@@ -1,0 +1,32 @@
+{
+  "name": "haptic",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n sdk,web,demo -c blue,green,magenta \"npm run dev -w @haptic/sdk\" \"npm run dev -w @haptic/web\" \"npm run dev -w @haptic/demo\"",
+    "build": "npm run build -w @haptic/sdk && npm run build -w @haptic/web && npm run build -w @haptic/demo",
+    "test": "vitest run --project protocol --project web",
+    "test:browser": "vitest run --project sdk-browser",
+    "test:all": "vitest run",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "eval": "node eval/run.ts",
+    "eval:guides": "node eval/guides.ts",
+    "e2e": "playwright test",
+    "db:start": "supabase start --exclude realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor",
+    "db:reset": "supabase db reset",
+    "db:types": "supabase gen types typescript --local > apps/web/lib/database.types.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@vitest/browser-playwright": "^5.0.3",
+    "concurrently": "^10.0.6",
+    "playwright": "^1.64.0",
+    "supabase": "^2.120.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.3"
+  }
+}
