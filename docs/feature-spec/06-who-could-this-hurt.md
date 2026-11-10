@@ -1,3 +1,0 @@
-# Who could this hurt?
-
-Our most important feature is step-by-step guidance inside a company's website. Incorrect instructions could lead users to change billing, permissions, or employee information, while guidance that relies only on a pointer could exclude people who use screen readers or keyboard navigation. We will pair visual cues with accessible written instructions, test keyboard and screen-reader use, keep consequential actions under the user's control, and stop when the assistant cannot identify a reliable next step. A tempting dark pattern would be to hide human support behind repeated attempts with the assistant to make ticket numbers look better. We will keep human help available and let users dismiss Haptic without pressure to continue.

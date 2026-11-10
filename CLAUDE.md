@@ -1,2 +1,0 @@
-@PURPOSE.md
-@AGENTS.md
