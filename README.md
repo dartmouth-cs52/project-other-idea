@@ -7,17 +7,64 @@ Haptic is an AI guide that software companies add to their web app with one scri
 
 ## Status
 
-We're rebuilding Haptic from scratch on `main`. There's no code here yet.
+We're rebuilding Haptic from scratch on `main`. What's here so far is the core loop, with no accounts or dashboard yet:
 
-The first version is on the [`v1`](../../tree/v1) branch. It has a working SDK, API, dashboard and demo app, and its README explains how to run it. We're keeping it as a reference while we rebuild.
+- **The widget** (`src/widget`): the script a customer adds to their site. It reads the page the visitor is on, asks the server for the next step, moves a pointer to the element, waits for the visitor to use it, and carries on, across page loads too.
+- **The server** (`src/server`): serves the widget and answers each step with one Claude call.
+- **Intake** (`src/intake`): a command that reads a customer's site and their help docs, saves what it learned, and prints the script tag.
+
+The first version is on the [`v1`](../../tree/v1) branch, kept as a reference.
 
 ## Architecture
 
-TODO: the stack and how the pieces fit together, once we've picked them
+TypeScript on Node, with no framework. The widget is bundled into one file by esbuild.
+
+```
+npm run tag ──▶ data/sites/<id>.json ──▶ server ◀── widget.js on the customer's site
+ (crawl + docs)   (the site's context)     │  POST /v1/turn: the page as a list of elements
+                                           ▼
+                                         Claude: "point at e12, then wait"
+```
+
+**What we keep about a site** (`SiteContext` in `src/shared/types.ts`):
+
+| Field | Where it comes from |
+|---|---|
+| `pages` | The crawl. For each page: title, headings, button and field labels, and which page each link leads to. Pages are nodes and links are edges, so this is already a graph of the site. |
+| `notes`, `docs` | The company: free-form notes and help docs (files, folders or URLs). |
+| `appearance`, `allowedOrigins` | The company: the widget's color, corner and label, and which origins it may run on. |
+| `source` | The inputs it was built from, so it can be rebuilt unattended. |
+
+**How a step works.** The widget lists every control on the page with a short id (`e12`), its role, label and state. It never reads what's typed into fields, and masks emails and long numbers. The model replies with the id to point at, a sentence to show, and whether to wait for the visitor. After the visitor acts, the widget waits for the page to stop changing and sends the new page with a summary of what changed. Guide state is kept in `sessionStorage`, so a click that loads a new page picks up where it left off.
+
+The crawl only sees HTML the server sends. Pages drawn by JavaScript or behind a login come back nearly empty, and the command says so when that happens. The widget reads each page live either way, so those sites lean on notes and docs for now.
 
 ## Setup
 
-TODO: how to run the project locally
+```bash
+npm install
+cp .env.example .env      # add ANTHROPIC_API_KEY, or set HAPTIC_MODEL=mock to run without one
+npm run dev               # http://localhost:4000, with a demo site at /demo/
+```
+
+In another terminal, build the demo site's context and open http://localhost:4000/demo/:
+
+```bash
+npm run tag -- --url http://localhost:4000/demo/ --id site_demo --name "Acme Console" \
+  --notes demo/notes.md --docs demo/help --accent "#2f3bd6"
+```
+
+Click **Ask** and try "how do I change my billing info". With `HAPTIC_MODEL=mock` the answers come from a keyword matcher, which is only good for testing the plumbing.
+
+For a real site:
+
+```bash
+npm run tag -- --url https://app.example.com --name Example --notes notes.md --docs help/ --docs https://example.com/faq
+```
+
+It prints the tag to paste before `</body>`. `npm run tag -- --help` lists every option. To keep a site's context current, run `npm run tag -- refresh --all` on a schedule (a cron job): it re-reads each site and its docs from the saved inputs, and the server picks up the change without a restart.
+
+`npm test` runs the unit tests and `npm run typecheck` checks types.
 
 ## Deployment
 

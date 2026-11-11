@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team · Acme Console</title>
+<link rel="stylesheet" href="/demo/style.css">
+</head>
+<body>
+<header>
+  <a class="brand" href="/demo/">Acme Console</a>
+  <nav>
+    <a href="/demo/">Overview</a>
+    <a href="/demo/projects">Projects</a>
+    <a href="/demo/team">Team</a>
+  </nav>
+  <div class="account">
+    <button id="account-button" aria-expanded="false" aria-haspopup="menu">A</button>
+    <div id="account-menu" role="menu" hidden>
+      <a role="menuitem" href="/demo/settings">Settings</a>
+      <a role="menuitem" href="/demo/settings-billing">Plan and billing</a>
+      <a role="menuitem" href="/demo/">Sign out</a>
+    </div>
+  </div>
+</header>
+<main>
+<h1>Team</h1>
+<p>People who can access this workspace.</p>
+<ul class="list" id="members"><li>Avery (owner)</li><li>Sam</li><li>Priya</li><li>Jordan</li></ul>
+<form id="invite" class="inline"><label>Email address <input type="email" name="email" required></label><button class="primary">Send invite</button></form>
+<p id="invite-result" role="status"></p>
+</main>
+<script src="/demo/app.js"></script>
+<script src="/widget.js" data-site="site_demo" async></script>
+</body>
+</html>

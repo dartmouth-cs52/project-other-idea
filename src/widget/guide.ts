@@ -1,0 +1,301 @@
+import { describeElement, normalizePath, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { describeChange, elementKey, isField, NOTHING_CHANGED, takeSnapshot } from "./snapshot.ts";
+import type { Ui } from "./ui.ts";
+
+// Runs one guide: ask the model for a step, point at it, wait for the visitor
+// to act, let the page settle, and go again until the model says it's done.
+
+const MAX_STEPS = 20;
+const MAX_HISTORY = 12;
+/** A field counts as filled in once typing pauses this long. */
+const TYPING_PAUSE_MS = 1200;
+const STORAGE_KEY = "haptic.guide";
+/** A saved guide older than this isn't picked back up after a page load. */
+const RESUME_WINDOW_MS = 3 * 60 * 1000;
+const CLICKABLE = "a[href], button, summary, select, input, textarea, label, [role], [onclick]";
+
+interface SavedGuide {
+  goal: string;
+  history: HistoryTurn[];
+  step: number;
+  path: string;
+  /** What the visitor did just before the page unloaded, if we saw it. */
+  event?: string;
+  savedAt: number;
+}
+
+export class Guide {
+  private goal = "";
+  private history: HistoryTurn[] = [];
+  private step = 0;
+  private previous?: Snapshot;
+  /** The element the last step pointed at, and whether the visitor used it. */
+  private last?: { key: string; used: boolean };
+  /** Bumped whenever the guide is stopped or restarted, so stale async work can tell and bail. */
+  private run = 0;
+  private stopWaiting?: () => void;
+
+  constructor(
+    private readonly ui: Ui,
+    private readonly sendTurn: (request: Omit<TurnRequest, "site">) => Promise<TurnReply>,
+  ) {}
+
+  start(goal: string) {
+    this.reset();
+    this.goal = goal;
+    void this.turn(this.run);
+  }
+
+  stop() {
+    this.reset();
+    this.ui.clear();
+    this.ui.setBusy("");
+  }
+
+  /** Pick up a guide that a full page load interrupted. */
+  resume() {
+    const saved = load();
+    if (!saved) return;
+    this.reset();
+    this.goal = saved.goal;
+    this.history = saved.history;
+    this.step = saved.step;
+    const here = normalizePath(location.pathname);
+    const moved = saved.path === here ? "The page reloaded." : `A new page loaded: the user went from ${saved.path} to ${here}.`;
+    const run = this.run;
+    this.ui.setBusy("Looking at this page…");
+    void settle(this.ui.host).then(() => this.turn(run, [saved.event, moved].filter(Boolean).join(" ")));
+  }
+
+  private reset() {
+    this.run++;
+    this.stopWaiting?.();
+    this.stopWaiting = undefined;
+    this.history = [];
+    this.step = 0;
+    this.previous = undefined;
+    this.last = undefined;
+    forget();
+  }
+
+  private async turn(run: number, event?: string, nudged = false): Promise<void> {
+    const { ui } = this;
+    if (this.step >= MAX_STEPS) return this.finish("That's as far as I can take this one. Ask again to keep going.");
+    ui.setBusy(this.step === 0 ? "Finding it…" : "Next step…");
+
+    ui.place();
+    const page = takeSnapshot(ui.host);
+    const change = event && this.previous ? describeChange(this.previous, page.snapshot) : undefined;
+    let reply: TurnReply;
+    try {
+      reply = await this.sendTurn({
+        goal: this.goal,
+        step: this.step,
+        history: this.history.slice(-MAX_HISTORY),
+        snapshot: page.snapshot,
+        ...(event ? { event } : {}),
+        ...(change ? { change } : {}),
+      });
+    } catch (error) {
+      if (run !== this.run) return;
+      console.warn("[Haptic]", error);
+      return this.finish("Something went wrong on our side. Try asking again.");
+    }
+    if (run !== this.run) return;
+
+    // The answer is about a page the visitor has already left. Start over from where they are now.
+    const here = normalizePath(location.pathname);
+    if (here !== page.snapshot.path) {
+      await settle(ui.host);
+      if (run !== this.run) return;
+      return this.turn(run, `${event ?? ""} The user went from ${page.snapshot.path} to ${here}.`.trim());
+    }
+
+    const el = reply.target ? page.elements.get(reply.target) : undefined;
+    const listed = reply.target ? page.snapshot.elements.find((element) => element.id === reply.target) : undefined;
+
+    // Pointing again at what the visitor just used, with the page unchanged,
+    // is a loop. Ask once more saying so, then give up rather than repeat.
+    if (listed && this.last?.used && this.last.key === elementKey(listed) && change === NOTHING_CHANGED && reply.status === "continue") {
+      if (nudged) return this.finish("That step didn't change anything I can see, so I've stopped here. Ask again if there's more to do.");
+      const nudge = `You pointed at ${describeElement(listed)} again, but the user already used it and nothing changed. Don't point at it again: move on, or say it's done.`;
+      return this.turn(run, `${event} ${nudge}`, true);
+    }
+
+    this.history.push({ role: "user", text: this.step === 0 ? this.goal : (event ?? "The page changed.") }, { role: "assistant", text: reply.say });
+    this.step++;
+    this.previous = page.snapshot;
+    this.last = listed ? { key: elementKey(listed), used: false } : undefined;
+
+    if (!el || !el.isConnected) return this.finish(reply.say);
+    if (listed?.offscreen) el.scrollIntoView({ block: "center", behavior: "smooth" });
+    ui.pointAt(el, reply.say);
+
+    if (reply.status === "done") {
+      // An explanation that points at something. Leave it up until they click anywhere.
+      ui.setBusy("");
+      ui.closePanel();
+      forget();
+      const dismiss = () => run === this.run && ui.clear();
+      document.addEventListener("click", dismiss, { capture: true, once: true });
+      this.stopWaiting = () => document.removeEventListener("click", dismiss, true);
+      return;
+    }
+
+    ui.closePanel();
+    this.save();
+    this.stopWaiting = waitForAction(el, listed, ui.host, (what) => {
+      this.stopWaiting = undefined;
+      if (this.last && what.onTarget) this.last.used = true;
+      // Saved straight away: if this click loads a new page, the next page needs to know about it.
+      this.save(what.event);
+      ui.clearPointer();
+      ui.setBusy("Next step…");
+      void settle(ui.host).then(() => {
+        if (run === this.run) void this.turn(run, what.event);
+      });
+    });
+  }
+
+  private finish(text: string) {
+    this.stopWaiting?.();
+    this.stopWaiting = undefined;
+    forget();
+    this.ui.setBusy("");
+    this.ui.closePanel();
+    this.ui.say(text);
+  }
+
+  private save(event?: string) {
+    const saved: SavedGuide = {
+      goal: this.goal,
+      history: this.history.slice(-MAX_HISTORY),
+      step: this.step,
+      path: normalizePath(location.pathname),
+      savedAt: Date.now(),
+      ...(event ? { event } : {}),
+    };
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+    } catch {
+      // Storage full or blocked. The guide just won't survive a page load.
+    }
+  }
+}
+
+function load(): SavedGuide | undefined {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "null") as SavedGuide | null;
+    return saved && Date.now() - saved.savedAt < RESUME_WINDOW_MS ? saved : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function forget() {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Nothing to clear.
+  }
+}
+
+/**
+ * Calls `done` once, when the visitor does what the step asked or does
+ * something else that moves things along. Returns a function that stops
+ * listening.
+ */
+function waitForAction(
+  target: Element,
+  listed: SnapElement | undefined,
+  host: Element,
+  done: (what: { event: string; onTarget: boolean }) => void,
+): () => void {
+  const name = listed ? describeElement(listed) : "the element you pointed at";
+  const field = isField(target);
+  const startUrl = location.href;
+  let typing: ReturnType<typeof setTimeout> | undefined;
+
+  const finish = (event: string, onTarget: boolean) => {
+    stop();
+    done({ event, onTarget });
+  };
+  const filled = () => finish(`The user filled in ${name}. You can't see what they entered.`, true);
+
+  const onClick = (event: MouseEvent) => {
+    const path = event.composedPath();
+    if (path.includes(host)) return;
+    if (path.includes(target)) {
+      // For a field, clicking into it isn't the action. Typing or picking is.
+      if (!field) finish(`The user clicked ${name}.`, true);
+      return;
+    }
+    const other = path.find((node): node is Element => node instanceof Element && node.matches(CLICKABLE));
+    // A click on blank space or plain text isn't worth a new step.
+    if (!other || other.contains(target)) return;
+    const label = (other.getAttribute("aria-label") || other.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
+    finish(`The user clicked ${label ? `"${label}"` : "something else"} instead of ${name}.`, false);
+  };
+  const onInput = (event: Event) => {
+    if (!event.composedPath().includes(target)) return;
+    clearTimeout(typing);
+    if (target instanceof HTMLSelectElement) filled();
+    else typing = setTimeout(filled, TYPING_PAUSE_MS);
+  };
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key === "Enter" && field && event.composedPath().includes(target)) filled();
+  };
+  // Back, forward and anything else that changes the address without a click we saw.
+  const poll = setInterval(() => {
+    if (location.href !== startUrl) finish(`The user went to ${normalizePath(location.pathname)} without using ${name}.`, false);
+  }, 500);
+
+  const stop = () => {
+    clearTimeout(typing);
+    clearInterval(poll);
+    document.removeEventListener("click", onClick, true);
+    document.removeEventListener("input", onInput, true);
+    document.removeEventListener("change", onInput, true);
+    document.removeEventListener("keydown", onKey, true);
+  };
+  document.addEventListener("click", onClick, true);
+  document.addEventListener("input", onInput, true);
+  document.addEventListener("change", onInput, true);
+  document.addEventListener("keydown", onKey, true);
+  return stop;
+}
+
+// Common loading markers: ARIA busy regions, progress bars, and the class
+// names spinners and skeletons usually carry (Tailwind's included).
+const LOADING = '[aria-busy="true"], [role="progressbar"], .animate-spin, .animate-pulse, [class*="skeleton" i], [class*="spinner" i]';
+
+/**
+ * Resolves once the page has stopped changing, so the next snapshot shows the
+ * result of a click and not a half-rendered page. Waits only as long as the
+ * page keeps changing, up to `maxMs`.
+ */
+export function settle(ignore: Element, quietMs = 300, maxMs = 3000): Promise<void> {
+  return new Promise((resolve) => {
+    let quiet: ReturnType<typeof setTimeout>;
+    const finish = () => {
+      observer.disconnect();
+      clearTimeout(quiet);
+      clearTimeout(limit);
+      resolve();
+    };
+    const restart = () => {
+      clearTimeout(quiet);
+      quiet = setTimeout(() => {
+        const loading = Array.from(document.querySelectorAll(LOADING)).some((el) => !ignore.contains(el) && el.getClientRects().length > 0);
+        if (loading) restart();
+        else finish();
+      }, quietMs);
+    };
+    const observer = new MutationObserver((records) => {
+      if (records.some((record) => record.target !== ignore && !ignore.contains(record.target))) restart();
+    });
+    observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+    const limit = setTimeout(finish, maxMs);
+    restart();
+  });
+}

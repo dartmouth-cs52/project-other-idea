@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.env.local
+.DS_Store
+*.log
+# Site contexts are built by `npm run tag`. The demo's is rebuilt on demand.
+data/
