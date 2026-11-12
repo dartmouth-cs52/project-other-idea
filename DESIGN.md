@@ -317,6 +317,13 @@ The request access page is two columns. The pitch sits on the left, as a
 headline over a card. The form sits on the right in a second card, with its
 inputs in Card white. Below 768px everything is one column.
 
+The form is two short steps in the same card. The first asks for a work email
+and a company, and its button says Continue. The second asks for a first and
+last name, side by side, and has an optional box for details, with Back and
+Request access under it. Nothing is sent until the second step. Once it is
+sent, the card holds a two line thank you in the feature card type, a Medium
+title over Muted text, and no icon.
+
 There is one call to action on the whole site, "Request access". It sits in
 the navigation, top right on every page and every screen size, and leads to
 that page. The hero carries no second copy of it, so the demo follows the
@@ -401,8 +408,12 @@ Components are shadcn/ui, restyled only through tokens and variants.
   with a lighter shade sweeping across it, shadcn's `shimmer`, with no icon.
   While it points it reads "Showing you how". When it finishes it is the green
   tick and "Done".
-- **Form:** Labels above 44px inputs and one primary button. Success and error
-  use shadcn's alert, with an icon, a short title and one line of detail.
+- **Form:** Labels above 44px inputs and one primary button. Every field is
+  required unless it says Optional, in Muted text at the right end of its
+  label row. No asterisks, which would need a colour of their own. A step that
+  has a way back puts a secondary Back button to the left of the primary one.
+  An error uses shadcn's alert, with an icon, a short title and one line of
+  detail. Success replaces the form with a thank you.
 - **Accordion:** FAQ rows with a plus that turns to a cross. One row open at a
   time.
 

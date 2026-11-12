@@ -15,8 +15,9 @@ export default function Privacy() {
       <h2>This website</h2>
       <p>We do not use analytics, advertising or tracking cookies on this site.</p>
       <p>
-        If you request access, we keep the email address and company name you give us so we can reply. We do not sell
-        them or share them for marketing.
+        If you request access, we keep what you put in the form so we can reply. That is your name, work email and
+        company, and anything you add about your product. A copy is emailed to our team. We do not sell these details
+        or share them for marketing.
       </p>
 
       <h2>Haptic inside a product</h2>

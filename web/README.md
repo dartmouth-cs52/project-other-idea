@@ -21,7 +21,15 @@ npm run lint
 
 ## The request access form
 
-The form posts JSON (`email`, `company`) to `/api/request-access`. On Cloudflare that is answered by the Worker in `worker/index.ts`, which checks the email address and saves the request in a KV namespace. Nothing else about the visitor is kept.
+The form has two steps and is sent once, at the end. It posts JSON (`email`, `company`, `firstName`, `lastName`, `details`) to `/api/request-access`. On Cloudflare that is answered by the Worker, in `worker/handler.ts`. The Worker checks the email address, saves the request in a KV namespace, then emails the team a copy. Nothing else about the visitor is kept.
+
+The email copy goes to the address in the Worker's `NOTIFY_TO` secret, which is not in this repository. Cloudflare only delivers to an inbox that is verified under Email Routing, as a destination address. To change it:
+
+```bash
+npx wrangler secret put NOTIFY_TO
+```
+
+Replying to one of those emails answers the person who sent the request. If the email fails, the request is still saved. Two things keep the inbox from being flooded: one address gets 5 tries a minute, and a hidden field that people never see catches programs that fill in everything.
 
 `npm run dev` runs the pages only, so the form shows its fallback message there. To try the form locally, use `npm run preview`.
 
