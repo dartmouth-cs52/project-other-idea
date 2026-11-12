@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- The Haptic pointer. The tip sits at (3.81, 3.14). The same path is used in
+       web/components/pointer.tsx and src/widget/ui.ts, so change all three together. -->
+  <path d="M3.271 4.871A1.678 1.678 0 0 1 5.604 2.907L19.822 9.597A1.678 1.678 0 0 1 19.705 12.684L13.956 14.875A.622.622 0 0 0 13.643 15.139L10.506 20.431A1.678 1.678 0 0 1 7.444 20.021Z" fill="#1E6EF4" stroke="#FFFFFF" stroke-width="3" stroke-linejoin="round" paint-order="stroke"/>
+</svg>
