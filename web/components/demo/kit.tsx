@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from "motion/react";
 import { ArrowUpIcon, Check, FileTextIcon, SquareIcon } from "lucide-react";
 import { Pointer, POINTER_TIP } from "@/components/pointer";
@@ -31,13 +31,34 @@ export type Playback = "playing" | "waiting" | "still";
 /** How much of a demo has to be on screen before it starts. */
 const START_AT = 0.35;
 
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+
+function watchReducedMotion(notify: () => void): () => void {
+  const query = window.matchMedia(REDUCED_MOTION);
+  query.addEventListener("change", notify);
+  return () => query.removeEventListener("change", notify);
+}
+
+/**
+ * Whether the visitor has asked for reduced motion. The server cannot know, so the page is first
+ * drawn as if they have not, and switches once it is running in the browser. Reading the setting
+ * during that first draw would make the page disagree with what the server sent.
+ */
+function useWantsStill(): boolean {
+  return useSyncExternalStore(
+    watchReducedMotion,
+    () => window.matchMedia(REDUCED_MOTION).matches,
+    () => false,
+  );
+}
+
 /**
  * A demo starts once enough of it is on screen, then keeps going until it has left the screen
  * completely. It never changes state while any of it can be seen, so scrolling past a demo never
  * makes it jump. If motion is reduced it holds a still frame instead.
  */
 export function usePlayback(frame: RefObject<HTMLElement | null>): Playback {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useWantsStill();
   const [running, setRunning] = useState(false);
   useEffect(() => {
     const element = frame.current;
