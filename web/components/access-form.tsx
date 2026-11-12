@@ -84,11 +84,11 @@ export function AccessForm() {
         <form onSubmit={next} className="mt-6 flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <Label htmlFor="access-email">Work email</Label>
-            <Input id="access-email" type="email" required autoFocus={returned} autoComplete="email" placeholder="jane@acme.co" className={FIELD} {...bind("email")} />
+            <Input id="access-email" type="email" required autoFocus={returned} autoComplete="email" placeholder="name@company.com" className={FIELD} {...bind("email")} />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="access-company">Company</Label>
-            <Input id="access-company" type="text" required autoComplete="organization" placeholder="Acme" className={FIELD} {...bind("company")} />
+            <Input id="access-company" type="text" required autoComplete="organization" placeholder="Company name" className={FIELD} {...bind("company")} />
           </div>
           <Button type="submit" size="xl" className="self-start">
             Continue
