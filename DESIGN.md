@@ -441,6 +441,10 @@ their final size. A click is acknowledged like a pressed button, with the mark
 dipping to 97 percent and back in a quarter of a second, and no ripple. With reduced motion on, the pointer jumps
 to its target and each demo holds one still frame.
 
+Scrolling never changes what a demo shows. A demo waits on its first frame,
+starts once about a third of it is on screen, and keeps playing until it has
+left the screen completely. Nothing switches while any of it can be seen.
+
 ## Interaction
 
 How a guide should feel. Only what the designer has signed off belongs here.
