@@ -23,6 +23,9 @@ colors:
   # The only chromatic colour in the system. Reserved for the pointer.
   pointer: "#1E6EF4"
   pointer-border: "#FFFFFF"
+  # Marks a finished task. Nothing else.
+  success: "#008932"
+  success-foreground: "#FFFFFF"
   # Dark mode.
   primary-dark: "#F5F5F4"
   primary-foreground-dark: "#1C1917"
@@ -39,6 +42,8 @@ colors:
   ring-dark: "#0091FF"
   pointer-dark: "#0091FF"
   pointer-border-dark: "#FFFFFF"
+  success-dark: "#30D158"
+  success-foreground-dark: "#1C1917"
 typography:
   display:
     fontFamily: Geist
@@ -175,6 +180,11 @@ components:
     typography: "{typography.body-sm}"
     rounded: "{rounded.2xl}"
     padding: 12px
+  done-mark:
+    backgroundColor: "{colors.success}"
+    textColor: "{colors.success-foreground}"
+    rounded: "{rounded.full}"
+    size: 20px
   launcher:
     backgroundColor: "{colors.primary}"
     textColor: "{colors.primary-foreground}"
@@ -213,7 +223,8 @@ mouse.
 
 ## Colors
 
-Two neutrals carry the whole interface, and one colour belongs to the pointer.
+Two neutrals carry the whole interface. One colour belongs to the pointer, and
+one marks a finished task.
 Neutrals are Tailwind's stone scale, which has a slight warmth so the page never
 looks stark.
 
@@ -226,11 +237,14 @@ looks stark.
 - **Border (#E7E5E4):** Hairlines, the secondary button and the question bubble.
 - **Pointer blue (#1E6EF4):** The pointer, its highlight ring, its thinking
   dots and the keyboard focus ring. Nothing else.
+- **Done green (#008932):** The small round tick that says a task is finished.
+  Blue means in progress and green means done, so the two never share a screen.
+  Not for buttons, text or bubbles.
 
 Dark mode follows the visitor's system setting and swaps the roles. The page
 becomes Ink (#1C1917), text becomes #F5F5F4, cards are #292524, borders are
-#44403C, and the pointer brightens to #0091FF. Every light token has a `-dark`
-twin in the front matter.
+#44403C, the pointer brightens to #0091FF and Done green to #30D158. Every
+light token has a `-dark` twin in the front matter.
 
 **Why blue.** It holds at least 3.8 to 1 against both pages, so one hue works
 in both modes, and it keeps its full colour for people with red-green colour
@@ -320,8 +334,9 @@ Components are shadcn/ui, restyled only through tokens and variants.
   One primary button per view.
 - **Navigation:** 64px tall. Pointer mark and "Haptic" on the left, links and
   one primary button on the right.
-- **Demo window:** A browser frame on Card, with three grey window dots, never
-  red, yellow and green. It plays one scripted task on a loop. The person types
+- **Demo window:** A browser frame on Card, with the three window dots in their
+  usual red, yellow and green so it reads as a real window at a glance. It
+  plays one scripted task on a loop. The person types
   a question, Haptic thinks, the pointer walks through each step, and Haptic
   confirms at the end.
 - **Pointer:** 24px. Glides to its target, pulses once when the visitor should
@@ -355,7 +370,9 @@ frame.
 - Do centre text in controls with flex, and keep every control on the 4px grid.
 - Don't replace the visitor's own mouse cursor.
 - Don't let the pointer or a caption cover the label it is pointing at.
-- Don't add a second accent colour, a gradient or an illustration.
+- Don't use Done green for anything but the finished mark.
+- Don't add another colour, a gradient or an illustration. The window dots on
+  the demo frame are the one borrowed exception.
 - Don't use Bold, italics for emphasis, or text smaller than 12px.
 - Don't show logos, quotes or numbers that are not real.
 - Don't use punctuation beyond commas and periods in marketing copy.

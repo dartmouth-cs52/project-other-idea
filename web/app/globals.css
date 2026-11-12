@@ -28,6 +28,8 @@
   --color-card: var(--card);
   --color-pointer: var(--pointer);
   --color-pointer-border: var(--pointer-border);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -69,6 +71,8 @@
   --ring: #1e6ef4;
   --pointer: #1e6ef4;
   --pointer-border: #ffffff;
+  --success: #008932;
+  --success-foreground: #ffffff;
   --radius: 0.625rem;
 }
 
@@ -95,6 +99,8 @@
     --ring: #0091ff;
     --pointer: #0091ff;
     --pointer-border: #ffffff;
+    --success: #30d158;
+    --success-foreground: #1c1917;
   }
 }
 

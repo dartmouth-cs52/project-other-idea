@@ -219,15 +219,15 @@ export function Demo() {
       >
         <div aria-hidden="true">
           <div className="flex h-11 items-center gap-3 border-b px-4">
-            <div className="flex w-[42px] gap-1.5">
-              <span className="size-2.5 rounded-full bg-border" />
-              <span className="size-2.5 rounded-full bg-border" />
-              <span className="size-2.5 rounded-full bg-border" />
+            <div className="flex w-[52px] gap-2">
+              {["#ff5f57", "#febc2e", "#28c840"].map((color) => (
+                <span key={color} className="size-3 rounded-full shadow-[inset_0_0_0_0.5px_rgb(0_0_0/0.2)]" style={{ background: color }} />
+              ))}
             </div>
             <div className="mx-auto flex h-7 w-full max-w-sm items-center justify-center rounded-full bg-muted px-3 text-xs text-muted-foreground">
               <span className="truncate">{scene.view === "projects" ? "app.acme.com/projects" : "app.acme.com/settings/billing"}</span>
             </div>
-            <div className="w-[42px]" />
+            <div className="w-[52px]" />
           </div>
 
           <div ref={app} className="relative h-[544px] overflow-hidden text-sm leading-5">
@@ -441,7 +441,9 @@ function ComposerBody({ scene }: { scene: Scene }) {
   if (scene.composer === "done") {
     return (
       <>
-        <Check className="size-4" />
+        <span className="flex size-5 items-center justify-center rounded-full bg-success text-success-foreground">
+          <Check className="size-3.5" strokeWidth={3} />
+        </span>
         <span className="flex-1 font-medium">Done</span>
       </>
     );
