@@ -294,8 +294,7 @@ gutters, which leaves 976px of content. The hero demo and the FAQ both fill
 that width.
 
 Spacing is a 4px grid, and most gaps are multiples of 8. The hero stacks with a
-fixed rhythm: 24px from headline to sub-copy, 32px to the buttons, 64px to the
-demo window. Sections are 128px apart on desktop and 80px on phones.
+fixed rhythm: 24px from headline to sub-copy, then 64px to the demo window. Sections are 128px apart on desktop and 80px on phones.
 
 The home page is, in order: a slim navigation bar, the hero with its demo
 window, three feature cards, the FAQ, and a footer with Privacy, Terms and the
@@ -309,8 +308,10 @@ The request access page is two columns. The pitch sits on the left, as a
 headline over a card. The form sits on the right in a second card, with its
 inputs in Card white. Below 768px everything is one column.
 
-There is one call to action on the whole site, "Request access". It appears in
-the navigation and under the hero, and both lead to that page. There is no
+There is one call to action on the whole site, "Request access". It sits in
+the navigation, top right on every page and every screen size, and leads to
+that page. The hero carries no second copy of it, so the demo follows the
+sub-copy directly. There is no
 "Contact sales", because Haptic is in early access and has no sales team or
 price list to point to.
 
