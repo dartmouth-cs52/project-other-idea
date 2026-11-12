@@ -267,26 +267,6 @@ and a shadow underneath. On a white page the fill does the work, on a dark or
 coloured page the border does, and the shadow lifts it off whatever it sits on.
 This is what lets one fixed colour work on any customer's site.
 
-**Artwork.** The panel behind each feature demo carries a painting, so the
-white window has something to float over. Proposed, awaiting sign off. Four
-rules keep it inside the system:
-
-- Hazy, low-colour landscapes only, the kind the tonalists painted, each close
-  to a single colour: warm greys, browns and grey-greens. No picture with blue
-  in it, because blue belongs to the pointer.
-- Always toned down, to 60 percent saturation at 80 percent opacity over Border
-  grey. That one treatment pulls a picture lighter in light mode and darker in
-  dark mode, so no painting needs a second version.
-- Only behind a demo window inside a feature card. Never behind text, and never
-  as a page background.
-- Public domain only, from a museum's open access collection, with the source
-  recorded in `web/README.md`.
-
-The three in use are Martin Johnson Heade, *York Harbor, Coast of Maine*
-(1877), George Inness, *The Home of the Heron* (1893), and James McNeill
-Whistler, *Nocturne: Blue and Gold—Southampton Water* (1872), all from the Art
-Institute of Chicago.
-
 ## Typography
 
 One family, Geist, in two weights. Regular (400) for reading and Medium (500)
@@ -319,9 +299,8 @@ fixed rhythm: 24px from headline to sub-copy, then 64px to the demo window. Sect
 The home page is, in order: a slim navigation bar, the hero with its demo
 window, three feature cards, the FAQ, and a footer with Privacy, Terms and the
 contact address. Each feature card makes one claim in a title of a few words,
-with the text on the left and a small live demo on the right. The demo window
-sits on a painting, with 32px of the picture showing on every side (16px on
-phones). Below 1024px the card stacks, text above the demo, so a demo is never
+with the text on the left and a small live demo on the right in a Border grey
+panel. Below 1024px the card stacks, text above the demo, so a demo is never
 squeezed. The
 FAQ is two columns on desktop, with the title on the left and the accordion in
 the right half. Each row is 20px padding around a 24px line with a 1px divider.
@@ -339,9 +318,8 @@ price list to point to.
 
 Surfaces nest the same way on every page. The page is Paper. A card on the
 page is Muted with a 1px border. Anything inside a card that needs to stand out
-is Card white, or sits on a Border grey panel. In a feature card that panel
-carries a painting. A demo window is always Card white with a 1px border,
-whether it sits on the page or inside a card.
+is Card white, or sits on a Border grey panel. A demo window is always Card
+white with a 1px border, whether it sits on the page or inside a card.
 
 Inside any mock interface, every control sits on the same grid. Rows are 64px,
 buttons are 32px, and text is centred in its control with flex, never with
@@ -470,9 +448,9 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
 - Don't replace the visitor's own mouse cursor.
 - Don't let the pointer or a caption cover the label it is pointing at.
 - Don't use Done green for anything but the finished mark.
-- Don't add another colour to the interface, a gradient or an illustration.
-  The window dots on the demo frame and the toned paintings behind the feature
-  demos are the two exceptions, and each has its own rule above.
+- Don't add another colour, a gradient, an illustration or artwork. Paintings
+  behind the demos were tried and turned down. The window dots on the demo
+  frame are the one borrowed exception.
 - Don't use Bold, italics for emphasis, or text smaller than 12px.
 - Don't show logos, quotes or numbers that are not real.
 - Don't use punctuation beyond commas and periods in marketing copy.
