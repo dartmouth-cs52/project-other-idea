@@ -186,7 +186,7 @@ export function DocsDemo() {
         <Stage pointing={scene} layoutKey="invite" className="h-[464px]">
           <AppHeader compact active="Team" />
           <div className="flex flex-col gap-3 p-4">
-            <h4 className="flex h-6 items-center text-base font-medium tracking-tight">Invite a teammate</h4>
+            <h4 className="flex h-6 items-center text-base font-medium tracking-tight">Invite</h4>
             <div className="flex items-end gap-2">
               <div className="min-w-0 flex-1">
                 <Field label="Email address" value="sam@acme.co" placeholder="name@company.com" />
@@ -219,7 +219,7 @@ const SEEN = [
   ["textbox", "Name on card"],
   ["textbox", "Email"],
   ["textbox", "Card number"],
-  ["text", "Receipts go to [email]"],
+  ["text", "Receipts to [email]"],
   ["button", "Save card"],
 ] as const;
 
@@ -271,7 +271,7 @@ export function PrivacyDemo() {
             {FORM.map((field, index) => (
               <Field key={field.label} label={field.label} value={field.value.slice(0, scene.typed[index])} placeholder={field.placeholder} />
             ))}
-            <p className="truncate text-[13px] text-muted-foreground">Receipts go to maya@acme.co</p>
+            <p className="truncate text-[13px] text-muted-foreground">Receipts to maya@acme.co</p>
             <MockButton primary className="self-start">
               Save card
             </MockButton>

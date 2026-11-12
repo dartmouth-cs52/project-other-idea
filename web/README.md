@@ -19,6 +19,18 @@ npm run lint
 - `lib/site.ts`: the name, contact address, links and FAQ copy.
 - `app/globals.css`: the colour, radius and motion tokens from `../DESIGN.md`.
 
+## The paintings
+
+The picture behind each feature demo is a public domain painting from the Art Institute of Chicago's open access collection, which the museum releases under CC0. No credit is required. The rules for choosing and treating them are in `../DESIGN.md`, under Colors.
+
+| File in `public/art/` | Painting | Museum page |
+| --- | --- | --- |
+| `heade-york-harbor.webp` | Martin Johnson Heade, *York Harbor, Coast of Maine*, 1877 | https://www.artic.edu/artworks/152747 |
+| `inness-home-of-the-heron.webp` | George Inness, *The Home of the Heron*, 1893 | https://www.artic.edu/artworks/64724 |
+| `whistler-nocturne.webp` | James McNeill Whistler, *Nocturne: Blue and Gold—Southampton Water*, 1872 | https://www.artic.edu/artworks/56905 |
+
+Each was downloaded from the museum's image server, resized to 1400px wide and saved as WebP. Together they weigh about 105 KB. To add one, check that the museum's record says `is_public_domain: true` before using it.
+
 ## The request access form
 
 The form posts JSON (`email`, `company`) to `/api/request-access`. On Cloudflare that is answered by the Worker in `worker/index.ts`, which checks the email address and saves the request in a KV namespace. Nothing else about the visitor is kept.
