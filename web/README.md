@@ -17,6 +17,7 @@ npm run lint
 - `components/demo.tsx`: the scripted demo. One task on a loop, driven by a list of steps at the top of the file.
 - `components/pointer.tsx`: the Haptic pointer. Same path as `../assets/pointer.svg` and the widget in `../src/widget/ui.ts`.
 - `lib/site.ts`: the name, contact address, links and FAQ copy.
+- `public/sitemap.xml` and `public/robots.txt`: the list of pages for search engines. Add a line to the sitemap when a page is added.
 - `app/globals.css`: the colour, radius and motion tokens from `../DESIGN.md`.
 
 ## The request access form
