@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Check } from "lucide-react";
-import { AppHeader, COMPANY, Chat, DemoFrame, Field, LANDING_MS, MockButton, MockWindow, Row, Stage, usePlayback, useScript, type ChatView, type ScriptIO } from "./kit";
+import { APP_DOMAIN, AppHeader, Chat, DemoFrame, Field, LANDING_MS, MockButton, MockWindow, Row, Stage, usePlayback, useScript, type ChatView, type ScriptIO } from "./kit";
 
 // The hero demo. One scripted task, played on a loop inside a mock customer
 // app: a person asks how to update their card, and Haptic points to each
@@ -132,7 +132,7 @@ export function HeroDemo() {
         ref={frame}
         label="A demo of Haptic inside a sample app. A person asks how to update their card, and Haptic points to each control in turn until the card is saved."
       >
-        <MockWindow address={`app.${COMPANY.domain}/${scene.view === "projects" ? "projects" : "settings/billing"}`}>
+        <MockWindow address={`${APP_DOMAIN}/${scene.view === "projects" ? "projects" : "settings/billing"}`}>
           <Stage
             pointing={scene}
             layoutKey={`${scene.view}-${scene.menu}-${scene.form}-${scene.saved}`}
