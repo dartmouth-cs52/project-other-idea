@@ -14,6 +14,9 @@ import { cn } from "@/lib/utils";
 // Haptic's pointer, target mark and caption over a mock app, and the mock
 // controls themselves.
 
+/** The made up company whose app the demos run in. Change it here and every demo follows. */
+export const COMPANY = { name: "Summit", domain: "summit.io" } as const;
+
 /** The pointer's one signature movement: quick to leave, slow to land, so the eye arrives with it. */
 export const GLIDE_EASE = [0.2, 0.8, 0.2, 1] as const;
 
@@ -329,7 +332,7 @@ export function AppHeader({ active, compact, children }: { active?: "Projects" |
     <div className={cn("flex items-center gap-6 border-b", compact ? "h-12 px-4" : "h-14 px-6")}>
       <div className="flex items-center gap-2 font-medium">
         <span className="size-5 rounded-md bg-foreground" />
-        Acme
+        {COMPANY.name}
       </div>
       <div className="hidden items-center gap-5 text-muted-foreground sm:flex">
         {(["Projects", "Team", "Reports"] as const).map((item) => (

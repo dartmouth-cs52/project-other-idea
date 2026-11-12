@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { cn } from "@/lib/utils";
 import {
   AppHeader,
+  COMPANY,
   Chat,
   DemoFrame,
   Field,
@@ -106,7 +107,7 @@ export function AnyQuestionDemo() {
       label="Three different questions asked on the same page. Haptic points to a different control for each one."
       className="text-sm leading-5"
     >
-      <MockWindow compact address="app.acme.com/team">
+      <MockWindow compact address={`app.${COMPANY.domain}/team`}>
         <Stage pointing={scene} layoutKey="team" className="h-[464px]">
           <AppHeader compact active="Team" />
           <div className="flex flex-col gap-2 p-4">
@@ -182,14 +183,14 @@ export function DocsDemo() {
       label="A person asks how to invite a teammate. Haptic points at the Send invite button and adds a detail taken from the company's help doc."
       className="text-sm leading-5"
     >
-      <MockWindow compact address="app.acme.com/team">
+      <MockWindow compact address={`app.${COMPANY.domain}/team`}>
         <Stage pointing={scene} layoutKey="invite" className="h-[464px]">
           <AppHeader compact active="Team" />
           <div className="flex flex-col gap-3 p-4">
             <h4 className="flex h-6 items-center text-base font-medium tracking-tight">Invite</h4>
             <div className="flex items-end gap-2">
               <div className="min-w-0 flex-1">
-                <Field label="Email address" value="sam@acme.co" placeholder="name@company.com" />
+                <Field label="Email address" value={`sam@${COMPANY.domain}`} placeholder="name@company.com" />
               </div>
               <MockButton target="send" caption="above" primary className="h-9">
                 Send invite
@@ -209,7 +210,7 @@ export function DocsDemo() {
 
 const FORM = [
   { label: "Name on card", value: "Maya Chen", placeholder: "Full name" },
-  { label: "Email", value: "maya@acme.co", placeholder: "you@company.com" },
+  { label: "Email", value: `maya@${COMPANY.domain}`, placeholder: "you@company.com" },
   { label: "Card number", value: "4242 4242 4242 4242", placeholder: "1234 1234 1234 1234" },
 ];
 
@@ -265,13 +266,13 @@ export function PrivacyDemo() {
       className="text-sm leading-5"
     >
       <div className="grid gap-4 sm:grid-cols-2">
-        <MockWindow compact address="app.acme.com/billing">
+        <MockWindow compact address={`app.${COMPANY.domain}/billing`}>
           <div className="flex h-[316px] flex-col gap-3 p-4">
             <h4 className="flex h-6 items-center text-base font-medium tracking-tight">Payment details</h4>
             {FORM.map((field, index) => (
               <Field key={field.label} label={field.label} value={field.value.slice(0, scene.typed[index])} placeholder={field.placeholder} />
             ))}
-            <p className="truncate text-[13px] text-muted-foreground">Receipts to maya@acme.co</p>
+            <p className="truncate text-[13px] text-muted-foreground">Receipts to maya@{COMPANY.domain}</p>
             <MockButton primary className="self-start">
               Save card
             </MockButton>
