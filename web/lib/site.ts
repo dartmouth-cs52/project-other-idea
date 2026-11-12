@@ -4,6 +4,8 @@ export const site = {
   url: "https://joinhaptic.com",
   email: "hello@joinhaptic.com",
   tagline: "The AI guide that lives in your product.",
+  /** The line under the picture when a link to the site is shared, and the end of the browser tab title. */
+  headline: "The AI guide that lives in your product",
   description:
     "The AI guide that lives in your product. People say what they want to do, and Haptic points to exactly where to click, step by step.",
 } as const;

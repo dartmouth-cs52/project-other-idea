@@ -10,16 +10,17 @@ const geist = Geist({
 
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),
-  title: { default: site.name, template: `%s, ${site.name}` },
+  title: { default: `${site.name}, ${site.headline.replace(/^The/, "the")}`, template: `%s, ${site.name}` },
   description: site.description,
+  // A shared link shows the picture, which carries the name, with this line under it.
   openGraph: {
-    title: site.name,
+    title: site.headline,
     description: site.description,
     url: site.url,
     siteName: site.name,
     type: "website",
   },
-  twitter: { card: "summary_large_image", title: site.name, description: site.description },
+  twitter: { card: "summary_large_image", title: site.headline, description: site.description },
 };
 
 export const viewport: Viewport = {

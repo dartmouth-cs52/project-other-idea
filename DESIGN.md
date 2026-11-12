@@ -368,6 +368,11 @@ in its back edge, tilted so the tip points up and to the left. It is drawn on a
 every pointer in the product and on the site is that one path. It is also the
 logo mark and the favicon, where it is Ink with a white border.
 
+**The link preview.** When a link to the site is shared in a message, the
+picture is the pointer and the name Haptic on Paper, and nothing else. The
+pointer there is the live one, Pointer blue with its white border and shadow.
+The line under the picture is "The AI guide that lives in your product".
+
 The pointer's tip sits in the lower right corner of whatever it points at, so
 the pointer hangs off the control and never covers its label.
 
