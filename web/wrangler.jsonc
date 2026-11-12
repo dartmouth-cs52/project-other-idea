@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "haptic-web",
+  "compatibility_date": "2026-11-01",
+  "main": "./worker/index.ts",
+  // The static site that `next build` writes to out/.
+  "assets": {
+    "directory": "./out",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": true
+  },
+  // Where contact form requests are kept. The id is filled in when the namespace is created.
+  "kv_namespaces": [{ "binding": "ACCESS_REQUESTS", "id": "REPLACE_WITH_NAMESPACE_ID" }],
+  // A preview address on workers.dev. The real domain is attached with the routes below once the preview is approved.
+  "workers_dev": true
+  // "routes": [
+  //   { "pattern": "joinhaptic.com", "custom_domain": true },
+  //   { "pattern": "www.joinhaptic.com", "custom_domain": true }
+  // ]
+}

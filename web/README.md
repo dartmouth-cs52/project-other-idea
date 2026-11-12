@@ -19,6 +19,23 @@ npm run lint
 - `lib/site.ts`: the name, contact address, links and FAQ copy.
 - `app/globals.css`: the colour, radius and motion tokens from `../DESIGN.md`.
 
-## Not wired up yet
+## The contact form
 
-The contact form posts JSON (`email`, `company`, `topic`) to `/api/request-access`, or to `NEXT_PUBLIC_ACCESS_ENDPOINT` if set. Nothing answers at that address yet, so the form shows its fallback message, which asks people to email instead. The handler is added when the site is deployed.
+The form posts JSON (`email`, `company`, `topic`) to `/api/request-access`. On Cloudflare that is answered by the Worker in `worker/index.ts`, which checks the email address and saves the request in a KV namespace. Nothing else about the visitor is kept.
+
+`npm run dev` runs the pages only, so the form shows its fallback message there. To try the form locally, use `npm run preview`.
+
+## Deploying
+
+The site runs on Cloudflare as one Worker: the static pages from `out/`, plus the form handler. The settings are in `wrangler.jsonc`.
+
+```bash
+npm run preview   # builds, then serves the site and the Worker at http://localhost:8787
+npm run deploy    # builds, then publishes to Cloudflare
+```
+
+Deploying needs a Cloudflare API token in `CLOUDFLARE_API_TOKEN`. Any address other than joinhaptic.com is treated as a preview and is marked so search engines skip it. To read the requests that have come in:
+
+```bash
+npx wrangler kv key list --binding ACCESS_REQUESTS --remote
+```

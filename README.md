@@ -71,7 +71,7 @@ It prints the tag to paste before `</body>`. `npm run tag -- --help` lists every
 
 ## Deployment
 
-TODO: how to deploy the project
+The website deploys to Cloudflare from `web/`. See [`web/README.md`](web/README.md#deploying). The widget server is not deployed yet.
 
 ## Authors
 

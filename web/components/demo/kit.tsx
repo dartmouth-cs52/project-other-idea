@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { AnimatePresence, motion, useInView, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useAnimationControls, useInView, useReducedMotion } from "motion/react";
 import { Pointer, POINTER_TIP } from "@/components/pointer";
 import { cn } from "@/lib/utils";
 
@@ -75,7 +75,7 @@ export interface Pointing {
   /** The outline around the target has landed. */
   marked: boolean;
   caption: string | null;
-  /** Goes up by one on each click, to replay the pulse. */
+  /** Goes up by one on each click, to replay the press. */
   pulse: number;
 }
 
@@ -94,6 +94,10 @@ interface Geometry {
 // the control's own keyboard focus ring.
 const MARK_GAP = 5;
 const MARK_SHADOW = "0 0 0 1.5px var(--pointer-border), inset 0 0 0 1.5px var(--pointer-border), 0 3px 10px rgb(0 0 0 / 0.14)";
+
+// A click is acknowledged the way a pressed button is: the mark and the
+// pointer dip slightly and come back, in under a quarter of a second.
+const PRESS = { duration: 0.24, times: [0, 0.4, 1], ease: "easeOut" as const };
 
 /**
  * A mock app with Haptic drawn on top. Positions are measured from the real
@@ -116,6 +120,11 @@ export function Stage({
   const [geometry, setGeometry] = useState<Geometry | null>(null);
   const [resized, setResized] = useState(0);
   const lastTip = useRef<{ x: number; y: number } | null>(null);
+  const press = useAnimationControls();
+
+  useEffect(() => {
+    if (pointing.pulse > 0) void press.start("press");
+  }, [pointing.pulse, press]);
 
   useEffect(() => {
     if (!root.current) return;
@@ -176,27 +185,27 @@ export function Stage({
       {children}
 
       {/* Everything below is Haptic, drawn on top of the customer's app. */}
-      {mark && (
-        <motion.div
-          key={`mark-${pointing.target}`}
-          className="pointer-events-none absolute top-0 left-0 z-20 border-2 border-pointer"
-          style={{ x: mark.x, y: mark.y, width: mark.w, height: mark.h, borderRadius: mark.r, boxShadow: MARK_SHADOW }}
-          // It draws in from slightly larger, like a lens finding focus, then holds still.
-          initial={{ opacity: 0, scale: 1.12 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.28, ease: GLIDE_EASE }}
-        />
-      )}
-      {mark && pointing.pulse > 0 && (
-        <motion.div
-          key={`pulse-${pointing.pulse}`}
-          className="pointer-events-none absolute top-0 left-0 z-20 border-2 border-pointer"
-          style={{ x: mark.x, y: mark.y, width: mark.w, height: mark.h, borderRadius: mark.r }}
-          initial={{ opacity: 0.7, scale: 1 }}
-          animate={{ opacity: 0, scale: 1.16 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-        />
-      )}
+      <AnimatePresence>
+        {mark && (
+          <motion.div
+            key={`mark-${pointing.target}`}
+            className="pointer-events-none absolute top-0 left-0 z-20"
+            style={{ x: mark.x, y: mark.y, width: mark.w, height: mark.h }}
+            // It settles in from slightly larger, quickly, then holds still. It never grows from nothing.
+            initial={{ opacity: 0, scale: 1.06 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.15, ease: "easeOut" } }}
+            transition={{ duration: 0.2, ease: GLIDE_EASE }}
+          >
+            <motion.div
+              className="size-full border-2 border-pointer"
+              style={{ borderRadius: mark.r, boxShadow: MARK_SHADOW }}
+              animate={press}
+              variants={{ press: { scale: [1, 0.97, 1], transition: PRESS } }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {pointing.caption && geometry?.caption && (
@@ -233,7 +242,9 @@ export function Stage({
                 }
           }
         >
-          <Pointer bordered className="pointer-shadow text-pointer" />
+          <motion.div animate={press} variants={{ press: { scale: [1, 0.9, 1], transition: PRESS } }} style={{ transformOrigin: "16% 13%" }}>
+            <Pointer bordered className="pointer-shadow text-pointer" />
+          </motion.div>
         </motion.div>
       )}
     </div>

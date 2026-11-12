@@ -352,7 +352,7 @@ Components are shadcn/ui, restyled only through tokens and variants.
   plays one scripted task on a loop. The person types
   a question, Haptic thinks, the pointer walks through each step, and Haptic
   confirms at the end.
-- **Pointer:** 24px. Glides to its target, and the mark pulses once when the
+- **Pointer:** 24px. Glides to its target, and dips with the mark when the
   person clicks. No face, no mascot.
 - **Target mark:** A 2px Pointer blue outline that stands 3px off the control,
   with a thin white edge on both sides and a soft shadow, the same recipe as
@@ -380,8 +380,12 @@ Components are shadcn/ui, restyled only through tokens and variants.
 
 **Motion.** Restrained. The pointer glide is the one signature movement. It
 eases out with `cubic-bezier(.2, .8, .2, 1)`, quick to leave and slow to land,
-and takes 400 to 700ms depending on how far it travels. Everything else is a
-150 to 300ms fade or height change. With reduced motion on, the pointer jumps
+and takes 400 to 700ms depending on how far it travels. It is the one movement
+allowed to run longer than 300ms, because the eye has to follow it. Everything
+else is a fade, a small scale or a height change of 150 to 250ms that eases
+out. Nothing grows from nothing: things arrive from within a few percent of
+their final size. A click is acknowledged like a pressed button, with the mark
+dipping to 97 percent and back in a quarter of a second, and no ripple. With reduced motion on, the pointer jumps
 to its target and each demo holds one still frame.
 
 ## Interaction
