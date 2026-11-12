@@ -1,5 +1,5 @@
 // What the Worker does for every request, whichever way the site's files are
-// supplied: one address for the site, the contact form, and the static pages.
+// supplied: one address for the site, the request access form, and the static pages.
 
 export interface Assets {
   fetch(request: Request): Promise<Response> | Response;
@@ -11,7 +11,6 @@ export interface Env {
 }
 
 const SITE = "joinhaptic.com";
-const TOPICS = new Set(["access", "sales", "other"]);
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 
 export async function handle(request: Request, env: Env, assets: Assets): Promise<Response> {
@@ -35,7 +34,7 @@ export async function handle(request: Request, env: Env, assets: Assets): Promis
   return response;
 }
 
-/** Saves what the contact form sends: an email address, a company name and a topic. Nothing else is kept. */
+/** Saves what the request access form sends: an email address and a company name. Nothing else is kept. */
 async function requestAccess(request: Request, env: Env, url: URL): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Use POST." }, 405);
   // The form only posts from our own pages.
@@ -53,11 +52,10 @@ async function requestAccess(request: Request, env: Env, url: URL): Promise<Resp
 
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const company = typeof body.company === "string" ? body.company.trim().slice(0, 200) : "";
-  const topic = typeof body.topic === "string" && TOPICS.has(body.topic) ? body.topic : "access";
   if (!EMAIL.test(email)) return json({ error: "Enter a valid email address." }, 400);
 
   const at = new Date().toISOString();
-  await env.ACCESS_REQUESTS.put(`${at} ${crypto.randomUUID()}`, JSON.stringify({ email, company, topic, at }));
+  await env.ACCESS_REQUESTS.put(`${at} ${crypto.randomUUID()}`, JSON.stringify({ email, company, at }));
   return json({ ok: true }, 200);
 }
 

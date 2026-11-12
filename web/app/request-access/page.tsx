@@ -1,12 +1,11 @@
-import { Suspense } from "react";
 import type { Metadata } from "next";
-import { ContactForm, ContactFormFallback } from "@/components/contact-form";
+import { AccessForm } from "@/components/access-form";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 
 export const metadata: Metadata = { title: "Request access" };
 
-export default function Contact() {
+export default function RequestAccess() {
   return (
     <>
       <SiteNav />
@@ -21,9 +20,7 @@ export default function Contact() {
             <p>Haptic is in early access. Tell us about your product and we will be in touch.</p>
           </div>
         </div>
-        <Suspense fallback={<ContactFormFallback />}>
-          <ContactForm />
-        </Suspense>
+        <AccessForm />
       </main>
       <SiteFooter />
     </>

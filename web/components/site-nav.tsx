@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Pointer } from "@/components/pointer";
 import { buttonVariants } from "@/components/ui/button";
-import { accessHref, salesHref, site } from "@/lib/site";
+import { accessHref, site } from "@/lib/site";
 
 export function SiteNav() {
   return (
@@ -13,9 +13,6 @@ export function SiteNav() {
       <nav className="flex items-center gap-6 text-sm font-medium">
         <Link href="/#faq" className="hidden text-muted-foreground transition-colors hover:text-foreground sm:block">
           FAQ
-        </Link>
-        <Link href={salesHref} className="hidden text-muted-foreground transition-colors hover:text-foreground sm:block">
-          Contact sales
         </Link>
         <Link href={accessHref} className={buttonVariants({ size: "lg" })}>
           Request access

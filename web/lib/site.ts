@@ -8,10 +8,9 @@ export const site = {
     "The AI guide that lives in your product. People say what they want to do, and Haptic points to exactly where to click, step by step.",
 } as const;
 
-export const accessHref = "/contact/";
-export const salesHref = "/contact/?topic=sales";
+export const accessHref = "/request-access/";
 
-/** Where the contact form posts. The handler is added when the site is deployed. */
+/** Where the request access form posts. The handler is added when the site is deployed. */
 export const accessEndpoint = process.env.NEXT_PUBLIC_ACCESS_ENDPOINT ?? "/api/request-access";
 
 export const faqs = [

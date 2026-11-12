@@ -6,7 +6,7 @@ import { Pointer } from "@/components/pointer";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 import { buttonVariants } from "@/components/ui/button";
-import { accessHref, salesHref } from "@/lib/site";
+import { accessHref } from "@/lib/site";
 
 export default function Home() {
   return (
@@ -23,14 +23,9 @@ export default function Home() {
             The AI guide that lives in your product. People say what they want to do, and Haptic points to exactly where
             to click, step by step.
           </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Link href={accessHref} className={buttonVariants({ size: "xl" })}>
-              Request access
-            </Link>
-            <Link href={salesHref} className={buttonVariants({ variant: "secondary", size: "xl" })}>
-              Contact sales
-            </Link>
-          </div>
+          <Link href={accessHref} className={buttonVariants({ size: "xl", className: "mt-8" })}>
+            Request access
+          </Link>
         </section>
         <HeroDemo />
         <Features />

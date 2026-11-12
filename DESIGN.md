@@ -305,10 +305,14 @@ panel. The
 FAQ is two columns on desktop, with the title on the left and the accordion in
 the right half. Each row is 20px padding around a 24px line with a 1px divider.
 
-The contact page is two columns. The pitch sits on the left, as a headline over
-a card. The form sits on the right in a second card, with its inputs in Card
-white. Both buttons in the navigation lead there. Below 768px everything is one
-column.
+The request access page is two columns. The pitch sits on the left, as a
+headline over a card. The form sits on the right in a second card, with its
+inputs in Card white. Below 768px everything is one column.
+
+There is one call to action on the whole site, "Request access". It appears in
+the navigation and under the hero, and both lead to that page. There is no
+"Contact sales", because Haptic is in early access and has no sales team or
+price list to point to.
 
 Surfaces nest the same way on every page. The page is Paper. A card on the
 page is Muted with a 1px border. Anything inside a card that needs to stand out
