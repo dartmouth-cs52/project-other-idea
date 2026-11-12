@@ -175,11 +175,22 @@ components:
   highlight-ring:
     rounded: "{rounded.lg}"
   question-bubble:
-    backgroundColor: "{colors.secondary}"
-    textColor: "{colors.secondary-foreground}"
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.primary-foreground}"
+    typography: "{typography.body-sm}"
+    rounded: "{rounded.xl}"
+    padding: 12px
+  reply-bubble:
+    backgroundColor: "{colors.muted}"
+    textColor: "{colors.foreground}"
+    typography: "{typography.body-sm}"
+    rounded: "{rounded.xl}"
+    padding: 12px
+  ask-box:
+    backgroundColor: "{colors.muted}"
+    textColor: "{colors.foreground}"
     typography: "{typography.body-sm}"
     rounded: "{rounded.2xl}"
-    padding: 12px
   done-mark:
     backgroundColor: "{colors.success}"
     textColor: "{colors.success-foreground}"
@@ -234,7 +245,7 @@ looks stark.
 - **Card (#FFFFFF):** Raised surfaces, such as the demo window and forms, so
   they lift off the page without a shadow.
 - **Muted text (#78716C):** Sub-copy and secondary labels. 4.6 to 1 on Paper.
-- **Border (#E7E5E4):** Hairlines, the secondary button and the question bubble.
+- **Border (#E7E5E4):** Hairlines and the secondary button.
 - **Pointer blue (#1E6EF4):** The pointer, its highlight ring, its thinking
   dots and the keyboard focus ring. Nothing else.
 - **Done green (#008932):** The small round tick that says a task is finished.
@@ -302,8 +313,8 @@ padding guesses.
 
 Flat. Hierarchy comes from the step between Paper and Card and from 1px borders,
 not from shadows. Three things are allowed a shadow, because they float above
-content: the demo window (`shadow-sm`), the widget's ask box, and the pointer
-with its caption. No gradients, no blur, no glass.
+content: the demo window (`shadow-sm`), the widget's launcher and ask box, and
+the pointer with its caption. No gradients, no blur, no glass.
 
 The pointer's shadow is two layers, a tight one and a soft one:
 `drop-shadow(0 1px 1px rgb(0 0 0 / .3)) drop-shadow(0 5px 9px rgb(0 0 0 / .26))`.
@@ -344,13 +355,18 @@ Components are shadcn/ui, restyled only through tokens and variants.
 - **Highlight ring:** 2px Pointer blue with a 4px ring of the same blue at 25
   percent, 4px outside the target.
 - **Caption:** Ink bubble with Paper text, 14px, at most 320px wide, placed
-  under the target and never over the next control.
-- **Ask box and launcher:** The widget's entry point. An Ink pill launcher that
-  opens a pill text field with a round send button, on Card with a shadow.
-- **Bubbles:** The person's question is a Border grey bubble on the right.
-  Haptic's reply is an Ink bubble on the left.
-- **Form:** Labels above 44px inputs, one primary button, plain text for
-  success and error.
+  under the target and never over the next control. It ends in a small round
+  close button, a cross in a tinted circle, which stops the guide.
+- **Ask box and launcher:** The widget's entry point. An Ink pill launcher opens
+  the ask box, which is shadcn's input group: a Muted field with the text on
+  top and a round Ink send button on a row beneath. The ask box steps aside
+  while Haptic points, leaving only the launcher.
+- **Bubbles and status:** shadcn's chat parts. The person's question is an Ink
+  bubble on the right. Haptic's reply is a Muted bubble on the left. Status
+  sits under them as a marker, three blue dots while thinking and the green
+  tick when done.
+- **Form:** Labels above 44px inputs and one primary button. Success and error
+  use shadcn's alert, with an icon, a short title and one line of detail.
 - **Accordion:** FAQ rows with a plus that turns to a cross. One row open at a
   time.
 

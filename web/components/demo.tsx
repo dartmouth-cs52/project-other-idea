@@ -2,8 +2,13 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useInView, useReducedMotion } from "motion/react";
-import { ArrowUp, Check } from "lucide-react";
+import { ArrowUpIcon, Check, XIcon } from "lucide-react";
 import { Pointer, POINTER_TIP } from "@/components/pointer";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { Button } from "@/components/ui/button";
+import { InputGroup, InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import { Message, MessageContent } from "@/components/ui/message";
 import { cn } from "@/lib/utils";
 
 // One scripted task, played on a loop inside a mock customer app: a person
@@ -14,7 +19,8 @@ const CARD_NUMBER = "•••• •••• •••• 1881";
 const GLIDE = { duration: 0.55, ease: [0.2, 0.8, 0.2, 1] as const };
 
 type Target = "avatar" | "billing" | "update" | "card" | "save";
-type Composer = "idle" | "typing" | "thinking" | "guiding" | "done";
+/** What the ask box is doing. It steps aside while Haptic points, as the real widget does. */
+type Composer = "idle" | "typing" | "thinking" | "pointing" | "next" | "done";
 
 interface Scene {
   view: "projects" | "billing";
@@ -26,7 +32,6 @@ interface Scene {
   typed: number;
   /** The question has been sent and shows as a bubble. */
   asked: boolean;
-  step: number;
   target: Target | null;
   ring: boolean;
   caption: string | null;
@@ -42,7 +47,7 @@ const STEPS: { target: Target; say: string }[] = [
   { target: "avatar", say: "Open your account menu." },
   { target: "billing", say: "Choose Plan and billing." },
   { target: "update", say: "Click Update payment method." },
-  { target: "card", say: "Enter your new card." },
+  { target: "card", say: "Enter your card." },
   { target: "save", say: "Then save your card." },
 ];
 
@@ -54,7 +59,6 @@ const START: Scene = {
   composer: "idle",
   typed: 0,
   asked: false,
-  step: 0,
   target: null,
   ring: false,
   caption: null,
@@ -68,9 +72,8 @@ const START: Scene = {
 const REST: Scene = {
   ...START,
   view: "billing",
-  composer: "guiding",
+  composer: "pointing",
   asked: true,
-  step: 3,
   target: "update",
   ring: true,
   caption: STEPS[2].say,
@@ -126,7 +129,7 @@ export function Demo() {
         for (let i = 0; i < STEPS.length && alive; i++) {
           const { target, say } = STEPS[i]!;
           // The pointer glides to the control, then the ring and caption land.
-          set({ composer: "guiding", step: i + 1, target, ring: false, caption: null });
+          set({ composer: "pointing", target, ring: false, caption: null });
           await wait(600);
           set({ ring: true, caption: say });
           await wait(1500);
@@ -148,7 +151,7 @@ export function Demo() {
 
           set({ ring: false, caption: null });
           if (i < STEPS.length - 1) {
-            set({ composer: "thinking" });
+            set({ composer: "next" });
             await wait(600);
           }
         }
@@ -185,7 +188,7 @@ export function Demo() {
       // Nothing to point at, so the pointer waits by the ask box.
       const box = composer.current?.getBoundingClientRect();
       const tip = box
-        ? { x: box.left - bounds.left + 24, y: box.top - bounds.top + box.height / 2 }
+        ? { x: box.right - bounds.left - 64, y: box.bottom - bounds.top - 20 }
         : { x: bounds.width - 80, y: bounds.height - 44 };
       setGeometry({ tip, ring: null, caption: null });
       return;
@@ -217,7 +220,7 @@ export function Demo() {
         aria-label="A demo of Haptic inside a sample app. A person asks how to update their card, and Haptic points to each control in turn until the card is saved."
         className="overflow-hidden rounded-3xl border bg-card shadow-sm select-none"
       >
-        <div aria-hidden="true">
+        <div aria-hidden="true" inert>
           <div className="flex h-11 items-center gap-3 border-b px-4">
             <div className="flex w-[52px] gap-2">
               {["#ff5f57", "#febc2e", "#28c840"].map((color) => (
@@ -230,7 +233,7 @@ export function Demo() {
             <div className="w-[52px]" />
           </div>
 
-          <div ref={app} className="relative h-[544px] overflow-hidden text-sm leading-5">
+          <div ref={app} className="relative h-[576px] overflow-hidden text-sm leading-5">
             <motion.div className="h-full" animate={{ opacity: scene.fading ? 0 : 1 }} transition={{ duration: 0.3 }}>
               <div className="flex h-14 items-center gap-6 border-b px-6">
                 <div className="flex items-center gap-2 font-medium">
@@ -355,7 +358,7 @@ export function Demo() {
               {scene.caption && geometry?.caption && (
                 <motion.div
                   key={scene.caption}
-                  className="pointer-events-none absolute z-20 max-w-[min(16.25rem,calc(100%-1rem))] rounded-xl bg-primary px-3 py-2 text-primary-foreground shadow-lg"
+                  className="pointer-events-none absolute z-20 flex max-w-[min(18rem,calc(100%-1rem))] items-center gap-2 rounded-xl bg-primary py-1.5 pr-1.5 pl-3 text-primary-foreground shadow-lg"
                   style={geometry.caption}
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -363,38 +366,15 @@ export function Demo() {
                   transition={{ duration: 0.18 }}
                 >
                   {scene.caption}
+                  <Button variant="ghost" size="icon-xs" className="bg-primary-foreground/15 text-primary-foreground">
+                    <XIcon />
+                  </Button>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <div className="absolute right-5 bottom-5 z-10 flex max-w-[calc(100%-2.5rem)] flex-col items-end gap-2">
-              <AnimatePresence>
-                {scene.asked && !scene.fading && (
-                  <motion.div
-                    className="rounded-2xl bg-secondary px-3 py-2 text-secondary-foreground"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    {QUESTION}
-                  </motion.div>
-                )}
-                {scene.reply && !scene.fading && (
-                  <motion.div
-                    className="self-start rounded-2xl bg-primary px-3 py-2 text-primary-foreground"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    {scene.reply}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              <div ref={composer} className="flex h-11 w-[19rem] max-w-full shrink-0 items-center gap-2.5 rounded-full border bg-card pr-2 pl-4 shadow-md">
-                <ComposerBody scene={scene} />
-              </div>
+            <div ref={composer} className="absolute right-5 bottom-5 z-10 flex w-[19rem] max-w-[calc(100%-2.5rem)] flex-col items-end">
+              <Dock scene={scene} />
             </div>
 
             {geometry && (
@@ -414,56 +394,91 @@ export function Demo() {
   );
 }
 
-function ComposerBody({ scene }: { scene: Scene }) {
-  if (scene.composer === "thinking") {
+const rise = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2 } };
+
+/** Haptic's corner of the screen: the ask box, a status pill between steps, or just the launcher. */
+function Dock({ scene }: { scene: Scene }) {
+  if (scene.fading) return null;
+  if (scene.composer === "pointing") {
     return (
-      <>
-        <span className="flex items-center gap-1">
-          {[0, 1, 2].map((i) => (
-            <span key={i} className="size-1.5 animate-thinking rounded-full bg-pointer" style={{ animationDelay: `${i * 0.16}s` }} />
-          ))}
-        </span>
-        <span className="flex-1 text-muted-foreground">{scene.step === 0 ? "Thinking" : "Next step"}</span>
-      </>
+      <motion.div key="launcher" {...rise} className="flex h-10 items-center gap-2 rounded-full bg-primary pr-4 pl-3.5 font-medium text-primary-foreground shadow-lg">
+        <Pointer className="size-4" />
+        Ask
+      </motion.div>
     );
   }
-  if (scene.composer === "guiding") {
+  if (scene.composer === "next") {
     return (
-      <>
-        <Pointer className="size-4 text-pointer" />
-        <span className="flex-1 font-medium">
-          Step {scene.step} of {STEPS.length}
-        </span>
-        <span className="flex h-7 items-center rounded-full border px-3 text-[13px] text-muted-foreground">Stop</span>
-      </>
-    );
-  }
-  if (scene.composer === "done") {
-    return (
-      <>
-        <span className="flex size-5 items-center justify-center rounded-full bg-success text-success-foreground">
-          <Check className="size-3.5" strokeWidth={3} />
-        </span>
-        <span className="flex-1 font-medium">Done</span>
-      </>
+      <motion.div key="next" {...rise} className="flex h-10 items-center gap-2.5 rounded-full border bg-card px-4 shadow-lg">
+        <Dots />
+        <span className="text-muted-foreground">Next step</span>
+      </motion.div>
     );
   }
   const typing = scene.composer === "typing";
   return (
-    <>
-      <span className={cn("flex-1 truncate", !typing && "text-muted-foreground")}>
-        {typing ? QUESTION.slice(0, scene.typed) : "What do you want to do"}
-        {typing && <span className="ml-px inline-block h-4 w-px translate-y-[3px] animate-caret bg-foreground" />}
-      </span>
-      <span
-        className={cn(
-          "flex size-7 items-center justify-center rounded-full transition-colors",
-          typing && scene.typed > 0 ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground",
-        )}
-      >
-        <ArrowUp className="size-4" />
-      </span>
-    </>
+    <motion.div key="panel" {...rise} className="flex w-full flex-col gap-3 rounded-3xl border bg-card p-2 shadow-lg">
+      {scene.asked && (
+        <div className="flex flex-col gap-2 px-1 pt-1">
+          <Message align="end">
+            <MessageContent>
+              <Bubble align="end">
+                <BubbleContent>{QUESTION}</BubbleContent>
+              </Bubble>
+            </MessageContent>
+          </Message>
+          {scene.reply && (
+            <Message>
+              <MessageContent>
+                <Bubble variant="muted">
+                  <BubbleContent>{scene.reply}</BubbleContent>
+                </Bubble>
+              </MessageContent>
+            </Message>
+          )}
+          {scene.composer === "done" ? (
+            <Marker>
+              <MarkerIcon>
+                <span className="flex size-4 items-center justify-center rounded-full bg-success text-success-foreground">
+                  <Check className="size-3" strokeWidth={3} />
+                </span>
+              </MarkerIcon>
+              <MarkerContent className="font-medium text-foreground">Done</MarkerContent>
+            </Marker>
+          ) : (
+            <Marker>
+              <MarkerIcon className="flex w-auto items-center">
+                <Dots />
+              </MarkerIcon>
+              <MarkerContent>Thinking</MarkerContent>
+            </Marker>
+          )}
+        </div>
+      )}
+      <InputGroup className="rounded-2xl border-transparent bg-muted">
+        <div className="flex min-h-10 w-full items-center px-3 pt-1">
+          <span className={cn("truncate", !typing && "text-muted-foreground")}>
+            {typing ? QUESTION.slice(0, scene.typed) : "What do you want to do"}
+            {typing && <span className="ml-px inline-block h-4 w-px translate-y-[3px] animate-caret bg-foreground" />}
+          </span>
+        </div>
+        <InputGroupAddon align="block-end">
+          <InputGroupButton variant="default" size="icon-sm" className="ml-auto rounded-full" disabled={!typing || scene.typed === 0}>
+            <ArrowUpIcon />
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
+    </motion.div>
+  );
+}
+
+function Dots() {
+  return (
+    <span className="flex items-center gap-1">
+      {[0, 1, 2].map((i) => (
+        <span key={i} className="size-1.5 animate-thinking rounded-full bg-pointer" style={{ animationDelay: `${i * 0.16}s` }} />
+      ))}
+    </span>
   );
 }
 

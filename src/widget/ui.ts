@@ -24,15 +24,14 @@ button { font: inherit; cursor: pointer; }
   background: #1c1917; color: #fafaf9; font-weight: 500; box-shadow: 0 4px 14px rgba(0,0,0,.22); }
 .launcher svg { width: 16px; height: 16px; flex: none; }
 .launcher path { fill: currentColor; }
-.panel { width: min(340px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 22px;
-  padding: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.16); }
+.panel { width: min(320px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 22px;
+  padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.16); }
 [hidden] { display: none !important; }
-.panel form { display: flex; align-items: center; gap: 6px; }
-.panel input { flex: 1; min-width: 0; height: 36px; font: inherit; color: inherit; padding: 0 12px; border: 1px solid transparent; border-radius: 999px;
-  background: transparent; outline: none; }
+.panel form { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 18px; background: #f5f5f4; }
+.panel form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+.panel input { width: 100%; height: 40px; font: inherit; color: inherit; padding: 4px 12px 0; border: 0; background: transparent; outline: none; }
 .panel input::placeholder { color: #78716c; }
-.panel input:focus-visible { border-color: var(--accent); }
-.panel .send { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; margin-right: 2px; border: 0;
+.panel .send { display: inline-flex; align-items: center; justify-content: center; align-self: flex-end; width: 32px; height: 32px; margin: 6px 10px 8px; border: 0;
   border-radius: 999px; background: #1c1917; color: #fafaf9; }
 .panel .send svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .status { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 36px; padding: 0 2px 0 12px; }
@@ -44,9 +43,12 @@ button { font: inherit; cursor: pointer; }
   filter: drop-shadow(0 1px 1px rgba(0,0,0,.3)) drop-shadow(0 5px 9px rgba(0,0,0,.26)); will-change: transform; }
 .cursor svg { display: block; overflow: visible; }
 .cursor path { fill: var(--accent); stroke: #fff; stroke-width: 3; stroke-linejoin: round; paint-order: stroke; }
-.caption { position: fixed; max-width: min(320px, calc(100vw - 24px)); background: #1c1917; color: #fafaf9; border-radius: 14px;
-  padding: 8px 32px 8px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.22); pointer-events: auto; }
-.caption .close { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border: 0; border-radius: 999px; background: none; color: #a8a29e; font-size: 16px; line-height: 1; }
+.caption { position: fixed; display: flex; align-items: center; gap: 8px; max-width: min(320px, calc(100vw - 24px)); background: #1c1917; color: #fafaf9;
+  border-radius: 14px; padding: 6px 6px 6px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.22); pointer-events: auto; }
+.caption .close { display: inline-flex; align-items: center; justify-content: center; flex: none; align-self: flex-start; width: 24px; height: 24px; border: 0;
+  border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; }
+.caption .close:hover { background: rgba(250,250,249,.25); }
+.caption .close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
 @media (prefers-reduced-motion: reduce) { .cursor { transition: none; } }
 `;
 
@@ -78,7 +80,7 @@ export class Ui {
     const side = appearance.position === "bottom-left" ? "left" : "right";
     root.innerHTML = `<style>${CSS}</style>
       <div class="ring" hidden></div>
-      <div class="caption" hidden><span></span><button class="close" aria-label="Stop guide">×</button></div>
+      <div class="caption" hidden><span></span><button class="close" aria-label="Stop guide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="cursor" hidden><svg viewBox="0 0 24 24" width="24" height="24"><path d="${POINTER_PATH}"/></svg></div>
       <div class="dock ${side}">
         <div class="panel" hidden>
