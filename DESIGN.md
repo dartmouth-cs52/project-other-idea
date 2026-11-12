@@ -271,9 +271,9 @@ This is what lets one fixed colour work on any customer's site.
 white window has something to float over. Proposed, awaiting sign off. Four
 rules keep it inside the system:
 
-- Tonalist works only, hazy and close to a single colour: warm greys, browns
-  and grey-greens. No picture with blue in it, because blue belongs to the
-  pointer.
+- Hazy, low-colour landscapes only, the kind the tonalists painted, each close
+  to a single colour: warm greys, browns and grey-greens. No picture with blue
+  in it, because blue belongs to the pointer.
 - Always toned down, to 60 percent saturation at 80 percent opacity over Border
   grey. That one treatment pulls a picture lighter in light mode and darker in
   dark mode, so no painting needs a second version.

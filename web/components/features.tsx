@@ -6,9 +6,10 @@ import { AnyQuestionDemo, DocsDemo, PrivacyDemo } from "@/components/demo/featur
 // the claim. The claims describe the product as it works today.
 
 /**
- * A public domain painting that sits behind a demo. The three are tonalist
- * works, quiet and close to one colour each, from the Art Institute of Chicago's
- * open access collection (CC0). `position` picks the part of the picture that shows.
+ * A public domain painting that sits behind a demo. The three are hazy,
+ * low-colour landscapes, each close to one colour, from the Art Institute of
+ * Chicago's open access collection (CC0). `position` picks the part of the
+ * picture that shows.
  */
 interface Art {
   src: string;
