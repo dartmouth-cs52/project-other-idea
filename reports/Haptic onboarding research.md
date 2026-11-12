@@ -1,8 +1,177 @@
 # Haptic must earn its script tag
 
-The team's three working beliefs each fail in the form stated, and correcting them changes the order of Haptic's onboarding more than its contents. **The script tag is the right production install and the wrong first ask**: it is the first step that needs an engineer, a Content Security Policy change and a security review; one comparable snippet product reported almost half its signups still uninstalled after a month (a figure seen only in a search snippet); and five self-serve in-app guidance products, including Haptic's closest competitor, let a non-developer run the product on their own logged-in app through a Chrome extension before any code ships. **The Crisp/Hugo wizard transfers in shape but not in substance**, because Crisp builds its proof from a public website and Haptic's subject is a logged-in app that no crawler in the evidence can read, Haptic's own included. **The paper the team cited tested "memory in the prompt" directly and found it bought nothing for a strong model** (42.0% task success and 8.41 model calls with the map, against 44.4% and 8.16 without); its gain came from a deterministic executor that skips model calls, on 27 Microsoft Office tasks, and its authors name the web as the case they do not handle. Haptic as built is the configuration that test found unhelpful: a static map in the prompt and one model call per step. The speed levers the evidence points to instead are a non-reasoning model with the pointer target streamed first, and a per-customer store of verified routes that is checked against the live page and lets repeat steps skip the model; neither has been measured on a product like Haptic. Those routes come from an admin demonstrating flows and from guided sessions, which is the "different onboarding" the team suspected. The recommended flow follows: keep the request-access gate and onboard the first handful of companies by hand, show Haptic on the buyer's own app before asking for the script, make the hand-off to an engineer a designed step with live verification, go live to the customer's own staff first, and build self-serve from what those calls reveal. The number that matters most, the share of signups who are not engineers and still get a script installed, is published nowhere, so the first cohort's own funnel is the most valuable measurement available.
+**Bottom line.** Three assumptions the team started with each fail in the form stated, and correcting them changes the order of Haptic's onboarding more than its contents. The fix has three parts: show Haptic working on the customer's own site, before the install or straight after a small one; treat the hand-off to whoever installs the script as a designed step with live verification; and get speed from routes that people have confirmed, not from a site map in the prompt.
 
-**How to read the evidence.** Every claim below carries the strength the underlying research notes gave it. "Controlled" means a randomised test. "Self-reported" means a company describing its own product with no control group. "Vendor telemetry" means a tool vendor's data from its own customers, who are not a random sample. "Snippet only" means the claim was seen in a search-result summary and the page itself could not be opened. "Documentation" shows that a pattern exists, not that it works. "Inference" marks reasoning by the researchers or by this report, not a sourced fact. Competitor pages were read through a tool that summarises, so quoted wording should be re-checked before it is repeated publicly. No competitor flow was signed up for or walked through; everything said about competitors rests on their documentation and marketing pages as of 12 November 2026. Facts about Haptic's own code and website come from its repository. Each major conclusion ends with a confidence level: high, moderate, low or unknown.
+| What the team assumed | What the evidence says | Confidence |
+|---|---|---|
+| The script tag is the best: they just add it | Right production install, wrong first ask. It is the first step that needs an engineer, and often a Content Security Policy change and a security review as well. One comparable snippet product reported almost half its signups still uninstalled after a month (seen only in a search snippet). Five self-serve guidance products, including the closest competitor, let a non-developer run the product on their own logged-in app through a Chrome extension before any code ships | High that the tag is table stakes; moderate that moving it later raises installs |
+| Follow the Crisp/Hugo wizard | It transfers for public sites and breaks at a login, and Haptic has to work on both. On a public site, "enter your domain" can do for Haptic what it does for Crisp once the crawl can render JavaScript, which Haptic's cannot yet. On an app behind a login, no crawler in the evidence can read the screens, Haptic's own included, so the proof has to come another way | High on the login wall; moderate on the replacements |
+| A memory of the site will make it fast | The cited paper tested a map in the prompt and found it bought nothing for a strong model: 42.0% task success and 8.41 model calls with the map, against 44.4% and 8.16 without. Its gain came from an executor that skips model calls, on 27 Microsoft Office tasks, and its authors name the web as the case they do not handle. Haptic as built is the configuration that test found unhelpful. What cuts model calls is a store of verified routes, checked against the live page | High on what the paper says; moderate on the transfer to Haptic |
+
+**What follows.** Keep the request-access gate and onboard the first handful of companies by hand. Build only the three steps every script-installed product needs (create a site, add the tag, see it connect) and add the others when a named problem calls for them. Test the choice of model before anything else, because it asks nothing of the customer. The number that matters most, the share of signups who are not engineers and still get a script installed, is published nowhere, so the first customers' own funnel is the most valuable measurement available.
+
+> **How to read the evidence.** Every claim below carries the strength the underlying research notes gave it. "Controlled" means a randomised test. "Self-reported" means a company describing its own product with no control group. "Vendor telemetry" means a tool vendor's data from its own customers, who are not a random sample. "Snippet only" means the claim was seen in a search-result summary and the page itself could not be opened. "Documentation" shows that a pattern exists, not that it works. "Inference" marks reasoning by the researchers or by this report, not a sourced fact. Competitor pages were read through a tool that summarises, so quoted wording should be re-checked before it is repeated publicly. No competitor flow was signed up for or walked through; everything said about competitors rests on their documentation and marketing pages as of 12 November 2026. Facts about Haptic's own code and website come from its repository. Each major conclusion ends with a confidence level: high, moderate, low or unknown.
+
+> **Revised 12 November 2026 after the team's review.** Two decisions from the team are now built in. Haptic must work on public sites as well as apps behind a login, so the report no longer treats the logged-in app as the only case. The first release is guiding only; answering questions and acting for the user come later. The team's stated priority is speed first and accuracy second; the next section argues for a slightly different rule. That section also covers which model to use, whether to show the steps of a guide, which onboarding steps are required, what this week's goal needs, whether Supabase is needed, and what Jimo documents about how it works. The section after it is a build note for Isaac on the route store.
+
+## Team review, 12 November: decisions and open questions
+
+Everything in this section is this report's judgement, reasoned from the evidence in the later sections and from Haptic's code. None of it has been measured on Haptic.
+
+### Speed first, or accuracy first
+
+The team's stated goal is to be as fast as possible, and then as accurate as possible. The strongest argument against that order is that **a wrong pointer is not a slow answer. It is a wrong instruction given with authority.** In the one study in this report of people following model help, users "often followed the LLM's suggestions verbatim, even if they were incorrect" ([Khurana et al., IUI 2024](https://arxiv.org/abs/2402.08030)). A fast wrong pointer costs the user the wrong click, the time to notice, the way back, and their trust in the next pointer. A right pointer that arrives a second later costs one second. Haptic's pitch against chatbots is that it shows exactly where to click, so accuracy is the product and speed is how good the product feels.
+
+What holds in the team's order is that above some level of accuracy, speed is what people notice, and Haptic today is probably slow. The long-standing rule of thumb for response times is that about 0.1 seconds feels instant, about 1 second keeps a person's train of thought, and about 10 seconds is the limit of attention ([Nielsen, 1993](https://www.nngroup.com/articles/response-times-3-important-limits/); a design guideline, not a measurement of Haptic, and not part of the research notes). The pointer should aim for the middle figure.
+
+**The rule this report recommends: set an accuracy floor, then make Haptic as fast as possible without going under it.** In practice that means a fixed set of real questions, a pass mark the team chooses for "the first pointer was right", and the fastest configuration that clears it. The research gives no number for the pass mark. The two goals also stop competing on repeat questions: a route a person has confirmed is both faster than a fresh model answer, because there is no model call, and more accurate, because someone checked it. **Confidence: moderate.**
+
+### Which model
+
+The model in use is probably not the right one for speed, and nobody has measured it. Three facts, from Haptic's code and from Anthropic's model reference as bundled with this session (cached 3 November 2026; check the live pricing page before budgeting):
+
+| Fact | Where it comes from | Why it matters |
+|---|---|---|
+| Haptic calls `claude-opus-5-5` at low effort for every step | `src/server/model.ts` | On that model, thinking cannot be turned off at any effort level, so each step waits for some thinking before the first usable token |
+| The call is not streamed | `client.beta.messages.parse` in `src/server/model.ts` returns only when the whole reply is done | The pointer waits for the sentence as well as the target, although `target` is the first field of the reply |
+| The two smaller current models can run with thinking off | Claude Haiku 5.5 accepts thinking disabled at effort high or below; Claude Sonnet 5.5 has a `between_tools` setting that does the same job | Removes the wait before the first token, at some risk to accuracy |
+
+| Model | Price per million tokens, input / output | Thinking off? | Note |
+|---|---|---|---|
+| `claude-opus-5-5` (today) | $4 / $20 | No | A paid fast mode exists at $8 / $40, with up to 2.5 times the output speed |
+| `claude-sonnet-5-5` | $2 / $10 | Yes | The middle option |
+| `claude-haiku-5-5` | $0.10 / $0.50 | Yes | Forty times cheaper than Opus 5.5. No automatic fallback when a request is declined |
+
+**Recommendation: decide by test, not by reputation.** Run the three on the same questions, in the same hour, and compare two numbers: seconds until the pointer moves, and the share of first pointers that are right. This report's expectation, unmeasured, is that Haiku 5.5 with thinking off and the reply streamed will reach the first pointer several times sooner, and that the open question is whether it stays accurate on real apps. The cited paper gives one reason for hope: its weaker model was the one that gained from a site map. If the small model fails the accuracy floor only on hard steps, it can take every step and hand just the failures (no target found, or the loop guard in `src/widget/guide.ts` tripping) to a larger model. A faster model is not automatically a faster guide: one that needs more steps gives the time back, so compare whole guides as well as single steps.
+
+Two changes are worth making whichever model wins, and neither asks anything of the customer. Stream the reply and move the pointer as soon as `target` arrives. And give the cached site prompt a one-hour lifetime: the default is five minutes, so on a quiet site the first step of most guides starts cold. Pre-warming with an empty request is not allowed together with structured output, which Haptic uses, so the longer lifetime is the available fix.
+
+This session had no API key, so nothing was timed. About 30 questions on 3 models is a few hundred calls, likely under ten dollars at the prices above; that figure is an estimate from token counts, not a quote. **Confidence: moderate** that the current model is the wrong default for speed; **unknown** for which model holds accuracy.
+
+### Showing the steps of a guide
+
+Jimo's marketing demo shows a panel that lists the steps of a guide and ticks them off: "Read page: Home", "Find Reports in the sidebar", "Plan the export in 3 steps", "Open Reports", then the filter and the export. Frigade's tooltip shows "3 of 3". These are screenshots from the two companies' sites, not observed product behaviour. A step list is not required. Part of it is worth having, and the part that is free should come first.
+
+| What the panel shows | What it costs Haptic | Recommendation |
+|---|---|---|
+| Steps already done | Nothing. The guide already keeps this history in `src/widget/guide.ts` | Show it now. It tells the user where they are and that progress is real |
+| The current step | Nothing. It is the sentence beside the pointer | Already shown |
+| Steps still to come | A plan made before the first pointer moves: an extra model call or a longer first reply, which works against speed. The plan is also a guess, because Haptic sees only the page the user is on | Show only when the steps come from a verified route, where the whole list is known, costs nothing, and has been checked |
+| "Reading the page", "Planning" | Nothing, but these are not steps the user takes. They narrate the wait | Use one short status line, as Haptic does now ("Finding it…"). If the wait needs three lines to fill, the wait is the problem |
+
+That makes the step list the visible face of the route store. On a goal Haptic has seen, the user gets "3 steps" at once and the pointer moves immediately. On a new goal, they get one step at a time. Jimo's demo also corrects a wrong click ("AND, not OR"). Haptic already detects a click on something other than the target and carries on from where the user is (`waitForAction` in `src/widget/guide.ts`); saying so in the pointer's sentence would be a small change. **Confidence: moderate.**
+
+### Which onboarding steps are required
+
+The seven-step flow recommended at the end of this report is not proven to be the best option, and as something to build now it is too much. The report's own confidence in the order is moderate at best. Three of the seven steps are required by any product installed with a script: create a site, add the tag, see it connect. Every snippet product in the research has those three. The other four each answer a named problem, and each can be dropped when the problem does not apply.
+
+| Step | Required? | The problem it answers | Drop or defer it when |
+|---|---|---|---|
+| 1. Sign up | Yes | Haptic needs an owner, a site ID and the origins the widget may run on | Never. The question "can you install it yourself?" need not be a signup field: two buttons on the install page, "I'll add it" and "Send to my developer", collect the same answer |
+| 2. Read the public pages and help docs | No | Gives the customer something specific to them within minutes, and gives Haptic their vocabulary | The crawl returns little. It must never block the next step |
+| 3. See it on your own site before the install | No | The person who signed up cannot install it and needs a reason to chase someone who can | The signer can install it in minutes. That is likely for the first customers, and then the install is the demo |
+| 4. Test your top questions | No, but it is the first one to keep | Trust before real users see it; a test set; the first verified routes | It should not be dropped. It can run after the install, in a preview only the admin sees |
+| 5. Add the script | Yes | The script has to reach the site | Never. For a signer who installs alone it is one tag and a copy button |
+| 6. See it connect | Yes | Without it nobody knows whether the install worked, and every support conversation starts with guessing | Never |
+| 7. Go live in stages | No | Lets a cautious customer say yes in parts | Public sites and small teams. One switch, off by default, is enough |
+
+**The lean version** is five screens, and the last two are the product itself and not setup: sign up with the site's address; copy the tag or send it to a developer; watch the status change to connected; try the top questions in a preview only the admin can see; switch it on. The preview does the work of steps 3, 4 and 7 with one mechanism and no browser extension: the tag is installed, but the widget appears only in a browser the admin opened from a preview link in the dashboard. Google Tag Manager's preview mode works the same way. The cost is that the proof now comes after the install, so it does nothing for a signer who cannot get the tag installed. For that person the call with an engineer, or later the extension, is still the answer, and the first customers' funnel will show how common that person is.
+
+What this report still holds after the challenge: the install is where accounts stall, verification is not optional, the top-questions step is where both trust and routes come from, and staged release matters for apps that hold customer data. What it concedes: seven separate steps is over-built, the install question does not belong on the signup form, and the extension should not be built until the first customers show that signers cannot install. **Confidence: moderate.**
+
+### This week: guides working on the sites the team is working with
+
+The team's goal for the end of this week is guides finished and working on any site the team is working with. That goal does not need a signup flow, a dashboard or a database. It needs the six things below.
+
+| Needed this week | State today | Smallest way to get it |
+|---|---|---|
+| A server that customers' browsers can reach over HTTPS | Not deployed | Run the existing Node server on one always-on machine with a disk. Set `HAPTIC_PUBLIC_URL` and the API key there |
+| A site context for each site | Made by hand with `npm run tag`, stored as a JSON file | Keep making them by hand. Pass `--allow` for each extra origin, such as localhost and staging |
+| A way to try a site before its owner installs anything | None | Paste the loader below into the browser console on that site. Checked in this session: the widget loaded on a second origin once that origin was allowed. It will fail on a site whose Content Security Policy blocks outside scripts |
+| A faster step | One Opus call per step, not streamed | The model test and the streaming change described above |
+| A fixed set of questions per site | None | Ten real how-do-I questions per site, kept in the repo and rerun after every change. Without this, "done" cannot be checked |
+| Telling the user when they click the wrong thing | Detected, and the guide carries on from where they are, but nothing is said | A line in the prompt rules in `src/server/prompt.ts` telling the model to say so before giving the next step |
+
+```js
+const s = document.createElement("script");
+s.src = "https://YOUR-HAPTIC-HOST/widget.js";
+s.dataset.site = "site_yourid";
+document.body.append(s);
+```
+
+| Not needed this week | Why |
+|---|---|
+| Signup, accounts and a dashboard | The team adds each site by hand |
+| The onboarding flow at the end of this report | Same reason. It is the design for self-serve, later |
+| A browser extension | The console loader does the same job for the team's own testing |
+| The route store | Start the log now; build the store once the log shows that questions repeat |
+| A crawl that renders JavaScript | The widget reads every page live, so guides work with no site map. The crawl only adds a map of public pages |
+
+"Any website" has four limits that come from the widget's code, and it is better to know them before a customer finds them. Content inside an iframe is skipped. An interface drawn on a canvas gives the widget nothing to read. A page lists at most 300 controls. And a strict Content Security Policy blocks the script until the site's owner allows it. Open shadow roots are read. **Confidence: high** on the limits, which were read from `src/widget/snapshot.ts`; **moderate** on what fits in a week.
+
+### Is a Supabase project needed
+
+Not for this week's goal. The server keeps each site as a JSON file, which works as long as it runs on one machine with a disk. A database becomes necessary at three points.
+
+| When | Why files stop working |
+|---|---|
+| The server runs somewhere with no disk, or on more than one machine | Cloudflare Workers, where the website already runs, has no disk. Two machines would each have their own copy of the files |
+| The step log is being written | Many requests appending to one file at once is fragile, and the log is only useful if it can be queried |
+| There are accounts | Sign-in, and rules about who can see which site, need a real store |
+
+Supabase covers all three: a Postgres database, sign-in with Google or email, and per-row access rules. The change on Haptic's side is small, because every read and write of a site goes through three functions in `src/server/sites.ts`. **Recommendation: one machine with a disk this week; create the Supabase project when the step log or signup is started, whichever comes first.**
+
+Four things to know before then. The Supabase account connected to this session has no project for Haptic, and a team project belongs in an organisation the whole team can reach. The server must hold the database's service key as a secret and never send it to the browser. Site contexts should stay cached in the server's memory, so that a step never waits on a database read. And free Supabase projects are paused after about a week without activity, as far as this report knows; if the widget depended on a paused project it would stop on every customer's site, so check the current terms before production relies on a free project. If the server moves to Cloudflare Workers, Cloudflare's own storage is the alternative for site contexts (the website already uses its key-value store for access requests), but it has no sign-in service. **Confidence: high** that it is not needed this week; **moderate** on the timing after that.
+
+### How Jimo works, as far as its own documentation says
+
+Nothing here was observed hands-on. It comes from Jimo's help pages, read through a tool that summarises, and the last line of each row is this report's reading.
+
+| What Jimo documents | Source | What it means for Haptic |
+|---|---|---|
+| Two ways of knowing a page. "Scan and curate": an admin catalogs the page's elements, about three minutes a page, and "an element hidden here can never be the target of a Guide". "Read all": "The Agent reads the page in real time whenever a user asks about it" | [Jimo docs, Interface](https://help.usejimo.com/docs/experiences/agent/knowledge/interface.md) | "Read all" is the same family as Haptic's live snapshot. The curated mode is a per-page allow-list Haptic does not have |
+| Guides run from Skills that a person writes ("Describe it") or demonstrates ("Show me"). Every run starts with "Read page to get refs". While pointing it shows "Waiting for your action... Skip". Steps that send, pay, delete or change permissions are handed back to the user | [Jimo docs, Agent](https://help.usejimo.com/docs/experiences/agent.md) | Jimo's documented design is live page reading plus routes authored by people. That is the route store, filled by hand. Haptic today works out the path fresh on every step |
+| The end user has an "eye" control, off by default. With it off, the Agent gets only the page's address and answers in text | [Jimo docs, Agent](https://help.usejimo.com/docs/experiences/agent.md) | A consent pattern worth copying if a customer objects to page reading |
+
+The correction in Jimo's demo ("AND, not OR", "Not that one, switch it back to AND") is worth having, and Haptic is one prompt line away from it, since the wrong click is already detected.
+
+**Has anyone taken Jimo apart?** No public teardown was found, and the search for independent write-ups stopped when the session's search budget ran out, so absence here proves little. Two better sources exist. The first is the trial. With Jimo's extension running on a site the team controls, the browser's network panel shows what is sent with each question, how many requests a step takes and how long each takes. That answers the questions that matter: whether a plan is made before the first pointer, how long the first pointer takes, and what happens on a wrong click. It is observation of the team's own browser. The second is open code of the same kind. [alibaba/page-agent](https://github.com/alibaba/page-agent) is an in-page agent under the MIT licence, with about 29.7 thousand GitHub stars, that reads the page as text with "No screenshots". It acts for the user where Haptic points, but its page-reading code solves the same problem as `src/widget/snapshot.ts` and can be read freely. Pulling apart Jimo's shipped JavaScript is a different matter: software terms commonly forbid reverse engineering, and Jimo's terms were not read for this report, so read them first.
+
+## Note for Isaac: a store of verified routes
+
+**What it is.** For each site, a small table that remembers which control was right for a goal on a screen. When the same goal comes up again on the same screen, Haptic points without asking the model, after checking that the control is on the live page. If the check fails, it falls back to the model call that exists today, and the new answer replaces the stored one.
+
+**Why build it.** It is the only kind of memory in the research with large measured cuts in model calls. The cited paper went from 8.16 to 4.61 calls per task with an executor, and to nothing with the map alone. An Android system made repeat tasks 62.5% faster after a first run ([MobileGPT](https://arxiv.org/abs/2312.03003)). A browser-automation library documents cached replay at roughly 50 to 100 milliseconds against 1 to 5 seconds for a model call ([Stagehand docs](https://docs.stagehand.dev/v4/best-practices/caching); a documentation figure, not a benchmark). The site map Haptic puts in the prompt today is the kind of memory that showed no gain for a strong model.
+
+**What the repo already has.**
+
+| Piece | Where | What it gives a route store |
+|---|---|---|
+| A key that identifies a control across snapshots | `elementKey()` in `src/widget/snapshot.ts:146`: role, label, icon and link target joined | The start of a locator. It is not unique when two controls share a label, and today it is used only to describe what changed between two snapshots |
+| Everything a route step needs | The guide loop in `src/widget/guide.ts`: the goal, the page path, the element pointed at, whether the user clicked it (`last.used`), and what changed afterwards | All of it is in memory during a guide and none of it is saved |
+| One place every step passes through | `POST /v1/turn` in `src/server/index.ts`, which calls `runTurn` in `src/server/model.ts` | The store can sit in front of `runTurn` with no change to the widget |
+| Per-site storage | JSON files in `data/sites/`, read by `src/server/sites.ts` | A first version can keep routes the same way |
+
+**The smallest version worth building, in order.**
+
+1. **Log before acting.** On every step, record the goal, the normalised path, any open dialog, the key of the element pointed at, whether the user clicked it, and whether the guide finished. This alone answers the question that decides everything else: what share of real questions repeat a goal already seen on the same screen.
+2. **Serve exact repeats.** Look up by site, goal (lower-cased, punctuation removed), path, dialog and the key of the previous step. Store the element key plus two tie-breakers: the context string the snapshot already computes (such as "nav › Account") and the position among controls with the same key. If an entry exists and exactly one element in the live snapshot matches, return it with the stored sentence and skip the model.
+3. **Check and repair.** If nothing matches, or more than one element does, call the model as now and overwrite the entry. Count hits, misses and repairs.
+4. **Serve only what a person confirmed.** An entry becomes servable once a user clicked the element it points at and the guide went on to finish, or once an admin confirmed it during onboarding.
+
+**The hard parts.**
+
+| Problem | Why it is hard | A way to start |
+|---|---|---|
+| Matching goals | "change my card" and "update billing info" are one goal. Exact matching will hit rarely; matching by meaning adds a call and can match wrongly | Exact match first, measure the hit rate from the log, then decide |
+| Same label, different control | Every row of a table has an "Edit" button | Refuse to serve unless exactly one element matches |
+| State and roles | The right next step can depend on what the user already did, or on their role or plan. A route an admin showed may not exist for a member | Key on the screen as the user sees it, and never point at something that is not on the live page |
+| Stale but confident | An out-of-date route shown instantly is worse than a slow right answer | Refuse on any doubt; a miss costs one model call |
+| Privacy | Goals are typed by end users and can contain personal data, and so can labels | Run the existing `cleanText` masking on goals before storing them. Whether logging guided sessions needs consent is unresolved (see the legal gaps below) |
+
+**What to measure.** The share of steps served without a model call. The share of served steps where the user clicked the element pointed at. Time to pointer on served steps against model steps. Repairs per site per week.
+
+**Questions for Isaac.** Is `elementKey` unique enough on real apps, and what would you add to it? Should the lookup live on the server, which is the smallest change and still costs one round trip, or in the widget, which is fastest and means sending routes to the browser? Can the store sit in front of `runTurn` as described, or does the step loop need to change? Is step 1, the log, something you could add this week, so the repeat rate is known before anything else is built?
 
 ## Company onboarding ends at the first real end-user answer, not at the install
 
@@ -120,7 +289,7 @@ The middle row is the test of the team's belief, and the authors ran it for exac
 
 ### Why the result does not carry over to Haptic as built
 
-The reasoning runs in five steps. One: in the paper the map pays off because an executor clicks through the hidden hops at no model cost. In Haptic the executor is a person, by design, and the number of clicks is fixed by the app's own menus. The only savings available to Haptic are therefore model calls per human step and seconds per call. Two: Haptic makes one model call per step with a site map in the prompt, which is the middle row of the table, the configuration that showed no gain for a strong model. Three: Haptic's map is weaker than the paper's. It comes from a plain-HTTP crawl with no JavaScript and no login, and the web papers that build site graphs explicitly go beyond that: "Traditional crawlers parse static hyperlinks to discover URL-addressable pages but miss interaction-triggered states" ([WebNavigator](https://arxiv.org/abs/2603.20366)). For a logged-in app, Haptic's repository says such pages "come back nearly empty", so the map holds little about the screens where users get lost. Four: the paper's "critical lesson is the need for applications to expose globally unique identifiers for controls", and Haptic's element identifiers are valid for one page snapshot only, so no stored route could be reused today. Five: Haptic logs no sessions or transitions, so nothing is learned after install either.
+The reasoning runs in five steps. One: in the paper the map pays off because an executor clicks through the hidden hops at no model cost. In Haptic the executor is a person, by design, and the number of clicks is fixed by the app's own menus. The only savings available to Haptic are therefore model calls per human step and seconds per call. Two: Haptic makes one model call per step with a site map in the prompt, which is the middle row of the table, the configuration that showed no gain for a strong model. Three: Haptic's map is weaker than the paper's. It comes from a plain-HTTP crawl with no JavaScript and no login, and the web papers that build site graphs explicitly go beyond that: "Traditional crawlers parse static hyperlinks to discover URL-addressable pages but miss interaction-triggered states" ([WebNavigator](https://arxiv.org/abs/2603.20366)). For a logged-in app, Haptic's repository says such pages "come back nearly empty", so the map holds little about the screens where users get lost. Four: the paper's "critical lesson is the need for applications to expose globally unique identifiers for controls", and Haptic's element ids such as `e12` are valid for one page snapshot only. The widget does compute a key that survives across snapshots, from role, label, icon and link target (`elementKey` in `src/widget/snapshot.ts`), but it is used only to describe what changed between two snapshots, it is not unique when two controls share a label, and it is never stored or sent to the server. So no stored route could be reused today. Five: Haptic logs no sessions or transitions, so nothing is learned after install either.
 
 **The team's belief that a memory of the site will make Haptic "as fast as possible" is contradicted as stated.** What the paper supports is narrower: a map plus a mechanism that skips model calls reduces calls for an autonomous agent on desktop benchmark tasks. **Confidence: high** on what the paper says, which was read in full text with the numbers checked against its Table 3; **moderate** on the transfer to Haptic, because no study covers a web app, a logged-in app or a human in the loop.
 
@@ -184,16 +353,16 @@ What still holds is substantial. A script tag is the only route to end users of 
 
 The script tag therefore belongs after the buyer has seen Haptic work on their own app and before go-live, and it should land on a local or staging build first, then production for the customer's staff, then everyone. The exception is the signer who answers "yes, I can install it myself": for that person the install comes straight after signup, as it does at Sentry and PostHog. **Confidence: high** that the tag is table stakes and that five guidance vendors show the product before install; **moderate** that reordering will raise Haptic's install rate, which no source has tested for this kind of product.
 
-### The Crisp/Hugo wizard transfers in shape, not in substance
+### The Crisp/Hugo wizard transfers for public sites and breaks at a login
 
-The strongest counterargument to using Crisp as the model is that its wizard works for a reason Haptic does not share. Crisp's "Automatically train" step turns a public domain into a working support agent within minutes, and the agent's answers in the playground are the product. Every crawler in the evidence stops at a login: Intercom's documentation says "If the content you want to use is behind a login, Fin won't be able to access or import it", and Zendesk's says "If a website requires authentication, the web crawler can't access it" ([Intercom help](https://www.intercom.com/help/en/articles/9357945-sync-and-manage-websites); [Zendesk help](https://support.zendesk.com/hc/en-us/articles/9961827483162-Best-practices-for-using-a-web-crawler-to-import-content-for-AI-agents-AI-agents-Advanced-only)). Run on a Haptic customer, the same step would produce a bot that can answer from help articles, shown in a preview frame, which is a different product from a pointer on the customer's app. A second difference is the install. Crisp's widget goes on a public website, often through a platform plug-in the signer can add alone, and Crisp can leave it as one checklist item with manual verification. Haptic's goes into a logged-in application and needs an engineer. A third is the checklist: Crisp's ten items mix one critical step with nine general helpdesk tasks, which is why it opens at 9% (the researchers' reading).
+The strongest counterargument to using Crisp as the model is that its wizard works for a reason Haptic shares only on public sites. Crisp's "Automatically train" step turns a public domain into a working support agent within minutes, and the agent's answers in the playground are the product. Every crawler in the evidence stops at a login: Intercom's documentation says "If the content you want to use is behind a login, Fin won't be able to access or import it", and Zendesk's says "If a website requires authentication, the web crawler can't access it" ([Intercom help](https://www.intercom.com/help/en/articles/9357945-sync-and-manage-websites); [Zendesk help](https://support.zendesk.com/hc/en-us/articles/9961827483162-Best-practices-for-using-a-web-crawler-to-import-content-for-AI-agents-AI-agents-Advanced-only)). Run on a Haptic customer whose product sits behind a login, the same step would produce a bot that can answer from help articles, shown in a preview frame, which is a different product from a pointer on the customer's app. A second difference is the install. Crisp's widget goes on a public website, often through a platform plug-in the signer can add alone, and Crisp can leave it as one checklist item with manual verification. Haptic's goes into a logged-in application and needs an engineer. A third is the checklist: Crisp's ten items mix one critical step with nine general helpdesk tasks, which is why it opens at 9% (the researchers' reading).
 
 | Crisp/Hugo step | Transfers? | Reasoning | Haptic version |
 |---|---|---|---|
 | Account by Google or name, email, password | Yes | One-click sign-in is the best-supported friction reducer | Same, with a nudge toward work email, not a block |
 | Company, domain, goal chips | Partly | Haptic needs two addresses, the public site and the app where users log in, as Jimo records. Goal chips earn their place only if they change the flow | Company, public site, app URL, help-centre URL. Replace goal chips with the install question |
 | AI-first or human-first choice | No | Haptic has no equivalent product split | The fork that matters: "Can you add a script to your app yourself?" |
-| "Automatically train" on the domain | In shape only | Ask for one thing the customer knows, do work at once, show a countable result. The result for Haptic is intent knowledge from public pages, not the app | Show "N public pages and M help articles read" and say plainly that screens behind the login are learned in the next step |
+| "Automatically train" on the domain | Yes for public sites; in shape only behind a login | Ask for one thing the customer knows, do work at once, show a countable result. The result for Haptic is intent knowledge from public pages, not the app | Show "N public pages and M help articles read" and say plainly that screens behind the login are learned in the next step |
 | "Manually train" with website, files, Q&A | Yes | Maps onto Haptic's existing notes and docs inputs | Add the customer's five to ten most common how-do-I questions, which become the test set |
 | "Configure" with logo, name, description, guidance, beside a live preview | Yes, with a different preview | A preview in an empty frame shows a chat bubble, not the pointer | Name, accent and guidance as now; the preview is the customer's own app |
 | Dashboard opens on a playground: "disabled, a safe playground" | As a principle | "Disabled but testable" is the shared answer to fear of shipping an AI feature | Haptic's playground is the customer's app, visible to their staff only |
@@ -202,6 +371,21 @@ The strongest counterargument to using Crisp as the model is that its wizard wor
 | Activation as a separate switch | Yes | Install and go-live are different decisions | Staff-only, then everyone, with an off switch |
 
 Crisp's flow also lacks five things Haptic needs because of where its script runs: the install question and developer hand-off, live install verification (Crisp's is "send a test message"), the list of allowed origins captured early as kapa.ai does before it reveals an ID, a security summary for the approver, and a staged rollout ([kapa.ai docs](https://docs.kapa.ai/integrations/website-widget/quickstart)). **Confidence: high** that the login wall breaks the "auto-train as proof" step, since vendor documentation and Haptic's own repository agree; **moderate** on the specific replacements, which are assembled from other vendors' documented patterns and untested for Haptic.
+
+### Public sites and apps behind a login need different proof
+
+Haptic has to work on both, and the two differ at almost every step of onboarding. The table is this report's reasoning from the evidence above and from Haptic's code. None of its cells was measured.
+
+| | Public site, no login | App behind a login |
+|---|---|---|
+| Can the intake crawl read it? | Yes, for pages the server sends as HTML. Pages drawn by JavaScript come back thin, and the crawler already flags them | No. The crawler has no login |
+| Does Crisp's "enter your domain" step transfer? | Yes: a real page count and a site map built from the pages users will be on | Only for the public pages and help docs around the app |
+| Seeing Haptic before the install | A hosted preview that loads the public page with the widget added is possible for many sites. Sites that forbid being embedded, or that depend on running at their own address, will break | Needs the admin's own signed-in browser: an extension, or the tag on a local or staging build |
+| Who installs | Often the person who signed up, through a site builder, a tag manager or one layout file | Usually an engineer |
+| Review before install | Lighter: public pages hold no customer data | Heavier: the script runs beside customer data |
+| Where routes come from | The crawl already has the link paths | An admin showing the way, or guided sessions after install |
+
+The flow therefore forks on one question, asked at signup: do people have to log in to reach the part of your site where they need help? A company can answer "both", and then the public part follows the Crisp shape while the app behind the login follows the rest of this section. The work this puts on Haptic's side is a crawl that renders JavaScript, since many public sites are built that way and the present crawl reads them as nearly empty.
 
 ### How a prospect can see Haptic working on their own app
 
@@ -235,12 +419,12 @@ The gaps below are the ones the research could not close. They are grouped by wh
 
 ### The ordered flow
 
-This is a design recommendation. It describes what the customer experiences, whether Haptic's team performs a step by hand or a dashboard does.
+This is the full flow. The team review section near the top says which three of its steps are required and gives a leaner version. This is a design recommendation. It describes what the customer experiences, whether Haptic's team performs a step by hand or a dashboard does.
 
 | # | Step | What happens | Who at the customer | Reason |
 |---|---|---|---|---|
 | 0 | Before signup | A public demo of the pointer on a sample app, no signup | Anyone | Onboarding starts before signup; Frigade and Chameleon offer the same. The Request access form is already part of onboarding |
-| 1 | Signup | Work email, company, public site, app URL where users log in, help-centre URL, and one question: "Can you add a script to your app yourself?" (yes; someone else will; not sure) | Buyer | Ask only what forks the flow. The install question is the single one the evidence justifies, and the answer splits every later metric |
+| 1 | Signup | Work email, company, public site, app URL where users log in, help-centre URL, whether the screens that need guiding are public, behind a login or both, and one question: "Can you add a script to your app yourself?" (yes; someone else will; not sure) | Buyer | Ask only what forks the flow. The install question is the single one the evidence justifies, and the answer splits every later metric |
 | 2 | Read what is public and say so honestly | Crawl the public site and help docs. Show "N public pages and M help articles read", pick name and accent from the site, and state that screens behind the login are learned next | Buyer | Jimo's "What Jimo knows" screen; something real within minutes. Honest about the login wall, which the current website copy is not |
 | 3 | See it on your own app | First cohort: on a call, their engineer adds the tag to a local or staging build. Self-serve: the buyer installs an extension and opens their app | Buyer; an engineer only in the first-cohort version | The aha is "it works on my app". Five guidance vendors put this before the install. Sentry's sample-event test is the one controlled result that showing success first raises installs |
 | 4 | Teach and test the top questions | The buyer asks their five to ten most common how-do-I questions on their own app, marks each pointer right or wrong, and demonstrates the route where it was wrong. The questions are saved as a test set and the routes as verified routes | Buyer or support lead | This is the trust step AI-agent vendors use, and the only source of knowledge about logged-in screens before launch. Demonstrations gave the best results in the one comparison found. It is also what later makes repeat steps fast |

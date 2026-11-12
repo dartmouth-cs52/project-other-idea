@@ -1,0 +1,1515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Haptic must earn its script tag · Haptic onboarding research</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#FAFAF9;--fg:#1C1917;--card:#FFFFFF;--muted:#F5F5F4;--muted-fg:#78716C;--border:#E7E5E4;--pointer:#1E6EF4;--ring:#1E6EF4;--shadow:0 1px 2px rgba(28,25,23,.04)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1C1917;--fg:#F5F5F4;--card:#292524;--muted:#35312E;--muted-fg:#A8A29E;--border:#44403C;--pointer:#0091FF;--ring:#0091FF;--shadow:none}}
+:root[data-theme="dark"]{--bg:#1C1917;--fg:#F5F5F4;--card:#292524;--muted:#35312E;--muted-fg:#A8A29E;--border:#44403C;--pointer:#0091FF;--ring:#0091FF;--shadow:none}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:76px;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:17px;line-height:1.65;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+a{color:inherit;text-decoration:underline;text-decoration-color:var(--muted-fg);text-decoration-thickness:1px;text-underline-offset:3px}
+a:hover{text-decoration-color:var(--fg)}
+:focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:6px}
+.skip{position:absolute;left:-999px}.skip:focus{left:16px;top:12px;z-index:50;background:var(--card);padding:8px 12px;border-radius:8px}
+.progress{position:fixed;inset:0 0 auto 0;height:2px;background:var(--fg);transform-origin:0 50%;transform:scaleX(0);z-index:40}
+.top{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;height:56px;padding:0 24px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:8px;font-weight:500;font-size:15px;letter-spacing:-.01em;text-decoration:none}
+.brand svg{width:20px;height:20px}.brand svg path,.toc li.active>a .n svg path{fill:var(--pointer);stroke:#fff}
+.brand small{color:var(--muted-fg);font-weight:400;font-size:14px}
+.top .spacer{flex:1}
+.top button{font:inherit;font-size:13px;font-weight:500;height:32px;padding:0 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--fg);cursor:pointer}
+.top button:hover{background:var(--muted)}
+.shell{display:grid;grid-template-columns:288px minmax(0,1fr);gap:0 56px;max-width:1440px;margin:0 auto;padding:0 24px}
+.toc{position:sticky;top:56px;align-self:start;max-height:calc(100vh - 56px);overflow:auto;padding:36px 4px 48px 0;font-size:14px;line-height:1.4}
+.toc summary{list-style:none;cursor:default;font-size:12px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-fg);margin:0 0 14px}
+.toc summary::-webkit-details-marker{display:none}
+.toc ol{list-style:none;margin:0;padding:0}
+.toc>details>ol>li{margin:0 0 2px}
+.toc>details>ol>li>a{display:grid;grid-template-columns:26px 1fr auto;gap:0 6px;align-items:baseline;padding:7px 8px;border-radius:8px;text-decoration:none;color:var(--muted-fg)}
+.toc>details>ol>li>a:hover{background:var(--muted);color:var(--fg)}
+.toc .n{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;position:relative}
+.toc .m{font-size:12px;opacity:.75}
+.toc li.active>a{color:var(--fg);font-weight:500;background:var(--muted)}
+.toc li ol{display:none;margin:4px 0 10px 40px;padding-left:12px;border-left:1px solid var(--border)}
+.toc li.active ol{display:block}
+.toc li ol a{display:block;padding:5px 6px;border-radius:6px;text-decoration:none;color:var(--muted-fg);font-size:13px}
+.toc li ol a:hover,.toc li ol a.here{color:var(--fg)}
+.toc li ol a.here{font-weight:500}
+main{min-width:0;padding:44px 0 120px;max-width:1040px}
+.hero .kicker{font-size:13px;font-weight:500;color:var(--muted-fg);margin:0 0 14px}
+h1{font-size:clamp(34px,4.6vw,52px);line-height:1.05;letter-spacing:-.04em;font-weight:500;margin:0 0 18px;max-width:16ch;text-wrap:balance}
+.hero .meta{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 36px;padding:0;list-style:none;font-size:13px;color:var(--muted-fg)}
+.hero .meta li{border:1px solid var(--border);background:var(--card);border-radius:999px;padding:4px 12px}
+main p,main ul,main ol,main blockquote,main pre,main h2,main h3,.eyebrow{max-width:44rem}
+p{margin:0 0 18px}
+strong{font-weight:600}
+section{padding-top:28px;margin-top:64px;border-top:1px solid var(--border)}
+.eyebrow{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--muted-fg);margin:0 0 10px;display:flex;gap:14px}
+h2{font-size:clamp(26px,3vw,34px);line-height:1.15;letter-spacing:-.03em;font-weight:500;margin:0 0 22px;text-wrap:balance}
+h3{font-size:21px;line-height:1.3;letter-spacing:-.02em;font-weight:500;margin:44px 0 14px;text-wrap:balance}
+ul,ol{margin:0 0 18px;padding-left:22px}li{margin:0 0 8px}
+blockquote{margin:0 0 20px;padding:16px 20px;border:1px solid var(--border);border-radius:14px;background:var(--card);font-size:15.5px;line-height:1.6;box-shadow:var(--shadow)}
+blockquote p{margin:0}
+code{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.86em;background:var(--muted);border-radius:6px;padding:2px 5px;overflow-wrap:anywhere}
+pre{background:var(--muted);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow:auto;margin:0 0 20px}
+pre code{background:none;padding:0;font-size:13.5px;line-height:1.6;overflow-wrap:normal}
+.cite{font-size:.8em;color:var(--muted-fg);overflow-wrap:anywhere}
+.cite a{text-decoration-color:var(--border)}.cite a:hover{color:var(--fg);text-decoration-color:var(--fg)}
+.conf{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:500;line-height:1;padding:5px 11px 5px 9px;border:1px solid var(--border);border-radius:999px;background:var(--card);white-space:nowrap;vertical-align:1px;margin-right:2px}
+.meter{display:inline-flex;gap:3px}.meter i{width:6px;height:6px;border-radius:50%;border:1px solid var(--muted-fg)}.meter i.on{background:var(--fg);border-color:var(--fg)}
+.table-wrap{margin:6px 0 26px;border:1px solid var(--border);border-radius:14px;background:var(--card);overflow-x:auto;box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:14.5px;line-height:1.5}
+.cols-4 table{min-width:720px}.cols-5 table{min-width:900px}.cols-6 table,.cols-7 table{min-width:1040px}
+th{font-size:12.5px;font-weight:500;color:var(--muted-fg);text-align:left;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--muted);vertical-align:bottom;position:sticky;top:0}
+td{padding:13px 16px;vertical-align:top;border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:500}
+.numbered td:first-child{font-family:"Geist Mono",ui-monospace,monospace;font-weight:400;color:var(--muted-fg);white-space:nowrap}
+.numbered td:nth-child(2){font-weight:500}
+td .cite{font-size:.86em}
+.end{margin-top:72px;padding-top:20px;border-top:1px solid var(--border);font-size:13px;color:var(--muted-fg)}
+@media (max-width:1100px){
+ .shell{display:block;padding:0 20px}
+ .toc{position:static;max-height:none;padding:20px 0 0;overflow:visible}
+ .toc details{border:1px solid var(--border);border-radius:14px;background:var(--card);padding:4px 10px}
+ .toc summary{cursor:pointer;margin:0;padding:12px 6px;display:flex;justify-content:space-between;align-items:center}
+ .toc summary::after{content:"Show";font-size:12px;letter-spacing:0;text-transform:none}
+ .toc details[open] summary::after{content:"Hide"}
+ .toc details[open]{padding-bottom:10px}
+ main{padding-top:28px}
+}
+@media (max-width:820px){
+ body{font-size:16.5px}
+ .top{padding:0 16px}.shell{padding:0 16px}.brand small{display:none}
+ section{margin-top:48px}
+ .table-wrap{border:0;background:none;box-shadow:none;overflow:visible;border-radius:0}
+ .table-wrap table{min-width:0}
+ table,tbody,tr,td{display:block}
+ thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+ tr{border:1px solid var(--border);border-radius:14px;background:var(--card);padding:14px 16px 6px;margin:0 0 12px;box-shadow:var(--shadow)}
+ td{padding:0 0 10px;border:0;font-size:15px}
+ td::before{content:attr(data-label);display:block;font-size:12px;font-weight:500;color:var(--muted-fg);margin:0 0 2px}
+ td:first-child{font-size:16px;padding-bottom:12px}
+ td:first-child::before{display:none}
+ .numbered td:first-child{font-size:12px;padding-bottom:2px}
+ .numbered td:first-child::before{display:inline;content:attr(data-label) " "}
+ .numbered td:nth-child(2){font-size:16px;padding-bottom:12px}
+ .numbered td:nth-child(2)::before{display:none}
+ td:empty{display:none}
+}
+@media print{.top,.toc,.progress{display:none}.shell{display:block}body{font-size:11pt}section{break-inside:auto}.table-wrap{overflow:visible}a{text-decoration:none}}
+</style>
+</head>
+<body>
+<a class="skip" href="#report">Skip to the report</a>
+<div class="progress"></div>
+<header class="top">
+  <a class="brand" href="#top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.271 4.871A1.678 1.678 0 0 1 5.604 2.907L19.822 9.597A1.678 1.678 0 0 1 19.705 12.684L13.956 14.875A.622.622 0 0 0 13.643 15.139L10.506 20.431A1.678 1.678 0 0 1 7.444 20.021Z" stroke-width="3" stroke-linejoin="round" paint-order="stroke"/></svg><span>Haptic</span><small>Onboarding research</small></a>
+  <span class="spacer"></span>
+  <button id="theme" type="button" aria-label="Switch between light and dark">Dark</button>
+</header>
+<div class="shell" id="top">
+  <nav class="toc" aria-label="Contents"><details open><summary>Contents</summary><ol><li data-for="team-review-12-november-decisions-and-open-questions"><a href="#team-review-12-november-decisions-and-open-questions"><span class="n">01</span><span class="t">Team review, 12 November: decisions and open questions</span><span class="m">13m</span></a><ol><li><a href="#speed-first-or-accuracy-first">Speed first, or accuracy first</a></li><li><a href="#which-model">Which model</a></li><li><a href="#showing-the-steps-of-a-guide">Showing the steps of a guide</a></li><li><a href="#which-onboarding-steps-are-required">Which onboarding steps are required</a></li><li><a href="#this-week-guides-working-on-the-sites-the-team-is-working-with">This week: guides working on the sites the team is working with</a></li><li><a href="#is-a-supabase-project-needed">Is a Supabase project needed</a></li><li><a href="#how-jimo-works-as-far-as-its-own-documentation-says">How Jimo works, as far as its own documentation says</a></li></ol></li><li data-for="note-for-isaac-a-store-of-verified-routes"><a href="#note-for-isaac-a-store-of-verified-routes"><span class="n">02</span><span class="t">Note for Isaac: a store of verified routes</span><span class="m">4m</span></a></li><li data-for="company-onboarding-ends-at-the-first-real-end-user-answer-not-at-the-install"><a href="#company-onboarding-ends-at-the-first-real-end-user-answer-not-at-the-install"><span class="n">03</span><span class="t">Company onboarding ends at the first real end-user answer, not at the install</span><span class="m">10m</span></a><ol><li><a href="#the-account-is-the-unit-and-setup-is-not-the-aha">The account is the unit, and setup is not the "aha"</a></li><li><a href="#no-one-publishes-how-many-signups-finish-a-snippet-install">No one publishes how many signups finish a snippet install</a></li><li><a href="#value-before-the-hard-step-helps-blocking-helps-only-when-the-step-is-the-value">Value before the hard step helps; blocking helps only when the step is the value</a></li><li><a href="#ask-only-what-changes-the-next-screen">Ask only what changes the next screen</a></li><li><a href="#checklists-reach-about-a-fifth-of-users-and-the-psychology-cited-for-them-is-thin">Checklists reach about a fifth of users, and the psychology cited for them is thin</a></li><li><a href="#human-help-staged-exposure-and-the-security-review-belong-inside-the-flow">Human help, staged exposure and the security review belong inside the flow</a></li></ol></li><li data-for="the-closest-rivals-show-the-product-on-your-own-app-before-any-code-ships"><a href="#the-closest-rivals-show-the-product-on-your-own-app-before-any-code-ships"><span class="n">04</span><span class="t">The closest rivals show the product on your own app before any code ships</span><span class="m">9m</span></a><ol><li><a href="#who-is-comparable-and-who-is-left">Who is comparable, and who is left</a></li><li><a href="#what-the-best-documented-flows-have-in-common">What the best documented flows have in common</a></li><li><a href="#walkthrough-order-time-and-what-to-capture">Walkthrough order, time, and what to capture</a></li></ol></li><li data-for="the-cited-paper-credits-the-executor-not-the-map"><a href="#the-cited-paper-credits-the-executor-not-the-map"><span class="n">05</span><span class="t">The cited paper credits the executor, not the map</span><span class="m">10m</span></a><ol><li><a href="#what-arxiv251004607-measured">What arXiv:2510.04607 measured</a></li><li><a href="#why-the-result-does-not-carry-over-to-haptic-as-built">Why the result does not carry over to Haptic as built</a></li><li><a href="#what-the-wider-literature-adds">What the wider literature adds</a></li><li><a href="#where-haptics-speed-can-actually-come-from">Where Haptic's speed can actually come from</a></li></ol></li><li data-for="every-way-of-learning-a-logged-in-app-is-a-different-onboarding-ask"><a href="#every-way-of-learning-a-logged-in-app-is-a-different-onboarding-ask"><span class="n">06</span><span class="t">Every way of learning a logged-in app is a different onboarding ask</span><span class="m">13m</span></a><ol><li><a href="#the-eight-approaches-and-what-each-demands">The eight approaches and what each demands</a></li><li><a href="#just-add-the-script-tag-is-the-right-production-install-and-the-wrong-first-step">"Just add the script tag" is the right production install and the wrong first step</a></li><li><a href="#the-crisphugo-wizard-transfers-for-public-sites-and-breaks-at-a-login">The Crisp/Hugo wizard transfers for public sites and breaks at a login</a></li><li><a href="#public-sites-and-apps-behind-a-login-need-different-proof">Public sites and apps behind a login need different proof</a></li><li><a href="#how-a-prospect-can-see-haptic-working-on-their-own-app">How a prospect can see Haptic working on their own app</a></li></ol></li><li data-for="the-install-rate-the-latency-split-and-the-legal-line-are-all-unmeasured"><a href="#the-install-rate-the-latency-split-and-the-legal-line-are-all-unmeasured"><span class="n">07</span><span class="t">The install rate, the latency split and the legal line are all unmeasured</span><span class="m">3m</span></a></li><li data-for="recommended-flow-proof-then-hand-off-then-staff-then-everyone"><a href="#recommended-flow-proof-then-hand-off-then-staff-then-everyone"><span class="n">08</span><span class="t">Recommended flow: proof, then hand-off, then staff, then everyone</span><span class="m">8m</span></a><ol><li><a href="#the-ordered-flow">The ordered flow</a></li><li><a href="#staged-path">Staged path</a></li><li><a href="#what-to-measure-first">What to measure first</a></li><li><a href="#decisions-the-team-has-to-make">Decisions the team has to make</a></li></ol></li><li data-for="conclusion"><a href="#conclusion"><span class="n">09</span><span class="t">Conclusion</span><span class="m">1m</span></a></li></ol></details></nav>
+  <main id="report">
+    <header class="hero">
+      <p class="kicker">Research report · revised 12 November 2026</p>
+      <h1>Haptic must earn its script tag</h1>
+      <ul class="meta"><li>9 sections</li><li>About 74 minutes in full</li><li>Sections 1 and 2 answer the team's review: about 17 minutes</li></ul>
+    </header>
+    <p><strong>Bottom line.</strong> Three assumptions the team started with each fail in the form stated, and correcting them changes the order of Haptic's onboarding more than its contents. The fix has three parts: show Haptic working on the customer's own site, before the install or straight after a small one; treat the hand-off to whoever installs the script as a designed step with live verification; and get speed from routes that people have confirmed, not from a site map in the prompt.</p>
+<div class="table-wrap cols-3"><table>
+<thead>
+<tr class="header">
+<th>What the team assumed</th>
+<th>What the evidence says</th>
+<th>Confidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="What the team assumed">The script tag is the best: they just add it</td>
+<td data-label="What the evidence says">Right production install, wrong first ask. It is the first step that needs an engineer, and often a Content Security Policy change and a security review as well. One comparable snippet product reported almost half its signups still uninstalled after a month (seen only in a search snippet). Five self-serve guidance products, including the closest competitor, let a non-developer run the product on their own logged-in app through a Chrome extension before any code ships</td>
+<td data-label="Confidence">High that the tag is table stakes; moderate that moving it later raises installs</td>
+</tr>
+<tr>
+<td data-label="What the team assumed">Follow the Crisp/Hugo wizard</td>
+<td data-label="What the evidence says">It transfers for public sites and breaks at a login, and Haptic has to work on both. On a public site, "enter your domain" can do for Haptic what it does for Crisp once the crawl can render JavaScript, which Haptic's cannot yet. On an app behind a login, no crawler in the evidence can read the screens, Haptic's own included, so the proof has to come another way</td>
+<td data-label="Confidence">High on the login wall; moderate on the replacements</td>
+</tr>
+<tr>
+<td data-label="What the team assumed">A memory of the site will make it fast</td>
+<td data-label="What the evidence says">The cited paper tested a map in the prompt and found it bought nothing for a strong model: 42.0% task success and 8.41 model calls with the map, against 44.4% and 8.16 without. Its gain came from an executor that skips model calls, on 27 Microsoft Office tasks, and its authors name the web as the case they do not handle. Haptic as built is the configuration that test found unhelpful. What cuts model calls is a store of verified routes, checked against the live page</td>
+<td data-label="Confidence">High on what the paper says; moderate on the transfer to Haptic</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>What follows.</strong> Keep the request-access gate and onboard the first handful of companies by hand. Build only the three steps every script-installed product needs (create a site, add the tag, see it connect) and add the others when a named problem calls for them. Test the choice of model before anything else, because it asks nothing of the customer. The number that matters most, the share of signups who are not engineers and still get a script installed, is published nowhere, so the first customers' own funnel is the most valuable measurement available.</p>
+<blockquote>
+<p><strong>How to read the evidence.</strong> Every claim below carries the strength the underlying research notes gave it. "Controlled" means a randomised test. "Self-reported" means a company describing its own product with no control group. "Vendor telemetry" means a tool vendor's data from its own customers, who are not a random sample. "Snippet only" means the claim was seen in a search-result summary and the page itself could not be opened. "Documentation" shows that a pattern exists, not that it works. "Inference" marks reasoning by the researchers or by this report, not a sourced fact. Competitor pages were read through a tool that summarises, so quoted wording should be re-checked before it is repeated publicly. No competitor flow was signed up for or walked through; everything said about competitors rests on their documentation and marketing pages as of 12 November 2026. Facts about Haptic's own code and website come from its repository. Each major conclusion ends with a confidence level: high, moderate, low or unknown.</p>
+</blockquote>
+<blockquote>
+<p><strong>Revised 12 November 2026 after the team's review.</strong> Two decisions from the team are now built in. Haptic must work on public sites as well as apps behind a login, so the report no longer treats the logged-in app as the only case. The first release is guiding only; answering questions and acting for the user come later. The team's stated priority is speed first and accuracy second; the next section argues for a slightly different rule. That section also covers which model to use, whether to show the steps of a guide, which onboarding steps are required, what this week's goal needs, whether Supabase is needed, and what Jimo documents about how it works. The section after it is a build note for Isaac on the route store.</p>
+</blockquote>
+
+    <section data-section="team-review-12-november-decisions-and-open-questions"><p class="eyebrow">01 <span>13 min read</span></p><h2 id="team-review-12-november-decisions-and-open-questions">Team review, 12 November: decisions and open questions</h2>
+<p>Everything in this section is this report's judgement, reasoned from the evidence in the later sections and from Haptic's code. None of it has been measured on Haptic.</p>
+<h3 id="speed-first-or-accuracy-first">Speed first, or accuracy first</h3>
+<p>The team's stated goal is to be as fast as possible, and then as accurate as possible. The strongest argument against that order is that <strong>a wrong pointer is not a slow answer. It is a wrong instruction given with authority.</strong> In the one study in this report of people following model help, users "often followed the LLM's suggestions verbatim, even if they were incorrect" <span class="cite">(<a href="https://arxiv.org/abs/2402.08030" target="_blank" rel="noopener">Khurana et al., IUI 2024</a>)</span>. A fast wrong pointer costs the user the wrong click, the time to notice, the way back, and their trust in the next pointer. A right pointer that arrives a second later costs one second. Haptic's pitch against chatbots is that it shows exactly where to click, so accuracy is the product and speed is how good the product feels.</p>
+<p>What holds in the team's order is that above some level of accuracy, speed is what people notice, and Haptic today is probably slow. The long-standing rule of thumb for response times is that about 0.1 seconds feels instant, about 1 second keeps a person's train of thought, and about 10 seconds is the limit of attention (<a href="https://www.nngroup.com/articles/response-times-3-important-limits/" target="_blank" rel="noopener">Nielsen, 1993</a>; a design guideline, not a measurement of Haptic, and not part of the research notes). The pointer should aim for the middle figure.</p>
+<p><strong>The rule this report recommends: set an accuracy floor, then make Haptic as fast as possible without going under it.</strong> In practice that means a fixed set of real questions, a pass mark the team chooses for "the first pointer was right", and the fastest configuration that clears it. The research gives no number for the pass mark. The two goals also stop competing on repeat questions: a route a person has confirmed is both faster than a fresh model answer, because there is no model call, and more accurate, because someone checked it. <strong>Confidence: moderate.</strong></p>
+<h3 id="which-model">Which model</h3>
+<p>The model in use is probably not the right one for speed, and nobody has measured it. Three facts, from Haptic's code and from Anthropic's model reference as bundled with this session (cached 3 November 2026; check the live pricing page before budgeting):</p>
+<div class="table-wrap cols-3"><table>
+<thead>
+<tr class="header">
+<th>Fact</th>
+<th>Where it comes from</th>
+<th>Why it matters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Fact">Haptic calls <code>claude-opus-5-5</code> at low effort for every step</td>
+<td data-label="Where it comes from"><code>src/server/model.ts</code></td>
+<td data-label="Why it matters">On that model, thinking cannot be turned off at any effort level, so each step waits for some thinking before the first usable token</td>
+</tr>
+<tr>
+<td data-label="Fact">The call is not streamed</td>
+<td data-label="Where it comes from"><code>client.beta.messages.parse</code> in <code>src/server/model.ts</code> returns only when the whole reply is done</td>
+<td data-label="Why it matters">The pointer waits for the sentence as well as the target, although <code>target</code> is the first field of the reply</td>
+</tr>
+<tr>
+<td data-label="Fact">The two smaller current models can run with thinking off</td>
+<td data-label="Where it comes from">Claude Haiku 5.5 accepts thinking disabled at effort high or below; Claude Sonnet 5.5 has a <code>between_tools</code> setting that does the same job</td>
+<td data-label="Why it matters">Removes the wait before the first token, at some risk to accuracy</td>
+</tr>
+</tbody>
+</table></div>
+<div class="table-wrap cols-4"><table>
+<thead>
+<tr class="header">
+<th>Model</th>
+<th>Price per million tokens, input / output</th>
+<th>Thinking off?</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Model"><code>claude-opus-5-5</code> (today)</td>
+<td data-label="Price per million tokens, input / output">$4 / $20</td>
+<td data-label="Thinking off?">No</td>
+<td data-label="Note">A paid fast mode exists at $8 / $40, with up to 2.5 times the output speed</td>
+</tr>
+<tr>
+<td data-label="Model"><code>claude-sonnet-5-5</code></td>
+<td data-label="Price per million tokens, input / output">$2 / $10</td>
+<td data-label="Thinking off?">Yes</td>
+<td data-label="Note">The middle option</td>
+</tr>
+<tr>
+<td data-label="Model"><code>claude-haiku-5-5</code></td>
+<td data-label="Price per million tokens, input / output">$0.10 / $0.50</td>
+<td data-label="Thinking off?">Yes</td>
+<td data-label="Note">Forty times cheaper than Opus 5.5. No automatic fallback when a request is declined</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Recommendation: decide by test, not by reputation.</strong> Run the three on the same questions, in the same hour, and compare two numbers: seconds until the pointer moves, and the share of first pointers that are right. This report's expectation, unmeasured, is that Haiku 5.5 with thinking off and the reply streamed will reach the first pointer several times sooner, and that the open question is whether it stays accurate on real apps. The cited paper gives one reason for hope: its weaker model was the one that gained from a site map. If the small model fails the accuracy floor only on hard steps, it can take every step and hand just the failures (no target found, or the loop guard in <code>src/widget/guide.ts</code> tripping) to a larger model. A faster model is not automatically a faster guide: one that needs more steps gives the time back, so compare whole guides as well as single steps.</p>
+<p>Two changes are worth making whichever model wins, and neither asks anything of the customer. Stream the reply and move the pointer as soon as <code>target</code> arrives. And give the cached site prompt a one-hour lifetime: the default is five minutes, so on a quiet site the first step of most guides starts cold. Pre-warming with an empty request is not allowed together with structured output, which Haptic uses, so the longer lifetime is the available fix.</p>
+<p>This session had no API key, so nothing was timed. About 30 questions on 3 models is a few hundred calls, likely under ten dollars at the prices above; that figure is an estimate from token counts, not a quote. <span class="conf"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i class=""></i></span>Confidence: moderate</span> that the current model is the wrong default for speed; <strong>unknown</strong> for which model holds accuracy.</p>
+<h3 id="showing-the-steps-of-a-guide">Showing the steps of a guide</h3>
+<p>Jimo's marketing demo shows a panel that lists the steps of a guide and ticks them off: "Read page: Home", "Find Reports in the sidebar", "Plan the export in 3 steps", "Open Reports", then the filter and the export. Frigade's tooltip shows "3 of 3". These are screenshots from the two companies' sites, not observed product behaviour. A step list is not required. Part of it is worth having, and the part that is free should come first.</p>
+<div class="table-wrap cols-3"><table>
+<thead>
+<tr class="header">
+<th>What the panel shows</th>
+<th>What it costs Haptic</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="What the panel shows">Steps already done</td>
+<td data-label="What it costs Haptic">Nothing. The guide already keeps this history in <code>src/widget/guide.ts</code></td>
+<td data-label="Recommendation">Show it now. It tells the user where they are and that progress is real</td>
+</tr>
+<tr>
+<td data-label="What the panel shows">The current step</td>
+<td data-label="What it costs Haptic">Nothing. It is the sentence beside the pointer</td>
+<td data-label="Recommendation">Already shown</td>
+</tr>
+<tr>
+<td data-label="What the panel shows">Steps still to come</td>
+<td data-label="What it costs Haptic">A plan made before the first pointer moves: an extra model call or a longer first reply, which works against speed. The plan is also a guess, because Haptic sees only the page the user is on</td>
+<td data-label="Recommendation">Show only when the steps come from a verified route, where the whole list is known, costs nothing, and has been checked</td>
+</tr>
+<tr>
+<td data-label="What the panel shows">"Reading the page", "Planning"</td>
+<td data-label="What it costs Haptic">Nothing, but these are not steps the user takes. They narrate the wait</td>
+<td data-label="Recommendation">Use one short status line, as Haptic does now ("Finding it…"). If the wait needs three lines to fill, the wait is the problem</td>
+</tr>
+</tbody>
+</table></div>
+<p>That makes the step list the visible face of the route store. On a goal Haptic has seen, the user gets "3 steps" at once and the pointer moves immediately. On a new goal, they get one step at a time. Jimo's demo also corrects a wrong click ("AND, not OR"). Haptic already detects a click on something other than the target and carries on from where the user is (<code>waitForAction</code> in <code>src/widget/guide.ts</code>); saying so in the pointer's sentence would be a small change. <strong>Confidence: moderate.</strong></p>
+<h3 id="which-onboarding-steps-are-required">Which onboarding steps are required</h3>
+<p>The seven-step flow recommended at the end of this report is not proven to be the best option, and as something to build now it is too much. The report's own confidence in the order is moderate at best. Three of the seven steps are required by any product installed with a script: create a site, add the tag, see it connect. Every snippet product in the research has those three. The other four each answer a named problem, and each can be dropped when the problem does not apply.</p>
+<div class="table-wrap cols-4"><table>
+<thead>
+<tr class="header">
+<th>Step</th>
+<th>Required?</th>
+<th>The problem it answers</th>
+<th>Drop or defer it when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Step">1. Sign up</td>
+<td data-label="Required?">Yes</td>
+<td data-label="The problem it answers">Haptic needs an owner, a site ID and the origins the widget may run on</td>
+<td data-label="Drop or defer it when">Never. The question "can you install it yourself?" need not be a signup field: two buttons on the install page, "I'll add it" and "Send to my developer", collect the same answer</td>
+</tr>
+<tr>
+<td data-label="Step">2. Read the public pages and help docs</td>
+<td data-label="Required?">No</td>
+<td data-label="The problem it answers">Gives the customer something specific to them within minutes, and gives Haptic their vocabulary</td>
+<td data-label="Drop or defer it when">The crawl returns little. It must never block the next step</td>
+</tr>
+<tr>
+<td data-label="Step">3. See it on your own site before the install</td>
+<td data-label="Required?">No</td>
+<td data-label="The problem it answers">The person who signed up cannot install it and needs a reason to chase someone who can</td>
+<td data-label="Drop or defer it when">The signer can install it in minutes. That is likely for the first customers, and then the install is the demo</td>
+</tr>
+<tr>
+<td data-label="Step">4. Test your top questions</td>
+<td data-label="Required?">No, but it is the first one to keep</td>
+<td data-label="The problem it answers">Trust before real users see it; a test set; the first verified routes</td>
+<td data-label="Drop or defer it when">It should not be dropped. It can run after the install, in a preview only the admin sees</td>
+</tr>
+<tr>
+<td data-label="Step">5. Add the script</td>
+<td data-label="Required?">Yes</td>
+<td data-label="The problem it answers">The script has to reach the site</td>
+<td data-label="Drop or defer it when">Never. For a signer who installs alone it is one tag and a copy button</td>
+</tr>
+<tr>
+<td data-label="Step">6. See it connect</td>
+<td data-label="Required?">Yes</td>
+<td data-label="The problem it answers">Without it nobody knows whether the install worked, and every support conversation starts with guessing</td>
+<td data-label="Drop or defer it when">Never</td>
+</tr>
+<tr>
+<td data-label="Step">7. Go live in stages</td>
+<td data-label="Required?">No</td>
+<td data-label="The problem it answers">Lets a cautious customer say yes in parts</td>
+<td data-label="Drop or defer it when">Public sites and small teams. One switch, off by default, is enough</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>The lean version</strong> is five screens, and the last two are the product itself and not setup: sign up with the site's address; copy the tag or send it to a developer; watch the status change to connected; try the top questions in a preview only the admin can see; switch it on. The preview does the work of steps 3, 4 and 7 with one mechanism and no browser extension: the tag is installed, but the widget appears only in a browser the admin opened from a preview link in the dashboard. Google Tag Manager's preview mode works the same way. The cost is that the proof now comes after the install, so it does nothing for a signer who cannot get the tag installed. For that person the call with an engineer, or later the extension, is still the answer, and the first customers' funnel will show how common that person is.</p>
+<p>What this report still holds after the challenge: the install is where accounts stall, verification is not optional, the top-questions step is where both trust and routes come from, and staged release matters for apps that hold customer data. What it concedes: seven separate steps is over-built, the install question does not belong on the signup form, and the extension should not be built until the first customers show that signers cannot install. <strong>Confidence: moderate.</strong></p>
+<h3 id="this-week-guides-working-on-the-sites-the-team-is-working-with">This week: guides working on the sites the team is working with</h3>
+<p>The team's goal for the end of this week is guides finished and working on any site the team is working with. That goal does not need a signup flow, a dashboard or a database. It needs the six things below.</p>
+<div class="table-wrap cols-3"><table>
+<thead>
+<tr class="header">
+<th>Needed this week</th>
+<th>State today</th>
+<th>Smallest way to get it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Needed this week">A server that customers' browsers can reach over HTTPS</td>
+<td data-label="State today">Not deployed</td>
+<td data-label="Smallest way to get it">Run the existing Node server on one always-on machine with a disk. Set <code>HAPTIC_PUBLIC_URL</code> and the API key there</td>
+</tr>
+<tr>
+<td data-label="Needed this week">A site context for each site</td>
+<td data-label="State today">Made by hand with <code>npm run tag</code>, stored as a JSON file</td>
+<td data-label="Smallest way to get it">Keep making them by hand. Pass <code>--allow</code> for each extra origin, such as localhost and staging</td>
+</tr>
+<tr>
+<td data-label="Needed this week">A way to try a site before its owner installs anything</td>
+<td data-label="State today">None</td>
+<td data-label="Smallest way to get it">Paste the loader below into the browser console on that site. Checked in this session: the widget loaded on a second origin once that origin was allowed. It will fail on a site whose Content Security Policy blocks outside scripts</td>
+</tr>
+<tr>
+<td data-label="Needed this week">A faster step</td>
+<td data-label="State today">One Opus call per step, not streamed</td>
+<td data-label="Smallest way to get it">The model test and the streaming change described above</td>
+</tr>
+<tr>
+<td data-label="Needed this week">A fixed set of questions per site</td>
+<td data-label="State today">None</td>
+<td data-label="Smallest way to get it">Ten real how-do-I questions per site, kept in the repo and rerun after every change. Without this, "done" cannot be checked</td>
+</tr>
+<tr>
+<td data-label="Needed this week">Telling the user when they click the wrong thing</td>
+<td data-label="State today">Detected, and the guide carries on from where they are, but nothing is said</td>
+<td data-label="Smallest way to get it">A line in the prompt rules in <code>src/server/prompt.ts</code> telling the model to say so before giving the next step</td>
+</tr>
+</tbody>
+</table></div>
+<pre class="js"><code>const s = document.createElement(&quot;script&quot;);
+s.src = &quot;https://YOUR-HAPTIC-HOST/widget.js&quot;;
+s.dataset.site = &quot;site_yourid&quot;;
+document.body.append(s);</code></pre>
+<div class="table-wrap cols-2"><table>
+<thead>
+<tr class="header">
+<th>Not needed this week</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Not needed this week">Signup, accounts and a dashboard</td>
+<td data-label="Why">The team adds each site by hand</td>
+</tr>
+<tr>
+<td data-label="Not needed this week">The onboarding flow at the end of this report</td>
+<td data-label="Why">Same reason. It is the design for self-serve, later</td>
+</tr>
+<tr>
+<td data-label="Not needed this week">A browser extension</td>
+<td data-label="Why">The console loader does the same job for the team's own testing</td>
+</tr>
+<tr>
+<td data-label="Not needed this week">The route store</td>
+<td data-label="Why">Start the log now; build the store once the log shows that questions repeat</td>
+</tr>
+<tr>
+<td data-label="Not needed this week">A crawl that renders JavaScript</td>
+<td data-label="Why">The widget reads every page live, so guides work with no site map. The crawl only adds a map of public pages</td>
+</tr>
+</tbody>
+</table></div>
+<p>"Any website" has four limits that come from the widget's code, and it is better to know them before a customer finds them. Content inside an iframe is skipped. An interface drawn on a canvas gives the widget nothing to read. A page lists at most 300 controls. And a strict Content Security Policy blocks the script until the site's owner allows it. Open shadow roots are read. <span class="conf"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i></span>Confidence: high</span> on the limits, which were read from <code>src/widget/snapshot.ts</code>; <strong>moderate</strong> on what fits in a week.</p>
+<h3 id="is-a-supabase-project-needed">Is a Supabase project needed</h3>
+<p>Not for this week's goal. The server keeps each site as a JSON file, which works as long as it runs on one machine with a disk. A database becomes necessary at three points.</p>
+<div class="table-wrap cols-2"><table>
+<thead>
+<tr class="header">
+<th>When</th>
+<th>Why files stop working</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="When">The server runs somewhere with no disk, or on more than one machine</td>
+<td data-label="Why files stop working">Cloudflare Workers, where the website already runs, has no disk. Two machines would each have their own copy of the files</td>
+</tr>
+<tr>
+<td data-label="When">The step log is being written</td>
+<td data-label="Why files stop working">Many requests appending to one file at once is fragile, and the log is only useful if it can be queried</td>
+</tr>
+<tr>
+<td data-label="When">There are accounts</td>
+<td data-label="Why files stop working">Sign-in, and rules about who can see which site, need a real store</td>
+</tr>
+</tbody>
+</table></div>
+<p>Supabase covers all three: a Postgres database, sign-in with Google or email, and per-row access rules. The change on Haptic's side is small, because every read and write of a site goes through three functions in <code>src/server/sites.ts</code>. <strong>Recommendation: one machine with a disk this week; create the Supabase project when the step log or signup is started, whichever comes first.</strong></p>
+<p>Four things to know before then. The Supabase account connected to this session has no project for Haptic, and a team project belongs in an organisation the whole team can reach. The server must hold the database's service key as a secret and never send it to the browser. Site contexts should stay cached in the server's memory, so that a step never waits on a database read. And free Supabase projects are paused after about a week without activity, as far as this report knows; if the widget depended on a paused project it would stop on every customer's site, so check the current terms before production relies on a free project. If the server moves to Cloudflare Workers, Cloudflare's own storage is the alternative for site contexts (the website already uses its key-value store for access requests), but it has no sign-in service. <span class="conf"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i></span>Confidence: high</span> that it is not needed this week; <strong>moderate</strong> on the timing after that.</p>
+<h3 id="how-jimo-works-as-far-as-its-own-documentation-says">How Jimo works, as far as its own documentation says</h3>
+<p>Nothing here was observed hands-on. It comes from Jimo's help pages, read through a tool that summarises, and the last line of each row is this report's reading.</p>
+<div class="table-wrap cols-3"><table>
+<thead>
+<tr class="header">
+<th>What Jimo documents</th>
+<th>Source</th>
+<th>What it means for Haptic</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="What Jimo documents">Two ways of knowing a page. "Scan and curate": an admin catalogs the page's elements, about three minutes a page, and "an element hidden here can never be the target of a Guide". "Read all": "The Agent reads the page in real time whenever a user asks about it"</td>
+<td data-label="Source"><a href="https://help.usejimo.com/docs/experiences/agent/knowledge/interface.md" target="_blank" rel="noopener">Jimo docs, Interface</a></td>
+<td data-label="What it means for Haptic">"Read all" is the same family as Haptic's live snapshot. The curated mode is a per-page allow-list Haptic does not have</td>
+</tr>
+<tr>
+<td data-label="What Jimo documents">Guides run from Skills that a person writes ("Describe it") or demonstrates ("Show me"). Every run starts with "Read page to get refs". While pointing it shows "Waiting for your action... Skip". Steps that send, pay, delete or change permissions are handed back to the user</td>
+<td data-label="Source"><a href="https://help.usejimo.com/docs/experiences/agent.md" target="_blank" rel="noopener">Jimo docs, Agent</a></td>
+<td data-label="What it means for Haptic">Jimo's documented design is live page reading plus routes authored by people. That is the route store, filled by hand. Haptic today works out the path fresh on every step</td>
+</tr>
+<tr>
+<td data-label="What Jimo documents">The end user has an "eye" control, off by default. With it off, the Agent gets only the page's address and answers in text</td>
+<td data-label="Source"><a href="https://help.usejimo.com/docs/experiences/agent.md" target="_blank" rel="noopener">Jimo docs, Agent</a></td>
+<td data-label="What it means for Haptic">A consent pattern worth copying if a customer objects to page reading</td>
+</tr>
+</tbody>
+</table></div>
+<p>The correction in Jimo's demo ("AND, not OR", "Not that one, switch it back to AND") is worth having, and Haptic is one prompt line away from it, since the wrong click is already detected.</p>
+<p><strong>Has anyone taken Jimo apart?</strong> No public teardown was found, and the search for independent write-ups stopped when the session's search budget ran out, so absence here proves little. Two better sources exist. The first is the trial. With Jimo's extension running on a site the team controls, the browser's network panel shows what is sent with each question, how many requests a step takes and how long each takes. That answers the questions that matter: whether a plan is made before the first pointer, how long the first pointer takes, and what happens on a wrong click. It is observation of the team's own browser. The second is open code of the same kind. <a href="https://github.com/alibaba/page-agent" target="_blank" rel="noopener">alibaba/page-agent</a> is an in-page agent under the MIT licence, with about 29.7 thousand GitHub stars, that reads the page as text with "No screenshots". It acts for the user where Haptic points, but its page-reading code solves the same problem as <code>src/widget/snapshot.ts</code> and can be read freely. Pulling apart Jimo's shipped JavaScript is a different matter: software terms commonly forbid reverse engineering, and Jimo's terms were not read for this report, so read them first.</p>
+</section>
+<section data-section="note-for-isaac-a-store-of-verified-routes"><p class="eyebrow">02 <span>4 min read</span></p><h2 id="note-for-isaac-a-store-of-verified-routes">Note for Isaac: a store of verified routes</h2>
+<p><strong>What it is.</strong> For each site, a small table that remembers which control was right for a goal on a screen. When the same goal comes up again on the same screen, Haptic points without asking the model, after checking that the control is on the live page. If the check fails, it falls back to the model call that exists today, and the new answer replaces the stored one.</p>
+<p><strong>Why build it.</strong> It is the only kind of memory in the research with large measured cuts in model calls. The cited paper went from 8.16 to 4.61 calls per task with an executor, and to nothing with the map alone. An Android system made repeat tasks 62.5% faster after a first run <span class="cite">(<a href="https://arxiv.org/abs/2312.03003" target="_blank" rel="noopener">MobileGPT</a>)</span>. A browser-automation library documents cached replay at roughly 50 to 100 milliseconds against 1 to 5 seconds for a model call (<a href="https://docs.stagehand.dev/v4/best-practices/caching" target="_blank" rel="noopener">Stagehand docs</a>; a documentation figure, not a benchmark). The site map Haptic puts in the prompt today is the kind of memory that showed no gain for a strong model.</p>
+<p><strong>What the repo already has.</strong></p>
+<div class="table-wrap cols-3"><table>
+<thead>
+<tr class="header">
+<th>Piece</th>
+<th>Where</th>
+<th>What it gives a route store</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Piece">A key that identifies a control across snapshots</td>
+<td data-label="Where"><code>elementKey()</code> in <code>src/widget/snapshot.ts:146</code>: role, label, icon and link target joined</td>
+<td data-label="What it gives a route store">The start of a locator. It is not unique when two controls share a label, and today it is used only to describe what changed between two snapshots</td>
+</tr>
+<tr>
+<td data-label="Piece">Everything a route step needs</td>
+<td data-label="Where">The guide loop in <code>src/widget/guide.ts</code>: the goal, the page path, the element pointed at, whether the user clicked it (<code>last.used</code>), and what changed afterwards</td>
+<td data-label="What it gives a route store">All of it is in memory during a guide and none of it is saved</td>
+</tr>
+<tr>
+<td data-label="Piece">One place every step passes through</td>
+<td data-label="Where"><code>POST /v1/turn</code> in <code>src/server/index.ts</code>, which calls <code>runTurn</code> in <code>src/server/model.ts</code></td>
+<td data-label="What it gives a route store">The store can sit in front of <code>runTurn</code> with no change to the widget</td>
+</tr>
+<tr>
+<td data-label="Piece">Per-site storage</td>
+<td data-label="Where">JSON files in <code>data/sites/</code>, read by <code>src/server/sites.ts</code></td>
+<td data-label="What it gives a route store">A first version can keep routes the same way</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>The smallest version worth building, in order.</strong></p>
+<ol type="1">
+<li><strong>Log before acting.</strong> On every step, record the goal, the normalised path, any open dialog, the key of the element pointed at, whether the user clicked it, and whether the guide finished. This alone answers the question that decides everything else: what share of real questions repeat a goal already seen on the same screen.</li>
+<li><strong>Serve exact repeats.</strong> Look up by site, goal (lower-cased, punctuation removed), path, dialog and the key of the previous step. Store the element key plus two tie-breakers: the context string the snapshot already computes (such as "nav › Account") and the position among controls with the same key. If an entry exists and exactly one element in the live snapshot matches, return it with the stored sentence and skip the model.</li>
+<li><strong>Check and repair.</strong> If nothing matches, or more than one element does, call the model as now and overwrite the entry. Count hits, misses and repairs.</li>
+<li><strong>Serve only what a person confirmed.</strong> An entry becomes servable once a user clicked the element it points at and the guide went on to finish, or once an admin confirmed it during onboarding.</li>
+</ol>
+<p><strong>The hard parts.</strong></p>
+<div class="table-wrap cols-3"><table>
+<thead>
+<tr class="header">
+<th>Problem</th>
+<th>Why it is hard</th>
+<th>A way to start</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Problem">Matching goals</td>
+<td data-label="Why it is hard">"change my card" and "update billing info" are one goal. Exact matching will hit rarely; matching by meaning adds a call and can match wrongly</td>
+<td data-label="A way to start">Exact match first, measure the hit rate from the log, then decide</td>
+</tr>
+<tr>
+<td data-label="Problem">Same label, different control</td>
+<td data-label="Why it is hard">Every row of a table has an "Edit" button</td>
+<td data-label="A way to start">Refuse to serve unless exactly one element matches</td>
+</tr>
+<tr>
+<td data-label="Problem">State and roles</td>
+<td data-label="Why it is hard">The right next step can depend on what the user already did, or on their role or plan. A route an admin showed may not exist for a member</td>
+<td data-label="A way to start">Key on the screen as the user sees it, and never point at something that is not on the live page</td>
+</tr>
+<tr>
+<td data-label="Problem">Stale but confident</td>
+<td data-label="Why it is hard">An out-of-date route shown instantly is worse than a slow right answer</td>
+<td data-label="A way to start">Refuse on any doubt; a miss costs one model call</td>
+</tr>
+<tr>
+<td data-label="Problem">Privacy</td>
+<td data-label="Why it is hard">Goals are typed by end users and can contain personal data, and so can labels</td>
+<td data-label="A way to start">Run the existing <code>cleanText</code> masking on goals before storing them. Whether logging guided sessions needs consent is unresolved (see the legal gaps below)</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>What to measure.</strong> The share of steps served without a model call. The share of served steps where the user clicked the element pointed at. Time to pointer on served steps against model steps. Repairs per site per week.</p>
+<p><strong>Questions for Isaac.</strong> Is <code>elementKey</code> unique enough on real apps, and what would you add to it? Should the lookup live on the server, which is the smallest change and still costs one round trip, or in the widget, which is fastest and means sending routes to the browser? Can the store sit in front of <code>runTurn</code> as described, or does the step loop need to change? Is step 1, the log, something you could add this week, so the repeat rate is known before anything else is built?</p>
+</section>
+<section data-section="company-onboarding-ends-at-the-first-real-end-user-answer-not-at-the-install"><p class="eyebrow">03 <span>10 min read</span></p><h2 id="company-onboarding-ends-at-the-first-real-end-user-answer-not-at-the-install">Company onboarding ends at the first real end-user answer, not at the install</h2>
+<h3 id="the-account-is-the-unit-and-setup-is-not-the-aha">The account is the unit, and setup is not the "aha"</h3>
+<p>There is no single authoritative definition of onboarding. The practitioners cited most often agree on three points. First, onboarding starts before signup and has no fixed end: Samuel Hulick defines it as "any time there's an opportunity to increase the likelihood that users are successful" and places the start "long before they sign up" <span class="cite">(<a href="https://www.intercom.com/blog/podcasts/user-onboarding-interview-samuel-hulick/" target="_blank" rel="noopener">Intercom interview</a>)</span>. Second, the measurable milestone inside it is activation, "the earliest point in your onboarding flow that, by showing your product's value, is predictive of long-term retention" <span class="cite">(<a href="https://www.lennysnewsletter.com/p/what-is-a-good-activation-rate" target="_blank" rel="noopener">Lenny's Newsletter</a>)</span>. Third, in B2B the thing that must activate is the account, not the person who signed up: Miro did not count an account as activated until two people had collaborated, and PostHog checks whether "an organization meets the activation definition within 30 days" <span class="cite">(<a href="https://www.elenaverna.com/p/hey-b2b-i-bet-you-are-measuring-activation" target="_blank" rel="noopener">Elena Verna</a>; <a href="https://posthog.com/handbook/growth/growth-engineering/per-product-activation" target="_blank" rel="noopener">PostHog handbook</a>)</span>. Verna, quoting the Reforge definition, splits activation into setup, aha and habit and names the common error directly: "Many companies excel at innovating in setup and mistakenly want to count setup as their value delivery, or aha moment" <span class="cite">(<a href="https://www.elenaverna.com/p/hey-b2b-i-bet-you-are-measuring-activation" target="_blank" rel="noopener">Elena Verna</a>)</span>.</p>
+<p>Applied to Haptic, a company onboarding flow is the whole account-level path from the "Request access" form on joinhaptic.com to the point where the customer's own end users are being guided and coming back. <strong>Installing the script is setup. The aha is the buyer watching the pointer find the right control on their own app. Activation is the first real end-user question answered in production, and habit is repeat use in the following weeks.</strong> The person who signs up for Haptic, the person who installs it and the person who approves it are often three different people, so "the user activated" and "the account activated" are different events (an inference from the definitions above). For orientation only: self-reported median activation across surveys sits between about 25% and 37% of signups, each source using its own milestone, and products sold to developers convert free users to paid at about half the rate of other software (5% against 10% within six months in a secondary analysis of OpenView's 2023 survey) <span class="cite">(<a href="https://www.lennysnewsletter.com/p/what-is-a-good-activation-rate" target="_blank" rel="noopener">Lenny's Newsletter</a>; <a href="https://userpilot.com/blog/saas-onboarding-benchmarks/" target="_blank" rel="noopener">Userpilot</a>; <a href="https://boldstart.vc/?p=1596" target="_blank" rel="noopener">boldstart</a>)</span>. With a handful of accounts these are not targets; the funnel should be read as a list of named companies. <span class="conf"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i></span>Confidence: high</span> that this is the consensus definition. It is framework and opinion, not measurement.</p>
+<h3 id="no-one-publishes-how-many-signups-finish-a-snippet-install">No one publishes how many signups finish a snippet install</h3>
+<p>The planning number Haptic needs most is the share of signups that complete a snippet or SDK install when the person signing up is not the person installing. The researchers searched for it across Segment, Hotjar, Mixpanel, Amplitude, Heap, FullStory, LaunchDarkly, Stripe, Algolia and Intercom and found only help pages. Two weak anchors exist. Upscope, a co-browsing product installed by snippet, wrote that "almost half did not have Upscope installed after one month" (snippet only; the post could not be opened) <span class="cite">(<a href="https://blog.upscope.com/this-simple-intercom-email-trick-helped-us-double-installations" target="_blank" rel="noopener">Upscope</a>)</span>. Sentry, whose signups are developers, reported that about <strong>70% of users on its two best platforms sent a first event within two days</strong> in 2017 <span class="cite">(<a href="https://blog.sentry.io/small-data-big-insights" target="_blank" rel="noopener">Sentry</a>)</span>. Sentry is a ceiling case, because its signups can install the product themselves. From these two points, expecting well under half of non-developer signups to reach a live install without human help is a reasonable planning assumption. It is an estimate from two weak data points, not a benchmark.</p>
+<p>Three levers are reported to raise the install rate, in rising order of claimed effect. The first is making instructions specific to the customer's stack, which Sentry did by asking for the platform at signup <span class="cite">(<a href="https://blog.sentry.io/small-data-big-insights" target="_blank" rel="noopener">Sentry</a>)</span>. The second is routing the task to the right person. Upscope asked each signup whether they could install the product themselves, showed the code to those who said yes, and gave everyone else a one-click email to their developer with Upscope copied in; it claimed this halved the share still uninstalled after a month (snippet only, no sample size, no control) <span class="cite">(<a href="https://blog.upscope.com/this-simple-intercom-email-trick-helped-us-double-installations" target="_blank" rel="noopener">Upscope</a>)</span>. Intercom documents the same idea as a developer invite carrying "the minimum permissions required to install the Messenger" <span class="cite">(<a href="https://www.intercom.com/help/en/articles/16946116-new-messenger-install-experience-on-your-website" target="_blank" rel="noopener">Intercom help</a>)</span>. The third is removing the manual work. PostHog reports that users of its command-line install wizard convert to paid at <strong>14.2% against 2.6%</strong> and reach a first event in 1.9 hours against 3.8, and DevCycle reports about three times as many users reaching SDK install after moving the install into the developer's AI coding assistant <span class="cite">(<a href="https://posthog.com/newsletter/context-engineering" target="_blank" rel="noopener">PostHog</a>; <a href="https://blog.devcycle.com/we-rebuilt-our-onboarding-around-mcp-the-result-3x-sdk-installs/" target="_blank" rel="noopener">DevCycle</a>)</span>. Both are self-reported and uncontrolled. PostHog's post names no sample, period or assignment method, and developers who choose a wizard are likely more committed than those who do not, so the gap overstates the causal effect. Amplitude is running a 50/50 test of a coding-agent install option and has published no result <span class="cite">(<a href="https://amplitude.com/docs/en/get-started/setup-wizard-cli" target="_blank" rel="noopener">Amplitude docs</a>)</span>. <span class="conf"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i class=""></i></span>Confidence: moderate</span> on direction, because independent companies report the same thing; <strong>low</strong> on every magnitude.</p>
+<h3 id="value-before-the-hard-step-helps-blocking-helps-only-when-the-step-is-the-value">Value before the hard step helps; blocking helps only when the step is the value</h3>
+<p>The direction of the evidence favours letting the buyer experience something real before the install, and nearly all of it is self-reported. Chameleon, itself a snippet-installed guidance product, built a sandbox that needs no code and reported that users who explored it "reached key milestones 25% faster"; those users chose to explore, so motivation is a confound <span class="cite">(<a href="https://www.chameleon.io/shift-left/auditing-onboarding" target="_blank" rel="noopener">Chameleon</a>)</span>. Twilio's redesign, which included a simulated phone that receives test messages before any carrier registration, reported "a 62% improvement in first message activation" with no baseline or sample given <span class="cite">(<a href="https://www.twilio.com/en-us/blog/developers/redesigning-twilio-onboarding-experience-whats-new" target="_blank" rel="noopener">Twilio</a>)</span>. The one controlled result is Sentry's: a prominent "See Sample Event" button at the top of the install-instructions page <strong>beat control by 12% on the share of signups that went on to send a real error</strong> <span class="cite">(<a href="https://blog.sentry.io/easy-ab-testing-with-planout" target="_blank" rel="noopener">Sentry</a>)</span>. Showing what success looks like on the waiting screen raised real installs. Every vendor in the notes that kept the install first has also added a way out of the waiting screen: Sentry's sample error, PostHog's skip action, Microsoft Clarity's public demo project. No fetched source shows a hard block with no alternative <span class="cite">(<a href="https://raw.githubusercontent.com/getsentry/sentry/master/static/app/views/onboarding/components/firstEventFooter.tsx" target="_blank" rel="noopener">Sentry source</a>; <a href="https://raw.githubusercontent.com/PostHog/posthog/master/frontend/src/scenes/onboarding/onboardingLogic.tsx" target="_blank" rel="noopener">PostHog source</a>; <a href="https://learn.microsoft.com/en-us/clarity/setup-and-installation/getting-started" target="_blank" rel="noopener">Microsoft Learn</a>)</span>.</p>
+<p>There is evidence in the other direction, and it concerns a different question. Superhuman made one setup step full-screen and interruptive and saw completion go "from 30% to over 98%"; when its onboarding call went from mandatory to optional, attendance fell from 100% to a typical 15% <span class="cite">(<a href="https://review.firstround.com/superhuman-onboarding-playbook/" target="_blank" rel="noopener">First Round Review</a>)</span>. The two findings fit together once the questions are separated. Should the buyer see value before the hard step? Mostly yes. Should a step be blocking? Only when the step itself is the value and the person in front of it can perform it. A blocking "waiting for your script" screen fails the second test whenever the signer is not an engineer (inference). For Haptic, generic demo data is a weak substitute for the real thing, because the aha is "it works on my app"; no source tested a pre-install trial on the customer's own app for a product of this type. <strong>Confidence: moderate.</strong></p>
+<h3 id="ask-only-what-changes-the-next-screen">Ask only what changes the next screen</h3>
+<p>Removing signup fields raises signups, but the better-supported finding is that questions which route the user cost little. One-click sign-in through a third-party account was associated with signup conversion 8.2 percentage points higher across 79 companies (2017, observational) <span class="cite">(<a href="https://heap.io/blog/good-conversion-rate-signup-flow" target="_blank" rel="noopener">Heap</a>)</span>. Rows nudged users toward a company email and saw a "33% increase in the share of users registering with a work email" with website conversion unchanged at 5–6%; its use-case question, which changed nothing downstream, drew "Not sure" or "Other" from 25% of respondents; and its generic invite-teammates step was used by about 1% of new signups (pre/post comparison, sample sizes not reported) <span class="cite">(<a href="https://rows.com/blog/post/experimenting-with-questions-and-hints-in-the-user-onboarding" target="_blank" rel="noopener">Rows</a>)</span>. Twilio's role and code-or-no-code question forks the flow and was part of its reported activation gain, though its separate contribution was not isolated <span class="cite">(<a href="https://www.twilio.com/en-us/blog/developers/redesigning-twilio-onboarding-experience-whats-new" target="_blank" rel="noopener">Twilio</a>)</span>. The lesson is to ask only what the product will branch on. For Haptic that is one question: can you add a script to your app yourself? Invites work the same way. In a controlled 30-day test, Sentry let any member request an invite for a colleague and let outsiders ask to join, which together raised accepted invitations by 21%, and 71–78% of invitees became active; Rows's generic invite step was used by about 1% <span class="cite">(<a href="https://blog.sentry.io/how-we-grew-sentrys-monthly-active-users-by-rethinking-invitations" target="_blank" rel="noopener">Sentry</a>)</span>. The invite that matters for Haptic is "send this to the person who can install it". <strong>Confidence: moderate.</strong></p>
+<h3 id="checklists-reach-about-a-fifth-of-users-and-the-psychology-cited-for-them-is-thin">Checklists reach about a fifth of users, and the psychology cited for them is thin</h3>
+<p>In the one vendor dataset that reports it, the average onboarding checklist completion rate is <strong>19.2%</strong>, and in another about <strong>23% of users</strong> click inside a checklist launcher at all <span class="cite">(<a href="https://userpilot.com/blog/product-metrics-benchmark-report/" target="_blank" rel="noopener">Userpilot</a>; <a href="https://chameleon.io/benchmark-report" target="_blank" rel="noopener">Chameleon</a>)</span>. No public controlled test of checklist against no checklist, with activation as the outcome, was found. The psychology usually cited is weaker than vendor posts suggest. The endowed-progress study is real and peer-reviewed, but it concerned loyalty cards redeemed for a tangible reward, and its abstract says the effect depends on "the reason, if any, offered for the endowment" <span class="cite">(<a href="https://academic.oup.com/jcr/article/32/4/504/1787425" target="_blank" rel="noopener">Journal of Consumer Research</a>)</span>. A 2025 meta-analysis "found no memory advantage for unfinished tasks", so the Zeigarnik effect should not be cited for checklists <span class="cite">(<a href="https://ideas.repec.org/a/pal/palcom/v12y2025i1d10.1057_s41599-025-05000-w.html" target="_blank" rel="noopener">Ghibellini and Meier</a>)</span>. A meta-analysis of 32 randomised web-survey experiments found that a constant progress indicator "does not significantly help reduce drop-offs" and that indicators which start slowly increase drop-off <span class="cite">(<a href="https://research.google/pubs/where-am-i-a-meta-analysis-of-experiments-on-the-effects-of-progress-indicators-for-web-surveys/" target="_blank" rel="noopener">Villar, Callegaro and Yang</a>)</span>. Sentry found in 2019 that its onboarding widget, "a list of TODOs rather than a guided tour of the product", had low engagement and replaced it with contextual help that raised its first-event rate by almost 6% <span class="cite">(<a href="https://blog.sentry.io/growing-adoption-building-modern-clippy" target="_blank" rel="noopener">Sentry</a>)</span>. Vendor guidance is three to five items, with no data behind it <span class="cite">(<a href="https://productled.com/blog/product-led-user-onboarding-experience" target="_blank" rel="noopener">ProductLed</a>)</span>.</p>
+<p>Three design consequences follow, all inferences. A checklist is a secondary aid for the motivated minority, so the main path has to be the flow itself. A pre-ticked first item is legitimate when it has a stated reason, which is the condition under which the head-start effect held. And a list whose first open item is "wait for an engineer" starts slowly, which is the pattern that raised drop-off in surveys; items the buyer can finish alone belong first. The transfer from surveys to onboarding is the researchers' reasoning, not a tested result. <span class="conf"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i class=""></i></span>Confidence: moderate</span> that a checklist is secondary; <strong>low</strong> on the right number of items.</p>
+<h3 id="human-help-staged-exposure-and-the-security-review-belong-inside-the-flow">Human help, staged exposure and the security review belong inside the flow</h3>
+<p>The evidence on gating is founder testimony, and it is consistent. Superhuman's head of onboarding says "every founder should spend time manually onboarding their earliest customers" and reports human-led onboarding at "nearly 2x" the activation of self-serve, while noting selection bias; replacing it in-product took three years <span class="cite">(<a href="https://review.firstround.com/superhuman-onboarding-playbook/" target="_blank" rel="noopener">First Round Review</a>)</span>. Arcade ran a waitlist until it "got to know our first one hundred customers very well", learned that users "were confused about the first action that they needed to take", and opened self-serve when it could no longer keep up with leads <span class="cite">(<a href="https://arcade.software/post/going-self-service" target="_blank" rel="noopener">Arcade</a>)</span>. Paul Graham's name for doing the install with the customer is the "Collison installation", after Stripe's founders: "Right then, give me your laptop" <span class="cite">(<a href="https://paulgraham.com/ds.html" target="_blank" rel="noopener">Paul Graham</a>)</span>. Survey data point the same way and are correlational: companies that reached out to users "retained them 2-3x better", and <strong>80% of free-trial products add human touchpoints when an enterprise user enters the trial</strong> <span class="cite">(<a href="https://www.prnewswire.com/news-releases/openviews-third-annual-product-benchmarks-report-reveals-plg-companies-2x-more-likely-to-grow-quickly-301562090.html" target="_blank" rel="noopener">OpenView via PR Newswire</a>; <a href="https://chartmogul.com/reports/saas-conversion-report/" target="_blank" rel="noopener">ChartMogul</a>)</span>. No benchmark for waitlist conversion or decay was found.</p>
+<p>A script inside a customer's app runs with that app's privileges, so a reviewer treats it as code the customer is shipping. The documentation of mature vendors shows what reviewers expect: exact Content Security Policy entries (the browser rule list naming which hosts a page may load scripts from and send data to), a pinnable version, masking done in the browser before anything leaves it, and a rollout that starts with internal users <span class="cite">(<a href="https://posthog.com/docs/libraries/js/security" target="_blank" rel="noopener">PostHog docs</a>; <a href="https://help.fullstory.com/hc/en-us/articles/360020623574" target="_blank" rel="noopener">FullStory help</a>; <a href="https://www.intercom.com/help/en/articles/7321743-best-practices-for-testing-intercom-and-going-live" target="_blank" rel="noopener">Intercom help</a>)</span>. Payment pages carry an extra burden: PCI DSS requirement 6.4.3 says every script on a payment page must be authorised, integrity-checked and listed in a written inventory with a justification, which matters to any guide that points at billing screens (wording from a practitioner summary, not the standard itself) <span class="cite">(<a href="https://blog.report-uri.com/pci-dss-4-0-1-and-requirements-6-4-3-and-11-6-1-what-changed-for-payment-page-scripts/" target="_blank" rel="noopener">Report URI</a>)</span>. AI support agents have converged on a similar caution: train on the customer's content, test in a playground, test in bulk against real past questions, then release to a limited audience, and Intercom and Decagon both shipped formal evaluation and release tooling in 2025–2026 <span class="cite">(<a href="https://www.intercom.com/blog/announcing-evals-and-releases/" target="_blank" rel="noopener">Intercom</a>; <a href="https://decagon.ai/blog/decagon-simulations" target="_blank" rel="noopener">Decagon</a>)</span>. No measured evidence was found that test-before-live features raise activation or trust; the support is vendor assertion and customer quotes. The security review is in effect a second funnel with its own drop-off (inference), and no source quantifies how often it blocks or how long it delays an install. <span class="conf"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i class=""></i></span>Confidence: moderate</span> that hand onboarding is right for the first cohort; <strong>unknown</strong> for the size of the security-review delay.</p>
+<div class="table-wrap cols-4"><table>
+<thead>
+<tr class="header">
+<th>Practice</th>
+<th>Strongest evidence found</th>
+<th>Grade</th>
+<th>Confidence it helps Haptic</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Practice">Define activation per account, with install as setup</td>
+<td data-label="Strongest evidence found">Verna/Reforge, PostHog, Lenny Rachitsky</td>
+<td data-label="Grade">Framework and first-party definitions</td>
+<td data-label="Confidence it helps Haptic">High, as a definition</td>
+</tr>
+<tr>
+<td data-label="Practice">Show real value before the install</td>
+<td data-label="Strongest evidence found">Sentry sample-event button, 12% more activation; Chameleon sandbox; Twilio redesign</td>
+<td data-label="Grade">One controlled test; the rest self-reported and self-selected</td>
+<td data-label="Confidence it helps Haptic">Moderate</td>
+</tr>
+<tr>
+<td data-label="Practice">Ask "can you install this yourself?" and hand off to a developer</td>
+<td data-label="Strongest evidence found">Upscope halved its non-install share</td>
+<td data-label="Grade">Snippet only, no control</td>
+<td data-label="Confidence it helps Haptic">Low to moderate</td>
+</tr>
+<tr>
+<td data-label="Practice">Automate the install with a wizard or coding-agent prompt</td>
+<td data-label="Strongest evidence found">PostHog 14.2% against 2.6% paid; DevCycle about 3x installs</td>
+<td data-label="Grade">Self-reported, uncontrolled</td>
+<td data-label="Confidence it helps Haptic">Moderate on direction, low on size</td>
+</tr>
+<tr>
+<td data-label="Practice">Verify the install live and never hard-block the waiting screen</td>
+<td data-label="Strongest evidence found">Intercom, Plausible, Sentry, Tidio documentation</td>
+<td data-label="Grade">Documentation; no isolated outcome data</td>
+<td data-label="Confidence it helps Haptic">Low</td>
+</tr>
+<tr>
+<td data-label="Practice">Ask only questions that fork the flow; nudge work email</td>
+<td data-label="Strongest evidence found">Rows; Twilio</td>
+<td data-label="Grade">Pre/post, uncontrolled</td>
+<td data-label="Confidence it helps Haptic">Moderate</td>
+</tr>
+<tr>
+<td data-label="Practice">Short checklist as a secondary aid</td>
+<td data-label="Strongest evidence found">19.2% completion; about 23% engage; no checklist-versus-none test</td>
+<td data-label="Grade">Vendor telemetry</td>
+<td data-label="Confidence it helps Haptic">Moderate that it is secondary; low on item count</td>
+</tr>
+<tr>
+<td data-label="Practice">Onboard the first customers by hand</td>
+<td data-label="Strongest evidence found">Superhuman, Arcade, Paul Graham; OpenView survey</td>
+<td data-label="Grade">Founder testimony; correlational survey</td>
+<td data-label="Confidence it helps Haptic">Moderate</td>
+</tr>
+<tr>
+<td data-label="Practice">Staff-first, staged go-live</td>
+<td data-label="Strongest evidence found">Intercom documentation; Intercom and Decagon release tooling</td>
+<td data-label="Grade">Documentation and vendor assertion</td>
+<td data-label="Confidence it helps Haptic">Low</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section data-section="the-closest-rivals-show-the-product-on-your-own-app-before-any-code-ships"><p class="eyebrow">04 <span>9 min read</span></p><h2 id="the-closest-rivals-show-the-product-on-your-own-app-before-any-code-ships">The closest rivals show the product on your own app before any code ships</h2>
+<h3 id="who-is-comparable-and-who-is-left">Who is comparable, and who is left</h3>
+<p>The closest live product to Haptic is <strong>Jimo's Adoption Agent</strong>. Its documentation describes "a cursor and a tooltip on one control at a time; the user clicks", driven by reading the visible page's text and interactive elements <span class="cite">(<a href="https://help.usejimo.com/docs/experiences/agent.md" target="_blank" rel="noopener">Jimo docs</a>)</span>. <strong>Frigade</strong> is closest in ambition: its assistant "highlights the next click and walks the workflow, across pages and modals", it can also act for the user, and it learns the app by sending its own browser agent in with a test login <span class="cite">(<a href="https://frigade.com" target="_blank" rel="noopener">Frigade</a>)</span>. Product Fruits' assistant is adjacent, and a tail of small entrants (Skippr, Invocursor, and by snippet-only evidence Fluidworks and Orango) launched in 2025–2026. Several earlier entrants are gone or have moved. Y Combinator lists Layup, a "second cursor" guide, as Inactive <span class="cite">(<a href="https://www.ycombinator.com/companies/layup" target="_blank" rel="noopener">YC</a>)</span>. Tandem's home page now sells "the agentic workspace for implementation and forward-deployed teams" and describes no embeddable script; no announcement of a pivot was found, so the evidence is the site content alone <span class="cite">(<a href="https://usetandem.ai/" target="_blank" rel="noopener">Tandem</a>)</span>. Sammy Labs has repositioned, Command AI was absorbed into Amplitude after its October 2024 acquisition, and Fullstory bought Usetiful in November 2025 <span class="cite">(<a href="https://www.ycombinator.com/companies/sammy-labs" target="_blank" rel="noopener">YC</a>; <a href="https://amplitude.com/blog/amplitude-acquires-command-ai" target="_blank" rel="noopener">Amplitude</a>; <a href="https://www.fullstory.com/fullstory-acquires-usetiful/" target="_blank" rel="noopener">Fullstory</a>)</span>.</p>
+<p>Three readings of this field bear on Haptic; all three are the researchers' interpretation, not something any source states. First, the churn among pure "AI cursor" startups suggests the standalone category has been hard to sustain: the survivors bundled the pointer into a broader suite (Jimo, Product Fruits) or sell an interface to teams that already have an agent (Frigade). Second, the incumbent in-app tour platforms (Pendo, Appcues, Chameleon, Userpilot, Whatfix) have spent their AI effort on the authoring side, drafting tours and repairing broken selectors, not on pointing in answer to an end user's question. Third, most new entrants click for the user by default, so Haptic's "never clicks" rule is a minority position; Jimo's guide mode and Skippr's "guide-only mode" are the nearest equivalents. One fact needs no interpretation: <strong>"one script tag" is the install claim of nearly every entrant</strong> (Tandem's "One script to install", Invocursor's one tag, Skippr's "2 lines of code"), so it does not differentiate <span class="cite">(<a href="https://www.producthunt.com/posts/tandem-ai" target="_blank" rel="noopener">Product Hunt: Tandem</a>; <a href="https://www.producthunt.com/posts/skippr-ai" target="_blank" rel="noopener">Product Hunt: Skippr</a>)</span>. On commercial norms, Jimo and the mid-market tour tools are self-serve with 14-day to one-month trials and no card, at entry prices of roughly $80 to $300 a month (Jimo's Agent plan is $79 a month billed yearly); Frigade starts at $1,000 a month; WalkMe, Whatfix and Userlane are demo-only; and three leading AI support agents (Decagon, Sierra, Ada) offer no self-serve flow to study at all <span class="cite">(<a href="https://help.usejimo.com/docs/settings/plan-and-billing.md" target="_blank" rel="noopener">Jimo docs</a>; <a href="https://frigade.com/pricing" target="_blank" rel="noopener">Frigade pricing</a>; <a href="https://decagon.ai" target="_blank" rel="noopener">Decagon</a>)</span>.</p>
+<h3 id="what-the-best-documented-flows-have-in-common">What the best documented flows have in common</h3>
+<p>Three patterns recur among the self-serve leaders. The first is a first-run screen built from the customer's own site. Jimo asks for only a product URL and a goal at signup, then shows "the URL the Agent read", "how many pages it learned", drafts generated for the stated goal and a theme "picked from your site"; its "Get Started" page is a numbered checklist whose first step, "Workspace Created", is "already checked when you land" <span class="cite">(<a href="https://help.usejimo.com/docs/getting-started/your-workspace.md" target="_blank" rel="noopener">Jimo docs</a>)</span>. Chatbase follows the Crisp shape in fewer screens: enter a URL, see "all discovered pages and the total character count", pass two skippable steps, test in a playground that "always uses the draft", then deploy <span class="cite">(<a href="https://www.chatbase.co/docs/user-guides/quick-start/your-first-agent" target="_blank" rel="noopener">Chatbase docs</a>)</span>.</p>
+<p>The second pattern is a trial on the customer's own logged-in app before any code. Jimo's Chrome extension "loads Jimo on any page you open in Chrome, as if the snippet were already installed", so a buyer can "build, position and preview experiences on your own app today. Only publishing waits for the snippet" <span class="cite">(<a href="https://help.usejimo.com/docs/getting-started/extension" target="_blank" rel="noopener">Jimo docs</a>)</span>. Product Fruits, Userflow, Chameleon and UserGuiding document the same route <span class="cite">(<a href="https://help.productfruits.com/article/test-in-chrome-without-installation" target="_blank" rel="noopener">Product Fruits</a>; <a href="https://help.userflow.com/docs/userflow-chrome-extension" target="_blank" rel="noopener">Userflow</a>; <a href="https://help.chameleon.io/en/articles/1204283-what-does-the-chrome-extension-do" target="_blank" rel="noopener">Chameleon</a>; <a href="https://help.userguiding.com/en/articles/5358722-userguiding-now" target="_blank" rel="noopener">UserGuiding</a>)</span>. Jimo's documented order is workspace created, install the extension, create an experience, install the snippet, publish, and its docs note that only the install step needs a developer <span class="cite">(<a href="https://help.usejimo.com/docs/getting-started/how-to-start.md" target="_blank" rel="noopener">Jimo docs</a>)</span>. Userpilot, Appcues, Pendo and Amplitude put the developer first; Appcues says plainly that it "only works on pages where the snippet loads" <span class="cite">(<a href="https://docs.appcues.com/getting-started/quick-start-guide-for-appcues" target="_blank" rel="noopener">Appcues docs</a>)</span>. Frigade takes a third route: "Train on staging. Install the SDK in prod", after the customer sends "a URL and a test login", plus a public demo that needs no signup <span class="cite">(<a href="https://frigade.com/how-it-works" target="_blank" rel="noopener">Frigade</a>)</span>.</p>
+<p>The third pattern is a designed developer step. Jimo has a "Share Instructions to Engineer" button, tells the buyer to "Ask for a date", offers the install as two tabs (a prompt for an AI coding agent, or manual), shows the snippet "as detected on your domain", and extends the trial: "the trial lasts 2 weeks, plus 2 more weeks once the snippet is installed" <span class="cite">(<a href="https://help.usejimo.com/docs/getting-started/install-jimo.md" target="_blank" rel="noopener">Jimo install</a>; <a href="https://help.usejimo.com/docs/settings/installation.md" target="_blank" rel="noopener">Jimo installation settings</a>; <a href="https://help.usejimo.com/docs/settings/plan-and-billing.md" target="_blank" rel="noopener">Jimo billing</a>)</span>. Userflow offers "Copy all instructions (to send to a developer)", writes a self-contained install specification file when its AI skill has no code access, and reports installation, initialisation and user identification as three separate checks <span class="cite">(<a href="https://help.userflow.com/docs/install-with-ai" target="_blank" rel="noopener">Userflow install with AI</a>; <a href="https://help.userflow.com/docs/userflowjs-installation-check.md" target="_blank" rel="noopener">Userflow installation check</a>)</span>. Plausible generates its own test traffic and, on failure, "lets you check again, try another URL, review the installation instructions or verify the installation manually" <span class="cite">(<a href="https://plausible.io/docs/troubleshoot-integration" target="_blank" rel="noopener">Plausible docs</a>)</span>. Outside the guidance category, Intercom is the only flow found that covers an install-type question, framework-specific tabs, a "Test your installation" button, server-signed identity for logged-in users and a developer invite in one place <span class="cite">(<a href="https://www.intercom.com/help/en/articles/16946116-new-messenger-install-experience-on-your-website" target="_blank" rel="noopener">Intercom help</a>)</span>.</p>
+<p>The judgement on "who is best" is therefore split by job. Jimo has the most complete documented flow for a product like Haptic. Intercom has the most complete install for an app behind a login. Plausible has the best verification, PostHog the most mature automated install, and Chatbase the shortest value-first agent setup. <strong>Confidence: moderate.</strong> The ranking rests on documentation; real friction such as forced demo calls, email verification timing and work-email rules only shows up hands-on.</p>
+<h3 id="walkthrough-order-time-and-what-to-capture">Walkthrough order, time, and what to capture</h3>
+<p>The list below merges the two rankings in the notes into one order. Crisp/Hugo is left off because the team has already captured it. One correction to that capture is worth carrying into the walkthroughs: Crisp's own documentation shows that "Activation" is a conversation-routing switch, not a script install, and that the widget snippet lives separately under workspace settings with manual verification only <span class="cite">(<a href="https://help.crisp.chat/en/article/navigating-the-hugo-interface-and-features-h1eatv/" target="_blank" rel="noopener">Crisp help</a>; <a href="https://help.crisp.chat/en/article/how-to-add-a-live-chat-to-my-website-10wcj3l/" target="_blank" rel="noopener">Crisp install article</a>)</span>. Times are this report's planning estimates; no source measures them. Use the same logged-in web app for every extension-based trial so the results compare, and use a throwaway demo app and scratch repository that Haptic controls wherever a vendor asks for a test login or code access.</p>
+<div class="table-wrap cols-5 numbered"><table>
+<thead>
+<tr class="header">
+<th>Order</th>
+<th>Product</th>
+<th>Time (estimate)</th>
+<th>Why it is on the list</th>
+<th>What to capture beyond the common checklist</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Order">1</td>
+<td data-label="Product">Jimo</td>
+<td data-label="Time (estimate)">2–3 hours</td>
+<td data-label="Why it is on the list">Closest live product; self-serve, one-month trial, no card; extension before snippet</td>
+<td data-label="What to capture beyond the common checklist">Fields beyond product URL and goal. How long the "reading your product" step takes and what the failure state looks like. Wording of the four "Workspace Created" blocks and the page count it claims. Minutes from "Install extension" to the side panel on a logged-in app, and whether it works under a strict Content Security Policy. Ask a how-do-I question with page reading set to "Read all", with the end-user "eye" control on and off. What the cursor does after a full page load and when the control is missing. One "Scan and curate" and one "Show me" skill, timed. Exact text of "Share Instructions to Engineer" and the coding-agent prompt. How fast "detected on your domain" flips and whether the trial visibly extends</td>
+</tr>
+<tr>
+<td data-label="Order">2</td>
+<td data-label="Product">Frigade</td>
+<td data-label="Time (estimate)">30 minutes for the public demo; signup time unknown</td>
+<td data-label="Why it is on the list">The other learning model: test login and autonomous exploration</td>
+<td data-label="What to capture beyond the common checklist">In the demo, who clicks, the user or the assistant. How the URL and test login are requested, what is promised about credentials, whether staging is suggested. How training progress and the learned map are shown, how skills are reviewed and enabled, where manual retrain lives. The point at which a person from Frigade gets involved</td>
+</tr>
+<tr>
+<td data-label="Order">3</td>
+<td data-label="Product">Chatbase</td>
+<td data-label="Time (estimate)">30–45 minutes</td>
+<td data-label="Why it is on the list">Shortest documented value-first agent flow; the Crisp shape with fewer screens</td>
+<td data-label="What to capture beyond the common checklist">What the crawl screen shows and for how long. What happens when the URL is a JavaScript-heavy or login-walled app, which is Haptic's case. Copy on the two skippable steps. First playground state. How the dashboard pushes deployment after the wizard. The allowed-domains setting. Whether any install verification exists</td>
+</tr>
+<tr>
+<td data-label="Order">4</td>
+<td data-label="Product">Intercom (Fin trial)</td>
+<td data-label="Time (estimate)">1.5–2 hours</td>
+<td data-label="Why it is on the list">Most complete install for a logged-in app</td>
+<td data-label="What to capture beyond the common checklist">Sign-in options, work-email rule, card. How much of the AI agent can be trained and previewed before the Messenger exists. Wording of the install-type question. Framework tabs, and whether an AI-prompt option appears. What "Test your installation" does when the snippet is only on a logged-in page or on localhost, and the failure copy. The "Invite teammate" email as the developer receives it</td>
+</tr>
+<tr>
+<td data-label="Order">5</td>
+<td data-label="Product">Userflow</td>
+<td data-label="Time (estimate)">45–60 minutes</td>
+<td data-label="Why it is on the list">Best documented verification and developer hand-off</td>
+<td data-label="What to capture beyond the common checklist">Preview a flow with only the extension. Open the debugger on a page with no snippet and copy the error text. "Copy all instructions" and the AI-install prompt. Record one flow by demonstration and note where element selection fails</td>
+</tr>
+<tr>
+<td data-label="Order">6</td>
+<td data-label="Product">PostHog</td>
+<td data-label="Time (estimate)">45–60 minutes, needs a scratch repository</td>
+<td data-label="Why it is on the list">Most mature automated install, with published though uncontrolled results</td>
+<td data-label="What to capture beyond the common checklist">How the install step presents wizard, snippet and framework tabs. Whether there is a waiting-for-events state. Run the wizard: the sign-in hand-off, the file-change approval, where it leaves you in the product. What "skip" leads to. The first emails</td>
+</tr>
+<tr>
+<td data-label="Order">7</td>
+<td data-label="Product">Plausible</td>
+<td data-label="Time (estimate)">10–15 minutes</td>
+<td data-label="Why it is on the list">Most complete automated verification</td>
+<td data-label="What to capture beyond the common checklist">The banner's progress states, success copy and each of the four failure options, tried against a page with no snippet</td>
+</tr>
+<tr>
+<td data-label="Order">8</td>
+<td data-label="Product">Product Fruits</td>
+<td data-label="Time (estimate)">30 minutes</td>
+<td data-label="Why it is on the list">A setup wizard that offers "extension or snippet" as an explicit fork</td>
+<td data-label="What to capture beyond the common checklist">Wording of the fork. What "Full preview" shows. How the limits of extension mode are disclosed. Whether its assistant draws a walkthrough live or launches a pre-built tour</td>
+</tr>
+<tr>
+<td data-label="Order">9</td>
+<td data-label="Product">Pendo, including Novus</td>
+<td data-label="Time (estimate)">45 minutes</td>
+<td data-label="Why it is on the list">Incumbent baseline, and the route that asks for repository access</td>
+<td data-label="What to capture beyond the common checklist">Whether a new account can still start on Free. How visitor and account identifiers are explained to a non-developer. How the "up to two hours" data delay is communicated. What permissions the GitHub connection requests</td>
+</tr>
+</tbody>
+</table></div>
+<p>Shorter optional looks, each for one thing: Amplitude for the coding-agent option under test; Clerk for an install that happens before any account exists and is "claimed" afterwards; Tidio for its "checking widget activation" waiting state; Sentry for "Waiting for error" beside "View Sample Error"; Microsoft Clarity for the "Share code" email; Skippr for a meeting-link mode that needs no install <span class="cite">(<a href="https://clerk.com/docs/nextjs/getting-started/quickstart.md" target="_blank" rel="noopener">Clerk docs</a>; <a href="https://help.tidio.com/hc/en-us/articles/5379640857884" target="_blank" rel="noopener">Tidio help</a>; <a href="https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-setup" target="_blank" rel="noopener">Microsoft Learn</a>)</span>.</p>
+<div class="table-wrap cols-3"><table>
+<thead>
+<tr class="header">
+<th>Capture at every product</th>
+<th>Record exactly</th>
+<th>Why it matters for Haptic</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Capture at every product">Signup fields</td>
+<td data-label="Record exactly">Every field in order; sign-in providers; whether a work email is required or nudged; when email is verified; whether a card is asked</td>
+<td data-label="Why it matters for Haptic">Almost none of this is documented publicly; it is the largest gap in the notes</td>
+</tr>
+<tr>
+<td data-label="Capture at every product">Order of steps</td>
+<td data-label="Record exactly">Screenshot and timestamp per screen; which steps can be skipped; number of screens before the first result specific to your company</td>
+<td data-label="Why it matters for Haptic">Tests whether value comes before the install</td>
+</tr>
+<tr>
+<td data-label="Capture at every product">First personalised result</td>
+<td data-label="Record exactly">What is generated from your URL, how long it takes, what the failure state says</td>
+<td data-label="Why it matters for Haptic">Haptic's crawl can power the same screen for public pages</td>
+</tr>
+<tr>
+<td data-label="Capture at every product">When the install is first asked for</td>
+<td data-label="Record exactly">Which screen, the wording, blocking or skippable, whether you are asked if you can do it yourself</td>
+<td data-label="Why it matters for Haptic">Decides where Haptic's script tag sits</td>
+</tr>
+<tr>
+<td data-label="Capture at every product">Install paths</td>
+<td data-label="Record exactly">Snippet, package, tag manager, command-line wizard, coding-agent prompt; copy the prompt text</td>
+<td data-label="Why it matters for Haptic">The hand-off page Haptic needs</td>
+</tr>
+<tr>
+<td data-label="Capture at every product">Developer hand-off</td>
+<td data-label="Record exactly">The button's label; send it to yourself and keep the email or page; what permissions the invitee gets; whether the vendor stays on the thread</td>
+<td data-label="Why it matters for Haptic">The step where self-serve flows stall</td>
+</tr>
+<tr>
+<td data-label="Capture at every product">Install verification</td>
+<td data-label="Record exactly">Mechanism (vendor loads your URL, waits for a first request, a test button, a command-line check); seconds to flip; whether the environment is named; failure text and next actions</td>
+<td data-label="Why it matters for Haptic">A logged-in app cannot be loaded by the vendor, so only some mechanisms transfer</td>
+</tr>
+<tr>
+<td data-label="Capture at every product">Trial on your own app before install</td>
+<td data-label="Record exactly">Whether possible and by what means; minutes from signup to seeing it on a logged-in page; what is disabled in that mode</td>
+<td data-label="Why it matters for Haptic">The central open design question for Haptic</td>
+</tr>
+<tr>
+<td data-label="Capture at every product">Empty states</td>
+<td data-label="Record exactly">What the dashboard shows before install: sample data, badges, banners, waiting screens</td>
+<td data-label="Why it matters for Haptic">Haptic has no dashboard yet</td>
+</tr>
+<tr>
+<td data-label="Capture at every product">Checklist</td>
+<td data-label="Record exactly">Exact wording of every item, count, order, which are pre-ticked, how progress is shown, where the install sits</td>
+<td data-label="Why it matters for Haptic">Direct input to Haptic's "Get Started"</td>
+</tr>
+<tr>
+<td data-label="Capture at every product">Go-live controls</td>
+<td data-label="Record exactly">Draft versus live; internal-only audience; percentage rollout; off switch</td>
+<td data-label="Why it matters for Haptic">The trust step for an AI feature</td>
+</tr>
+<tr>
+<td data-label="Capture at every product">First 72 hours</td>
+<td data-label="Record exactly">Every email and its timing; whether a person contacts you</td>
+<td data-label="Why it matters for Haptic">Shows where human help is inserted</td>
+</tr>
+<tr>
+<td data-label="Capture at every product">Security material</td>
+<td data-label="Record exactly">Where data-flow, masking and Content Security Policy details appear in the flow</td>
+<td data-label="Why it matters for Haptic">The approver's path</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section data-section="the-cited-paper-credits-the-executor-not-the-map"><p class="eyebrow">05 <span>10 min read</span></p><h2 id="the-cited-paper-credits-the-executor-not-the-map">The cited paper credits the executor, not the map</h2>
+<h3 id="what-arxiv251004607-measured">What arXiv:2510.04607 measured</h3>
+<p>The paper is "From Imperative to Declarative: Towards LLM-friendly OS Interfaces for Boosted Computer-Use Agents" by Wang, Li and Chen, published at EuroSys 2026 <span class="cite">(<a href="https://arxiv.org/abs/2510.04607" target="_blank" rel="noopener">arXiv</a>)</span>. It concerns agents that operate Windows desktop applications on their own. Its system, called the Declarative Model Interface, has two parts. Offline, an automated crawler clicks through Word, Excel and PowerPoint, records which control reveals which, and turns the result into a tree-like map with one unique path to each control; a pruned version of 15,000 to 30,000 tokens goes into the prompt. At run time, a new command lets the model name the control it wants, and a deterministic executor walks the path and clicks, with no further model calls for the hops in between: "Given a control identifier, DMI deterministically navigates from any current state to that control" <span class="cite">(<a href="https://arxiv.org/html/2510.04607v2" target="_blank" rel="noopener">arXiv full text</a>)</span>. The evaluation used 27 single-application tasks, each run three times, with GPT-5 and GPT-5-mini.</p>
+<div class="table-wrap cols-5"><table>
+<thead>
+<tr class="header">
+<th>Configuration</th>
+<th>GPT-5 success</th>
+<th>GPT-5 model calls per task</th>
+<th>GPT-5-mini success</th>
+<th>GPT-5-mini model calls per task</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Configuration">No map (baseline)</td>
+<td data-label="GPT-5 success">44.4%</td>
+<td data-label="GPT-5 model calls per task">8.16</td>
+<td data-label="GPT-5-mini success">17.3%</td>
+<td data-label="GPT-5-mini model calls per task">7.14</td>
+</tr>
+<tr>
+<td data-label="Configuration">Map in the prompt, no executor</td>
+<td data-label="GPT-5 success">42.0%</td>
+<td data-label="GPT-5 model calls per task">8.41</td>
+<td data-label="GPT-5-mini success">23.5%</td>
+<td data-label="GPT-5-mini model calls per task">6.32</td>
+</tr>
+<tr>
+<td data-label="Configuration">Map plus executor</td>
+<td data-label="GPT-5 success">74.1%</td>
+<td data-label="GPT-5 model calls per task">4.61</td>
+<td data-label="GPT-5-mini success">43.2%</td>
+<td data-label="GPT-5-mini model calls per task">4.43</td>
+</tr>
+</tbody>
+</table></div>
+<p>The middle row is the test of the team's belief, and the authors ran it for exactly that reason: "To determine whether DMI's performance gains stem from its declarative interface or simply from providing a static knowledge base". Their conclusion for the strong model is that the map alone "yields no significant change in performance", "indicating that the declarative interface, not the static knowledge, is the primary source of DMI's effectiveness" <span class="cite">(<a href="https://arxiv.org/html/2510.04607v2" target="_blank" rel="noopener">arXiv full text</a>)</span>. Three further points change how the paper should be read. First, the weaker model did gain modestly from the map alone, which the authors read as "supplementary topology knowledge can be helpful for models with less general-purpose knowledge". With 81 trials per configuration, that gain is 5 trials and the strong-model difference is 2; the paper reports no confidence intervals or significance tests (the trial arithmetic is the researchers' inference). Second, the "single LLM call" claim means four calls per task of which three are fixed framework overhead, and a successful task still took <strong>239 seconds on average</strong>. Per-call latency was "similar to the baseline", so the 39% time saving came entirely from making fewer calls, not faster ones. Third, the authors name Haptic's setting as the one they do not handle: "A canonical example is the Web browser. The main challenge of adapting DMI to Web browsers is the high volatility of Web controls". The offline model also cost under three hours of crawling plus "around 1.5 person-days" of manual work per application and is "version-specific" <span class="cite">(<a href="https://arxiv.org/html/2510.04607v2" target="_blank" rel="noopener">arXiv full text</a>)</span>.</p>
+<h3 id="why-the-result-does-not-carry-over-to-haptic-as-built">Why the result does not carry over to Haptic as built</h3>
+<p>The reasoning runs in five steps. One: in the paper the map pays off because an executor clicks through the hidden hops at no model cost. In Haptic the executor is a person, by design, and the number of clicks is fixed by the app's own menus. The only savings available to Haptic are therefore model calls per human step and seconds per call. Two: Haptic makes one model call per step with a site map in the prompt, which is the middle row of the table, the configuration that showed no gain for a strong model. Three: Haptic's map is weaker than the paper's. It comes from a plain-HTTP crawl with no JavaScript and no login, and the web papers that build site graphs explicitly go beyond that: "Traditional crawlers parse static hyperlinks to discover URL-addressable pages but miss interaction-triggered states" <span class="cite">(<a href="https://arxiv.org/abs/2603.20366" target="_blank" rel="noopener">WebNavigator</a>)</span>. For a logged-in app, Haptic's repository says such pages "come back nearly empty", so the map holds little about the screens where users get lost. Four: the paper's "critical lesson is the need for applications to expose globally unique identifiers for controls", and Haptic's element ids such as <code>e12</code> are valid for one page snapshot only. The widget does compute a key that survives across snapshots, from role, label, icon and link target (<code>elementKey</code> in <code>src/widget/snapshot.ts</code>), but it is used only to describe what changed between two snapshots, it is not unique when two controls share a label, and it is never stored or sent to the server. So no stored route could be reused today. Five: Haptic logs no sessions or transitions, so nothing is learned after install either.</p>
+<p><strong>The team's belief that a memory of the site will make Haptic "as fast as possible" is contradicted as stated.</strong> What the paper supports is narrower: a map plus a mechanism that skips model calls reduces calls for an autonomous agent on desktop benchmark tasks. <span class="conf"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i></span>Confidence: high</span> on what the paper says, which was read in full text with the numbers checked against its Table 3; <strong>moderate</strong> on the transfer to Haptic, because no study covers a web app, a logged-in app or a human in the loop.</p>
+<h3 id="what-the-wider-literature-adds">What the wider literature adds</h3>
+<p>The adjacent papers sort, imperfectly, by what the stored knowledge is used for. Knowledge the model only reads moves success by roughly 4 to 15 points and step counts by 0 to 25%. The large reductions all come from knowledge that is executed, although not every executable design achieves them (the grouping and the ranges are the researchers' synthesis).</p>
+<div class="table-wrap cols-7"><table>
+<thead>
+<tr class="header">
+<th>System and setting</th>
+<th>What is stored</th>
+<th>How it is used</th>
+<th>Success</th>
+<th>Model calls or steps</th>
+<th>Wall-clock time</th>
+<th>Caveat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="System and setting">DMI, Office desktop</td>
+<td data-label="What is stored">Control-level navigation map</td>
+<td data-label="How it is used">Model names target; executor navigates</td>
+<td data-label="Success">44.4% → 74.1%</td>
+<td data-label="Model calls or steps">8.16 → 4.61</td>
+<td data-label="Wall-clock time">392 s → 239 s</td>
+<td data-label="Caveat">27 tasks; map alone gave nothing for the strong model</td>
+</tr>
+<tr>
+<td data-label="System and setting">WebNavigator, WebArena benchmark sites</td>
+<td data-label="What is stored">Graph of page states with click paths</td>
+<td data-label="How it is used">Retrieve a page, model picks one, executor "teleports"</td>
+<td data-label="Success">50.4% → 63.3%</td>
+<td data-label="Model calls or steps">10.10 → 8.98</td>
+<td data-label="Wall-clock time">773.6 s → 753.5 s</td>
+<td data-label="Caveat">Tokens per task rose from 67,351 to 123,684</td>
+</tr>
+<tr>
+<td data-label="System and setting">ActionEngine, WebArena subset</td>
+<td data-label="What is stored">State machine with validated locators</td>
+<td data-label="How it is used">Model writes one program; it runs deterministically</td>
+<td data-label="Success">82.7% → 91.2%</td>
+<td data-label="Model calls or steps">7–16 → 1.5–3.5</td>
+<td data-label="Wall-clock time">87 s → 27 s</td>
+<td data-label="Caveat">Preprint; memory refined on the benchmark's own task templates; 73.1% with the crawler-only memory</td>
+</tr>
+<tr>
+<td data-label="System and setting">MobileGPT, Android</td>
+<td data-label="What is stored">Screens, sub-tasks and action sequences from first executions</td>
+<td data-label="How it is used">Replay on repeat tasks</td>
+<td data-label="Success">82.7% new; 98.75% repeat</td>
+<td data-label="Model calls or steps">Not reported</td>
+<td data-label="Wall-clock time">Repeat tasks 62.5% faster; first run 3.9% slower</td>
+<td data-label="Caveat">16.2% of recalled actions still needed the model</td>
+</tr>
+<tr>
+<td data-label="System and setting">WebChallenger, WebArena-lite</td>
+<td data-label="What is stored">Per-site page summaries</td>
+<td data-label="How it is used">Read by the model</td>
+<td data-label="Success">51.2% → 58.8%</td>
+<td data-label="Model calls or steps">7.34 → 7.20</td>
+<td data-label="Wall-clock time">Not reduced</td>
+<td data-label="Caveat">Read-only: accuracy up, steps flat</td>
+</tr>
+<tr>
+<td data-label="System and setting">Agent Workflow Memory, WebArena</td>
+<td data-label="What is stored">Text workflows</td>
+<td data-label="How it is used">Read by the model</td>
+<td data-label="Success">23.5% → 35.5%</td>
+<td data-label="Model calls or steps">7.9 → 5.9</td>
+<td data-label="Wall-clock time">Not reported</td>
+<td data-label="Caveat">Top of the read-only range</td>
+</tr>
+</tbody>
+</table></div>
+<p>Sources for the table: <span class="cite">(<a href="https://arxiv.org/html/2510.04607v2" target="_blank" rel="noopener">DMI</a>; <a href="https://arxiv.org/abs/2603.20366" target="_blank" rel="noopener">WebNavigator</a>; <a href="https://arxiv.org/abs/2602.20502" target="_blank" rel="noopener">ActionEngine</a>; <a href="https://arxiv.org/abs/2312.03003" target="_blank" rel="noopener">MobileGPT</a>; <a href="https://arxiv.org/abs/2606.10423" target="_blank" rel="noopener">WebChallenger</a>; <a href="https://arxiv.org/abs/2409.07429" target="_blank" rel="noopener">Agent Workflow Memory</a>)</span>.</p>
+<p>Four findings from this body of work matter for Haptic. A graph does not guarantee time savings on the web: WebNavigator cut steps by 11–12% and left wall-clock time flat. The researchers' explanation is that finding the target, including an 11-second selection call, replaced the navigation steps it saved, and that most time is spent on the destination page <span class="cite">(<a href="https://arxiv.org/abs/2603.20366" target="_blank" rel="noopener">WebNavigator</a>)</span>. A raw map can hurt: adding an unsummarised map lowered one agent's success from 47.9% to 44.8%, and summarising it raised success to 57.4% <span class="cite">(<a href="https://arxiv.org/abs/2510.22732" target="_blank" rel="noopener">WebATLAS</a>)</span>. Speed on repeats is real but arrives on the second run: MobileGPT's 62.5% latency cut applies to a task type the system has already executed once <span class="cite">(<a href="https://arxiv.org/abs/2312.03003" target="_blank" rel="noopener">MobileGPT</a>)</span>. And nothing here was measured on a customer-specific logged-in application; one paper says so directly: "broader external validity (e.g., enterprise apps) remains to be tested" <span class="cite">(<a href="https://arxiv.org/abs/2510.01524" target="_blank" rel="noopener">WALT</a>)</span>.</p>
+<p>The human-computer interaction evidence supports Haptic's product choice more than its speed claim. In a 20-person study on Google Sheets and Figma, a copilot that gave step-by-step visual guidance let 11 of 20 participants finish the Sheets task, against none with a copilot that did the task for them, and participants completed 88.5% of the task on average against 35.0% <span class="cite">(<a href="https://arxiv.org/abs/2504.15549" target="_blank" rel="noopener">Khurana et al., CHI 2025</a>)</span>. In an earlier 16-person study, text-only help from a language model left users unable to find the controls it named, and they "often followed the LLM's suggestions verbatim, even if they were incorrect" <span class="cite">(<a href="https://arxiv.org/abs/2402.08030" target="_blank" rel="noopener">Khurana et al., IUI 2024</a>)</span>. No controlled study was found that measures human task time or error rate for on-screen pointing against text instructions in a live web app.</p>
+<h3 id="where-haptics-speed-can-actually-come-from">Where Haptic's speed can actually come from</h3>
+<p>The levers below are ordered by how little they ask of the customer. The first three ask nothing.</p>
+<p>The largest untested lever is seconds per call. Haptic's default is a large model at low reasoning effort. Third-party measurements put time to first token for a non-reasoning small model (Claude Haiku 4.5) at <strong>0.62 to 1.50 seconds</strong> depending on the provider, and time to the first answer token for a newer small model at low reasoning effort at 6.28 seconds; the second figure is snippet-level and from a workload unlike Haptic's short prompts <span class="cite">(<a href="https://artificialanalysis.ai/models/claude-4-5-haiku/providers" target="_blank" rel="noopener">Artificial Analysis: Haiku 4.5</a>; <a href="https://artificialanalysis.ai/models/claude-haiku-5-5-low/providers" target="_blank" rel="noopener">Artificial Analysis: Haiku 5.5 low</a>)</span>. The researchers' inference is that Haptic is probably paying mostly for thinking time, not output. That must be measured on Haptic's own prompts, and no public benchmark tests small models on Haptic's actual task, choosing an element from a text description of the page. The risk is lost accuracy. Here the paper's ablation cuts the other way: the weaker model was the one that gained from the map. That yields the part of the team's belief that survives, as a hypothesis to test and not a finding: site knowledge will not make a strong model faster, but it could be what lets a faster, smaller model hold its accuracy.</p>
+<p>The second lever is to move the pointer as soon as the target arrives. Haptic's structured output already puts <code>target</code> first; Anthropic documents streaming of tool input as it is generated, which allows the pointer to move on a partial result while the sentence follows (snippet-level) <span class="cite">(<a href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/fine-grained-tool-streaming" target="_blank" rel="noopener">Claude docs</a>)</span>. The third is cache hygiene. Haptic's prompt is already cached, but the default cache lifetime is five minutes, so a low-traffic customer's first step is usually cold; a one-hour lifetime and pre-warming when the widget opens are documented options <span class="cite">(<a href="https://platform.claude.com/docs/en/build-with-claude/prompt-caching" target="_blank" rel="noopener">Claude docs</a>)</span>. Anthropic's guidance for knowledge bases under about 200,000 tokens is to "just include the entire knowledge base in the prompt" with caching, and Haptic's 60,000-character help-docs budget sits well inside that, so no retrieval system is needed yet <span class="cite">(<a href="https://www.anthropic.com/news/contextual-retrieval" target="_blank" rel="noopener">Anthropic</a>)</span>.</p>
+<p>The fourth lever is the one the literature supports for large gains: skip the model on steps already seen. The design assembled from the papers and from browser-automation practice is a per-customer store of verified routes. Each entry maps a goal and a screen to a description of the element to point at, using role, visible name and position in the page structure, not a single selector. Before pointing, the entry is checked against the live page; a match points with no model call; a miss falls back to the normal call; and the correction is written back. The published precedent is Stagehand, whose cache returns "with no LLM inference and no token cost" and "falls back to full inference" when "the recorded selector no longer resolves"; its documentation puts cached replay at roughly 50–100 milliseconds against 1–5 seconds, a docs figure seen through a mirror, not a benchmark <span class="cite">(<a href="https://docs.stagehand.dev/v4/best-practices/caching" target="_blank" rel="noopener">Stagehand docs</a>; <a href="https://www.mintlify.com/browserbase/stagehand/best-practices/speed-optimization" target="_blank" rel="noopener">Stagehand speed guide mirror</a>)</span>. Matching on several attributes is the difference between a route that survives a redesign and one that does not: across new versions of 48 public sites, a single-locator baseline failed to find 27% of 801 elements and a multi-attribute matcher failed on 11% at about 4 milliseconds per lookup <span class="cite">(<a href="https://api.crossref.org/works/10.1145/3571855" target="_blank" rel="noopener">Similo</a>)</span>. Haptic has two structural advantages no autonomous agent has, both inferences: the person's click produces a settled page before the next pointer, which is a free check at every step, and every guided session is a demonstration of a real route with the user's goal attached. It also has a disadvantage: a wrong cached pointer is shown to a person, so the threshold for skipping the model must be conservative.</p>
+<p>The fifth lever uses the user's reading time. A published system that has a fast model predict the next action reports up to 55% accuracy (snippet-level), which implies that roughly half of steps could be precomputed while the user reads and clicks <span class="cite">(<a href="https://arxiv.org/abs/2510.04371" target="_blank" rel="noopener">Speculative Actions</a>)</span>. The sixth is to use stable attributes such as test identifiers wherever a customer's app already has them. Two things are not viable as a primary path in 2026: Chrome's built-in model, which is desktop-only and needs at least 22 GB of free disk, and WebMCP, which is discussed below <span class="cite">(<a href="https://developer.chrome.com/docs/ai/prompt-api" target="_blank" rel="noopener">Chrome docs</a>)</span>.</p>
+<p>Levers four and five need routes, and routes have to come from somewhere: an admin walking the app, a recorded demonstration, or sessions after install. That is where the technical question becomes an onboarding question. The belief should be restated as something measurable: with a store of verified routes, what share of pointer steps can be served without a model call, at what pointer accuracy? The literature gives reason to expect a large share on repeat goals, since MobileGPT's memory hit rates on scripted repeats were 70.6–98.6%, and gives no number for help-widget traffic. <span class="conf"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i class=""></i></span>Confidence: moderate</span> on the direction of levers one and four; <strong>low</strong> on every size.</p>
+</section>
+<section data-section="every-way-of-learning-a-logged-in-app-is-a-different-onboarding-ask"><p class="eyebrow">06 <span>13 min read</span></p><h2 id="every-way-of-learning-a-logged-in-app-is-a-different-onboarding-ask">Every way of learning a logged-in app is a different onboarding ask</h2>
+<h3 id="the-eight-approaches-and-what-each-demands">The eight approaches and what each demands</h3>
+<div class="table-wrap cols-6"><table>
+<thead>
+<tr class="header">
+<th>Approach</th>
+<th>What it yields</th>
+<th>Effect on speed and accuracy, per the evidence</th>
+<th>What the customer must do or grant at onboarding</th>
+<th>Who at the customer</th>
+<th>Deal-breaking risk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Approach">Live page reading only (Haptic today; Jimo's "Read all" mode)</td>
+<td data-label="What it yields">The interactive elements of the page the user is on, always current; nothing stored, so nothing to break</td>
+<td data-label="Effect on speed and accuracy, per the evidence">The baseline. No speed benefit: one model call per step. Accuracy depends on the model guessing which menu hides an off-screen target. This is the "no map" row of the cited paper</td>
+<td data-label="What the customer must do or grant at onboarding">Add one script tag; add Haptic's hosts to the Content Security Policy; list allowed origins; pass review</td>
+<td data-label="Who at the customer">Engineer installs; security approves; buyer waits</td>
+<td data-label="Deal-breaking risk">Review of a script that reads the page; pages in payment-card scope; wrong first hop on deep tasks</td>
+</tr>
+<tr>
+<td data-label="Approach">Help-content ingestion</td>
+<td data-label="What it yields">Names, vocabulary and prose routes ("Settings, then Billing"); nothing behind a login; no element-level knowledge</td>
+<td data-label="Effect on speed and accuracy, per the evidence">Improves the choice of target, not navigation speed. A desktop agent lost 9 points of success without web knowledge (65-task subset); software context raised instruction accuracy from 37.5% to 64.4% in a 16-person study without fixing task completion. A typical help centre fits in a cached prompt</td>
+<td data-label="What the customer must do or grant at onboarding">Give a URL or upload documents; optionally export support tickets</td>
+<td data-label="Who at the customer">Buyer or anyone</td>
+<td data-label="Deal-breaking risk">Does not know the interface; documents go stale; tickets bring personal data and a data-processing agreement</td>
+</tr>
+<tr>
+<td data-label="Approach">Admin's browser extension</td>
+<td data-label="What it yields">The product running on the admin's real logged-in app with no code shipped; screens and transitions for whatever the admin visits</td>
+<td data-label="Effect on speed and accuracy, per the evidence">No measured effect on speed or accuracy. It is the established pre-install channel at five guidance vendors (documentation). It can seed routes before install (inference)</td>
+<td data-label="What the customer must do or grant at onboarding">Install a Chrome extension, allow it on the app's domain, click around</td>
+<td data-label="Who at the customer">Buyer, product manager or support lead; IT only where extensions are locked down</td>
+<td data-label="Deal-breaking risk">Extension blocked by company policy; only the installer sees it; Chrome only; every update needs store review; strict Content Security Policy can still block it</td>
+</tr>
+<tr>
+<td data-label="Approach">Recorded demonstrations</td>
+<td data-label="What it yields">Verified routes for exactly the flows recorded</td>
+<td data-label="Effect on speed and accuracy, per the evidence">In the one head-to-head found, tools built from human demonstrations gave the highest success (66.0% against 61.5% for auto-discovered). Human-corrected executions gave 98.75% success on repeats. Allows model-free steps if checked against the live page (inference)</td>
+<td data-label="What the customer must do or grant at onboarding">A few minutes per flow, through the extension or an author mode of the installed script</td>
+<td data-label="Who at the customer">Support or product person</td>
+<td data-label="Deal-breaking risk">Goes stale when the interface changes; the long tail stays uncovered</td>
+</tr>
+<tr>
+<td data-label="Approach">Passive learning from sessions after install</td>
+<td data-label="What it yields">The paths real users take, across all roles, tenants and feature flags; labelled with the goal when the session was guided; cold start</td>
+<td data-label="Effect on speed and accuracy, per the evidence">The basis for cache hits and prediction: repeat tasks 62.5% faster on Android after a first run that was no faster. No guidance product was found that documents doing this</td>
+<td data-label="What the customer must do or grant at onboarding">The script tag, plus a privacy and consent decision and likely contract terms</td>
+<td data-label="Who at the customer">Engineer, plus security, legal or privacy</td>
+<td data-label="Deal-breaking risk">Consent law for anything resembling session replay; wiretap suits in the United States; enterprise objection to behavioural capture; element labels can contain personal data</td>
+</tr>
+<tr>
+<td data-label="Approach">Authenticated cloud exploration with a test login (Frigade)</td>
+<td data-label="What it yields">A page-and-action map for one role in one tenant, before launch, refreshed on a schedule</td>
+<td data-label="Effect on speed and accuracy, per the evidence">On benchmarks, a crawled graph raised success by about 13 points with wall-clock time flat; a crawled state machine cut calls from 7–16 to 1.5–3.5 only after refinement on the benchmark's own tasks. Crawls cost 36–260 minutes and <span class="math inline">11.6–</span>37.2 per app. None was run behind single sign-on or role-based menus</td>
+<td data-label="What the customer must do or grant at onboarding">A staging URL, a test account per role, a way past two-factor or single sign-on, a "do not touch" list, seed data, possibly an allow-list entry for the crawler</td>
+<td data-label="Who at the customer">Engineer or IT, plus security</td>
+<td data-label="Deal-breaking risk">Credential custody; destructive clicks; identity providers blocking automated logins; prompt injection</td>
+</tr>
+<tr>
+<td data-label="Approach">Build-time plugin or repository access (Candu, Pendo Novus)</td>
+<td data-label="What it yields">Stable element identifiers and a route inventory; no runtime state, no routes to a goal</td>
+<td data-label="Effect on speed and accuracy, per the evidence">No speed or accuracy measurement. Makes stored routes durable: the cited paper's "critical lesson" is the need for stable identifiers</td>
+<td data-label="What the customer must do or grant at onboarding">Add attributes or a build plugin, review and release; or grant read access to the repository</td>
+<td data-label="Who at the customer">Front-end engineers and security</td>
+<td data-label="Deal-breaking risk">Engineering time; repository access refused; plugins are React-only</td>
+</tr>
+<tr>
+<td data-label="Approach">Declarative exposure (WebMCP, registered actions)</td>
+<td data-label="What it yields">Only what a developer chooses to declare; tool names are useful vocabulary</td>
+<td data-label="Effect on speed and accuracy, per the evidence">The one research proposal was evaluated for developer practicality with 16 developers, not for speed or success. WebMCP is in a Chrome and Edge origin trial whose interface moved in July 2026</td>
+<td data-label="What the customer must do or grant at onboarding">A developer designs, registers and maintains tools or actions</td>
+<td data-label="Who at the customer">Engineering</td>
+<td data-label="Deal-breaking risk">Immature standard; real engineering per customer; it describes actions for an agent to execute, a different product from guiding a person's click</td>
+</tr>
+</tbody>
+</table></div>
+<p>Sources by row: live reading and scanning <span class="cite">(<a href="https://help.usejimo.com/docs/experiences/agent/knowledge/interface.md" target="_blank" rel="noopener">Jimo docs</a>)</span>; help content <span class="cite">(<a href="https://arxiv.org/abs/2410.08164" target="_blank" rel="noopener">Agent S</a>; <a href="https://arxiv.org/abs/2402.08030" target="_blank" rel="noopener">Khurana et al.</a>; <a href="https://www.intercom.com/help/en/articles/9357945-sync-and-manage-websites" target="_blank" rel="noopener">Intercom help</a>)</span>; extension <span class="cite">(<a href="https://help.usejimo.com/docs/getting-started/extension" target="_blank" rel="noopener">Jimo docs</a>; <a href="https://developer.chrome.com/docs/extensions/develop/migrate/improve-security" target="_blank" rel="noopener">Chrome extension rules</a>; <a href="https://support.google.com/chrome/a/answer/6177431" target="_blank" rel="noopener">Google admin help</a>; <a href="https://help.userguiding.com/en/articles/5358722-userguiding-now" target="_blank" rel="noopener">UserGuiding</a>)</span>; demonstrations <span class="cite">(<a href="https://arxiv.org/abs/2510.01524" target="_blank" rel="noopener">WALT</a>; <a href="https://arxiv.org/abs/2312.03003" target="_blank" rel="noopener">MobileGPT</a>; <a href="https://help.userflow.com/docs/creating-smartflows" target="_blank" rel="noopener">Userflow</a>)</span>; passive learning <span class="cite">(<a href="https://heap.io/blog/how-autocapture-actually-works" target="_blank" rel="noopener">Heap</a>; <a href="https://www.cnil.fr/en/session-replay-cnil-launches-public-consultation-its-draft-recommendation" target="_blank" rel="noopener">CNIL</a>)</span>; cloud exploration <span class="cite">(<a href="https://frigade.com/how-it-works" target="_blank" rel="noopener">Frigade</a>; <a href="https://arxiv.org/abs/2603.20366" target="_blank" rel="noopener">WebNavigator</a>; <a href="https://arxiv.org/abs/2602.20502" target="_blank" rel="noopener">ActionEngine</a>; <a href="https://docs.qawolf.com/qawolf/Full-Service-The-First-Three-Months" target="_blank" rel="noopener">QA Wolf</a>; <a href="https://docs.browserbase.com/guides/authentication" target="_blank" rel="noopener">Browserbase</a>)</span>; build-time <span class="cite">(<a href="https://blog.sentry.io/improving-developer-experience-from-unreadable-css-selectors-to-clear-component-names/" target="_blank" rel="noopener">Sentry</a>; <a href="https://www.candu.ai/blog/the-death-of-manual-product-tours" target="_blank" rel="noopener">Candu</a>; <a href="https://www.pendo.io/pendo-free/" target="_blank" rel="noopener">Pendo</a>)</span>; declarative <span class="cite">(<a href="https://developer.chrome.com/docs/ai/webmcp" target="_blank" rel="noopener">Chrome WebMCP docs</a>; <a href="https://arxiv.org/abs/2511.11287" target="_blank" rel="noopener">VOIX</a>)</span>.</p>
+<p>Several cells need their grading spelled out. The consent-law entry rests on a draft French regulator recommendation seen as a snippet, with the final November 2026 text not read, and on a vendor blog's account of a United States appeals ruling that was not checked against the opinion. The prompt-injection risk is quantified only by Anthropic's August 2025 pilot, where attacks succeeded 11.2% of the time with mitigations, also snippet-level <span class="cite">(<a href="https://www.anthropic.com/news/claude-for-chrome" target="_blank" rel="noopener">Anthropic</a>)</span>. WebMCP's "close to zero deployment on real websites" as of July 2026 is one crawler vendor's blog <span class="cite">(<a href="https://www.spronta.com/blog/state-of-webmcp-july-2026/" target="_blank" rel="noopener">Spronta</a>)</span>. The ranking of approaches by coverage of logged-in screens is reasoned, not measured: no vendor publishes coverage percentages. Read as a whole, the table forms a ladder of customer effort (the researchers' synthesis): a URL, then an extension, then recorded flows need no engineer and no security review; <strong>the script tag is the first step that reaches end users and the first that triggers both</strong>; test credentials, build changes and repository access each ask for more. Only four approaches see the real logged-in interface at all: the installed script, the admin's extension, recorded demonstrations and authenticated exploration. <span class="conf"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i class=""></i></span>Confidence: moderate</span> on the columns for what the customer must do and who does it, which come from vendors' own documented requirements; <strong>low</strong> on the speed-and-accuracy column, because none of those results was measured on a customer's logged-in application or with a person doing the clicking.</p>
+<h3 id="just-add-the-script-tag-is-the-right-production-install-and-the-wrong-first-step">"Just add the script tag" is the right production install and the wrong first step</h3>
+<p>The strongest case against the team's belief has four parts. First, the script tag is not a differentiator; nearly every entrant in the category makes the same claim. Second, it is rarely one step. Pendo, Fullstory, PostHog and Intercom all document Content Security Policy changes for their scripts, and buyers' security teams ask a standard list of privacy questions, including "Do you use customer data to train AI models?" <span class="cite">(<a href="https://support.pendo.io/hc/en-us/articles/360032209131" target="_blank" rel="noopener">Pendo CSP</a>; <a href="https://posthog.com/docs/advanced/content-security-policy" target="_blank" rel="noopener">PostHog CSP</a>; <a href="https://www.vanta.com/resources/privacy-questions-enterprise-security-reviews" target="_blank" rel="noopener">Vanta</a>)</span>. In practice "one script tag" is one script tag, a policy change and a review, done by people who did not sign up (inference). Third, the only data on products where the buyer is not the installer says about half stall at this step for a month or more, and that figure is snippet-only. Fourth, the script by itself teaches Haptic nothing about the customer's app before users arrive. Haptic's website currently says "During onboarding we read your site and your help docs, so Haptic knows your product before it meets your users." For an app behind a login that sentence is true of the help docs and the public pages and false of the product's screens, because the intake crawl has no login and no JavaScript rendering. <strong>That promise overstates what exists and should be reworded or made true.</strong></p>
+<p>What still holds is substantial. A script tag is the only route to end users of a customer-facing app; an extension never reaches them. Haptic's install is also smaller than the incumbents'. Userflow, Appcues, Userpilot, Pendo and Amplitude all require a user-identification call as well as the snippet, and Jimo's docs budget "About an hour for the person who edits your app" for both; Haptic needs no identification call, stores no selectors and requires nothing to be authored <span class="cite">(<a href="https://help.userflow.com/docs/userflowjs-installation.md" target="_blank" rel="noopener">Userflow docs</a>; <a href="https://help.usejimo.com/docs/getting-started/install-jimo.md" target="_blank" rel="noopener">Jimo docs</a>)</span>. The site's other claim, that Haptic works behind a login because it "runs in the browser on the page your user is looking at", is accurate. Haptic can also verify faster than analytics tools: its first request from an allowed origin is proof of install within seconds, where Pendo warns that initial data "can take up to two hours" (the first half is an inference about Haptic's design; the second is documented) <span class="cite">(<a href="https://support.pendo.io/hc/en-us/articles/360046272771" target="_blank" rel="noopener">Pendo support</a>)</span>.</p>
+<p>The script tag therefore belongs after the buyer has seen Haptic work on their own app and before go-live, and it should land on a local or staging build first, then production for the customer's staff, then everyone. The exception is the signer who answers "yes, I can install it myself": for that person the install comes straight after signup, as it does at Sentry and PostHog. <span class="conf"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i></span>Confidence: high</span> that the tag is table stakes and that five guidance vendors show the product before install; <strong>moderate</strong> that reordering will raise Haptic's install rate, which no source has tested for this kind of product.</p>
+<h3 id="the-crisphugo-wizard-transfers-for-public-sites-and-breaks-at-a-login">The Crisp/Hugo wizard transfers for public sites and breaks at a login</h3>
+<p>The strongest counterargument to using Crisp as the model is that its wizard works for a reason Haptic shares only on public sites. Crisp's "Automatically train" step turns a public domain into a working support agent within minutes, and the agent's answers in the playground are the product. Every crawler in the evidence stops at a login: Intercom's documentation says "If the content you want to use is behind a login, Fin won't be able to access or import it", and Zendesk's says "If a website requires authentication, the web crawler can't access it" <span class="cite">(<a href="https://www.intercom.com/help/en/articles/9357945-sync-and-manage-websites" target="_blank" rel="noopener">Intercom help</a>; <a href="https://support.zendesk.com/hc/en-us/articles/9961827483162-Best-practices-for-using-a-web-crawler-to-import-content-for-AI-agents-AI-agents-Advanced-only" target="_blank" rel="noopener">Zendesk help</a>)</span>. Run on a Haptic customer whose product sits behind a login, the same step would produce a bot that can answer from help articles, shown in a preview frame, which is a different product from a pointer on the customer's app. A second difference is the install. Crisp's widget goes on a public website, often through a platform plug-in the signer can add alone, and Crisp can leave it as one checklist item with manual verification. Haptic's goes into a logged-in application and needs an engineer. A third is the checklist: Crisp's ten items mix one critical step with nine general helpdesk tasks, which is why it opens at 9% (the researchers' reading).</p>
+<div class="table-wrap cols-4"><table>
+<thead>
+<tr class="header">
+<th>Crisp/Hugo step</th>
+<th>Transfers?</th>
+<th>Reasoning</th>
+<th>Haptic version</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Crisp/Hugo step">Account by Google or name, email, password</td>
+<td data-label="Transfers?">Yes</td>
+<td data-label="Reasoning">One-click sign-in is the best-supported friction reducer</td>
+<td data-label="Haptic version">Same, with a nudge toward work email, not a block</td>
+</tr>
+<tr>
+<td data-label="Crisp/Hugo step">Company, domain, goal chips</td>
+<td data-label="Transfers?">Partly</td>
+<td data-label="Reasoning">Haptic needs two addresses, the public site and the app where users log in, as Jimo records. Goal chips earn their place only if they change the flow</td>
+<td data-label="Haptic version">Company, public site, app URL, help-centre URL. Replace goal chips with the install question</td>
+</tr>
+<tr>
+<td data-label="Crisp/Hugo step">AI-first or human-first choice</td>
+<td data-label="Transfers?">No</td>
+<td data-label="Reasoning">Haptic has no equivalent product split</td>
+<td data-label="Haptic version">The fork that matters: "Can you add a script to your app yourself?"</td>
+</tr>
+<tr>
+<td data-label="Crisp/Hugo step">"Automatically train" on the domain</td>
+<td data-label="Transfers?">Yes for public sites; in shape only behind a login</td>
+<td data-label="Reasoning">Ask for one thing the customer knows, do work at once, show a countable result. The result for Haptic is intent knowledge from public pages, not the app</td>
+<td data-label="Haptic version">Show "N public pages and M help articles read" and say plainly that screens behind the login are learned in the next step</td>
+</tr>
+<tr>
+<td data-label="Crisp/Hugo step">"Manually train" with website, files, Q&amp;A</td>
+<td data-label="Transfers?">Yes</td>
+<td data-label="Reasoning">Maps onto Haptic's existing notes and docs inputs</td>
+<td data-label="Haptic version">Add the customer's five to ten most common how-do-I questions, which become the test set</td>
+</tr>
+<tr>
+<td data-label="Crisp/Hugo step">"Configure" with logo, name, description, guidance, beside a live preview</td>
+<td data-label="Transfers?">Yes, with a different preview</td>
+<td data-label="Reasoning">A preview in an empty frame shows a chat bubble, not the pointer</td>
+<td data-label="Haptic version">Name, accent and guidance as now; the preview is the customer's own app</td>
+</tr>
+<tr>
+<td data-label="Crisp/Hugo step">Dashboard opens on a playground: "disabled, a safe playground"</td>
+<td data-label="Transfers?">As a principle</td>
+<td data-label="Reasoning">"Disabled but testable" is the shared answer to fear of shipping an AI feature</td>
+<td data-label="Haptic version">Haptic's playground is the customer's app, visible to their staff only</td>
+</tr>
+<tr>
+<td data-label="Crisp/Hugo step">"Setup required" badges</td>
+<td data-label="Transfers?">Yes</td>
+<td data-label="Reasoning">They show state, not a to-do</td>
+<td data-label="Haptic version">Script not detected; detected on staging; live for staff; live for everyone</td>
+</tr>
+<tr>
+<td data-label="Crisp/Hugo step">"Get Started" at 9%, ten items, install second</td>
+<td data-label="Transfers?">No</td>
+<td data-label="Reasoning">Guidance is three to five items; about a fifth of users finish checklists; putting the engineer-dependent item second starts the list slowly</td>
+<td data-label="Haptic version">Five items, install fourth, first item pre-ticked with its reason</td>
+</tr>
+<tr>
+<td data-label="Crisp/Hugo step">Activation as a separate switch</td>
+<td data-label="Transfers?">Yes</td>
+<td data-label="Reasoning">Install and go-live are different decisions</td>
+<td data-label="Haptic version">Staff-only, then everyone, with an off switch</td>
+</tr>
+</tbody>
+</table></div>
+<p>Crisp's flow also lacks five things Haptic needs because of where its script runs: the install question and developer hand-off, live install verification (Crisp's is "send a test message"), the list of allowed origins captured early as kapa.ai does before it reveals an ID, a security summary for the approver, and a staged rollout <span class="cite">(<a href="https://docs.kapa.ai/integrations/website-widget/quickstart" target="_blank" rel="noopener">kapa.ai docs</a>)</span>. <span class="conf"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i></span>Confidence: high</span> that the login wall breaks the "auto-train as proof" step, since vendor documentation and Haptic's own repository agree; <strong>moderate</strong> on the specific replacements, which are assembled from other vendors' documented patterns and untested for Haptic.</p>
+<h3 id="public-sites-and-apps-behind-a-login-need-different-proof">Public sites and apps behind a login need different proof</h3>
+<p>Haptic has to work on both, and the two differ at almost every step of onboarding. The table is this report's reasoning from the evidence above and from Haptic's code. None of its cells was measured.</p>
+<div class="table-wrap cols-3"><table>
+<thead>
+<tr class="header">
+<th></th>
+<th>Public site, no login</th>
+<th>App behind a login</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="">Can the intake crawl read it?</td>
+<td data-label="Public site, no login">Yes, for pages the server sends as HTML. Pages drawn by JavaScript come back thin, and the crawler already flags them</td>
+<td data-label="App behind a login">No. The crawler has no login</td>
+</tr>
+<tr>
+<td data-label="">Does Crisp's "enter your domain" step transfer?</td>
+<td data-label="Public site, no login">Yes: a real page count and a site map built from the pages users will be on</td>
+<td data-label="App behind a login">Only for the public pages and help docs around the app</td>
+</tr>
+<tr>
+<td data-label="">Seeing Haptic before the install</td>
+<td data-label="Public site, no login">A hosted preview that loads the public page with the widget added is possible for many sites. Sites that forbid being embedded, or that depend on running at their own address, will break</td>
+<td data-label="App behind a login">Needs the admin's own signed-in browser: an extension, or the tag on a local or staging build</td>
+</tr>
+<tr>
+<td data-label="">Who installs</td>
+<td data-label="Public site, no login">Often the person who signed up, through a site builder, a tag manager or one layout file</td>
+<td data-label="App behind a login">Usually an engineer</td>
+</tr>
+<tr>
+<td data-label="">Review before install</td>
+<td data-label="Public site, no login">Lighter: public pages hold no customer data</td>
+<td data-label="App behind a login">Heavier: the script runs beside customer data</td>
+</tr>
+<tr>
+<td data-label="">Where routes come from</td>
+<td data-label="Public site, no login">The crawl already has the link paths</td>
+<td data-label="App behind a login">An admin showing the way, or guided sessions after install</td>
+</tr>
+</tbody>
+</table></div>
+<p>The flow therefore forks on one question, asked at signup: do people have to log in to reach the part of your site where they need help? A company can answer "both", and then the public part follows the Crisp shape while the app behind the login follows the rest of this section. The work this puts on Haptic's side is a crawl that renders JavaScript, since many public sites are built that way and the present crawl reads them as nearly empty.</p>
+<h3 id="how-a-prospect-can-see-haptic-working-on-their-own-app">How a prospect can see Haptic working on their own app</h3>
+<p>No route exists today, because the widget server is not deployed. The options, in the order the evidence and Haptic's current state favour them, are below.</p>
+<div class="table-wrap cols-5"><table>
+<thead>
+<tr class="header">
+<th>Route</th>
+<th>What the prospect does</th>
+<th>What it needs from Haptic</th>
+<th>Limits</th>
+<th>When to use it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Route">A call where their engineer adds the tag to a local or staging build</td>
+<td data-label="What the prospect does">Joins a 30–45 minute call with one engineer</td>
+<td data-label="What it needs from Haptic">A deployed server; the site's allowed origins to include localhost and staging</td>
+<td data-label="Limits">Needs an engineer in the room</td>
+<td data-label="When to use it">The first handful of customers</td>
+</tr>
+<tr>
+<td data-label="Route">Chrome extension that injects the widget</td>
+<td data-label="What the prospect does">Installs the extension, opens their app, asks a real question</td>
+<td data-label="What it needs from Haptic">Building and publishing an extension; its logic must ship inside the package</td>
+<td data-label="Limits">Company extension policies; Chrome only; a strict Content Security Policy can still block the server call; only that person sees it</td>
+<td data-label="When to use it">Self-serve</td>
+</tr>
+<tr>
+<td data-label="Route">Staging install from the hand-off page</td>
+<td data-label="What the prospect does">Sends the page to a developer, who adds the tag to staging</td>
+<td data-label="What it needs from Haptic">The hand-off page and live verification</td>
+<td data-label="Limits">Still waits on the developer</td>
+<td data-label="When to use it">Signers who answer "yes" or have a responsive engineer</td>
+</tr>
+<tr>
+<td data-label="Route">Cloud browser the prospect logs into through a live view</td>
+<td data-label="What the prospect does">Logs in once in a hosted browser; Haptic never holds the password</td>
+<td data-label="What it needs from Haptic">A hosted-browser setup</td>
+<td data-label="Limits">The researchers' suggestion, borrowed from browser-automation practice; not a documented pattern for product trials</td>
+<td data-label="When to use it">Fallback where extensions are blocked</td>
+</tr>
+<tr>
+<td data-label="Route">Public demo on a sample app</td>
+<td data-label="What the prospect does">Nothing; no signup</td>
+<td data-label="What it needs from Haptic">A sample logged-in app with Haptic installed</td>
+<td data-label="Limits">Shows the product, not their app</td>
+<td data-label="When to use it">Before signup</td>
+</tr>
+</tbody>
+</table></div>
+<p>The extension is the only approach found that shows a product on the prospect's real logged-in app with no credentials shared, no developer and no policy change, and it has a second payoff: the prospect's clicking during the trial can seed the routes Haptic lacks (inference). Its ceiling is IT policy; no data was found on what share of business admins may install an arbitrary extension. Pasting a loader into the browser console or using a bookmarklet is a weaker fallback that a strict policy will often block; that is an engineering assumption nobody sourced. <span class="conf"><span class="meter" aria-hidden="true"><i class="on"></i><i class="on"></i><i class=""></i></span>Confidence: moderate</span> that the extension is the right self-serve answer; <strong>unknown</strong> for how many of Haptic's prospects can use one.</p>
+</section>
+<section data-section="the-install-rate-the-latency-split-and-the-legal-line-are-all-unmeasured"><p class="eyebrow">07 <span>3 min read</span></p><h2 id="the-install-rate-the-latency-split-and-the-legal-line-are-all-unmeasured">The install rate, the latency split and the legal line are all unmeasured</h2>
+<p>The gaps below are the ones the research could not close. They are grouped by what would close them.</p>
+<p><strong>Numbers that do not exist publicly.</strong> The install-completion rate for snippet products where the signer is not the installer. An activation benchmark for developer or infrastructure products. Any controlled test of an onboarding checklist against none. Any test of a blocking "waiting for first event" screen against a skippable one, or of demo data against none. Any measured effect of test-before-live features on activation or trust for AI agents. How often security review blocks or delays a client-side script, and which documents shorten it. Waitlist conversion and decay. Whether staged-rollout controls raise install rates. And the specific pattern this report recommends, a pre-install trial on the customer's own app for a product like Haptic, has been tested by no source; it is an extrapolation from Twilio, Chameleon, the guidance vendors' extensions and the AI-agent playgrounds.</p>
+<p><strong>Competitor facts that need the hands-on pass.</strong> Exact signup fields for every vendor; only Jimo's two are documented. Whether Frigade's "Get Started" is truly self-serve, how it stores test credentials, and whether training progress is visible. How Jimo's pointer behaves across full page loads and when the target is missing. Whether Intercom's and Chatbase's trials need a card or a sales call, whether Intercom's AI agent can be previewed before its Messenger is installed, and what Intercom's install test actually does. Whether any vendor shows a literal "waiting for your first event" screen. Whether Product Fruits' assistant draws walkthroughs live or launches pre-built tours. Why and when Tandem changed direction. What became of Command AI's copilot inside Amplitude. Intercom's tours with its AI agent, and Microsoft's and Google's screen-aware assistants, were not examined. Independent reviews on Reddit, Hacker News and G2 and the screen-recording libraries were not searched because the shared search budget ran out.</p>
+<p><strong>Technical questions only Haptic's own tests can answer.</strong> Whether a site map in the prompt helps a human-guided loop at all, and what it costs in time to first token with a cached prompt. Latency of the current large model at low effort on Haptic's short prompts. Accuracy of small models at choosing an element from page text. What share of real help questions repeat a goal already seen, which bounds the cache-hit rate. How fast stored routes go stale under a customer's release cadence. How often multi-attribute matching picks the wrong one of several near-identical controls, for example row actions in a table. How many logged-in screens each learning approach actually covers. No web paper in the notes crawled a multi-tenant app behind single sign-on, multi-factor login, role-based menus or feature flags. No study measures whether pointing is faster than text for people.</p>
+<p><strong>Legal and security questions.</strong> Whether a log of screen-to-screen transitions with no text, no values and no user identifier would be classed with session replay is a legal question the research cannot answer; the final French regulator text and the United States appeals opinion were not read. The payment-card standard's own text was not read at source. No source says when an early-stage vendor is expected to have a SOC 2 report. Whether a third-party script can list a page's WebMCP tools is not stated in Chrome's documentation. Claims about isolating the widget with shadow DOM were not sourced at all.</p>
+<p><strong>Figures deliberately left out.</strong> Several widely repeated statistics could not be traced to a primary source and are not used here: "40% to 60% of users who sign up will never return", product-qualified leads converting at 25–30%, 75% of users leaving in the first week, Stripe targeting a first API call in under 90 seconds, and a 40% conversion gain credited to Intercom's onboarding rethink. Userpilot states its benchmark sample as both 62 and 547 companies. The headline figures from the two loyalty-card psychology studies come from secondary summaries, not the papers. Results from classic tutorial research in human-computer interaction were verified bibliographically only and should not be quoted with numbers.</p>
+</section>
+<section data-section="recommended-flow-proof-then-hand-off-then-staff-then-everyone"><p class="eyebrow">08 <span>8 min read</span></p><h2 id="recommended-flow-proof-then-hand-off-then-staff-then-everyone">Recommended flow: proof, then hand-off, then staff, then everyone</h2>
+<h3 id="the-ordered-flow">The ordered flow</h3>
+<p>This is the full flow. The team review section near the top says which three of its steps are required and gives a leaner version. This is a design recommendation. It describes what the customer experiences, whether Haptic's team performs a step by hand or a dashboard does.</p>
+<div class="table-wrap cols-5 numbered"><table>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>Step</th>
+<th>What happens</th>
+<th>Who at the customer</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="#">0</td>
+<td data-label="Step">Before signup</td>
+<td data-label="What happens">A public demo of the pointer on a sample app, no signup</td>
+<td data-label="Who at the customer">Anyone</td>
+<td data-label="Reason">Onboarding starts before signup; Frigade and Chameleon offer the same. The Request access form is already part of onboarding</td>
+</tr>
+<tr>
+<td data-label="#">1</td>
+<td data-label="Step">Signup</td>
+<td data-label="What happens">Work email, company, public site, app URL where users log in, help-centre URL, whether the screens that need guiding are public, behind a login or both, and one question: "Can you add a script to your app yourself?" (yes; someone else will; not sure)</td>
+<td data-label="Who at the customer">Buyer</td>
+<td data-label="Reason">Ask only what forks the flow. The install question is the single one the evidence justifies, and the answer splits every later metric</td>
+</tr>
+<tr>
+<td data-label="#">2</td>
+<td data-label="Step">Read what is public and say so honestly</td>
+<td data-label="What happens">Crawl the public site and help docs. Show "N public pages and M help articles read", pick name and accent from the site, and state that screens behind the login are learned next</td>
+<td data-label="Who at the customer">Buyer</td>
+<td data-label="Reason">Jimo's "What Jimo knows" screen; something real within minutes. Honest about the login wall, which the current website copy is not</td>
+</tr>
+<tr>
+<td data-label="#">3</td>
+<td data-label="Step">See it on your own app</td>
+<td data-label="What happens">First cohort: on a call, their engineer adds the tag to a local or staging build. Self-serve: the buyer installs an extension and opens their app</td>
+<td data-label="Who at the customer">Buyer; an engineer only in the first-cohort version</td>
+<td data-label="Reason">The aha is "it works on my app". Five guidance vendors put this before the install. Sentry's sample-event test is the one controlled result that showing success first raises installs</td>
+</tr>
+<tr>
+<td data-label="#">4</td>
+<td data-label="Step">Teach and test the top questions</td>
+<td data-label="What happens">The buyer asks their five to ten most common how-do-I questions on their own app, marks each pointer right or wrong, and demonstrates the route where it was wrong. The questions are saved as a test set and the routes as verified routes</td>
+<td data-label="Who at the customer">Buyer or support lead</td>
+<td data-label="Reason">This is the trust step AI-agent vendors use, and the only source of knowledge about logged-in screens before launch. Demonstrations gave the best results in the one comparison found. It is also what later makes repeat steps fast</td>
+</tr>
+<tr>
+<td data-label="#">5</td>
+<td data-label="Step">Hand-off to the installer</td>
+<td data-label="What happens">One page: the script tag with the site ID filled in, the origins to allow, the two Content Security Policy lines, a prompt for an AI coding agent, and a one-page summary of what the script reads, masks and sends. "I'll do it" opens the page; "Send to my developer" emails it with Haptic copied in. Ask for a date</td>
+<td data-label="Who at the customer">Buyer sends; engineer acts; security reads</td>
+<td data-label="Reason">The largest expected drop is between "buyer convinced" and "script detected". Upscope, Jimo, Userflow and Intercom all design this step; coding-agent prompts are the fastest-growing install path</td>
+</tr>
+<tr>
+<td data-label="#">6</td>
+<td data-label="Step">Verify</td>
+<td data-label="What happens">The status changes when the first request arrives from an allowed origin and names the environment. It separates "script not found", "origin not allowed" and "blocked by policy". The waiting screen shows what success looks like and is never a dead end</td>
+<td data-label="Who at the customer">Engineer</td>
+<td data-label="Reason">A vendor cannot load a logged-in page, so a first-request listener is the mechanism that transfers. Plausible pairs each failure with a next action</td>
+</tr>
+<tr>
+<td data-label="#">7</td>
+<td data-label="Step">Go live in stages</td>
+<td data-label="What happens">Staging, then production for the customer's own staff, then all users, with an off switch</td>
+<td data-label="Who at the customer">Buyer decides; engineer may gate</td>
+<td data-label="Reason">Intercom documents internal-first rollout; AI-agent vendors add limited release. It lets a cautious customer say yes in parts</td>
+</tr>
+<tr>
+<td data-label="#">8</td>
+<td data-label="Step">Activation and after</td>
+<td data-label="What happens">The first end-user question answered in production is the account's activation. A weekly summary shows questions asked, wrong pointers and goals with no answer. Learning routes from guided sessions is opt-in</td>
+<td data-label="Who at the customer">Buyer</td>
+<td data-label="Reason">Setup is not the aha. The summary is the reason to come back, and the opt-in keeps the privacy question explicit</td>
+</tr>
+</tbody>
+</table></div>
+<p>For a signer who answers "yes" to the install question, steps 5 and 6 come directly after step 2 and steps 3 and 4 happen on their own local build.</p>
+<p>The team has put the dashboard and its checklist off until later, and the evidence supports that order: the checklist is the part of the Crisp flow with the weakest support. When the dashboard is built, its "Get Started" list should hold five items worded as goals, shown as "1 of 5" and not as a percentage that opens at 9%.</p>
+<div class="table-wrap cols-3"><table>
+<thead>
+<tr class="header">
+<th>Item</th>
+<th>Done when</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Item">Workspace created: Haptic read your public site and help docs</td>
+<td data-label="Done when">On arrival; pre-ticked</td>
+<td data-label="Note">A head start with a stated reason, the condition under which the effect held</td>
+</tr>
+<tr>
+<td data-label="Item">See Haptic guide you on your own app</td>
+<td data-label="Done when">The widget has answered one question on the app's domain</td>
+<td data-label="Note">Completable without an engineer</td>
+</tr>
+<tr>
+<td data-label="Item">Check your top five questions</td>
+<td data-label="Done when">Five questions asked and each marked right or corrected</td>
+<td data-label="Note">Completable without an engineer; creates the test set</td>
+</tr>
+<tr>
+<td data-label="Item">Add the script to your app</td>
+<td data-label="Done when">A request is seen from an allowed origin</td>
+<td data-label="Note">Two buttons, "I'll do it" and "Send to my developer"; shows sent, opened, detected on staging, detected on production</td>
+</tr>
+<tr>
+<td data-label="Item">Turn it on for your team, then for everyone</td>
+<td data-label="Done when">Live for all users</td>
+<td data-label="Note">The go-live switch</td>
+</tr>
+</tbody>
+</table></div>
+<p>Branding, team invites, billing and integrations stay in settings. A generic "invite your team" item drew about 1% use at Rows. Checklist completion must not be the activation metric.</p>
+<h3 id="staged-path">Staged path</h3>
+<div class="table-wrap cols-3"><table>
+<thead>
+<tr class="header">
+<th></th>
+<th>First handful of customers, by hand</th>
+<th>Self-serve, built afterwards</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="">Entry</td>
+<td data-label="First handful of customers, by hand">Keep "Request access". Add the app URL, the help-centre URL and the install question to its second step. Someone on the team replies personally</td>
+<td data-label="Self-serve, built afterwards">Open signup with Google or work email; keep a human lane for larger accounts</td>
+</tr>
+<tr>
+<td data-label="">Learning the public site</td>
+<td data-label="First handful of customers, by hand">The team runs the existing intake command on the site, notes and docs, and reviews the pages it flags as thin</td>
+<td data-label="Self-serve, built afterwards">The same crawl behind a "what Haptic knows" screen</td>
+</tr>
+<tr>
+<td data-label="">Seeing it on their app</td>
+<td data-label="First handful of customers, by hand">A call with the buyer and one engineer; the tag goes onto a local or staging build during the call</td>
+<td data-label="Self-serve, built afterwards">Extension; hand-off page for staging</td>
+</tr>
+<tr>
+<td data-label="">Teaching the top questions</td>
+<td data-label="First handful of customers, by hand">The team watches the buyer ask their real questions, writes owner notes for each wrong pointer, and keeps the list as that account's test set</td>
+<td data-label="Self-serve, built afterwards">In-product "mark right or wrong, then show me", saved as verified routes</td>
+</tr>
+<tr>
+<td data-label="">Install and verification</td>
+<td data-label="First handful of customers, by hand">The team sends the tag and policy lines by email, stays on the thread, and confirms by hand that requests arrive</td>
+<td data-label="Self-serve, built afterwards">Hand-off page, coding-agent prompt, live status</td>
+</tr>
+<tr>
+<td data-label="">Go-live</td>
+<td data-label="First handful of customers, by hand">Agreed on the call: staging, staff, everyone</td>
+<td data-label="Self-serve, built afterwards">Rollout controls and off switch</td>
+</tr>
+<tr>
+<td data-label="">Record-keeping</td>
+<td data-label="First handful of customers, by hand">One sheet per account with a timestamp for each stage, every confusion, and every security question asked</td>
+<td data-label="Self-serve, built afterwards">Instrumented account funnel</td>
+</tr>
+<tr>
+<td data-label="">Prerequisites</td>
+<td data-label="First handful of customers, by hand">A deployed widget server; a record of when each site's script was first seen and of each guide's steps; a one-page summary of what the script reads, masks and sends</td>
+<td data-label="Self-serve, built afterwards">Accounts, a database, a dashboard</td>
+</tr>
+</tbody>
+</table></div>
+<p>The hand stage is forced as much as chosen: Haptic has no accounts, no dashboard and no deployed server, and the parts of the flow most likely to fail, the hand-off and the security review, are the parts analytics cannot explain. The notes from those calls are the specification for self-serve. The criteria for opening self-serve recur across Arcade and Superhuman and none is a number: inbound exceeds what can be handled by hand, the team can write down the confusions the calls were resolving, and the product no longer needs a person to cover a missing function. The self-serve build order should follow where the first cohort stalls. On present evidence that is the hand-off page with verification first, then the extension. <strong>Confidence: moderate.</strong></p>
+<h3 id="what-to-measure-first">What to measure first</h3>
+<div class="table-wrap cols-3"><table>
+<thead>
+<tr class="header">
+<th>Measurement</th>
+<th>How</th>
+<th>Decision it informs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Measurement">Time from question to pointer, split into parts</td>
+<td data-label="How">On Haptic's own prompts: current model and effort against a non-reasoning small model; with and without the site map; cold cache against warm</td>
+<td data-label="Decision it informs">Whether speed is a model-choice problem before it is a memory problem</td>
+</tr>
+<tr>
+<td data-label="Measurement">Pointer accuracy on a fixed question set</td>
+<td data-label="How">About 30 real how-do-I questions on each of three logged-in apps; with and without the site map; with and without help docs; large model against small</td>
+<td data-label="Decision it informs">Repeats the paper's ablation in Haptic's setting; tests whether knowledge lets a smaller model hold accuracy</td>
+</tr>
+<tr>
+<td data-label="Measurement">What the crawl returns for real prospects</td>
+<td data-label="How">For each prospect's app URL: pages read, share flagged thin, logged-in screens captured</td>
+<td data-label="Decision it informs">Whether the website's promise can stand; which learning step is needed</td>
+</tr>
+<tr>
+<td data-label="Measurement">The account funnel, by name, with timestamps</td>
+<td data-label="How">Request, call, seen on own app, hand-off sent, script detected on staging, on production, staff-only, live, first end-user question, week-four use; plus the install answer and who installed</td>
+<td data-label="Decision it informs">The install rate nobody publishes; where to build first</td>
+</tr>
+<tr>
+<td data-label="Measurement">Security review</td>
+<td data-label="How">Whether one happened, what was asked for, how long it took</td>
+<td data-label="Decision it informs">The contents of the security summary; whether review is the real bottleneck</td>
+</tr>
+<tr>
+<td data-label="Measurement">Goal repetition</td>
+<td data-label="How">Share of end-user questions that repeat a goal already seen on the same screen</td>
+<td data-label="Decision it informs">The ceiling on model-free steps; whether a route store is worth building</td>
+</tr>
+<tr>
+<td data-label="Measurement">Extension permission</td>
+<td data-label="How">Ask each buyer whether they may install a Chrome extension at work</td>
+<td data-label="Decision it informs">Whether the extension trial fits Haptic's segment</td>
+</tr>
+<tr>
+<td data-label="Measurement">Step outcomes</td>
+<td data-label="How">Whether the user clicked the element pointed at; where guides are abandoned</td>
+<td data-label="Decision it informs">Real-world pointer accuracy; which flows to ask admins to demonstrate</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="decisions-the-team-has-to-make">Decisions the team has to make</h3>
+<div class="table-wrap cols-4"><table>
+<thead>
+<tr class="header">
+<th>Decision</th>
+<th>Options</th>
+<th>What the evidence favours</th>
+<th>Confidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Decision">Gate or open</td>
+<td data-label="Options">Keep Request access and onboard by hand; or build signup and dashboard first</td>
+<td data-label="What the evidence favours">Keep the gate for the first cohort</td>
+<td data-label="Confidence">Moderate</td>
+</tr>
+<tr>
+<td data-label="Decision">How a buyer first sees it on their app</td>
+<td data-label="Options">Call with an engineer; extension; staging install; public sample demo</td>
+<td data-label="What the evidence favours">Call for the first cohort; extension as the first self-serve investment if buyers cannot bring an engineer</td>
+<td data-label="Confidence">Moderate for the pattern; unknown for extension permission in the segment</td>
+</tr>
+<tr>
+<td data-label="Decision">The website's "knows your product before it meets your users" line</td>
+<td data-label="Options">Keep; reword; make true by adding a learning step</td>
+<td data-label="What the evidence favours">Reword now, make true with step 4</td>
+<td data-label="Confidence">High that the current wording overstates</td>
+</tr>
+<tr>
+<td data-label="Decision">First way to learn logged-in screens</td>
+<td data-label="Options">Admin demonstration; test-login exploration; passive session learning; build-time attributes</td>
+<td data-label="What the evidence favours">Admin demonstration first. Session learning opt-in, after reading the regulator's text. Test-login exploration as an optional extra for customers with staging. Use stable attributes where they exist; never require them</td>
+<td data-label="Confidence">Low to moderate</td>
+</tr>
+<tr>
+<td data-label="Decision">First speed investment</td>
+<td data-label="Options">Model and effort; route store; prediction during reading time</td>
+<td data-label="What the evidence favours">Measure model and effort first, since it asks nothing of the customer; then the route store</td>
+<td data-label="Confidence">Moderate on direction, low on size</td>
+</tr>
+<tr>
+<td data-label="Decision">What to log from end users</td>
+<td data-label="Options">Nothing; guided sessions only, structure only, per customer, opt-in; all sessions</td>
+<td data-label="What the evidence favours">The middle option</td>
+<td data-label="Confidence">Low; the legal position is unknown</td>
+</tr>
+<tr>
+<td data-label="Decision">Staff-only rollout without user identity</td>
+<td data-label="Options">The customer renders the tag for staff only; staging origin, then everyone; an optional identity call</td>
+<td data-label="What the evidence favours">Decide after the first cohort; keep identity optional, since its absence is an install advantage</td>
+<td data-label="Confidence">Low</td>
+</tr>
+<tr>
+<td data-label="Decision">Account activation definition</td>
+<td data-label="Options">For example: script live in production and N end-user questions answered within X days</td>
+<td data-label="What the evidence favours">The team sets N and X; the form is supported, the numbers are not</td>
+<td data-label="Confidence">High on form</td>
+</tr>
+<tr>
+<td data-label="Decision">Checklist size and install incentive</td>
+<td data-label="Options">Ten items as at Crisp, or five; extend a trial when the script is detected, as Jimo does</td>
+<td data-label="What the evidence favours">Five items; consider the incentive when pricing exists</td>
+<td data-label="Confidence">Low</td>
+</tr>
+<tr>
+<td data-label="Decision">Security material</td>
+<td data-label="Options">Prepare before the first call, or on request</td>
+<td data-label="What the evidence favours">A one-page data-flow summary before the first call; SOC 2 timing has no evidence either way</td>
+<td data-label="Confidence">Low</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section data-section="conclusion"><p class="eyebrow">09 <span>1 min read</span></p><h2 id="conclusion">Conclusion</h2>
+<p>Onboarding and speed turned out to be one design problem, not two. The only kind of memory the evidence credits with large gains is a store of executable, verified routes, and for an app behind a login those routes can only come from people: an admin showing Haptic where things are before launch, and end users being guided after it. The step in the flow where a buyer tests their top questions and corrects the pointer is therefore not a courtesy before the "real" install. It is where Haptic acquires the knowledge its website already claims to have, where the buyer decides whether to trust it, and where the material for model-free steps is first collected. A flow modelled on Crisp would skip that step, because Crisp can get everything it needs from a public URL.</p>
+<p>The research also changes what Haptic can claim. "A memory of the site makes it fast" should become a hypothesis with two numbers attached, the share of steps served without a model call and the pointer accuracy at that share, and "one script tag" should be treated as the price of entry, with the difference made by what happens before and after it. Haptic's real structural advantages are untested ones: a person's click verifies every step for free, and every guided session is a labelled demonstration in the real app with real permissions. No published system has measured either, which means the first five customers will produce evidence that does not exist anywhere else, provided each stage of their journey is written down.</p>
+</section>
+    <p class="end">Built from <code>reports/Haptic onboarding research.md</code>. The research notes behind it are in <code>research_notes/Haptic onboarding research/</code>.</p>
+  </main>
+</div>
+<script>
+(function(){
+  var root=document.documentElement,key="haptic-report-theme";
+  try{var saved=localStorage.getItem(key);if(saved)root.setAttribute("data-theme",saved)}catch(e){}
+  var button=document.getElementById("theme");
+  function dark(){var t=root.getAttribute("data-theme");return t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches}
+  function label(){button.textContent=dark()?"Light":"Dark"}
+  button.addEventListener("click",function(){var next=dark()?"light":"dark";root.setAttribute("data-theme",next);try{localStorage.setItem(key,next)}catch(e){}label()});
+  label();
+  var details=document.querySelector(".toc details"),wide=matchMedia("(min-width: 1101px)");
+  function fit(){details.open=wide.matches}
+  fit();wide.addEventListener("change",fit);
+  details.addEventListener("click",function(e){if(e.target.closest("a")&&!wide.matches)details.open=false});
+  var bar=document.querySelector(".progress");
+  var heads=[].slice.call(document.querySelectorAll("main h2[id], main h3[id]"));
+  var items={};[].forEach.call(document.querySelectorAll(".toc li[data-for]"),function(li){items[li.getAttribute("data-for")]=li});
+  var subs={};[].forEach.call(document.querySelectorAll(".toc li ol a"),function(a){subs[a.getAttribute("href").slice(1)]=a});
+  var ticking=false;
+  function update(){
+    ticking=false;
+    var doc=document.documentElement,max=doc.scrollHeight-innerHeight;
+    bar.style.transform="scaleX("+(max>0?Math.min(1,scrollY/max):0)+")";
+    var h2=null,h3=null;
+    for(var i=0;i<heads.length;i++){
+      if(heads[i].getBoundingClientRect().top>120)break;
+      if(heads[i].tagName==="H2"){h2=heads[i];h3=null}else h3=heads[i];
+    }
+    for(var id in items)items[id].classList.toggle("active",!!h2&&h2.id===id);
+    for(var sid in subs)subs[sid].classList.toggle("here",!!h3&&h3.id===sid);
+  }
+  addEventListener("scroll",function(){if(!ticking){ticking=true;requestAnimationFrame(update)}},{passive:true});
+  addEventListener("resize",update);update();
+})();
+</script>
+</body>
+</html>
