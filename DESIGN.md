@@ -172,7 +172,7 @@ components:
     typography: "{typography.body-sm}"
     rounded: "{rounded.xl}"
     padding: 12px
-  highlight-ring:
+  target-mark:
     rounded: "{rounded.lg}"
   question-bubble:
     backgroundColor: "{colors.primary}"
@@ -246,8 +246,8 @@ looks stark.
   they lift off the page without a shadow.
 - **Muted text (#78716C):** Sub-copy and secondary labels. 4.6 to 1 on Paper.
 - **Border (#E7E5E4):** Hairlines and the secondary button.
-- **Pointer blue (#1E6EF4):** The pointer, its highlight ring, its thinking
-  dots and the keyboard focus ring. Nothing else.
+- **Pointer blue (#1E6EF4):** The pointer, the mark around its target, its
+  thinking dots and the keyboard focus ring. Nothing else.
 - **Done green (#008932):** The small round tick that says a task is finished.
   Blue means in progress and green means done, so the two never share a screen.
   Not for buttons, text or bubbles.
@@ -297,7 +297,9 @@ fixed rhythm: 24px from headline to sub-copy, 32px to the buttons, 64px to the
 demo window. Sections are 128px apart on desktop and 80px on phones.
 
 The home page is, in order: a slim navigation bar, the hero with its demo
-window, the FAQ, and a footer with Privacy, Terms and the contact address. The
+window, three feature cards, the FAQ, and a footer with Privacy, Terms and the
+contact address. Each feature card makes one claim, with the text on the left
+and a small live demo on the right in a Border grey panel. The
 FAQ is two columns on desktop, with the title on the left and the accordion in
 the right half. Each row is 20px padding around a 24px line with a 1px divider.
 
@@ -352,15 +354,17 @@ Components are shadcn/ui, restyled only through tokens and variants.
   confirms at the end.
 - **Pointer:** 24px. Glides to its target, pulses once when the visitor should
   click, and shows three dots while thinking. No face, no mascot.
-- **Highlight ring:** 2px Pointer blue with a 4px ring of the same blue at 25
-  percent, 4px outside the target.
-- **Caption:** Ink bubble with Paper text, 14px, at most 320px wide, placed
-  under the target and never over the next control. It ends in a small round
-  close button, a cross in a tinted circle, which stops the guide.
-- **Ask box and launcher:** The widget's entry point. An Ink pill launcher opens
-  the ask box, which is shadcn's input group: a Muted field with the text on
-  top and a round Ink send button on a row beneath. The ask box steps aside
-  while Haptic points, leaving only the launcher.
+- **Target mark:** A 2px Pointer blue outline that stands 3px off the control,
+  with a thin white edge on both sides and a soft shadow, the same recipe as
+  the pointer. The gap and the white edge are what stop it reading as the
+  control's own keyboard focus ring.
+- **Caption:** Ink bubble with Paper text, 14px, at most 288px wide. Text only.
+  It sits under the target, or above when the space under it is busy, and
+  never over the next control.
+- **Ask box:** shadcn's input group: a Muted field with the text on top and a
+  round Ink send button on a row beneath.
+- **Goal pill:** While Haptic guides, the ask box shrinks to a pill that shows
+  what the person asked and one round close button that stops the guide.
 - **Bubbles and status:** shadcn's chat parts. The person's question is an Ink
   bubble on the right. Haptic's reply is a Muted bubble on the left. Status
   sits under them as a marker, three blue dots while thinking and the green
@@ -370,15 +374,41 @@ Components are shadcn/ui, restyled only through tokens and variants.
 - **Accordion:** FAQ rows with a plus that turns to a cross. One row open at a
   time.
 
-**Motion.** Restrained. The pointer glide is the one signature movement, 550ms
-with `cubic-bezier(.2, .8, .2, 1)`, and it is the same curve on the site as in
-the widget. Everything else is a 150 to 200ms fade or height change. With
-reduced motion on, the pointer jumps to its target and the demo holds one still
-frame.
+**Motion.** Restrained. The pointer glide is the one signature movement. It
+eases out with `cubic-bezier(.2, .8, .2, 1)`, quick to leave and slow to land,
+and takes 400 to 700ms depending on how far it travels. Everything else is a
+150 to 300ms fade or height change. With reduced motion on, the pointer jumps
+to its target and each demo holds one still frame.
+
+## Interaction
+
+How a guide should feel. This is the proposed model, drawn from research and
+from how other guides and agents behave. It is not signed off, and the widget
+in `src/widget` does not follow all of it yet.
+
+- **Haptic guides, the person acts.** Haptic points and explains. It does not
+  click, type or scroll for anyone.
+- **Mark the control, leave the page alone.** One outline on the target. The
+  page is never dimmed, because the person may need to read it, and the edge of
+  the window never glows, because that is how agents signal that an AI has
+  taken control.
+- **Motion arrives, then stops.** The glide leads the eye. The mark draws in
+  from slightly larger as the pointer lands, then holds still. If nothing
+  happens for about four seconds the mark pulses once, and no more often than
+  that.
+- **Say one thing.** A caption names the next action in a short sentence. It
+  carries no buttons.
+- **Keep the goal and the exit in view.** The goal pill stays in the corner for
+  the whole guide.
+- **A wrong click is not an error.** Haptic reads the new page and carries on
+  from there without comment.
+- **Finish plainly.** Haptic confirms in a sentence, shows the green tick, and
+  reopens the ask box.
 
 ## Do's and Don'ts
 
-- Do keep Pointer blue for the pointer, its ring, its thinking dots and focus.
+- Do keep Pointer blue for the pointer, its target mark, its thinking dots and
+  focus.
   Never for text, buttons or links.
 - Do give the pointer its white border and shadow everywhere.
 - Do use sizes, radii and spacing from the scales above. No one-off values.

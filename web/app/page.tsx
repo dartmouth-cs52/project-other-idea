@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Demo } from "@/components/demo";
+import { HeroDemo } from "@/components/demo/hero-demo";
 import { Faq } from "@/components/faq";
+import { Features } from "@/components/features";
 import { Pointer } from "@/components/pointer";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
@@ -31,7 +32,8 @@ export default function Home() {
             </Link>
           </div>
         </section>
-        <Demo />
+        <HeroDemo />
+        <Features />
         <Faq />
       </main>
       <SiteFooter />
