@@ -7,6 +7,8 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Override default ignores of eslint-config-next.
   globalIgnores([
+    // Depends on a file generated at deploy time.
+    "worker/embedded.ts",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",

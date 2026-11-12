@@ -57,7 +57,7 @@ function Form({ initialTopic }: { initialTopic: string }) {
       </h2>
       {status === "sent" ? (
         <Alert role="status" className="mt-6 rounded-xl px-3.5 py-3">
-          <CircleCheckIcon className="text-success" />
+          <CircleCheckIcon className="text-success!" />
           <AlertTitle>Request sent</AlertTitle>
           <AlertDescription>Thanks. We have your details and will be in touch soon.</AlertDescription>
         </Alert>

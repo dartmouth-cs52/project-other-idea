@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "preview": "next build && wrangler dev",
-    "deploy": "next build && wrangler deploy"
+    "deploy": "next build && wrangler deploy",
+    "deploy:embedded": "next build && node scripts/embed-site.mjs && wrangler deploy -c wrangler.embedded.jsonc"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

@@ -10,8 +10,8 @@
     "not_found_handling": "404-page",
     "run_worker_first": true
   },
-  // Where contact form requests are kept. The id is filled in when the namespace is created.
-  "kv_namespaces": [{ "binding": "ACCESS_REQUESTS", "id": "REPLACE_WITH_NAMESPACE_ID" }],
+  // Where contact form requests are kept.
+  "kv_namespaces": [{ "binding": "ACCESS_REQUESTS", "id": "90e7d35b139e4720ac435d792e9b4280" }],
   // A preview address on workers.dev. The real domain is attached with the routes below once the preview is approved.
   "workers_dev": true
   // "routes": [
