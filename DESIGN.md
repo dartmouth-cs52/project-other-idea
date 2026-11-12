@@ -44,6 +44,8 @@ colors:
   pointer-border-dark: "#FFFFFF"
   success-dark: "#30D158"
   success-foreground-dark: "#1C1917"
+  error: "#DC2626"
+  error-dark: "#F87171"
 typography:
   display:
     fontFamily: Geist
@@ -252,10 +254,14 @@ looks stark.
 - **Done green (#008932):** The small round tick that says a task is finished.
   Blue means in progress and green means done, so the two never share a screen.
   Not for buttons, text or bubbles.
+- **Error red (#DC2626):** Forms only. The star on a required field, the
+  outline and message on a field that failed its check, and the alert when
+  sending fails. It is shadcn's destructive colour.
 
 Dark mode follows the visitor's system setting and swaps the roles. The page
 becomes Ink (#1C1917), text becomes #F5F5F4, cards are #292524, borders are
-#44403C, the pointer brightens to #0091FF and Done green to #30D158. Every
+#44403C, the pointer brightens to #0091FF, Done green to #30D158 and Error red
+to #F87171. Every
 light token has a `-dark` twin in the front matter.
 
 **Why blue.** It holds at least 3.8 to 1 against both pages, so one hue works
@@ -319,8 +325,8 @@ inputs in Card white. Below 768px everything is one column.
 
 The form is two short steps in the same card. The first asks for a work email
 and a company, and its button says Continue. The second asks for a first and
-last name, side by side, and has an optional box for details, with Back and
-Request access under it. Nothing is sent until the second step. Once it is
+last name, side by side, and has a box for details that may be left empty,
+with Back and Request access under it. Nothing is sent until the second step. Once it is
 sent, the card holds a two line thank you in the feature card type, a Medium
 title over Muted text, and no icon.
 
@@ -413,12 +419,15 @@ Components are shadcn/ui, restyled only through tokens and variants.
   with a lighter shade sweeping across it, shadcn's `shimmer`, with no icon.
   While it points it reads "Showing you how". When it finishes it is the green
   tick and "Done".
-- **Form:** Labels above 44px inputs and one primary button. Every field is
-  required unless it says Optional, in Muted text at the right end of its
-  label row. No asterisks, which would need a colour of their own. A step that
-  has a way back puts a secondary Back button to the left of the primary one.
-  An error uses shadcn's alert, with an icon, a short title and one line of
-  detail. Success replaces the form with a thank you.
+- **Form:** Labels above 44px inputs and one primary button. A required field
+  has an Error red star after its label, and a field with no star may be left
+  empty. A step that has a way back puts a secondary Back button to the left of
+  the primary one. Each field is checked when its step is submitted. A field
+  that fails gets an Error red outline and one 13px line under it saying what
+  to type, the first such field takes the focus, and the line goes as soon as
+  the person starts typing. A failure that is not one field's fault uses
+  shadcn's alert, with an icon, a short title and one line of detail. Success
+  replaces the form with a thank you.
 - **Accordion:** FAQ rows with a plus that turns to a cross. One row open at a
   time.
 

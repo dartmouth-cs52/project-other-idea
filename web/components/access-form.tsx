@@ -1,32 +1,46 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { AlertCircleIcon, ArrowRight } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { STEP_FIELDS, checkRequest, cleanRequest, type AccessErrors, type AccessField, type AccessRequest } from "@/lib/access-request";
 import { accessEndpoint, site } from "@/lib/site";
 
-type Status = "idle" | "sending" | "sent" | "error";
+/** What went wrong with sending, when it was not one field's fault. */
+type Failure = "busy" | "failed";
+type Status = "idle" | "sending" | "sent" | Failure;
 
-const EMPTY = { email: "", company: "", firstName: "", lastName: "", details: "", fax: "" };
-type Fields = typeof EMPTY;
+/** `fax` is the trap for programs. See the note on its input below. */
+type Fields = AccessRequest & { fax: string };
+const EMPTY: Fields = { email: "", company: "", firstName: "", lastName: "", details: "", fax: "" };
+
+const ID: Record<AccessField, string> = {
+  email: "access-email",
+  company: "access-company",
+  firstName: "access-first-name",
+  lastName: "access-last-name",
+  details: "access-details",
+};
 
 const FIELD = "h-11 bg-card px-3.5 md:text-base";
 
 /**
  * The form on the request access page, in two short steps. First the work email
  * and company, then a name and anything the person wants to add. It is sent once,
- * at the end.
+ * at the end. Every field but the last is required, and each is checked on the
+ * page before it is sent and again by the server.
  */
 export function AccessForm() {
   const [step, setStep] = useState<1 | 2>(1);
   const [fields, setFields] = useState<Fields>(EMPTY);
+  const [errors, setErrors] = useState<AccessErrors>({});
   const [status, setStatus] = useState<Status>("idle");
-  // The first step only takes the focus when someone comes back to it, never on page load.
-  const [returned, setReturned] = useState(false);
+  // The field to move the focus to, and a count so the same field can be asked for twice.
+  const [focus, setFocus] = useState<{ field: AccessField; ask: number } | null>(null);
   const thanks = useRef<HTMLHeadingElement>(null);
 
   // When the request has gone, move the focus to the thank you, so a screen reader reads it.
@@ -34,35 +48,75 @@ export function AccessForm() {
     if (status === "sent") thanks.current?.focus();
   }, [status]);
 
-  const bind = (name: keyof Fields) => ({
+  // Put the cursor in the first field that needs attention.
+  useEffect(() => {
+    if (focus) document.getElementById(ID[focus.field])?.focus();
+  }, [focus]);
+
+  const ask = (field: AccessField) => setFocus((current) => ({ field, ask: (current?.ask ?? 0) + 1 }));
+
+  const bind = (name: AccessField) => ({
+    id: ID[name],
     name,
     value: fields[name],
-    onChange: (event: { target: { value: string } }) => setFields((current) => ({ ...current, [name]: event.target.value })),
+    "aria-invalid": errors[name] ? true : undefined,
+    "aria-describedby": errors[name] ? `${ID[name]}-error` : undefined,
+    onChange: (event: { target: { value: string } }) => {
+      setFields((current) => ({ ...current, [name]: event.target.value }));
+      // The message goes as soon as the person starts to fix the field.
+      if (errors[name]) {
+        setErrors((current) => {
+          const rest = { ...current };
+          delete rest[name];
+          return rest;
+        });
+      }
+    },
   });
+
+  /** Checks one step. Shows what is wrong and returns false if anything is. */
+  function passes(which: 1 | 2): boolean {
+    const found = checkRequest(cleanRequest(fields), STEP_FIELDS[which]);
+    setErrors(found);
+    const first = STEP_FIELDS[which].find((name) => found[name]);
+    if (first) ask(first);
+    return !first;
+  }
 
   function next(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setStep(2);
+    if (passes(1)) setStep(2);
   }
 
   function back() {
-    setReturned(true);
     setStatus("idle");
+    setErrors({});
     setStep(1);
+    ask("email");
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!passes(2)) return;
     setStatus("sending");
     try {
       const response = await fetch(accessEndpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(fields),
+        body: JSON.stringify({ ...cleanRequest(fields), fax: fields.fax }),
       });
-      setStatus(response.ok ? "sent" : "error");
+      if (response.ok) return setStatus("sent");
+      // The server checks again, and can know more than the page, such as whether the email's domain exists.
+      const answer = (await response.json().catch(() => null)) as { error?: string; field?: AccessField } | null;
+      if (response.status === 400 && answer?.field && answer.error && answer.field in ID) {
+        setStatus("idle");
+        setErrors({ [answer.field]: answer.error });
+        if (STEP_FIELDS[1].includes(answer.field)) setStep(1);
+        return ask(answer.field);
+      }
+      setStatus(response.status === 429 ? "busy" : "failed");
     } catch {
-      setStatus("error");
+      setStatus("failed");
     }
   }
 
@@ -72,7 +126,7 @@ export function AccessForm() {
         <h2 ref={thanks} tabIndex={-1} className="font-medium outline-none">
           Thank you for your request.
         </h2>
-        <p className="mt-1 text-muted-foreground">We will read it and reply to {fields.email || "you"} by email.</p>
+        <p className="mt-1 text-muted-foreground">We will read it and reply to {fields.email.trim()} by email.</p>
       </div>
     );
   }
@@ -81,56 +135,57 @@ export function AccessForm() {
     <div className="rounded-xl border bg-muted p-6 sm:p-8">
       <h2 className="text-2xl font-medium tracking-[-0.02em] text-balance">Request access to Haptic</h2>
       {step === 1 ? (
-        <form onSubmit={next} className="mt-6 flex flex-col gap-5">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="access-email">Work email</Label>
-            <Input id="access-email" type="email" required autoFocus={returned} autoComplete="email" placeholder="name@company.com" className={FIELD} {...bind("email")} />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="access-company">Company</Label>
-            <Input id="access-company" type="text" required autoComplete="organization" placeholder="Company name" className={FIELD} {...bind("company")} />
-          </div>
+        <form onSubmit={next} noValidate className="mt-6 flex flex-col gap-5">
+          <Row name="email" label="Work email" required error={errors.email}>
+            <Input type="email" required autoComplete="email" placeholder="name@company.com" className={FIELD} {...bind("email")} />
+          </Row>
+          <Row name="company" label="Company" required error={errors.company}>
+            <Input type="text" required autoComplete="organization" placeholder="Company name" className={FIELD} {...bind("company")} />
+          </Row>
           <Button type="submit" size="xl" className="self-start">
             Continue
             <ArrowRight data-icon="inline-end" />
           </Button>
         </form>
       ) : (
-        <form onSubmit={submit} className="mt-6 flex flex-col gap-5">
-          <div className="grid gap-5 sm:grid-cols-2 sm:gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="access-first-name">First name</Label>
-              <Input id="access-first-name" type="text" required autoFocus autoComplete="given-name" className={FIELD} {...bind("firstName")} />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="access-last-name">Last name</Label>
-              <Input id="access-last-name" type="text" required autoComplete="family-name" className={FIELD} {...bind("lastName")} />
-            </div>
+        <form onSubmit={submit} noValidate className="mt-6 flex flex-col gap-5">
+          <div className="grid items-start gap-5 sm:grid-cols-2 sm:gap-4">
+            <Row name="firstName" label="First name" required error={errors.firstName}>
+              <Input type="text" required autoFocus autoComplete="given-name" className={FIELD} {...bind("firstName")} />
+            </Row>
+            <Row name="lastName" label="Last name" required error={errors.lastName}>
+              <Input type="text" required autoComplete="family-name" className={FIELD} {...bind("lastName")} />
+            </Row>
           </div>
-          <div className="flex flex-col gap-2">
-            <div className="flex items-baseline justify-between gap-3">
-              <Label htmlFor="access-details">Additional details</Label>
-              <span className="text-[13px] text-muted-foreground">Optional</span>
-            </div>
+          <Row name="details" label="Additional details">
             <Textarea
-              id="access-details"
               rows={4}
               maxLength={2000}
               placeholder="Tell us about your product and where people get stuck."
               className="min-h-28 bg-card px-3.5 py-3 md:text-base"
               {...bind("details")}
             />
-          </div>
+          </Row>
           {/* Left empty by people, who never see it. Programs that fill in every field give themselves away. */}
           <div aria-hidden className="absolute -left-[9999px] size-px overflow-hidden">
             <label htmlFor="access-fax">Fax</label>
-            <input id="access-fax" type="text" tabIndex={-1} autoComplete="off" {...bind("fax")} />
+            <input
+              id="access-fax"
+              name="fax"
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              value={fields.fax}
+              onChange={(event) => setFields((current) => ({ ...current, fax: event.target.value }))}
+            />
           </div>
-          {status === "error" && (
+          {(status === "busy" || status === "failed") && (
             <Alert variant="destructive" className="px-3.5 py-3">
               <AlertCircleIcon />
-              <AlertTitle>That did not go through</AlertTitle>
-              <AlertDescription>Email {site.email} and we will set you up.</AlertDescription>
+              <AlertTitle>{status === "busy" ? "Too many tries" : "That did not go through"}</AlertTitle>
+              <AlertDescription>
+                {status === "busy" ? "Wait a minute, then send it again." : `Email ${site.email} and we will set you up.`}
+              </AlertDescription>
             </Alert>
           )}
           <div className="flex flex-wrap gap-3">
@@ -143,6 +198,28 @@ export function AccessForm() {
             </Button>
           </div>
         </form>
+      )}
+    </div>
+  );
+}
+
+/** One field: its label, a red star if it is required, the control, and what is wrong with it, if anything. */
+function Row({ name, label, required, error, children }: { name: AccessField; label: string; required?: boolean; error?: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={ID[name]} className="gap-0.5">
+        {label}
+        {required && (
+          <span aria-hidden className="text-destructive">
+            *
+          </span>
+        )}
+      </Label>
+      {children}
+      {error && (
+        <p id={`${ID[name]}-error`} className="text-[13px] leading-5 text-destructive">
+          {error}
+        </p>
       )}
     </div>
   );

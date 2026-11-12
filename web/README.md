@@ -21,7 +21,9 @@ npm run lint
 
 ## The request access form
 
-The form has two steps and is sent once, at the end. It posts JSON (`email`, `company`, `firstName`, `lastName`, `details`) to `/api/request-access`. On Cloudflare that is answered by the Worker, in `worker/handler.ts`. The Worker checks the email address, saves the request in a KV namespace, then emails the team a copy. Nothing else about the visitor is kept.
+The form has two steps and is sent once, at the end. It posts JSON (`email`, `company`, `firstName`, `lastName`, `details`) to `/api/request-access`. On Cloudflare that is answered by the Worker, in `worker/handler.ts`. The Worker checks the entry, saves it in a KV namespace, then emails the team a copy. Nothing else about the visitor is kept.
+
+Every field but `details` is required. The rules live in one file, `lib/access-request.ts`, which the page and the Worker both use, so a request that skips the page is held to the same standard. The Worker adds one check the page cannot make: it asks DNS whether the email's domain can receive mail, which catches mistyped and made up addresses. Personal mailboxes such as Gmail are accepted, and marked as such in the copy the team gets.
 
 The email copy goes to the address in the Worker's `NOTIFY_TO` secret, which is not in this repository. Cloudflare only delivers to an inbox that is verified under Email Routing, as a destination address. To change it:
 
