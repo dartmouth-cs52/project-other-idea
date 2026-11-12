@@ -33,13 +33,13 @@ export interface SiteSource {
 }
 
 export interface Appearance {
-  /** Hex color for the pointer, highlight and launcher. */
+  /** Hex color for the pointer and its highlight. */
   accent: string;
   position: "bottom-right" | "bottom-left";
   launcherLabel: string;
 }
 
-export const DEFAULT_APPEARANCE: Appearance = { accent: "#111111", position: "bottom-right", launcherLabel: "Ask" };
+export const DEFAULT_APPEARANCE: Appearance = { accent: "#1E6EF4", position: "bottom-right", launcherLabel: "Ask" };
 
 export interface Doc {
   title: string;

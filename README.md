@@ -12,6 +12,9 @@ We're rebuilding Haptic from scratch on `main`. What's here so far is the core l
 - **The widget** (`src/widget`): the script a customer adds to their site. It reads the page the visitor is on, asks the server for the next step, moves a pointer to the element, waits for the visitor to use it, and carries on, across page loads too.
 - **The server** (`src/server`): serves the widget and answers each step with one Claude call.
 - **Intake** (`src/intake`): a command that reads a customer's site and their help docs, saves what it learned, and prints the script tag.
+- **The website** (`web`): the landing page for joinhaptic.com, a static Next.js site. See [`web/README.md`](web/README.md).
+
+The look of both the widget and the website is defined in [`DESIGN.md`](DESIGN.md).
 
 The first version is on the [`v1`](../../tree/v1) branch, kept as a reference.
 
@@ -68,7 +71,7 @@ It prints the tag to paste before `</body>`. `npm run tag -- --help` lists every
 
 ## Deployment
 
-TODO: how to deploy the project
+The website deploys to Cloudflare from `web/`. See [`web/README.md`](web/README.md#deploying). The widget server is not deployed yet.
 
 ## Authors
 
