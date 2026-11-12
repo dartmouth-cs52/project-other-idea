@@ -13,7 +13,7 @@ export default function Contact() {
       <main className="mx-auto grid w-full max-w-5xl items-start gap-10 px-6 py-12 sm:py-20 md:grid-cols-2">
         <div className="flex flex-col gap-8">
           <h1 className="text-4xl font-medium tracking-[-0.03em] text-balance">The AI guide that lives in your product.</h1>
-          <div className="flex flex-col gap-4 rounded-2xl border bg-muted p-6 text-base leading-7">
+          <div className="flex flex-col gap-4 rounded-xl border bg-muted p-6 text-base leading-7">
             <p>
               Most help lives in docs and chat windows, away from the screen where people get stuck. Haptic works on the
               page itself. It points to the next control, waits for the click, then carries on until the job is done.

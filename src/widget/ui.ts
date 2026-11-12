@@ -24,10 +24,10 @@ button { font: inherit; cursor: pointer; }
   background: #1c1917; color: #fafaf9; font-weight: 500; box-shadow: 0 4px 14px rgba(0,0,0,.22); }
 .launcher svg { width: 16px; height: 16px; flex: none; }
 .launcher path { fill: currentColor; }
-.panel { width: min(320px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 22px;
+.panel { width: min(320px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 14px;
   padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.16); }
 [hidden] { display: none !important; }
-.panel form { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 18px; background: #f5f5f4; }
+.panel form { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 10px; background: #f5f5f4; }
 .panel form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 .panel input { width: 100%; height: 40px; font: inherit; color: inherit; padding: 4px 12px 0; border: 0; background: transparent; outline: none; }
 .panel input::placeholder { color: #78716c; }

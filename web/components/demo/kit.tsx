@@ -2,7 +2,12 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { AnimatePresence, motion, useAnimationControls, useInView, useReducedMotion } from "motion/react";
+import { ArrowUpIcon, Check, FileTextIcon, SquareIcon } from "lucide-react";
 import { Pointer, POINTER_TIP } from "@/components/pointer";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { InputGroup, InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import { Message, MessageContent } from "@/components/ui/message";
 import { cn } from "@/lib/utils";
 
 // Shared pieces for the scripted demos: a script runner, the stage that draws
@@ -286,7 +291,13 @@ export function MockWindow({
   children: ReactNode;
 }) {
   return (
-    <div className={cn("overflow-hidden border bg-card shadow-sm", compact ? "rounded-2xl" : "rounded-3xl", className)}>
+    <div
+      className={cn(
+        // Every window is the same surface: Card white, hairline border, 14px corners, one faint shadow.
+        "overflow-hidden rounded-xl border bg-card shadow-sm",
+        className,
+      )}
+    >
       <div className={cn("flex items-center gap-3 border-b", compact ? "h-9 px-3" : "h-11 px-4")}>
         <div className={cn("flex", compact ? "w-[42px] gap-1.5" : "w-[52px] gap-2")}>
           {["#ff5f57", "#febc2e", "#28c840"].map((color) => (
@@ -374,13 +385,125 @@ export function Field({ label, value, placeholder, target }: { label: string; va
 
 export function Row({ title, meta, action }: { title: string; meta: string; action: ReactNode }) {
   return (
-    <div className="flex h-16 items-center justify-between gap-4 rounded-xl border px-4">
+    <div className="flex h-16 items-center justify-between gap-4 rounded-lg border px-4">
       <div className="min-w-0">
         <div className="truncate font-medium">{title}</div>
         <div className="truncate text-[13px] text-muted-foreground">{meta}</div>
       </div>
       {action}
     </div>
+  );
+}
+
+/** What Haptic's chat is showing at one moment of a script. */
+export interface ChatView {
+  /** The text being typed into the ask box, or null when it is empty. */
+  typing: string | null;
+  /** The question, once it has been sent. */
+  question: string | null;
+  status: "idle" | "thinking" | "pointing" | "done";
+  /** What Haptic says back. */
+  reply?: string | null;
+  /** Where the detail in the reply came from. */
+  source?: string | null;
+}
+
+/**
+ * Haptic's chat. It lives in the bottom right corner of the customer's app,
+ * where support chat usually sits, and stays open from the first question to
+ * the last step.
+ */
+export function Chat({ view, compact, className }: { view: ChatView; compact?: boolean; className?: string }) {
+  const working = view.status === "thinking" || view.status === "pointing";
+  const send = working ? (
+    // While Haptic is guiding, send becomes stop.
+    <InputGroupButton variant="default" size={compact ? "icon-xs" : "icon-sm"} className="ml-auto rounded-full">
+      <SquareIcon className={cn("fill-current", compact ? "size-2.5" : "size-3")} />
+    </InputGroupButton>
+  ) : (
+    <InputGroupButton variant="default" size={compact ? "icon-xs" : "icon-sm"} className="ml-auto rounded-full" disabled={!view.typing}>
+      <ArrowUpIcon />
+    </InputGroupButton>
+  );
+  const text = (
+    <span className={cn("truncate", view.typing === null && "text-muted-foreground")}>
+      {view.typing ?? "What do you want to do"}
+      {view.typing !== null && <Caret />}
+    </span>
+  );
+
+  return (
+    <motion.div
+      data-home
+      className={cn("flex w-full flex-col rounded-xl border bg-card shadow-lg", compact ? "gap-2 p-1.5" : "gap-3 p-2", className)}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+    >
+      {view.question && (
+        <div className="flex flex-col gap-2 px-1 pt-1">
+          <Message align="end">
+            <MessageContent>
+              <Bubble align="end">
+                <BubbleContent>{view.question}</BubbleContent>
+              </Bubble>
+            </MessageContent>
+          </Message>
+          {view.reply && (
+            <Message>
+              <MessageContent>
+                <Bubble variant="muted" className={compact ? "max-w-[92%]" : undefined}>
+                  <BubbleContent>{view.reply}</BubbleContent>
+                </Bubble>
+              </MessageContent>
+            </Message>
+          )}
+          {view.source && (
+            <Marker className="text-xs">
+              <MarkerIcon className="size-3.5">
+                <FileTextIcon className="size-3.5" />
+              </MarkerIcon>
+              <MarkerContent>{view.source}</MarkerContent>
+            </Marker>
+          )}
+          {view.status === "thinking" && (
+            // No icon. A lighter shade sweeps across the word while Haptic works.
+            <Marker>
+              <MarkerContent className="shimmer">Thinking</MarkerContent>
+            </Marker>
+          )}
+          {view.status === "pointing" && (
+            <Marker>
+              <MarkerIcon>
+                <Pointer className="size-4 text-pointer" />
+              </MarkerIcon>
+              <MarkerContent>Showing you how</MarkerContent>
+            </Marker>
+          )}
+          {view.status === "done" && (
+            <Marker>
+              <MarkerIcon>
+                <span className="flex size-4 items-center justify-center rounded-full bg-success text-success-foreground">
+                  <Check className="size-3" strokeWidth={3} />
+                </span>
+              </MarkerIcon>
+              <MarkerContent className="font-medium text-foreground">Done</MarkerContent>
+            </Marker>
+          )}
+        </div>
+      )}
+      {compact ? (
+        <InputGroup className="h-10 rounded-lg border-transparent bg-muted">
+          <div className="flex min-w-0 flex-1 items-center pl-3">{text}</div>
+          <InputGroupAddon align="inline-end">{send}</InputGroupAddon>
+        </InputGroup>
+      ) : (
+        <InputGroup className="rounded-lg border-transparent bg-muted">
+          <div className="flex min-h-10 w-full items-center px-3 pt-1">{text}</div>
+          <InputGroupAddon align="block-end">{send}</InputGroupAddon>
+        </InputGroup>
+      )}
+    </motion.div>
   );
 }
 

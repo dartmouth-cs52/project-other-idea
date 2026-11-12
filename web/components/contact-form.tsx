@@ -51,12 +51,12 @@ function Form({ initialTopic }: { initialTopic: string }) {
   }
 
   return (
-    <div className="rounded-2xl border bg-card p-6 sm:p-8">
+    <div className="rounded-xl border bg-muted p-6 sm:p-8">
       <h2 className="text-2xl font-medium tracking-[-0.02em] text-balance">
         {topic === "sales" ? "Talk to our team about Haptic" : "Request access to Haptic"}
       </h2>
       {status === "sent" ? (
-        <Alert role="status" className="mt-6 rounded-xl px-3.5 py-3">
+        <Alert role="status" className="mt-6 px-3.5 py-3">
           <CircleCheckIcon className="text-success!" />
           <AlertTitle>Request sent</AlertTitle>
           <AlertDescription>Thanks. We have your details and will be in touch soon.</AlertDescription>
@@ -65,11 +65,11 @@ function Form({ initialTopic }: { initialTopic: string }) {
         <form onSubmit={submit} className="mt-6 flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <Label htmlFor="contact-email">Work email</Label>
-            <Input id="contact-email" name="email" type="email" required autoComplete="email" placeholder="jane@acme.co" className="h-11 px-3.5 md:text-base" />
+            <Input id="contact-email" name="email" type="email" required autoComplete="email" placeholder="jane@acme.co" className="h-11 bg-card px-3.5 md:text-base" />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="contact-company">Company</Label>
-            <Input id="contact-company" name="company" type="text" autoComplete="organization" placeholder="Acme" className="h-11 px-3.5 md:text-base" />
+            <Input id="contact-company" name="company" type="text" autoComplete="organization" placeholder="Acme" className="h-11 bg-card px-3.5 md:text-base" />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="contact-topic">What can we help you with</Label>
@@ -77,7 +77,7 @@ function Form({ initialTopic }: { initialTopic: string }) {
               id="contact-topic"
               value={topic}
               onChange={(event) => setTopic(event.target.value)}
-              className="w-full [&_select]:h-11 [&_select]:pl-3.5 [&_select]:text-base [&_svg]:right-3.5"
+              className="w-full [&_select]:h-11 [&_select]:bg-card [&_select]:pl-3.5 [&_select]:text-base [&_svg]:right-3.5"
             >
               {topics.map((option) => (
                 <NativeSelectOption key={option.value} value={option.value}>
@@ -87,7 +87,7 @@ function Form({ initialTopic }: { initialTopic: string }) {
             </NativeSelect>
           </div>
           {status === "error" && (
-            <Alert variant="destructive" className="rounded-xl px-3.5 py-3">
+            <Alert variant="destructive" className="px-3.5 py-3">
               <AlertCircleIcon />
               <AlertTitle>That did not go through</AlertTitle>
               <AlertDescription>Email {site.email} and we will set you up.</AlertDescription>

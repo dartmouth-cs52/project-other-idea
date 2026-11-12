@@ -2,14 +2,8 @@
 
 import { useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUpIcon, Check, SquareIcon } from "lucide-react";
-import { Pointer } from "@/components/pointer";
-import { Bubble, BubbleContent } from "@/components/ui/bubble";
-import { InputGroup, InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
-import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
-import { Message, MessageContent } from "@/components/ui/message";
-import { cn } from "@/lib/utils";
-import { AppHeader, Caret, DemoFrame, Field, LANDING_MS, MockButton, MockWindow, Row, Stage, usePlayback, useScript, type ScriptIO } from "./kit";
+import { Check } from "lucide-react";
+import { AppHeader, Chat, DemoFrame, Field, LANDING_MS, MockButton, MockWindow, Row, Stage, usePlayback, useScript, type ChatView, type ScriptIO } from "./kit";
 
 // The hero demo. One scripted task, played on a loop inside a mock customer
 // app: a person asks how to update their card, and Haptic points to each
@@ -156,7 +150,7 @@ export function HeroDemo() {
               <AnimatePresence>
                 {scene.menu && (
                   <motion.div
-                    className="absolute top-[52px] right-6 z-10 w-48 origin-top-right rounded-xl border bg-popover p-1 shadow-lg"
+                    className="absolute top-[52px] right-6 z-10 w-48 origin-top-right rounded-lg border bg-popover p-1 shadow-lg"
                     initial={{ opacity: 0, scale: 0.96 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0 }}
@@ -189,7 +183,7 @@ export function HeroDemo() {
                       </span>
                       <span className="flex h-9 items-center">Security</span>
                     </div>
-                    <div className="rounded-xl border">
+                    <div className="rounded-lg border">
                       <div className="flex min-h-16 flex-col items-start justify-between gap-3 px-4 py-3 sm:flex-row sm:items-center">
                         <div className="min-w-0">
                           <div className="truncate font-medium">{scene.saved ? "Visa ending 1881" : "Visa ending 4242"}</div>
@@ -225,9 +219,7 @@ export function HeroDemo() {
               </div>
             </motion.div>
 
-            <div data-home className="absolute right-5 bottom-5 z-10 flex w-[19rem] max-w-[calc(100%-2.5rem)] flex-col items-end">
-              <Dock scene={scene} />
-            </div>
+            <div className="absolute right-5 bottom-5 z-10 w-[19rem] max-w-[calc(100%-2.5rem)]">{!scene.fading && <Chat view={chatView(scene)} />}</div>
           </Stage>
         </MockWindow>
       </DemoFrame>
@@ -235,88 +227,20 @@ export function HeroDemo() {
   );
 }
 
-const rise = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2 } };
+const STATUS: Record<Composer, ChatView["status"]> = {
+  idle: "idle",
+  typing: "idle",
+  thinking: "thinking",
+  next: "thinking",
+  pointing: "pointing",
+  done: "done",
+};
 
-/** Haptic's chat, in the corner where support chat usually lives. It stays open from the first question to the last step. */
-function Dock({ scene }: { scene: Scene }) {
-  if (scene.fading) return null;
-  const typing = scene.composer === "typing";
-  const working = scene.asked && scene.composer !== "done";
-  return (
-    <motion.div key="chat" {...rise} className="flex w-full flex-col gap-3 rounded-3xl border bg-card p-2 shadow-lg">
-      {scene.asked && (
-        <div className="flex flex-col gap-2 px-1 pt-1">
-          <Message align="end">
-            <MessageContent>
-              <Bubble align="end">
-                <BubbleContent>{QUESTION}</BubbleContent>
-              </Bubble>
-            </MessageContent>
-          </Message>
-          {scene.reply && (
-            <Message>
-              <MessageContent>
-                <Bubble variant="muted">
-                  <BubbleContent>{scene.reply}</BubbleContent>
-                </Bubble>
-              </MessageContent>
-            </Message>
-          )}
-          <Status composer={scene.composer} />
-        </div>
-      )}
-      <InputGroup className="rounded-2xl border-transparent bg-muted">
-        <div className="flex min-h-10 w-full items-center px-3 pt-1">
-          <span className={cn("truncate", !typing && "text-muted-foreground")}>
-            {typing ? QUESTION.slice(0, scene.typed) : "What do you want to do"}
-            {typing && <Caret />}
-          </span>
-        </div>
-        <InputGroupAddon align="block-end">
-          {working ? (
-            // While Haptic is guiding, send becomes stop.
-            <InputGroupButton variant="default" size="icon-sm" className="ml-auto rounded-full">
-              <SquareIcon className="size-3 fill-current" />
-            </InputGroupButton>
-          ) : (
-            <InputGroupButton variant="default" size="icon-sm" className="ml-auto rounded-full" disabled={!typing || scene.typed === 0}>
-              <ArrowUpIcon />
-            </InputGroupButton>
-          )}
-        </InputGroupAddon>
-      </InputGroup>
-    </motion.div>
-  );
-}
-
-/** One line under the conversation that says what Haptic is doing right now. */
-function Status({ composer }: { composer: Composer }) {
-  if (composer === "done") {
-    return (
-      <Marker>
-        <MarkerIcon>
-          <span className="flex size-4 items-center justify-center rounded-full bg-success text-success-foreground">
-            <Check className="size-3" strokeWidth={3} />
-          </span>
-        </MarkerIcon>
-        <MarkerContent className="font-medium text-foreground">Done</MarkerContent>
-      </Marker>
-    );
-  }
-  if (composer === "pointing") {
-    return (
-      <Marker>
-        <MarkerIcon>
-          <Pointer className="size-4 text-pointer" />
-        </MarkerIcon>
-        <MarkerContent>Showing you how</MarkerContent>
-      </Marker>
-    );
-  }
-  // No icon. A lighter shade sweeps across the word while Haptic works.
-  return (
-    <Marker>
-      <MarkerContent className="shimmer">Thinking</MarkerContent>
-    </Marker>
-  );
+function chatView(scene: Scene): ChatView {
+  return {
+    typing: scene.composer === "typing" ? QUESTION.slice(0, scene.typed) : null,
+    question: scene.asked ? QUESTION : null,
+    status: STATUS[scene.composer],
+    reply: scene.reply,
+  };
 }

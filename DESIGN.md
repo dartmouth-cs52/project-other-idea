@@ -151,14 +151,14 @@ components:
     height: 44px
     padding: 14px
   card:
-    backgroundColor: "{colors.card}"
-    textColor: "{colors.card-foreground}"
-    rounded: "{rounded.2xl}"
+    backgroundColor: "{colors.muted}"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.xl}"
     padding: 24px
   browser-window:
     backgroundColor: "{colors.card}"
     textColor: "{colors.card-foreground}"
-    rounded: "{rounded.3xl}"
+    rounded: "{rounded.xl}"
   accordion-row:
     textColor: "{colors.foreground}"
     typography: "{typography.body-md}"
@@ -190,7 +190,7 @@ components:
     backgroundColor: "{colors.muted}"
     textColor: "{colors.foreground}"
     typography: "{typography.body-sm}"
-    rounded: "{rounded.2xl}"
+    rounded: "{rounded.lg}"
   done-mark:
     backgroundColor: "{colors.success}"
     textColor: "{colors.success-foreground}"
@@ -242,8 +242,9 @@ looks stark.
 - **Ink (#1C1917):** Text, primary buttons and the caption bubble in light mode.
   A soft black, 16.7 to 1 on the page.
 - **Paper (#FAFAF9):** The page in light mode. Off-white, not pure white.
-- **Card (#FFFFFF):** Raised surfaces, such as the demo window and forms, so
-  they lift off the page without a shadow.
+- **Card (#FFFFFF):** The white that sits inside or on top of other surfaces:
+  demo windows, the chat, and form inputs.
+- **Muted (#F5F5F4):** The fill of every card, and of the ask box.
 - **Muted text (#78716C):** Sub-copy and secondary labels. 4.6 to 1 on Paper.
 - **Border (#E7E5E4):** Hairlines and the secondary button.
 - **Pointer blue (#1E6EF4):** The pointer, the mark around its target and the
@@ -298,14 +299,21 @@ demo window. Sections are 128px apart on desktop and 80px on phones.
 
 The home page is, in order: a slim navigation bar, the hero with its demo
 window, three feature cards, the FAQ, and a footer with Privacy, Terms and the
-contact address. Each feature card makes one claim, with the text on the left
-and a small live demo on the right in a Border grey panel. The
+contact address. Each feature card makes one claim in a title of a few words,
+with the text on the left and a small live demo on the right in a Border grey
+panel. The
 FAQ is two columns on desktop, with the title on the left and the accordion in
 the right half. Each row is 20px padding around a 24px line with a 1px divider.
 
 The contact page is two columns. The pitch sits on the left, as a headline over
-a Muted card. The form sits on the right in a Card. Both buttons in the
-navigation lead there. Below 768px everything is one column.
+a card. The form sits on the right in a second card, with its inputs in Card
+white. Both buttons in the navigation lead there. Below 768px everything is one
+column.
+
+Surfaces nest the same way on every page. The page is Paper. A card on the
+page is Muted with a 1px border. Anything inside a card that needs to stand out
+is Card white, or sits on a Border grey panel. A demo window is always Card
+white with a 1px border, whether it sits on the page or inside a card.
 
 Inside any mock interface, every control sits on the same grid. Rows are 64px,
 buttons are 32px, and text is centred in its control with flex, never with
@@ -323,9 +331,15 @@ The pointer's shadow is two layers, a tight one and a soft one:
 
 ## Shapes
 
-Corners follow shadcn's radius scale with `--radius` at 10px. Buttons are full
-pills. Inputs are 10px. Cards are 14px or 18px. The demo window is 22px. The
-caption is 14px and chat bubbles are 18px.
+Corners follow shadcn's radius scale with `--radius` at 10px, using the same
+steps shadcn gives its own components, so nothing needs a one-off value.
+
+- **14px (`rounded-xl`):** every surface. Cards, demo windows, the chat, chat
+  bubbles and the caption.
+- **10px (`rounded-lg`):** anything inside a surface. Inputs, the ask box,
+  alerts, menus, inner panels and rows.
+- **8px (`rounded-md`):** small items inside those, such as menu and list rows.
+- **Full pill:** buttons, the launcher and avatars.
 
 **The pointer.** A tailless arrowhead with rounded corners and a shallow notch
 in its back edge, tilted so the tip points up and to the left. It is drawn on a
