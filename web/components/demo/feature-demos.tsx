@@ -8,7 +8,6 @@ import {
   Caret,
   DemoFrame,
   LANDING_MS,
-  Dots,
   Field,
   MockButton,
   MockWindow,
@@ -88,10 +87,7 @@ export function AnyQuestionDemo() {
       <div className="flex flex-col gap-4">
         <div className="flex h-11 w-72 max-w-full items-center gap-2.5 rounded-full border bg-card px-4 shadow-sm">
           {scene.thinking ? (
-            <>
-              <Dots />
-              <span className="text-muted-foreground">Thinking</span>
-            </>
+            <span className="shimmer text-muted-foreground">Thinking</span>
           ) : (
             <span className={cn("truncate", scene.typed === 0 && "text-muted-foreground")}>
               {scene.typed === 0 ? "What do you want to do" : ask.slice(0, scene.typed)}

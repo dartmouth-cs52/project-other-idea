@@ -2,15 +2,14 @@
 
 import { useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUpIcon, Check, XIcon } from "lucide-react";
+import { ArrowUpIcon, Check, SquareIcon } from "lucide-react";
 import { Pointer } from "@/components/pointer";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
-import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { Message, MessageContent } from "@/components/ui/message";
 import { cn } from "@/lib/utils";
-import { AppHeader, Caret, DemoFrame, Dots, Field, LANDING_MS, MockButton, MockWindow, Row, Stage, usePlayback, useScript, type ScriptIO } from "./kit";
+import { AppHeader, Caret, DemoFrame, Field, LANDING_MS, MockButton, MockWindow, Row, Stage, usePlayback, useScript, type ScriptIO } from "./kit";
 
 // The hero demo. One scripted task, played on a loop inside a mock customer
 // app: a person asks how to update their card, and Haptic points to each
@@ -20,7 +19,7 @@ const QUESTION = "How do I update my card";
 const CARD_NUMBER = "•••• •••• •••• 1881";
 
 type Target = "avatar" | "billing" | "update" | "card" | "save";
-/** What the ask box is doing. While Haptic guides it shrinks to a pill, so the page stays clear. */
+/** What Haptic is doing. The chat stays open the whole time, like the support chat it stands in for. */
 type Composer = "idle" | "typing" | "thinking" | "pointing" | "next" | "done";
 
 interface Scene {
@@ -143,7 +142,7 @@ export function HeroDemo() {
           <Stage
             pointing={scene}
             layoutKey={`${scene.view}-${scene.menu}-${scene.form}-${scene.saved}`}
-            className="h-[576px] text-sm leading-5"
+            className="h-[660px] text-sm leading-5 lg:h-[576px]"
           >
             <motion.div className="h-full" animate={{ opacity: scene.fading ? 0 : 1 }} transition={{ duration: 0.3 }}>
               <AppHeader active={scene.view === "projects" ? "Projects" : undefined}>
@@ -172,7 +171,7 @@ export function HeroDemo() {
                 )}
               </AnimatePresence>
 
-              <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 pt-6">
+              <div className="flex w-full flex-col gap-4 px-6 pt-6 lg:pr-[364px]">
                 {scene.view === "projects" ? (
                   <>
                     <h3 className="flex h-8 items-center text-lg font-medium tracking-tight">Projects</h3>
@@ -238,26 +237,13 @@ export function HeroDemo() {
 
 const rise = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2 } };
 
-/** Haptic's corner of the screen: the ask box, or a small goal pill while it guides. */
+/** Haptic's chat, in the corner where support chat usually lives. It stays open from the first question to the last step. */
 function Dock({ scene }: { scene: Scene }) {
   if (scene.fading) return null;
-  if (scene.composer === "pointing" || scene.composer === "next") {
-    // The goal stays in view with one clear way to stop, and the dots show when Haptic is working out the next step.
-    return (
-      <motion.div key="goal" {...rise} className="flex h-10 max-w-full items-center gap-2 rounded-full border bg-card pr-1.5 pl-3 shadow-lg">
-        <span className="flex w-6.5 shrink-0 items-center justify-center">
-          {scene.composer === "next" ? <Dots /> : <Pointer className="size-4 text-pointer" />}
-        </span>
-        <span className="truncate font-medium">{QUESTION}</span>
-        <Button variant="secondary" size="icon-xs" className="ml-1 size-7">
-          <XIcon />
-        </Button>
-      </motion.div>
-    );
-  }
   const typing = scene.composer === "typing";
+  const working = scene.asked && scene.composer !== "done";
   return (
-    <motion.div key="panel" {...rise} className="flex w-full flex-col gap-3 rounded-3xl border bg-card p-2 shadow-lg">
+    <motion.div key="chat" {...rise} className="flex w-full flex-col gap-3 rounded-3xl border bg-card p-2 shadow-lg">
       {scene.asked && (
         <div className="flex flex-col gap-2 px-1 pt-1">
           <Message align="end">
@@ -276,23 +262,7 @@ function Dock({ scene }: { scene: Scene }) {
               </MessageContent>
             </Message>
           )}
-          {scene.composer === "done" ? (
-            <Marker>
-              <MarkerIcon>
-                <span className="flex size-4 items-center justify-center rounded-full bg-success text-success-foreground">
-                  <Check className="size-3" strokeWidth={3} />
-                </span>
-              </MarkerIcon>
-              <MarkerContent className="font-medium text-foreground">Done</MarkerContent>
-            </Marker>
-          ) : (
-            <Marker>
-              <MarkerIcon className="flex w-auto items-center">
-                <Dots />
-              </MarkerIcon>
-              <MarkerContent>Thinking</MarkerContent>
-            </Marker>
-          )}
+          <Status composer={scene.composer} />
         </div>
       )}
       <InputGroup className="rounded-2xl border-transparent bg-muted">
@@ -303,11 +273,50 @@ function Dock({ scene }: { scene: Scene }) {
           </span>
         </div>
         <InputGroupAddon align="block-end">
-          <InputGroupButton variant="default" size="icon-sm" className="ml-auto rounded-full" disabled={!typing || scene.typed === 0}>
-            <ArrowUpIcon />
-          </InputGroupButton>
+          {working ? (
+            // While Haptic is guiding, send becomes stop.
+            <InputGroupButton variant="default" size="icon-sm" className="ml-auto rounded-full">
+              <SquareIcon className="size-3 fill-current" />
+            </InputGroupButton>
+          ) : (
+            <InputGroupButton variant="default" size="icon-sm" className="ml-auto rounded-full" disabled={!typing || scene.typed === 0}>
+              <ArrowUpIcon />
+            </InputGroupButton>
+          )}
         </InputGroupAddon>
       </InputGroup>
     </motion.div>
+  );
+}
+
+/** One line under the conversation that says what Haptic is doing right now. */
+function Status({ composer }: { composer: Composer }) {
+  if (composer === "done") {
+    return (
+      <Marker>
+        <MarkerIcon>
+          <span className="flex size-4 items-center justify-center rounded-full bg-success text-success-foreground">
+            <Check className="size-3" strokeWidth={3} />
+          </span>
+        </MarkerIcon>
+        <MarkerContent className="font-medium text-foreground">Done</MarkerContent>
+      </Marker>
+    );
+  }
+  if (composer === "pointing") {
+    return (
+      <Marker>
+        <MarkerIcon>
+          <Pointer className="size-4 text-pointer" />
+        </MarkerIcon>
+        <MarkerContent>Showing you how</MarkerContent>
+      </Marker>
+    );
+  }
+  // No icon. A lighter shade sweeps across the word while Haptic works.
+  return (
+    <Marker>
+      <MarkerContent className="shimmer">Thinking</MarkerContent>
+    </Marker>
   );
 }

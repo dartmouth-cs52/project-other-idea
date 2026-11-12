@@ -373,17 +373,6 @@ export function Row({ title, meta, action }: { title: string; meta: string; acti
   );
 }
 
-/** Three dots in the pointer's blue, shown while Haptic is thinking. */
-export function Dots() {
-  return (
-    <span className="flex items-center gap-1">
-      {[0, 1, 2].map((i) => (
-        <span key={i} className="size-1.5 animate-thinking rounded-full bg-pointer" style={{ animationDelay: `${i * 0.16}s` }} />
-      ))}
-    </span>
-  );
-}
-
 export function Caret() {
   return <span className="ml-px inline-block h-4 w-px translate-y-[3px] animate-caret bg-foreground" />;
 }

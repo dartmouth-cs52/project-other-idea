@@ -246,8 +246,8 @@ looks stark.
   they lift off the page without a shadow.
 - **Muted text (#78716C):** Sub-copy and secondary labels. 4.6 to 1 on Paper.
 - **Border (#E7E5E4):** Hairlines and the secondary button.
-- **Pointer blue (#1E6EF4):** The pointer, the mark around its target, its
-  thinking dots and the keyboard focus ring. Nothing else.
+- **Pointer blue (#1E6EF4):** The pointer, the mark around its target and the
+  keyboard focus ring. Nothing else.
 - **Done green (#008932):** The small round tick that says a task is finished.
   Blue means in progress and green means done, so the two never share a screen.
   Not for buttons, text or bubbles.
@@ -352,8 +352,8 @@ Components are shadcn/ui, restyled only through tokens and variants.
   plays one scripted task on a loop. The person types
   a question, Haptic thinks, the pointer walks through each step, and Haptic
   confirms at the end.
-- **Pointer:** 24px. Glides to its target, pulses once when the visitor should
-  click, and shows three dots while thinking. No face, no mascot.
+- **Pointer:** 24px. Glides to its target, and the mark pulses once when the
+  person clicks. No face, no mascot.
 - **Target mark:** A 2px Pointer blue outline that stands 3px off the control,
   with a thin white edge on both sides and a soft shadow, the same recipe as
   the pointer. The gap and the white edge are what stop it reading as the
@@ -361,14 +361,18 @@ Components are shadcn/ui, restyled only through tokens and variants.
 - **Caption:** Ink bubble with Paper text, 14px, at most 288px wide. Text only.
   It sits under the target, or above when the space under it is busy, and
   never over the next control.
+- **Chat:** Haptic's home, in the bottom right corner where support chat
+  usually lives. A Card panel holding the conversation and the ask box. It
+  stays open from the first question to the last step.
 - **Ask box:** shadcn's input group: a Muted field with the text on top and a
-  round Ink send button on a row beneath.
-- **Goal pill:** While Haptic guides, the ask box shrinks to a pill that shows
-  what the person asked and one round close button that stops the guide.
+  round Ink send button on a row beneath. While Haptic is guiding, send becomes
+  a stop button.
 - **Bubbles and status:** shadcn's chat parts. The person's question is an Ink
   bubble on the right. Haptic's reply is a Muted bubble on the left. Status
-  sits under them as a marker, three blue dots while thinking and the green
-  tick when done.
+  sits under them as one line. While Haptic thinks it is the word "Thinking"
+  with a lighter shade sweeping across it, shadcn's `shimmer`, with no icon.
+  While it points it reads "Showing you how". When it finishes it is the green
+  tick and "Done".
 - **Form:** Labels above 44px inputs and one primary button. Success and error
   use shadcn's alert, with an icon, a short title and one line of detail.
 - **Accordion:** FAQ rows with a plus that turns to a cross. One row open at a
@@ -382,9 +386,13 @@ to its target and each demo holds one still frame.
 
 ## Interaction
 
-How a guide should feel. This is the proposed model, drawn from research and
-from how other guides and agents behave. It is not signed off, and the widget
-in `src/widget` does not follow all of it yet.
+How a guide should feel. Only what the designer has signed off belongs here.
+Behaviour that merely exists in the widget code is not a design decision, and
+the widget in `src/widget` does not follow this model yet.
+
+Signed off: Haptic sits in the bottom right, in the place of support chat,
+because it is meant to replace it. The chat stays open once a question is
+asked. Thinking is a shimmer across the word. The rest below is proposed.
 
 - **Haptic guides, the person acts.** Haptic points and explains. It does not
   click, type or scroll for anyone.
@@ -398,8 +406,8 @@ in `src/widget` does not follow all of it yet.
   that.
 - **Say one thing.** A caption names the next action in a short sentence. It
   carries no buttons.
-- **Keep the goal and the exit in view.** The goal pill stays in the corner for
-  the whole guide.
+- **Keep the conversation and the exit in view.** The chat stays open for the
+  whole guide, with the question at the top and a stop button in the ask box.
 - **A wrong click is not an error.** Haptic reads the new page and carries on
   from there without comment.
 - **Finish plainly.** Haptic confirms in a sentence, shows the green tick, and
@@ -407,8 +415,7 @@ in `src/widget` does not follow all of it yet.
 
 ## Do's and Don'ts
 
-- Do keep Pointer blue for the pointer, its target mark, its thinking dots and
-  focus.
+- Do keep Pointer blue for the pointer, its target mark and focus.
   Never for text, buttons or links.
 - Do give the pointer its white border and shadow everywhere.
 - Do use sizes, radii and spacing from the scales above. No one-off values.
