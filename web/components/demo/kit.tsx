@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { AnimatePresence, motion, useAnimationControls, useInView, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from "motion/react";
 import { ArrowUpIcon, Check, FileTextIcon, SquareIcon } from "lucide-react";
 import { Pointer, POINTER_TIP } from "@/components/pointer";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
@@ -25,11 +25,35 @@ function glideSeconds(distance: number): number {
 /** How long a script should wait for the pointer to land before the mark and caption appear. */
 export const LANDING_MS = 750;
 
-/** A demo plays only while it is on screen, and holds a still frame if motion is reduced. */
-export function usePlayback(frame: RefObject<HTMLElement | null>): boolean {
+/** What a demo is doing: running its script, waiting on its first frame, or holding its still frame. */
+export type Playback = "playing" | "waiting" | "still";
+
+/** How much of a demo has to be on screen before it starts. */
+const START_AT = 0.35;
+
+/**
+ * A demo starts once enough of it is on screen, then keeps going until it has left the screen
+ * completely. It never changes state while any of it can be seen, so scrolling past a demo never
+ * makes it jump. If motion is reduced it holds a still frame instead.
+ */
+export function usePlayback(frame: RefObject<HTMLElement | null>): Playback {
   const reduce = useReducedMotion() ?? false;
-  const inView = useInView(frame, { amount: 0.35 });
-  return inView && !reduce;
+  const [running, setRunning] = useState(false);
+  useEffect(() => {
+    const element = frame.current;
+    if (!element) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry) return;
+        // Enough on screen starts it. Partly on screen changes nothing. Gone stops it.
+        setRunning((was) => (entry.intersectionRatio >= START_AT ? true : entry.isIntersecting ? was : false));
+      },
+      { threshold: [0, START_AT] },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [frame]);
+  return reduce ? "still" : running ? "playing" : "waiting";
 }
 
 export interface ScriptIO<S> {
@@ -40,11 +64,13 @@ export interface ScriptIO<S> {
 }
 
 /**
- * Runs `run` on a loop while `playing`, and returns the current scene. When
- * not playing it returns `rest`, a still frame that explains the demo by itself.
+ * Runs `run` on a loop while the demo is playing, and returns the current scene. While it waits
+ * to come on screen it shows `start`, the frame the script begins from, so starting is not a
+ * jump. `rest` is the still frame for reduced motion, which explains the demo by itself.
  */
-export function useScript<S>(playing: boolean, start: S, rest: S, run: (io: ScriptIO<S>) => Promise<void>): S {
+export function useScript<S>(playback: Playback, start: S, rest: S, run: (io: ScriptIO<S>) => Promise<void>): S {
   const [live, setLive] = useState<S>(start);
+  const playing = playback === "playing";
   useEffect(() => {
     if (!playing) return;
     let alive = true;
@@ -68,9 +94,11 @@ export function useScript<S>(playing: boolean, start: S, rest: S, run: (io: Scri
     return () => {
       alive = false;
       timers.forEach(clearTimeout);
+      // It only stops once it is off screen, so going back to the first frame is never seen.
+      setLive(start);
     };
   }, [playing, start, run]);
-  return playing ? live : rest;
+  return playback === "still" ? rest : live;
 }
 
 /** What Haptic is pointing at, at one moment of a script. */
