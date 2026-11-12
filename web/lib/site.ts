@@ -6,8 +6,12 @@ export const site = {
   tagline: "The AI guide that lives in your product.",
   /** The line under the picture when a link to the site is shared, and the end of the browser tab title. */
   headline: "The AI guide that lives in your product",
+  /**
+   * The lines under the title in a search result or a shared link. It does not repeat the
+   * headline, which sits right above it, and it stays under 155 characters so it is not cut off.
+   */
   description:
-    "The AI guide that lives in your product. People say what they want to do, and Haptic points to exactly where to click, step by step.",
+    "In-app guidance for your web app. People say what they want to do, and Haptic points to exactly where to click, step by step, on the live page.",
 } as const;
 
 export const accessHref = "/request-access/";
