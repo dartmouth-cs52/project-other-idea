@@ -24,7 +24,7 @@ Options:
   --docs <path|url>    A help doc: a file, a folder of files, or a URL. Repeat for more.
   --max-pages <n>      Most pages to read from the site. Default 30.
   --allow <origin>     Another origin the widget may run on, like a staging site. Repeat for more.
-  --accent <hex>       Color of the pointer and launcher. Default ${DEFAULT_APPEARANCE.accent}.
+  --accent <hex>       Color of the pointer and its highlight. Default ${DEFAULT_APPEARANCE.accent}.
   --position <side>    bottom-right or bottom-left. Default bottom-right.
   --label <text>       Text on the launcher button. Default "${DEFAULT_APPEARANCE.launcherLabel}".
   --id <site id>       Use this id, or rebuild the site that has it, keeping what isn't given again.

@@ -5,34 +5,50 @@ import type { Appearance } from "../shared/types.ts";
 // element, so the customer's CSS can't reach it and ours can't leak out.
 // Model text is only ever set as textContent.
 
+// Colours, radii and motion come from DESIGN.md. The accent colours the
+// pointer and its highlight only. Everything else is ink on white.
+// The pointer shape is assets/pointer.svg, with its tip at POINTER_TIP.
+const POINTER_PATH =
+  "M3.271 4.871A1.678 1.678 0 0 1 5.604 2.907L19.822 9.597A1.678 1.678 0 0 1 19.705 12.684L13.956 14.875A.622.622 0 0 0 13.643 15.139L10.506 20.431A1.678 1.678 0 0 1 7.444 20.021Z";
+const POINTER_TIP = { x: 3.81, y: 3.14 };
+
 const CSS = `
 :host { all: initial; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
-  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #111; }
+  font: 14px/20px system-ui, -apple-system, "Segoe UI", sans-serif; color: #1c1917; }
 * { box-sizing: border-box; }
 button { font: inherit; cursor: pointer; }
 .dock { position: fixed; bottom: 20px; display: flex; flex-direction: column; gap: 10px; pointer-events: auto; }
 .dock.right { right: 20px; align-items: flex-end; }
 .dock.left { left: 20px; align-items: flex-start; }
-.launcher { border: 0; border-radius: 999px; padding: 10px 18px; background: var(--accent); color: var(--on-accent);
-  font-weight: 600; box-shadow: 0 4px 14px rgba(0,0,0,.22); }
-.panel { width: min(340px, calc(100vw - 40px)); background: #fff; border: 1px solid rgba(0,0,0,.12); border-radius: 12px;
-  padding: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+.launcher { display: inline-flex; align-items: center; gap: 8px; height: 40px; border: 0; border-radius: 999px; padding: 0 16px 0 14px;
+  background: #1c1917; color: #fafaf9; font-weight: 500; box-shadow: 0 4px 14px rgba(0,0,0,.22); }
+.launcher svg { width: 16px; height: 16px; flex: none; }
+.launcher path { fill: currentColor; }
+.panel { width: min(320px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 14px;
+  padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.16); }
 [hidden] { display: none !important; }
-.panel form { display: flex; gap: 8px; }
-.panel input { flex: 1; min-width: 0; font: inherit; padding: 8px 10px; border: 1px solid rgba(0,0,0,.2); border-radius: 8px; outline: none; }
-.panel input:focus { border-color: var(--accent); }
-.panel .send { border: 0; border-radius: 8px; padding: 0 14px; background: var(--accent); color: var(--on-accent); font-weight: 600; }
-.status { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.status span { color: #444; }
-.stop { border: 1px solid rgba(0,0,0,.2); background: #fff; border-radius: 8px; padding: 5px 10px; }
-.ring { position: fixed; border: 2px solid var(--accent); border-radius: 8px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
+.panel form { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 10px; background: #f5f5f4; }
+.panel form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+.panel input { width: 100%; height: 40px; font: inherit; color: inherit; padding: 4px 12px 0; border: 0; background: transparent; outline: none; }
+.panel input::placeholder { color: #78716c; }
+.panel .send { display: inline-flex; align-items: center; justify-content: center; align-self: flex-end; width: 32px; height: 32px; margin: 6px 10px 8px; border: 0;
+  border-radius: 999px; background: #1c1917; color: #fafaf9; }
+.panel .send svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.status { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 36px; padding: 0 2px 0 12px; }
+.status span { color: #78716c; }
+.stop { height: 28px; border: 1px solid #e7e5e4; background: #fff; color: #78716c; border-radius: 999px; padding: 0 12px; font-size: 13px; }
+.ring { position: fixed; border: 2px solid var(--accent); border-radius: 10px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
   transition: opacity .2s; }
-.cursor { position: fixed; left: 0; top: 0; width: 26px; height: 26px; transition: transform .55s cubic-bezier(.2,.8,.2,1);
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,.35)); will-change: transform; }
-.cursor path { fill: var(--accent); stroke: #fff; stroke-width: 1.5; stroke-linejoin: round; }
-.caption { position: fixed; max-width: min(320px, calc(100vw - 24px)); background: #111; color: #fff; border-radius: 10px;
-  padding: 9px 30px 9px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.25); pointer-events: auto; }
-.caption .close { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border: 0; background: none; color: #bbb; font-size: 16px; line-height: 1; }
+.cursor { position: fixed; left: 0; top: 0; width: 24px; height: 24px; transition: transform .55s cubic-bezier(.2,.8,.2,1);
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,.3)) drop-shadow(0 5px 9px rgba(0,0,0,.26)); will-change: transform; }
+.cursor svg { display: block; overflow: visible; }
+.cursor path { fill: var(--accent); stroke: #fff; stroke-width: 3; stroke-linejoin: round; paint-order: stroke; }
+.caption { position: fixed; display: flex; align-items: center; gap: 8px; max-width: min(320px, calc(100vw - 24px)); background: #1c1917; color: #fafaf9;
+  border-radius: 14px; padding: 6px 6px 6px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.22); pointer-events: auto; }
+.caption .close { display: inline-flex; align-items: center; justify-content: center; flex: none; align-self: flex-start; width: 24px; height: 24px; border: 0;
+  border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; }
+.caption .close:hover { background: rgba(250,250,249,.25); }
+.caption .close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
 @media (prefers-reduced-motion: reduce) { .cursor { transition: none; } }
 `;
 
@@ -60,19 +76,18 @@ export class Ui {
   constructor(appearance: Appearance, handlers: UiHandlers) {
     this.host = document.createElement("haptic-root");
     this.host.style.setProperty("--accent", appearance.accent);
-    this.host.style.setProperty("--on-accent", readableOn(appearance.accent));
     const root = this.host.attachShadow({ mode: "open" });
     const side = appearance.position === "bottom-left" ? "left" : "right";
     root.innerHTML = `<style>${CSS}</style>
       <div class="ring" hidden></div>
-      <div class="caption" hidden><span></span><button class="close" aria-label="Stop guide">×</button></div>
-      <div class="cursor" hidden><svg viewBox="0 0 26 26" width="26" height="26"><path d="M4 2 L4 20 L9 15.5 L12.5 23 L15.5 21.6 L12 14.2 L19 14 Z"/></svg></div>
+      <div class="caption" hidden><span></span><button class="close" aria-label="Stop guide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="cursor" hidden><svg viewBox="0 0 24 24" width="24" height="24"><path d="${POINTER_PATH}"/></svg></div>
       <div class="dock ${side}">
         <div class="panel" hidden>
-          <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><button class="send" type="submit">Go</button></form>
+          <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
           <div class="status" hidden><span></span><button class="stop" type="button">Stop</button></div>
         </div>
-        <button class="launcher" type="button"></button>
+        <button class="launcher" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${POINTER_PATH}"/></svg><span></span></button>
       </div>`;
     const pick = <T extends Element>(selector: string) => root.querySelector(selector) as T;
     this.panel = pick(".panel");
@@ -85,7 +100,7 @@ export class Ui {
     this.caption = pick(".caption");
     this.captionText = pick(".caption span");
     const launcher = pick<HTMLButtonElement>(".launcher");
-    launcher.textContent = appearance.launcherLabel;
+    pick(".launcher span").textContent = appearance.launcherLabel;
     this.at = { x: side === "left" ? 60 : window.innerWidth - 60, y: window.innerHeight - 40 };
 
     launcher.addEventListener("click", () => {
@@ -155,7 +170,7 @@ export class Ui {
     this.caption.hidden = false;
     this.cursor.hidden = false;
     // Paint once at the old spot so the transition has somewhere to start from.
-    this.cursor.style.transform = `translate(${this.at.x}px, ${this.at.y}px)`;
+    this.cursor.style.transform = `translate(${this.at.x - POINTER_TIP.x}px, ${this.at.y - POINTER_TIP.y}px)`;
     cancelAnimationFrame(this.frame);
     this.frame = requestAnimationFrame(this.track);
   }
@@ -203,9 +218,9 @@ export class Ui {
     this.ring.style.width = `${rect.width + pad * 2}px`;
     this.ring.style.height = `${rect.height + pad * 2}px`;
 
-    // The arrow's tip sits a little inside the element, toward its lower right, so it doesn't cover the label.
-    this.at = { x: rect.left + Math.min(rect.width * 0.7, rect.width - 6), y: rect.top + Math.min(rect.height * 0.6, rect.height - 4) };
-    this.cursor.style.transform = `translate(${this.at.x - 4}px, ${this.at.y - 2}px)`;
+    // The tip sits in the element's lower right corner, so the pointer hangs off it and never covers the label.
+    this.at = { x: rect.right - Math.min(10, rect.width * 0.2), y: rect.bottom - Math.min(7, rect.height * 0.25) };
+    this.cursor.style.transform = `translate(${this.at.x - POINTER_TIP.x}px, ${this.at.y - POINTER_TIP.y}px)`;
 
     const box = this.caption.getBoundingClientRect();
     const below = rect.bottom + 14 + box.height < window.innerHeight;
@@ -214,12 +229,4 @@ export class Ui {
     this.caption.style.left = `${left}px`;
     this.caption.style.top = `${top}px`;
   };
-}
-
-/** Black or white text, whichever reads better on the accent color. */
-function readableOn(hex: string): string {
-  const value = /^#?([0-9a-f]{6})$/i.exec(hex)?.[1];
-  if (!value) return "#fff";
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(value.slice(i, i + 2), 16)) as [number, number, number];
-  return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#111" : "#fff";
 }

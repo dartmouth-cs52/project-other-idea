@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "haptic-web",
+  "compatibility_date": "2026-11-01",
+  "main": "./worker/embedded.ts",
+  // The site's files are packed inside the Worker. See worker/embedded.ts for why.
+  // Where contact form requests are kept.
+  "kv_namespaces": [{ "binding": "ACCESS_REQUESTS", "id": "90e7d35b139e4720ac435d792e9b4280" }],
+  // The preview address on workers.dev stays on. It is marked so search engines skip it.
+  "workers_dev": true,
+  // The live site. The Worker sends www to the bare domain.
+  "routes": [
+    { "pattern": "joinhaptic.com", "custom_domain": true },
+    { "pattern": "www.joinhaptic.com", "custom_domain": true }
+  ]
+}

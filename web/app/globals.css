@@ -1,0 +1,126 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Dark mode follows the visitor's system setting. Tokens come from DESIGN.md. */
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-heading: var(--font-sans);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-pointer: var(--pointer);
+  --color-pointer-border: var(--pointer-border);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --ease-glide: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-caret: caret 1s steps(1) infinite;
+
+  @keyframes caret {
+    50% { opacity: 0; }
+  }
+}
+
+:root {
+  --background: #fafaf9;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --popover: #ffffff;
+  --popover-foreground: #1c1917;
+  --primary: #1c1917;
+  --primary-foreground: #fafaf9;
+  --secondary: #e7e5e4;
+  --secondary-foreground: #1c1917;
+  --muted: #f5f5f4;
+  --muted-foreground: #78716c;
+  --accent: #f5f5f4;
+  --accent-foreground: #1c1917;
+  --destructive: #dc2626;
+  --border: #e7e5e4;
+  --input: #e7e5e4;
+  --ring: #1e6ef4;
+  --pointer: #1e6ef4;
+  --pointer-border: #ffffff;
+  --success: #008932;
+  --success-foreground: #ffffff;
+  --radius: 0.625rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --background: #1c1917;
+    --foreground: #f5f5f4;
+    --card: #292524;
+    --card-foreground: #f5f5f4;
+    --popover: #292524;
+    --popover-foreground: #f5f5f4;
+    --primary: #f5f5f4;
+    --primary-foreground: #1c1917;
+    --secondary: #44403c;
+    --secondary-foreground: #f5f5f4;
+    --muted: #35312e;
+    --muted-foreground: #a8a29e;
+    --accent: #35312e;
+    --accent-foreground: #f5f5f4;
+    --destructive: #f87171;
+    --border: #44403c;
+    --input: #44403c;
+    --ring: #0091ff;
+    --pointer: #0091ff;
+    --pointer-border: #ffffff;
+    --success: #30d158;
+    --success-foreground: #1c1917;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans scroll-smooth;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+}
+
+/* The shadow under the pointer. It lifts the pointer off whatever it sits on. */
+@utility pointer-shadow {
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.3)) drop-shadow(0 5px 9px rgb(0 0 0 / 0.26));
+}
