@@ -16,9 +16,11 @@ const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 export async function handle(request: Request, env: Env, assets: Assets): Promise<Response> {
   const url = new URL(request.url);
 
-  // One address for the site: www goes to the bare domain.
-  if (url.hostname === `www.${SITE}`) {
+  // One address for the site: www goes to the bare domain, and plain http goes to https.
+  const www = url.hostname === `www.${SITE}`;
+  if (www || (url.hostname === SITE && url.protocol === "http:")) {
     url.hostname = SITE;
+    url.protocol = "https:";
     return Response.redirect(url.toString(), 301);
   }
 

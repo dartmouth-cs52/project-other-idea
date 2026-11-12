@@ -136,7 +136,10 @@ export function HeroDemo() {
           <Stage
             pointing={scene}
             layoutKey={`${scene.view}-${scene.menu}-${scene.form}-${scene.saved}`}
-            className="h-[660px] text-sm leading-5 lg:h-[576px]"
+            // On a desktop the window fits the screen it is on, so the ask box in its corner is never
+            // below the fold. 370px is what sits above the stage plus a margin under the window:
+            // navigation 64, hero text 236, title bar and borders 46, margin 24.
+            className="h-[660px] text-sm leading-5 lg:h-[clamp(464px,calc(100svh_-_370px),576px)]"
           >
             <motion.div className="h-full" animate={{ opacity: scene.fading ? 0 : 1 }} transition={{ duration: 0.3 }}>
               <AppHeader active={scene.view === "projects" ? "Projects" : undefined}>

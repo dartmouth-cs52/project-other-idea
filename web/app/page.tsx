@@ -10,7 +10,7 @@ export default function Home() {
     <>
       <SiteNav />
       <main>
-        <section className="mx-auto flex w-full max-w-5xl flex-col items-center px-6 pt-12 pb-12 text-center sm:pt-20 sm:pb-16">
+        <section className="mx-auto flex w-full max-w-5xl flex-col items-center px-6 py-12 text-center">
           <h1 className="flex flex-wrap items-center justify-center gap-x-[0.2em] text-4xl font-medium tracking-[-0.04em] sm:text-6xl">
             Meet
             <Pointer bordered className="pointer-shadow size-[0.8em] text-pointer" />

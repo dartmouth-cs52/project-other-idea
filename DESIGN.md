@@ -294,7 +294,15 @@ gutters, which leaves 976px of content. The hero demo and the FAQ both fill
 that width.
 
 Spacing is a 4px grid, and most gaps are multiples of 8. The hero stacks with a
-fixed rhythm: 24px from headline to sub-copy, then 64px to the demo window. Sections are 128px apart on desktop and 80px on phones.
+fixed rhythm: 48px above the headline, 24px from headline to sub-copy, then
+48px to the demo window. Sections are 128px apart on desktop and 80px on phones.
+
+The hero demo window fits the screen it is on. On a desktop its stage is
+between 464px and 576px tall, sized so the whole window sits above the fold
+with 24px to spare. Haptic's ask box is in the bottom right corner of that
+window and the demo starts there, so it must never be cut off. Screens under
+834px tall get the 464px minimum, the shortest stage that holds every step of
+the demo.
 
 The home page is, in order: a slim navigation bar, the hero with its demo
 window, three feature cards, the FAQ, and a footer with Privacy, Terms and the
