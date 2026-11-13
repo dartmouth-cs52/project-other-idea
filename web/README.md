@@ -40,6 +40,15 @@ Replying to one of those emails answers the person who sent the request. If the 
 
 The site runs on Cloudflare as one Worker: the static pages from `out/`, plus the form handler. The settings are in `wrangler.jsonc`.
 
+**From GitHub.** Merging a change to the site into `main` publishes it. The workflow in `.github/workflows/deploy-site.yml` installs, lints, builds and deploys, then checks that joinhaptic.com answers. A change to the docs alone does not deploy. It can also be started by hand, from the Actions tab, under Deploy site. Pull requests never deploy.
+
+The workflow reads two repository secrets, set under Settings, Secrets and variables, Actions:
+
+- `CLOUDFLARE_API_TOKEN`: a Cloudflare API token made from the "Edit Cloudflare Workers" template.
+- `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account the Worker lives in.
+
+**By hand.** The same thing from a terminal:
+
 ```bash
 npm run preview   # builds, then serves the site and the Worker at http://localhost:8787
 npm run deploy    # builds, then publishes to Cloudflare
