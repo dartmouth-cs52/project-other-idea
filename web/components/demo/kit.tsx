@@ -14,6 +14,13 @@ import { cn } from "@/lib/utils";
 // Haptic's pointer, target mark and caption over a mock app, and the mock
 // controls themselves.
 
+/**
+ * Where the sample app in the demos lives. It has no brand name on purpose: Haptic runs inside
+ * the visitor's own product, so the address says "your app" and the app's header carries a plain
+ * mark with no name beside it. Change it here and every demo follows.
+ */
+export const APP_DOMAIN = "yourapp.com";
+
 /** The pointer's one signature movement: quick to leave, slow to land, so the eye arrives with it. */
 export const GLIDE_EASE = [0.2, 0.8, 0.2, 1] as const;
 
@@ -355,10 +362,7 @@ export function MockWindow({
 export function AppHeader({ active, compact, children }: { active?: "Projects" | "Team" | "Reports"; compact?: boolean; children?: ReactNode }) {
   return (
     <div className={cn("flex items-center gap-6 border-b", compact ? "h-12 px-4" : "h-14 px-6")}>
-      <div className="flex items-center gap-2 font-medium">
-        <span className="size-5 rounded-md bg-foreground" />
-        Acme
-      </div>
+      <span className="size-5 shrink-0 rounded-md bg-foreground" />
       <div className="hidden items-center gap-5 text-muted-foreground sm:flex">
         {(["Projects", "Team", "Reports"] as const).map((item) => (
           <span key={item} className={cn(item === active && "text-foreground")}>
