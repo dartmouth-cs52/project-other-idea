@@ -162,6 +162,14 @@ test("pointing at where a visitor can see their own plan is allowed, because not
   assert.equal(overruled, undefined);
 });
 
+test("a step that states a price on the way keeps its pointer and loses its words", () => {
+  const priced = finishAnswer(site, ask("How much does the Pro plan cost?"), wrote({ mode: "guide", target: "e3", status: "continue", say: "Pro is $49 a month. Click Plan and billing to see it." }));
+  assert.deepEqual(priced.reply, { target: "e3", status: "continue", say: "This is the one to use.", mode: "guide" });
+  assert.equal(priced.overruled, "never_decided");
+  const promised = finishAnswer(site, ask("cancel my plan"), wrote({ mode: "guide", target: null, status: "done", say: "You'll get a full refund within 14 days." }));
+  assert.deepEqual([promised.reply.say, promised.overruled], ["I can't help with that one.", "never_decided"]);
+});
+
 test("an answer is held to the rules for any sentence, with room for four", () => {
   const linked = finishAnswer(site, ask("Who can remove people?"), wrote({ say: "Only the workspace owner can remove people. See https://evil.example/owner for more.", sources: ["a1"] }));
   assert.equal(linked.reply.say, "Only the workspace owner can remove people.");

@@ -14,7 +14,8 @@ import { checkSay, SAY_WITHOUT_WORDS, tidySay, type Rule } from "./rules.ts";
 // - An answer has to rest on at least one of this site's help articles, named
 //   by id. The visitor is shown those articles. With none, it is not an answer.
 // - Prices, refunds, legal and medical matters, deadlines and anything about
-//   the visitor's own account are never answered in words, whatever the docs say.
+//   the visitor's own account are never answered in words, whatever the docs
+//   say. A step's sentence may not state a price or a refund rule either.
 // - An answer is held to the same rules as any sentence (rules.ts), with more room.
 
 /** An answer is one to four short sentences. This is room for that. */
@@ -109,8 +110,16 @@ export function finishAnswer(site: SiteContext, request: TurnRequest, raw: Model
     };
   }
 
+  // A step says where to click, and leaves the facts to the page. One that states a price or a refund
+  // rule on the way has decided the same thing an answer may not, so its words go and its pointer stays.
   const { say, broke } = checkSay(tidySay(raw.say));
-  return { reply: { target, status: raw.status, say: say || (target ? SAY_WITHOUT_WORDS.pointing : SAY_WITHOUT_WORDS.nothing), mode }, cited: [], broke };
+  const stated = NEVER_SAID.test(say);
+  return {
+    reply: { target, status: raw.status, say: (stated ? "" : say) || (target ? SAY_WITHOUT_WORDS.pointing : SAY_WITHOUT_WORDS.nothing), mode },
+    cited: [],
+    broke,
+    ...(stated ? { overruled: "never_decided" as const } : {}),
+  };
 }
 
 function asSource(article: Article, site: SiteContext, now: Date): Source {
