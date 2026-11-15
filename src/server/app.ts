@@ -168,7 +168,7 @@ export function parseTurn(body: unknown, now: Date = new Date()): TurnRequest | 
     if (item.icon) element.icon = text(item.icon, 40);
     if (item.href) element.href = text(item.href, 200);
     if (item.context) element.context = text(item.context, 120);
-    // Long enough for a state that takes a few words, like one that says a control opens a menu.
+    // Room for a state that takes a few words, like one saying a control only shows while the mouse is over its box.
     const state = texts(item.state, 8, 40);
     if (state.length) element.state = state;
     if (item.offscreen === "above" || item.offscreen === "below") element.offscreen = item.offscreen;
