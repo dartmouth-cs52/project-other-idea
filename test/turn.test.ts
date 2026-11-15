@@ -104,6 +104,23 @@ test("the model is told today's date, outside the part of the prompt that is kep
   assert.doesNotMatch(rules, /Today is|20\d\d/);
 });
 
+test("the model is told not to answer what has nothing to do with the site (asked the capital of France it said Paris, and asked 17 times 23 it said 391, before declining)", () => {
+  assert.match(rules, /You help with this website and what is on it, and with nothing else\./);
+  assert.match(rules, /do not answer it, not even in passing: reply "done" with target null and say only that you can help with finding things on Test\./);
+  // A real question asked badly must not be turned away: those pass 10 of 10 today.
+  assert.match(rules, /A question that is vague, misspelled or in another language is still about the site unless it plainly is not\./);
+  // It is part of who the guide is, so it comes before how a reply is shaped.
+  assert.ok(rules.indexOf("with nothing else") < rules.indexOf("Each reply is one step"));
+  // "The question only needed an explanation" read as leave to explain anything.
+  assert.match(rules, /a question about the site only needed an explanation/);
+  // The site's name is put in wherever it is used, exactly as its owner wrote it.
+  const named = buildSystemPrompt({ ...site, name: "Cash $& Carry" });
+  assert.match(named, /^You are Haptic, a guide built into Cash \$& Carry\./);
+  assert.match(named, /finding things on Cash \$& Carry\./);
+  assert.doesNotMatch(named, /\{site_name\}/);
+  assert.match(buildSystemPrompt({ ...site, name: "" }), /finding things on this website\./);
+});
+
 test("the question asked after the last step is worded as a closing one", () => {
   const at = new Date("2026-11-15T12:00:00Z");
   const closing = buildUserMessage({ ...request('The user clicked link "Billing".'), closing: true }, at);
