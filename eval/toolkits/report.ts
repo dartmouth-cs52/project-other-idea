@@ -36,6 +36,7 @@ interface Cell {
   typed: number;
   overlayExpected: number;
   overlayFound: number;
+  silent: number;
 }
 
 const heardTrue = (step: StepResult) => step.heard === "true";
@@ -43,7 +44,7 @@ const readRight = (step: StepResult) => step.readAt === "right" || step.readAt =
 const readChecked = (step: StepResult) => step.readAt !== "not checked" && step.readAt !== "nothing changed";
 
 function cellOf(results: DemoResult[]): Cell {
-  const cell: Cell = { demos: 0, expected: 0, found: 0, lines: 0, distinct: 0, unnamed: 0, pointed: 0, heard: 0, steps: 0, readChecked: 0, readRight: 0, overlays: 0, typed: 0, overlayExpected: 0, overlayFound: 0 };
+  const cell: Cell = { demos: 0, expected: 0, found: 0, lines: 0, distinct: 0, unnamed: 0, pointed: 0, heard: 0, steps: 0, readChecked: 0, readRight: 0, overlays: 0, typed: 0, overlayExpected: 0, overlayFound: 0, silent: 0 };
   for (const r of results) {
     if (!r.tested) continue;
     cell.demos++;
@@ -56,8 +57,13 @@ function cellOf(results: DemoResult[]): Cell {
     }
     for (const step of r.steps) {
       cell.steps++;
-      if (step.pointed) cell.pointed++;
-      if (step.pointed && heardTrue(step)) cell.heard++;
+      if (step.heard === "silent") {
+        cell.silent++;
+        continue;
+      }
+      // A pick made without a pointer, because the widget was waiting for it, is judged like a pointed one.
+      if (step.pointed || step.unpointed) cell.pointed++;
+      if ((step.pointed || step.unpointed) && heardTrue(step)) cell.heard++;
       if (readChecked(step)) cell.readChecked++;
       if (readChecked(step) && readRight(step)) cell.readRight++;
     }
@@ -81,7 +87,7 @@ function cellText(cell: Cell | undefined, results: DemoResult[]): string[] {
   return [
     ratio(cell.found, cell.expected),
     cell.lines ? `${cell.distinct}/${cell.lines}${cell.unnamed ? `, ${cell.unnamed} unnamed` : ""}` : "-",
-    `${ratio(cell.heard, cell.pointed)}${cell.steps > cell.pointed ? ` (${cell.steps - cell.pointed} not pointed)` : ""}`,
+    `${ratio(cell.heard, cell.pointed)}${cell.steps - cell.silent > cell.pointed ? ` (${cell.steps - cell.silent - cell.pointed} not pointed)` : ""}${cell.silent ? ` (${cell.silent} silent)` : ""}`,
     ratio(cell.readRight, cell.readChecked),
     cell.overlays ? `${ratio(cell.typed, cell.overlays)} typed, ${ratio(cell.overlayFound, cell.overlayExpected)} listed` : "",
     String(cell.demos),
@@ -117,7 +123,7 @@ export function table(run: RunResults, before?: RunResults): string {
 export const LEGEND = [
   "listed: controls the accessibility tree has in the demo and in what it opened, found in the widget's list.",
   "told apart: distinct lines among the controls listed in the demo (role, name, icon, state, surroundings, link), and how many have no name.",
-  "heard: steps where the widget asked its next question with a true sentence, of the steps where its pointer showed.",
+  "heard: steps where the widget asked its next question with a true sentence, of the steps where its pointer showed or the visitor picked in what had opened. Silent: a click into a field opened something and the widget, by design, waited for the pick.",
   "read in time: steps whose next list showed the page as it was once it stopped changing, of the steps where the list changed.",
   "inside overlays: whether a question could be typed into Haptic's box with the overlay open, and the overlay's controls in that list.",
 ].join("\n");
@@ -144,10 +150,14 @@ export function faults(run: RunResults): string {
     if (!r.tested) continue;
     for (const m of r.listed?.missing ?? []) add(`missing ${m.role} ${m.reason}`, `A ${m.role} the accessibility tree has is not listed (${m.reason})`, r, `${m.role} "${m.name}" ${m.markup}`);
     for (const u of r.listed?.unnamed ?? []) add(`unnamed ${u.line.split(" ")[0]}`, `A ${u.line.split(" ")[0]} is listed with no name${u.treeName ? " though the tree names it" : ""}`, r, `${u.line}${u.treeName ? ` (tree: "${u.treeName}")` : ""} ${u.markup}`);
-    for (const d of r.listed?.duplicates ?? []) add(`same line ${d.line.split(" ")[0]}`, `${d.line.split(" ")[0]} controls listed with the same whole line`, r, `${d.count} x ${d.line} ${d.markup}`);
+    for (const d of r.listed?.duplicates ?? []) {
+      const shared = d.treeSame ? " (the accessibility tree names them alike too)" : " (the accessibility tree tells them apart)";
+      add(`same line ${d.line.split(" ")[0]} ${d.treeSame}`, `${d.line.split(" ")[0]} controls listed with the same whole line${shared}`, r, `${d.count} x ${d.line} ${d.markup}`);
+    }
     for (const step of r.steps) {
       if (!step.listed) add(`step not listed`, "A control a step uses could not be pointed at", r, `${step.action}: ${step.why ?? ""}`);
-      else if (step.pointed && step.heard !== "true") add(`heard ${step.heard}`, `After the visitor used the control, the widget's next question was ${step.heard === "none" ? "never asked" : `"${step.heard}"`}`, r, `${step.action}: ${step.event ?? "(no question)"}${step.why ? ` (${step.why})` : ""}`);
+      else if (step.heard === "silent") add("silent", "After a click into a field opened a list or calendar, the widget asked nothing more until the pick (it waits for typing or a pick)", r, step.action);
+      else if ((step.pointed || step.unpointed) && step.heard !== "true") add(`heard ${step.heard}`, `After the visitor used the control, the widget's next question was ${step.heard === "none" ? "never asked" : `"${step.heard}"`}`, r, `${step.action}: ${step.event ?? "(no question)"}${step.why ? ` (${step.why})` : ""}`);
       if (step.readAt === "early" || step.readAt === "stale") add(`read ${step.readAt}`, `The list sent after an action was read ${step.readAt === "stale" ? "before the page changed" : "while the page was still changing"}`, r, `${step.action}: missing ${step.missingAfter.join(", ") || "nothing"}; still listed ${step.staleAfter.join(", ") || "nothing"}`);
       if (step.coveredByHaptic) add("covered by haptic", "Haptic's own caption or button sat on the control a visitor had to click", r, step.action);
       if (step.openedUnderHaptic?.length) add("opened under haptic", "Haptic's caption sat on top of controls the action opened, while the widget waited for its next answer", r, `${step.action}: ${step.openedUnderHaptic.length} of ${step.opened} covered (${step.openedUnderHaptic.slice(0, 3).join(", ")})`);

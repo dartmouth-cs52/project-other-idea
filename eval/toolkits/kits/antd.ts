@@ -22,7 +22,7 @@ const kit: Kit = {
       path: "/~demos/select-demo-basic",
       demo: "select-demo-basic",
       overlay: true,
-      steps: [{ click: { role: "combobox", nth: 0 } }, { click: { role: "option", name: "Jack", where: "page" } }],
+      steps: [{ click: { role: "combobox", nth: 0 } }, { click: { text: "Jack", where: "page" } }],
     },
     {
       kind: "combobox",
@@ -30,7 +30,7 @@ const kit: Kit = {
       demo: "auto-complete-demo-basic",
       overlay: true,
       // The demo offers what was typed, repeated: "ab" offers "ab", "abab" and "ababab".
-      steps: [{ type: { role: "combobox", nth: 0 }, text: "ab" }, { click: { role: "option", name: "abab", exact: true, where: "page" } }],
+      steps: [{ type: { role: "combobox", nth: 0 }, text: "ab" }, { click: { text: "abab", where: "page" } }],
     },
     {
       kind: "multi-select",
@@ -39,8 +39,8 @@ const kit: Kit = {
       overlay: true,
       steps: [
         { click: { role: "combobox", nth: 0 } },
-        { click: { role: "option", name: "b11", exact: true, where: "page" } },
-        { click: { role: "option", name: "d13", exact: true, where: "page" } },
+        { click: { text: "b11", where: "page" } },
+        { click: { text: "d13", where: "page" } },
       ],
     },
     { kind: "checkbox", path: "/~demos/checkbox-demo-basic", demo: "checkbox-demo-basic", steps: [{ click: { role: "checkbox", name: "Checkbox" } }] },

@@ -107,6 +107,14 @@ export interface Missing {
   markup: string;
 }
 
+export interface Duplicate {
+  line: string;
+  count: number;
+  markup: string;
+  /** The accessibility tree gives them the same names too, so the page itself does not tell them apart. */
+  treeSame: boolean;
+}
+
 export interface ListedResult {
   /** Controls a visitor could use in the demo, by the accessibility tree. */
   expected: number;
@@ -116,7 +124,7 @@ export interface ListedResult {
   /** Listed controls with no name and no icon: what the model is told is just "button". */
   unnamed: { line: string; treeName: string; markup: string }[];
   /** Groups of listed controls whose whole line is the same. */
-  duplicates: { line: string; count: number; markup: string }[];
+  duplicates: Duplicate[];
   /** Listed controls in the demo, and how many distinct lines they make. */
   lines: number;
   distinct: number;
@@ -124,7 +132,11 @@ export interface ListedResult {
   matchedSent: boolean;
 }
 
-export type Heard = "true" | "wrong" | "unclear" | "none" | "not pointed" | "blocked";
+/**
+ * "silent": the action opened something and the widget asked nothing, waiting
+ * for a pick in it. Not counted as heard or unheard: the pick that follows is.
+ */
+export type Heard = "true" | "wrong" | "unclear" | "none" | "not pointed" | "blocked" | "silent";
 export type ReadAt = "right" | "right on asking again" | "early" | "stale" | "nothing changed" | "not checked";
 
 export interface StepResult {
@@ -134,6 +146,8 @@ export interface StepResult {
   listed: boolean;
   /** The pointer went to that control. */
   pointed: boolean;
+  /** The visitor used it without a pointer, because the widget was waiting for a pick in what the last step opened. */
+  unpointed?: boolean;
   heard: Heard;
   event?: string;
   /** Why the sentence was judged as it was, when it was not plainly true. */

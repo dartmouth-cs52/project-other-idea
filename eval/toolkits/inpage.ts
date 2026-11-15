@@ -79,16 +79,32 @@ function deepHit(x: number, y: number): Element | null {
   return hit;
 }
 
-/** The part of an element's box that is not clipped away by a scrolling or clipping box around it. */
+/** Whether a box is where descendants with this position are laid out from, which is what makes it clip them. */
+function holds(box: CSSStyleDeclaration, position: string): boolean {
+  const makesBlock = box.transform !== "none" || box.filter !== "none" || /paint|layout|strict|content/.test(box.contain) || box.willChange.includes("transform");
+  if (position === "fixed") return makesBlock;
+  if (position === "absolute") return box.position !== "static" || makesBlock;
+  return true;
+}
+
+/**
+ * The part of an element's box that is not clipped away by a scrolling or
+ * clipping box around it. A box positioned out of the flow is clipped only by
+ * the boxes it is laid out from, so a popup put in a box of no height at the
+ * end of the page is still seen.
+ */
 function visibleRect(el: Element): DOMRect | undefined {
   const rect = el.getBoundingClientRect();
   let left = rect.left;
   let top = rect.top;
   let right = rect.right;
   let bottom = rect.bottom;
+  let position = getComputedStyle(el).position;
   let node: Element | null = el.parentElement;
-  for (let depth = 0; node && depth < 40; depth++, node = node.parentElement) {
+  for (let depth = 0; node && depth < 60; depth++, node = node.parentElement) {
     const style = getComputedStyle(node);
+    if (!holds(style, position)) continue;
+    if (style.position !== "static" || position === "fixed") position = style.position === "static" ? "relative" : style.position;
     if (style.overflowX === "visible" && style.overflowY === "visible") continue;
     const clip = node.getBoundingClientRect();
     if (style.overflowX !== "visible") {
@@ -131,16 +147,29 @@ function markup(el: Element | undefined, max = 360): string {
 
 /** Nodes put into the page since the demo was first read. Only observed: nothing on the page is changed. */
 const added = new WeakSet<Node>();
+/** The same, in order, kept only to tell whether anything new is on screen. */
+let addedList: Element[] = [];
 let watching: MutationObserver | undefined;
 
 const toolkit = {
   /** Starts noting what the page adds from now on, so that what a control opens can be told from what was there. */
   watchAdded() {
     watching?.disconnect();
+    addedList = [];
     watching = new MutationObserver((records) => {
-      for (const record of records) for (const node of record.addedNodes) added.add(node);
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          added.add(node);
+          if (node instanceof Element && addedList.length < 5000) addedList.push(node);
+        }
+      }
     });
     watching.observe(document.documentElement, { subtree: true, childList: true });
+  },
+
+  /** How many boxes put into the page since the watch began are on screen now, Haptic's own aside. */
+  addedShown() {
+    return addedList.filter((el) => el.isConnected && !isHaptic(el) && el.getClientRects().length > 0 && !!visibleRect(el)).length;
   },
 
   /** Whether the element, or a box around it, was put into the page since the watch began. */

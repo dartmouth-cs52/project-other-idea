@@ -245,11 +245,12 @@ async function act(session: Session, action: Action, handle: number): Promise<Ai
  * the control they used, says what they did with it, and does not say they
  * went somewhere else.
  */
-export function judgeEvent(event: string | undefined, action: Action, used: SnapElement): { heard: Heard; why?: string } {
+export function judgeEvent(event: string | undefined, action: Action, used: SnapElement | undefined, words?: string): { heard: Heard; why?: string } {
   if (!event) return { heard: "unclear", why: "the widget asked again without saying what the visitor did" };
   if (/instead of|without using|something else/i.test(event)) return { heard: "wrong", why: "it says the visitor did not use the control they used" };
-  const named = describeElement(used);
-  if (!event.includes(named) && !(used.label && event.includes(`"${used.label}"`))) return { heard: "unclear", why: `the sentence does not name ${named}` };
+  const named = used ? describeElement(used) : `"${words ?? ""}"`;
+  const mentions = (used && (event.includes(named) || (used.label && event.includes(`"${used.label}"`)))) || (words && event.includes(words));
+  if (!mentions) return { heard: "unclear", why: `the sentence does not name ${named}` };
   const verbs =
     "type" in action ? /filled|typed|entered|wrote/i : "drag" in action ? /filled|moved|set|changed|dragged|slid|clicked/i : "click" in action ? /clicked|chose|picked|selected|pressed|opened|checked|ticked|toggled/i : /./;
   if (!verbs.test(event)) return { heard: "unclear", why: "the sentence names the control but not what was done with it" };
@@ -286,7 +287,9 @@ async function judgeListed(session: Session, state: PageState, expected: Shown[]
   for (const element of listed) groups.set(lineOf(element), [...(groups.get(lineOf(element)) ?? []), element]);
   const duplicates: ListedResult["duplicates"] = [];
   for (const [line, group] of groups) {
-    if (group.length > 1) duplicates.push({ line, count: group.length, markup: await session.call<string>("markup", state.reading.ids[group[0]!.id]!) });
+    if (group.length < 2) continue;
+    const treeSame = new Set(group.map((element) => treeName.get(element.id) ?? "")).size === 1;
+    duplicates.push({ line, count: group.length, treeSame, markup: await session.call<string>("markup", state.reading.ids[group[0]!.id]!) });
   }
   return {
     expected: expected.length,
@@ -410,17 +413,21 @@ export async function runDemo(context: Context, bundles: Bundles, kit: Kit, demo
     // Every control seen so far, by element and by role and name. The page coming back from behind a
     // modal has not "opened", and neither has a control the demo drew again.
     const seen = new Set<number | string>(state.controls.map((c) => c.handle));
-    for (const c of state.controls) seen.add(`${c.role}|${c.name}`);
+    for (const c of state.controls) if (c.inDemo) seen.add(`${c.role}|${c.name}`);
     // Controls that were not there when the demo was first read: what the steps opened.
     const appeared = new Set<number>();
-    for (const action of demo.steps) {
-      const step = await runStep(session, box, chrome, seen, appeared, action, turn, state, result, log);
+    let waiting: Turn | undefined = turn;
+    for (const [i, action] of demo.steps.entries()) {
+      const step = await runStep(session, box, chrome, seen, appeared, action, waiting, state, result, log, i === demo.steps.length - 1);
       result.steps.push(step.result);
-      if (!step.next) break;
-      turn = step.next.turn;
+      if (!step.next) {
+        waiting = undefined;
+        break;
+      }
+      waiting = step.next.turn;
       state = step.next.state;
     }
-    turn?.answer({ target: null, status: "done", say: "That is all." });
+    waiting?.answer({ target: null, status: "done", say: "That is all." });
   } catch (error) {
     result.notes.push(`The run stopped with an error in the test: ${error instanceof Error ? error.message.split("\n")[0] : error}`);
   } finally {
@@ -433,9 +440,44 @@ export async function runDemo(context: Context, bundles: Bundles, kit: Kit, demo
 
 interface StepOutcome {
   result: StepResult;
-  next?: { turn: NonNullable<Awaited<ReturnType<Session["turns"]["next"]>>>; state: PageState };
+  /** What the next step starts from. With no turn, the widget asked nothing and waits for the visitor. */
+  next?: { turn?: Turn; state: PageState };
 }
 
+type Turn = NonNullable<Awaited<ReturnType<Session["turns"]["next"]>>>;
+
+/**
+ * Judges what an action opened like the demo itself: is it listed, can its
+ * controls be told apart, and is Haptic's caption on top of any of them.
+ * Returns the controls it opened.
+ */
+async function judgeOpened(session: Session, chrome: Set<number>, seen: Set<number | string>, appeared: Set<number>, after: PageState, result: StepResult, demoResult: DemoResult, sent?: Snapshot) {
+  // What the action opened may be put at the end of the page or inside the demo itself.
+  // Inside the demo, a control with the role and name of one seen before is that control drawn again.
+  const opened = after.controls.filter((c) => !seen.has(c.handle) && !(c.inDemo && seen.has(`${c.role}|${c.name}`)) && !chrome.has(c.handle));
+  for (const c of after.controls) {
+    if (!seen.has(c.handle)) appeared.add(c.handle);
+    seen.add(c.handle);
+  }
+  for (const c of opened) if (c.inDemo) seen.add(`${c.role}|${c.name}`);
+  if (!opened.length) return opened;
+  result.opened = opened.length;
+  const under = await session.call<boolean[]>("underHaptic", opened.map((c) => c.handle));
+  const covered = opened.filter((_, i) => under[i]).map((c) => `${c.role} "${c.name}"`);
+  if (covered.length) result.openedUnderHaptic = covered;
+  const openedHandles = new Set(opened.map((c) => c.handle));
+  const openedIds = Object.keys(after.reading.ids).filter((key) => openedHandles.has(after.reading.ids[key]!));
+  const openedListed = await judgeListed(session, after, opened, openedIds, sent ?? after.reading.snapshot);
+  demoResult.listed = demoResult.listed ? merge(demoResult.listed, openedListed, `opened by: ${result.action}`) : openedListed;
+  return opened;
+}
+
+/**
+ * One step. With a question waiting, the scripted answer points at the
+ * control and the visitor uses it. With none, because the widget waits for a
+ * pick in what the last step opened, the visitor picks without a pointer, as
+ * a person who can see the list would.
+ */
 async function runStep(
   session: Session,
   box: Locator,
@@ -443,59 +485,79 @@ async function runStep(
   seen: Set<number | string>,
   appeared: Set<number>,
   action: Action,
-  turn: NonNullable<Awaited<ReturnType<Session["turns"]["next"]>>>,
+  turn: Turn | undefined,
   before: PageState,
   demoResult: DemoResult,
   log: Log,
+  last: boolean,
 ): Promise<StepOutcome> {
   const result: StepResult = { action: describeAction(action), line: "", listed: false, pointed: false, heard: "not pointed", readAt: "not checked", missingAfter: [], staleAfter: [], asked: 0 };
   const target = targetOf(action);
   const handle = await find(session, box, target, appeared);
   if (handle === undefined) {
     result.why = target.where === "page" ? "the control was not found in what the last step opened" : "the control was not found in the demo";
-    turn.answer({ target: null, status: "done", say: "Stopping here." });
+    turn?.answer({ target: null, status: "done", say: "Stopping here." });
     return { result };
   }
 
-  // Point at it, answering again each time the widget asks again about the same page.
-  let id: string | undefined;
-  let pointed: Awaited<ReturnType<typeof waitForPointer>> = "none";
-  for (let asks = 0; asks < MAX_ASKS; asks++) {
-    id = await idInSent(session, handle, before, turn.request.snapshot);
-    if (!id) {
-      // A model cannot point at what it was not shown.
-      turn.answer({ target: null, status: "continue", say: "Use the control." });
-      const again = await session.turns.next(4000);
-      if (!again) break;
-      turn = again;
+  let used: SnapElement | undefined;
+  if (turn) {
+    // Point at it, answering again each time the widget asks again about the same page.
+    let id: string | undefined;
+    let pointed: Awaited<ReturnType<typeof waitForPointer>> = "none";
+    for (let asks = 0; asks < MAX_ASKS; asks++) {
+      id = await idInSent(session, handle, before, turn.request.snapshot);
+      if (!id) {
+        // A model cannot point at what it was not shown.
+        turn.answer({ target: null, status: "continue", say: "Use the control." });
+        const again = await session.turns.next(4000);
+        if (!again) break;
+        turn = again;
+        before = await read(session);
+        continue;
+      }
+      used = turn.request.snapshot.elements.find((element) => element.id === id)!;
+      result.line = lineOf(used);
+      result.listed = true;
+      turn.answer({ target: id, status: "continue", say: `Use ${describeElement(used)}.` });
+      pointed = await waitForPointer(session, handle);
+      if (pointed !== "asked again") break;
+      turn = (await session.turns.next(1000))!;
       before = await read(session);
-      continue;
     }
-    const used = turn.request.snapshot.elements.find((element) => element.id === id)!;
-    result.line = lineOf(used);
-    result.listed = true;
-    turn.answer({ target: id, status: "continue", say: `Use ${describeElement(used)}.` });
-    pointed = await waitForPointer(session, handle);
-    if (pointed !== "asked again") break;
-    turn = (await session.turns.next(1000))!;
-    before = await read(session);
+    if (!id || !used) {
+      result.why = "the widget did not list the control, so the scripted model could not point at it";
+      log(`    ${result.action}: not listed`);
+      return { result };
+    }
+    result.pointed = pointed === "pointed";
+    if (pointed !== "pointed") demoResult.notes.push(`${result.action}: the pointer ${pointed === "elsewhere" ? "went to another element" : "never showed"}.`);
+    await session.page.waitForTimeout(VISITOR_PAUSE_MS);
+  } else {
+    result.unpointed = true;
+    const [id] = await session.call<(string | undefined)[]>("relate", [handle], before.reading.ids);
+    used = id ? before.reading.snapshot.elements.find((element) => element.id === id) : undefined;
+    result.listed = !!used;
+    result.line = used ? lineOf(used) : "";
   }
-  if (!id) {
-    result.why = "the widget did not list the control, so the scripted model could not point at it";
-    log(`    ${result.action}: not listed`);
-    return { result };
-  }
-  const used = turn.request.snapshot.elements.find((element) => element.id === id)!;
-  result.pointed = pointed === "pointed";
-  if (pointed !== "pointed") demoResult.notes.push(`${result.action}: the pointer ${pointed === "elsewhere" ? "went to another element" : "never showed"}.`);
-  await session.page.waitForTimeout(VISITOR_PAUSE_MS);
 
+  const addedBefore = await session.call<number>("addedShown");
   const aim = await act(session, action, handle);
   if (aim.coveredByHaptic) result.coveredByHaptic = true;
   if (aim.blocker) demoResult.notes.push(`${result.action}: something was in front of the control (${aim.blocker}).`);
 
   let next = await session.turns.next(NEXT_QUESTION_MS);
   if (!next) {
+    const after = await read(session);
+    const opened = await judgeOpened(session, chrome, seen, appeared, after, result, demoResult);
+    const addedNow = await session.call<number>("addedShown");
+    if (!last && (opened.length || addedNow > addedBefore)) {
+      // The widget waits for a pick in what opened. The visitor makes it without a new pointer.
+      result.heard = "silent";
+      result.why = "the widget asked nothing after this opened something; the visitor went on to pick in it";
+      log(`    ${result.action}: silent, the visitor goes on`);
+      return { result, next: { state: after } };
+    }
     result.heard = aim.blocker && aim.coveredByHaptic ? "blocked" : "none";
     result.why = result.heard === "blocked" ? "Haptic's caption covered the control" : "the widget never asked its next question";
     log(`    ${result.action}: ${result.heard}`);
@@ -503,7 +565,7 @@ async function runStep(
   }
   result.asked = 1;
   result.event = next.request.event;
-  const judged = judgeEvent(next.request.event, action, used);
+  const judged = judgeEvent(next.request.event, action, used, targetWords(target));
   result.heard = judged.heard;
   if (judged.why) result.why = judged.why;
 
@@ -512,28 +574,9 @@ async function runStep(
   let after = await read(session);
   const firstSent = next.request.snapshot;
   await shoot(session, `${demoResult.kit}-${demoResult.demo}-${demoResult.steps.length + 1}`, firstSent);
-
   if (firstSent.dialog !== undefined) result.dialog = firstSent.dialog;
-
-  // Anything the action opened is judged like the demo itself: is it listed, and can its controls be told apart.
-  // What the action opened may be put at the end of the page or inside the demo itself.
-  const opened = after.controls.filter((c) => !seen.has(c.handle) && !seen.has(`${c.role}|${c.name}`) && !chrome.has(c.handle));
-  for (const c of after.controls) {
-    if (!seen.has(c.handle)) appeared.add(c.handle);
-    seen.add(c.handle);
-  }
-  for (const c of opened) seen.add(`${c.role}|${c.name}`);
+  await judgeOpened(session, chrome, seen, appeared, after, result, demoResult, firstSent);
   judgeReadAt(result, before, firstSent, after, chrome, appeared);
-  if (opened.length) {
-    result.opened = opened.length;
-    const under = await session.call<boolean[]>("underHaptic", opened.map((c) => c.handle));
-    const covered = opened.filter((_, i) => under[i]).map((c) => `${c.role} "${c.name}"`);
-    if (covered.length) result.openedUnderHaptic = covered;
-    const openedHandles = new Set(opened.map((c) => c.handle));
-    const openedIds = Object.keys(after.reading.ids).filter((key) => openedHandles.has(after.reading.ids[key]!));
-    const openedListed = await judgeListed(session, after, opened, openedIds, firstSent);
-    demoResult.listed = demoResult.listed ? merge(demoResult.listed, openedListed, `opened by: ${result.action}`) : openedListed;
-  }
   log(`    ${result.action}: heard ${result.heard}${result.why ? ` (${result.why})` : ""}; read ${result.readAt}`);
 
   // The page has stopped changing, but the widget may have asked again on its own: the last question is the one to answer.
@@ -543,6 +586,12 @@ async function runStep(
     after = await read(session);
   }
   return { result, next: { turn: next, state: after } };
+}
+
+/** The words a step's target was described by, which a sentence about it may use when the list had no name for it. */
+function targetWords(target: Target): string | undefined {
+  const words = target.text ?? target.name;
+  return typeof words === "string" ? words : undefined;
 }
 
 /**
@@ -587,11 +636,12 @@ async function overlayCheck(context: Context, bundles: Bundles, kit: Kit, demo: 
     if (!(await target.count())) return { ...result, why: "the control that opens it was not found" };
     const before = await session.axControls();
     const beforeHandles = new Set<number | string>(before.map((c) => c.handle));
-    for (const c of before) beforeHandles.add(`${c.role}|${c.name}`);
+    const beforeWhere = await session.call<Where[]>("where", before.map((c) => c.handle));
+    before.forEach((c, i) => beforeWhere[i]?.inDemo && beforeHandles.add(`${c.role}|${c.name}`));
     await act(session, first, await session.handleOf(target));
     await session.page.waitForTimeout(1200);
     const openState = await read(session);
-    const overlay = openState.controls.filter((c) => !beforeHandles.has(c.handle) && !beforeHandles.has(`${c.role}|${c.name}`));
+    const overlay = openState.controls.filter((c) => !beforeHandles.has(c.handle) && !(c.inDemo && beforeHandles.has(`${c.role}|${c.name}`)));
     result.opened = overlay.length > 0;
     if (!result.opened) return { ...result, why: "nothing new opened" };
 
