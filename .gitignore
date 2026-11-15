@@ -8,3 +8,6 @@ dist/
 data/
 # Benchmark runs. The cases in eval/cases are kept; each run's numbers are not.
 eval/results/
+# Wrangler's local state.
+.wrangler/
+.dev.vars
