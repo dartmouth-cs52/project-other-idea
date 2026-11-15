@@ -24,11 +24,16 @@ import { TLDS } from "./tlds.ts";
 //   do (tlds.ts), and a number only counts when the sentence says to call it
 //   or it is written the way a phone number is.
 //
+// One more kind of sentence is dropped, though it names no place to go: one
+// that asks the visitor to send someone a password, a code or their card
+// details. A guide has no reason to say that. "Type your password" into the
+// product's own field is a different thing and is left alone.
+//
 // It errs toward dropping. A dropped sentence costs the visitor some words,
 // and the pointer still shows where to go. It is not a proof: someone
 // determined will find a spelling this misses.
 
-export type Rule = "markup" | "link" | "email" | "phone" | "contact" | "length";
+export type Rule = "markup" | "link" | "email" | "phone" | "contact" | "secret" | "length";
 
 export interface Checked {
   /** What is left to show. Empty when no sentence survived. */
@@ -157,12 +162,27 @@ function hasPhone(folded: string): boolean {
   return digits >= 6 || (digits >= 3 && WORD_NUMBER.test(folded));
 }
 
+// Secrets -------------------------------------------------------------------
+
+const SECRETS = "password|passcode|passphrase|pin|login|log-in|credentials|verification code|security code|one-time code|code|card number|card details|cvv|cvc|api key|secret key|recovery (?:code|phrase)|seed phrase";
+/**
+ * A sentence that tells the visitor to hand a secret to someone: "email your
+ * password to the admin", "tell us your code". It needs a word for passing
+ * something on, then "your", then the secret, so a button called "Send code"
+ * and a step like "Type your password" are not touched.
+ */
+const HAND_OVER = new RegExp(
+  `\\b(?:send|e-?mail|mail|share|tell|give|text|message|forward|post|dm|read out|reply with|provide)\\b[^.!?]{0,40}\\b(?:your|their)\\s+(?:\\w+\\s+){0,2}(?:${SECRETS})\\b`,
+  "i",
+);
+
 function ruleBrokenBy(sentence: string): Rule | undefined {
   for (const folded of new Set([fold(sentence, "removed"), fold(sentence, "opened")])) {
     if (EMAIL.test(folded)) return "email";
     if (hasAddress(folded)) return "link";
     if (hasPhone(folded)) return "phone";
     if (MESSAGING.test(folded) && HANDLE.test(folded)) return "contact";
+    if (HAND_OVER.test(folded)) return "secret";
   }
   return undefined;
 }
