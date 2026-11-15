@@ -1,0 +1,90 @@
+# Runs the benchmark in eval/ against real models and prints the table.
+#
+# It is started by hand from the Actions tab and never runs on its own, because
+# every call is billed. It signs in to the Claude API with workload identity
+# federation: GitHub vouches for this run, and no API key is stored anywhere.
+#
+# It needs three repository variables, under Settings, Secrets and variables,
+# Actions, Variables. They are IDs, not secrets:
+#   ANTHROPIC_FEDERATION_RULE_ID   the federation rule, fdrl_...
+#   ANTHROPIC_SERVICE_ACCOUNT_ID   the service account the rule acts as, svac_...
+#   ANTHROPIC_ORGANIZATION_ID      from platform.claude.com/settings/organization
+#   ANTHROPIC_WORKSPACE_ID         only if the rule covers more than one workspace
+#
+# The rule trusts runs from main only, so start this workflow on main.
+
+name: Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: "Models to compare, comma-separated. After @: low, medium or high effort, and off for no thinking."
+        default: "claude-opus-5-5,claude-sonnet-5-5@off,claude-haiku-5-5@off"
+      repeat:
+        description: "Times to ask each case. More gives steadier timings and costs more."
+        default: "1"
+
+# Lets the run ask GitHub for the token that proves which repository and branch it is.
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  benchmark:
+    name: Run the benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+      ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+      ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+      ANTHROPIC_IDENTITY_TOKEN_FILE: /tmp/github-identity-token
+      WORKSPACE: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+      MODELS: ${{ inputs.models }}
+      REPEAT: ${{ inputs.repeat }}
+    steps:
+      - name: Check the federation variables are set
+        run: |
+          if [ -z "$ANTHROPIC_FEDERATION_RULE_ID" ] || [ -z "$ANTHROPIC_SERVICE_ACCOUNT_ID" ] || [ -z "$ANTHROPIC_ORGANIZATION_ID" ]; then
+            echo "::error::Add ANTHROPIC_FEDERATION_RULE_ID, ANTHROPIC_SERVICE_ACCOUNT_ID and ANTHROPIC_ORGANIZATION_ID under Settings, Secrets and variables, Actions, Variables."
+            exit 1
+          fi
+          # Only passed on when it is set: an empty workspace would be sent as one.
+          if [ -n "$WORKSPACE" ]; then echo "ANTHROPIC_WORKSPACE_ID=$WORKSPACE" >> "$GITHUB_ENV"; fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # GitHub's token lasts about five minutes and can be used once, and a run
+      # can outlast the access it buys. So a fresh one is fetched every three
+      # minutes, and the SDK reads the file again whenever it has to renew.
+      - name: Keep a fresh identity token on disk
+        run: |
+          fetch() {
+            curl -sS --fail -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" \
+              | jq -r .value > "$ANTHROPIC_IDENTITY_TOKEN_FILE.new" \
+              && mv "$ANTHROPIC_IDENTITY_TOKEN_FILE.new" "$ANTHROPIC_IDENTITY_TOKEN_FILE"
+          }
+          fetch
+          (while sleep 180; do fetch; done) &
+
+      - name: Run the benchmark
+        run: |
+          npm run -s eval -- --models "$MODELS" --repeat "$REPEAT" --yes | tee benchmark.txt
+          { echo '```'; cat benchmark.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep every answer
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: eval/results/
+          if-no-files-found: ignore
