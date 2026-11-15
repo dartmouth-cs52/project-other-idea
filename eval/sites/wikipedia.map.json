@@ -1,0 +1,751 @@
+{
+  "version": 1,
+  "id": "site_bench_wikipedia",
+  "name": "Wikipedia",
+  "origin": "https://en.wikipedia.org",
+  "allowedOrigins": [
+    "https://en.wikipedia.org"
+  ],
+  "appearance": {
+    "accent": "#1E6EF4",
+    "position": "bottom-right",
+    "launcherLabel": "Ask"
+  },
+  "notes": "",
+  "docs": [],
+  "pages": [
+    {
+      "path": "/w/index.php?title=Haptic_technology&action=history",
+      "title": "Haptic technology: Revision history - Wikipedia",
+      "headings": [
+        "Haptic technology: Revision history",
+        "20 September 2026",
+        "13 September 2026",
+        "2 September 2026",
+        "23 August 2026",
+        "19 August 2026",
+        "27 July 2026",
+        "7 July 2026"
+      ],
+      "links": [
+        {
+          "label": "Create account",
+          "to": "/w/index.php?title=Special:CreateAccount"
+        },
+        {
+          "label": "Log in",
+          "to": "/w/index.php?title=Special:UserLogin"
+        },
+        {
+          "label": "Article",
+          "to": "/wiki/Haptic_technology"
+        },
+        {
+          "label": "Read",
+          "to": "/wiki/Haptic_technology"
+        },
+        {
+          "label": "View logs for this page",
+          "to": "/w/index.php?title=Special:Log"
+        },
+        {
+          "label": "view filter log",
+          "to": "/w/index.php?title=Special:AbuseLog"
+        },
+        {
+          "label": "Help:Page history",
+          "to": "/wiki/Help:Page_history"
+        },
+        {
+          "label": "Help:Edit summary",
+          "to": "/wiki/Help:Edit_summary"
+        },
+        {
+          "label": "minor edit",
+          "to": "/wiki/Help:Minor_edit"
+        },
+        {
+          "label": "section edit",
+          "to": "/wiki/Help:Section"
+        },
+        {
+          "label": "automatic edit summary",
+          "to": "/wiki/Help:Automatic_edit_summaries"
+        },
+        {
+          "label": "prev",
+          "to": "/w/index.php?title=Haptic_technology&diff=prev"
+        },
+        {
+          "label": "19:55, 20 September 2026",
+          "to": "/w/index.php?title=Haptic_technology"
+        },
+        {
+          "label": "Quivico",
+          "to": "/w/index.php?title=User:Quivico&action=edit"
+        },
+        {
+          "label": "About Wikipedia",
+          "to": "/wiki/Wikipedia:About"
+        },
+        {
+          "label": "Disclaimers",
+          "to": "/wiki/Wikipedia:General_disclaimer"
+        },
+        {
+          "label": "Contact Wikipedia",
+          "to": "/wiki/Wikipedia:Contact_us"
+        }
+      ],
+      "buttons": [
+        "Jump to content",
+        "Main menu",
+        "Search",
+        "View history",
+        "Tools",
+        "Hide Appearance",
+        "Filter revisions show hide",
+        "oldest",
+        "older 50",
+        "Compare selected revisions",
+        "Mobile view"
+      ],
+      "fields": [
+        "Search Wikipedia",
+        "Small",
+        "Standard",
+        "Large",
+        "Wide",
+        "Automatic",
+        "Light",
+        "Dark",
+        "diff",
+        "oldid"
+      ]
+    },
+    {
+      "path": "/wiki/Haptic_technology",
+      "title": "Haptic technology - Wikipedia",
+      "headings": [
+        "Contents",
+        "Haptic technology",
+        "History",
+        "Types of mechanical touch sensing",
+        "Implementation",
+        "Controller rumble",
+        "Force feedback",
+        "Air vortex rings"
+      ],
+      "links": [
+        {
+          "label": "Create account",
+          "to": "/w/index.php?title=Special:CreateAccount"
+        },
+        {
+          "label": "Log in",
+          "to": "/w/index.php?title=Special:UserLogin"
+        },
+        {
+          "label": "Talk",
+          "to": "/wiki/Talk:Haptic_technology"
+        },
+        {
+          "label": "Edit",
+          "to": "/w/index.php?title=Haptic_technology&action=edit"
+        },
+        {
+          "label": "View history",
+          "to": "/w/index.php?title=Haptic_technology&action=history"
+        },
+        {
+          "label": "Tactile technology",
+          "to": "/wiki/Tactile_technology"
+        },
+        {
+          "label": "touch",
+          "to": "/wiki/Somatosensory_system"
+        },
+        {
+          "label": "computer simulation",
+          "to": "/wiki/Computer_simulation"
+        },
+        {
+          "label": "telerobotics",
+          "to": "/wiki/Telerobotics"
+        },
+        {
+          "label": "tactile sensors",
+          "to": "/wiki/Tactile_sensor"
+        },
+        {
+          "label": "Ancient Greek",
+          "to": "/wiki/Ancient_Greek_language"
+        },
+        {
+          "label": "game controllers",
+          "to": "/wiki/Game_controller"
+        },
+        {
+          "label": "joysticks",
+          "to": "/wiki/Joystick"
+        },
+        {
+          "label": "steering wheels",
+          "to": "/wiki/Steering_wheel"
+        },
+        {
+          "label": "sensory systems",
+          "to": "/wiki/Somatosensory_system"
+        },
+        {
+          "label": "Creative Commons Attribution-ShareAlike 4.0 Licen…",
+          "to": "/wiki/Wikipedia:Text_of_the_Creative_Commons_Attribution-ShareAlike_4.0_International_License"
+        },
+        {
+          "label": "About Wikipedia",
+          "to": "/wiki/Wikipedia:About"
+        },
+        {
+          "label": "Disclaimers",
+          "to": "/wiki/Wikipedia:General_disclaimer"
+        },
+        {
+          "label": "Contact Wikipedia",
+          "to": "/wiki/Wikipedia:Contact_us"
+        },
+        {
+          "label": "Mobile view",
+          "to": "/w/index.php?title=Haptic_technology&mobileaction=toggle_view_mobile"
+        }
+      ],
+      "buttons": [
+        "Jump to content",
+        "Main menu",
+        "Search",
+        "Hide Contents",
+        "(Top)",
+        "1 History",
+        "2 Types of mechanical touch sensing",
+        "3 Implementation",
+        "Toggle Implementation subsection",
+        "4 Applications",
+        "Toggle Applications subsection",
+        "5 See also",
+        "6 References",
+        "7 Further reading",
+        "8 External links",
+        "23 languages",
+        "Article",
+        "Read",
+        "Save",
+        "Tools"
+      ],
+      "fields": [
+        "Search Wikipedia",
+        "Small",
+        "Standard",
+        "Large",
+        "Wide",
+        "Automatic",
+        "Light",
+        "Dark"
+      ]
+    },
+    {
+      "path": "/wiki/Main_Page",
+      "title": "Wikipedia, the free encyclopedia",
+      "headings": [
+        "Welcome to Wikipedia",
+        "From today's featured article",
+        "Did you know ...",
+        "Help us improve this article!",
+        "In the news",
+        "On this day",
+        "Today's featured picture",
+        "Other areas of Wikipedia"
+      ],
+      "links": [
+        {
+          "label": "Create account",
+          "to": "/w/index.php?title=Special:CreateAccount"
+        },
+        {
+          "label": "Log in",
+          "to": "/w/index.php?title=Special:UserLogin"
+        },
+        {
+          "label": "Talk",
+          "to": "/wiki/Talk:Main_Page"
+        },
+        {
+          "label": "View source",
+          "to": "/w/index.php?title=Main_Page&action=edit"
+        },
+        {
+          "label": "View history",
+          "to": "/w/index.php?title=Main_Page&action=history"
+        },
+        {
+          "label": "Wikipedia",
+          "to": "/wiki/Wikipedia"
+        },
+        {
+          "label": "free",
+          "to": "/wiki/Free_content"
+        },
+        {
+          "label": "anyone can edit",
+          "to": "/wiki/Help:Introduction_to_Wikipedia"
+        },
+        {
+          "label": "264,734",
+          "to": "/wiki/Special:Statistics"
+        },
+        {
+          "label": "7,264,827",
+          "to": "/wiki/Special:Statistics"
+        },
+        {
+          "label": "English",
+          "to": "/wiki/English_language"
+        },
+        {
+          "label": "Mariah Carey",
+          "to": "/wiki/:id"
+        },
+        {
+          "label": "Can't Let Go",
+          "to": "/wiki/Can't_Let_Go_(Mariah_Carey_song)"
+        },
+        {
+          "label": "Mariah Carey",
+          "to": "/wiki/Mariah_Carey"
+        },
+        {
+          "label": "Emotions",
+          "to": "/wiki/Emotions_(Mariah_Carey_album)"
+        },
+        {
+          "label": "About Wikipedia",
+          "to": "/wiki/Wikipedia:About"
+        },
+        {
+          "label": "Disclaimers",
+          "to": "/wiki/Wikipedia:General_disclaimer"
+        },
+        {
+          "label": "Contact Wikipedia",
+          "to": "/wiki/Wikipedia:Contact_us"
+        },
+        {
+          "label": "Mobile view",
+          "to": "/w/index.php?title=Main_Page&mobileaction=toggle_view_mobile"
+        }
+      ],
+      "buttons": [
+        "Jump to content",
+        "Main menu",
+        "Search",
+        "Main Page",
+        "Save",
+        "Tools",
+        "Hide Appearance",
+        "349 languages"
+      ],
+      "fields": [
+        "Search Wikipedia",
+        "Small",
+        "Standard",
+        "Large",
+        "Wide",
+        "Automatic",
+        "Light",
+        "Dark"
+      ]
+    },
+    {
+      "path": "/wiki/Special:RecentChanges",
+      "title": "Recent changes - Wikipedia",
+      "headings": [
+        "Recent changes",
+        "15 November 2026"
+      ],
+      "links": [
+        {
+          "label": "Create account",
+          "to": "/w/index.php?title=Special:CreateAccount&returnto=Special:RecentChanges"
+        },
+        {
+          "label": "Log in",
+          "to": "/w/index.php?title=Special:UserLogin&returnto=Special:RecentChanges"
+        },
+        {
+          "label": "help",
+          "to": "/wiki/Help:Watchlist"
+        },
+        {
+          "label": "Wikid ata",
+          "to": "/wiki/Wikipedia:Wikidata"
+        },
+        {
+          "label": "N ew page",
+          "to": "/wiki/Special:NewPages"
+        },
+        {
+          "label": "M inor edit",
+          "to": "/wiki/Help:Minor_edit"
+        },
+        {
+          "label": "B ot edit",
+          "to": "/wiki/Wikipedia:Bots"
+        },
+        {
+          "label": "diff",
+          "to": "/w/index.php"
+        },
+        {
+          "label": "hist",
+          "to": "/w/index.php?action=history"
+        },
+        {
+          "label": "User:Amitchell125/sandbox",
+          "to": "/wiki/:id/sandbox"
+        },
+        {
+          "label": "Amitchell125",
+          "to": "/wiki/:id"
+        },
+        {
+          "label": "talk",
+          "to": "/wiki/:id"
+        },
+        {
+          "label": "About Wikipedia",
+          "to": "/wiki/Wikipedia:About"
+        },
+        {
+          "label": "Disclaimers",
+          "to": "/wiki/Wikipedia:General_disclaimer"
+        },
+        {
+          "label": "Contact Wikipedia",
+          "to": "/wiki/Wikipedia:Contact_us"
+        },
+        {
+          "label": "Mobile view",
+          "to": "/w/index.php?title=Special:RecentChanges&mobileaction=toggle_view_mobile"
+        }
+      ],
+      "buttons": [
+        "Jump to content",
+        "Main menu",
+        "Search",
+        "Tools",
+        "Hide Appearance",
+        "Other review tools",
+        "Hide",
+        "Remove 'Human (not bot)'",
+        "Remove 'Page edits'",
+        "Remove 'Page creations'",
+        "Remove 'Logged actions'",
+        "Remove 'Account creations'",
+        "Clear all filters",
+        "Filter results by namespace",
+        "Filter results using edit tags",
+        "Live updates",
+        "50 changes, 1 day",
+        "List of abbreviations (help ):"
+      ],
+      "fields": [
+        "Search Wikipedia",
+        "Small",
+        "Standard",
+        "Large",
+        "Wide",
+        "Automatic",
+        "Light",
+        "Dark",
+        "Filter changes (use menu or search for filter nam…"
+      ]
+    },
+    {
+      "path": "/wiki/Special:Search",
+      "title": "Search - Wikipedia",
+      "headings": [
+        "Search"
+      ],
+      "links": [
+        {
+          "label": "Create account",
+          "to": "/w/index.php?title=Special:CreateAccount&returnto=Special:Search"
+        },
+        {
+          "label": "Log in",
+          "to": "/w/index.php?title=Special:UserLogin&returnto=Special:Search"
+        },
+        {
+          "label": "Help",
+          "to": "/wiki/Help:Searching"
+        },
+        {
+          "label": "About Wikipedia",
+          "to": "/wiki/Wikipedia:About"
+        },
+        {
+          "label": "Disclaimers",
+          "to": "/wiki/Wikipedia:General_disclaimer"
+        },
+        {
+          "label": "Contact Wikipedia",
+          "to": "/wiki/Wikipedia:Contact_us"
+        },
+        {
+          "label": "Mobile view",
+          "to": "/w/index.php?title=Special:Search&mobileaction=toggle_view_mobile"
+        }
+      ],
+      "buttons": [
+        "Jump to content",
+        "Main menu",
+        "Search",
+        "Tools",
+        "Hide Appearance",
+        "Advanced search:",
+        "Search in:",
+        "Remove"
+      ],
+      "fields": [
+        "Search Wikipedia",
+        "Small",
+        "Standard",
+        "Large",
+        "Wide",
+        "Automatic",
+        "Light",
+        "Dark"
+      ]
+    },
+    {
+      "path": "/wiki/Special:WhatLinksHere/Haptic_technology",
+      "title": "Pages that link to \"Haptic technology\" - Wikipedia",
+      "headings": [
+        "Pages that link to \"Haptic technology\""
+      ],
+      "links": [
+        {
+          "label": "Create account",
+          "to": "/w/index.php?title=Special:CreateAccount"
+        },
+        {
+          "label": "Log in",
+          "to": "/w/index.php?title=Special:UserLogin"
+        },
+        {
+          "label": "Help",
+          "to": "/wiki/Help:What_links_here"
+        },
+        {
+          "label": "Article",
+          "to": "/wiki/Haptic_technology"
+        },
+        {
+          "label": "Read",
+          "to": "/wiki/Haptic_technology"
+        },
+        {
+          "label": "View history",
+          "to": "/w/index.php?title=Haptic_technology&action=history"
+        },
+        {
+          "label": "Haptic technology",
+          "to": "/wiki/Haptic_technology"
+        },
+        {
+          "label": "help page",
+          "to": "/wiki/Help:What_links_here"
+        },
+        {
+          "label": "transcluding these entries",
+          "to": "/wiki/Help:What_links_here"
+        },
+        {
+          "label": "next 50",
+          "to": "/w/index.php?dir=next"
+        },
+        {
+          "label": "20",
+          "to": "/w/index.php"
+        },
+        {
+          "label": "100",
+          "to": "/w/index.php"
+        },
+        {
+          "label": "250",
+          "to": "/w/index.php"
+        },
+        {
+          "label": "500",
+          "to": "/w/index.php"
+        },
+        {
+          "label": "Video game",
+          "to": "/wiki/Video_game"
+        },
+        {
+          "label": "links",
+          "to": "/w/index.php?title=Special:WhatLinksHere"
+        },
+        {
+          "label": "About Wikipedia",
+          "to": "/wiki/Wikipedia:About"
+        },
+        {
+          "label": "Disclaimers",
+          "to": "/wiki/Wikipedia:General_disclaimer"
+        },
+        {
+          "label": "Contact Wikipedia",
+          "to": "/wiki/Wikipedia:Contact_us"
+        },
+        {
+          "label": "Mobile view",
+          "to": "/w/index.php?mobileaction=toggle_view_mobile"
+        }
+      ],
+      "buttons": [
+        "Jump to content",
+        "Main menu",
+        "Search",
+        "Tools",
+        "Hide Appearance",
+        "Go"
+      ],
+      "fields": [
+        "Search Wikipedia",
+        "Small",
+        "Standard",
+        "Large",
+        "Wide",
+        "Automatic",
+        "Light",
+        "Dark",
+        "Page:",
+        "Namespace: all",
+        "Hide transclusions",
+        "Hide links",
+        "Hide redirects"
+      ]
+    },
+    {
+      "path": "/wiki/Wikipedia:Contact_us",
+      "title": "Wikipedia:Contact us - Wikipedia",
+      "headings": [
+        "Wikipedia:Contact us"
+      ],
+      "links": [
+        {
+          "label": "Create account",
+          "to": "/w/index.php?title=Special:CreateAccount"
+        },
+        {
+          "label": "Log in",
+          "to": "/w/index.php?title=Special:UserLogin"
+        },
+        {
+          "label": "Talk",
+          "to": "/wiki/Wikipedia_talk:Contact_us"
+        },
+        {
+          "label": "View source",
+          "to": "/w/index.php?title=Wikipedia:Contact_us&action=edit"
+        },
+        {
+          "label": "View history",
+          "to": "/w/index.php?title=Wikipedia:Contact_us&action=history"
+        },
+        {
+          "label": "Readers",
+          "to": "/wiki/Wikipedia:Contact_us/Readers"
+        },
+        {
+          "label": "Article subjects",
+          "to": "/wiki/Wikipedia:Contact_us/Article_subjects"
+        },
+        {
+          "label": "Licensing",
+          "to": "/wiki/Wikipedia:Contact_us/Licensing"
+        },
+        {
+          "label": "Donors",
+          "to": "/wiki/Wikipedia:Contact_us/Donors"
+        },
+        {
+          "label": "Press and partnerships",
+          "to": "/wiki/Wikipedia:Contact_us/Press_and_partnerships"
+        },
+        {
+          "label": "Back to main page",
+          "to": "/wiki/Wikipedia:Main"
+        },
+        {
+          "label": "Edit Request Wizard",
+          "to": "/wiki/Wikipedia:Edit_Request_Wizard"
+        },
+        {
+          "label": "Jimmy Wales",
+          "to": "/wiki/Jimmy_Wales"
+        },
+        {
+          "label": "About Wikipedia",
+          "to": "/wiki/Wikipedia:About"
+        },
+        {
+          "label": "Teahouse",
+          "to": "/wiki/Wikipedia:Teahouse"
+        },
+        {
+          "label": "Disclaimers",
+          "to": "/wiki/Wikipedia:General_disclaimer"
+        },
+        {
+          "label": "Mobile view",
+          "to": "/w/index.php?title=Wikipedia:Contact_us&mobileaction=toggle_view_mobile"
+        }
+      ],
+      "buttons": [
+        "Jump to content",
+        "Main menu",
+        "Search",
+        "84 languages",
+        "Project page",
+        "Tools",
+        "Hide Appearance",
+        "Introduction",
+        "Contact Wikipedia"
+      ],
+      "fields": [
+        "Search Wikipedia",
+        "Small",
+        "Standard",
+        "Large",
+        "Wide",
+        "Automatic",
+        "Light",
+        "Dark"
+      ]
+    }
+  ],
+  "source": {
+    "url": "https://en.wikipedia.org/wiki/Haptic_technology",
+    "maxPages": 15,
+    "docs": [],
+    "maxDepth": 1,
+    "skip": [
+      "Special:Random"
+    ],
+    "reader": "browser"
+  },
+  "createdAt": "2026-11-15T06:52:42.974Z",
+  "updatedAt": "2026-11-15T22:58:31.339Z"
+}
