@@ -1216,9 +1216,12 @@ const CONTROLS = "input, select, textarea, button, a[href], [role='button'], [ro
  * value, not a caption.
  */
 function holdsPressable(box: Element): boolean {
-  return Array.from(box.querySelectorAll("*"))
-    .slice(0, 30)
-    .some((inner) => getComputedStyle(inner).cursor === "pointer" && !!inner.parentElement && getComputedStyle(inner.parentElement).cursor !== "pointer");
+  // Only the first few boxes inside are looked at: a tag is small, and a large box is no caption anyway.
+  const walker = document.createTreeWalker(box, NodeFilter.SHOW_ELEMENT);
+  for (let inner = walker.nextNode() as Element | null, looked = 0; inner && looked < 30; inner = walker.nextNode() as Element | null, looked++) {
+    if (getComputedStyle(inner).cursor === "pointer" && inner.parentElement && getComputedStyle(inner.parentElement).cursor !== "pointer") return true;
+  }
+  return false;
 }
 
 function captionOf(el: Element, after: boolean): string {
