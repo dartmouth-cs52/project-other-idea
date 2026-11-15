@@ -45,6 +45,7 @@ const measure: TurnMeasure = {
   msToTarget: 800,
   wrote: "Click Billing.",
   broke: [],
+  cited: [],
   tokens: { input: 600, cacheRead: 24_000, cacheWrite: 0, output: 150 },
   usd: 0.0051,
 };

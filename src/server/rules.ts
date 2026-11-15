@@ -608,6 +608,21 @@ function sentences(text: string): string[] {
   return pieces.filter((piece) => piece.trim());
 }
 
+/** What a visitor reads when every sentence of a step had to be dropped. The pointer, if there is one, still says where to go. */
+export const SAY_WITHOUT_WORDS = {
+  pointing: "This is the one to use.",
+  nothing: "I can't help with that one.",
+} as const;
+
+/**
+ * The sentence a visitor reads, tidied: no blank space at either end, and no
+ * closing brace left over from the reply's own JSON. Some settings add one.
+ * Sonnet with thinking off did in about one reply in eight.
+ */
+export function tidySay(say: string): string {
+  return say.replace(/[\s}]+$/, "").trimStart();
+}
+
 export function checkSay(text: string, max = MAX_STEP_SAY): Checked {
   const broke = new Set<Rule>();
   const tidy = text.replace(/\s+/g, " ").trim();
