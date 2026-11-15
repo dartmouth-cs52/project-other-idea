@@ -63,6 +63,7 @@ test("a guide does not end on a pointer: after the last step is used the page is
     await session.untilState("finished");
     assert.equal(await session.caption(), "Your orders were exported as CSV.");
     assert.equal(await session.pointed(), null);
+    await session.page.waitForTimeout(150);
     states.stop();
     assert.deepEqual(states.seen, ["idle", "asking", "pointing", "asking", "pointing", "asking", "finished"]);
   } finally {
