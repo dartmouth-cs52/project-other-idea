@@ -268,12 +268,25 @@ export function isField(el: Element): boolean {
   return (el as HTMLElement).isContentEditable;
 }
 
+/**
+ * A label's own words. When the label wraps its field, the field's options or
+ * contents are part of the label's text, and those must not end up in its name.
+ */
+function labelWords(label: Element): string {
+  let text = "";
+  for (const node of label.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
+    else if (node instanceof Element && !node.matches("select, textarea, input, button, datalist, output")) text += labelWords(node);
+  }
+  return text;
+}
+
 function labelOf(el: Element, role: string): string {
   const root = el.getRootNode() as Document | ShadowRoot;
   const byIds = (ids: string) => ids.split(/\s+/).map((id) => root.getElementById?.(id)?.textContent ?? "").join(" ").trim();
   let raw = el.getAttribute("data-haptic-label") || byIds(el.getAttribute("aria-labelledby") ?? "") || el.getAttribute("aria-label")?.trim() || "";
   if (!raw && (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
-    raw = Array.from(el.labels ?? []).map((label) => label.textContent ?? "").join(" ").trim();
+    raw = Array.from(el.labels ?? []).map(labelWords).join(" ").trim();
     // A button's value is its caption, not user data.
     if (!raw && el instanceof HTMLInputElement && role === "button") raw = el.value || el.type;
     raw ||= el.getAttribute("placeholder") || el.getAttribute("title") || el.getAttribute("name") || "";
