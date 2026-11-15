@@ -104,7 +104,7 @@ export class Ui {
           <div class="helped" hidden></div>
           <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
           <div class="status" hidden><span></span><button class="stop" type="button">Stop</button></div>
-          <p class="note">Haptic <a href="${ABOUT_URL}" target="_blank" rel="noopener noreferrer">is AI and can make mistakes.</a></p>
+          <p class="note">Haptic <a href="${ABOUT_URL}" target="_blank" rel="noopener noreferrer">is an AI guide and can be wrong.</a></p>
         </div>
         <button class="launcher" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${POINTER_PATH}"/></svg><span></span></button>
       </div>`;

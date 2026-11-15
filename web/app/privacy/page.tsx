@@ -40,9 +40,9 @@ export default function Privacy() {
         reads before anything leaves the browser.
       </p>
       <p>
-        Haptic is AI and can make mistakes, so check anything that matters before relying on it. To work out the next
-        step, the question and that description of the page are sent to our server and to Anthropic, which provides
-        the AI model.
+        Haptic is an AI guide and can be wrong, so check anything that matters before relying on it. To work out the
+        next step, the question and that description of the page are sent to our server and to Anthropic, which
+        provides the AI model.
       </p>
       <p>
         We keep the question that was asked, what Haptic said and the names of the controls it pointed at, which page
