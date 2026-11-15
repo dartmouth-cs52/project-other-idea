@@ -120,7 +120,11 @@ async function me(sql: Sql, user: SignedInUser) {
   let org = await organizationOf(sql, user.id);
   if (!org) {
     // An address nobody has confirmed could be anyone's, so it is never matched against the list.
-    if (!user.emailVerified) return { user: who, approved: false, reason: "unverified" };
+    // The session copy in the cookie can be up to five minutes old, so a "no" is checked with the database.
+    if (!user.emailVerified) {
+      const [row] = await sql`select "emailVerified" as verified from neon_auth."user" where id = ${user.id}`;
+      if (row?.verified !== true) return { user: who, approved: false, reason: "unverified" };
+    }
     const approval = await approvalFor(sql, user.email);
     if (!approval) return { user: who, approved: false, reason: "not_approved" };
     org = await joinOrganization(sql, approval, user.id);
@@ -154,7 +158,8 @@ async function ownedSite(sql: Sql, org: Organization, id: string): Promise<SiteR
 function siteAddress(input: unknown): URL {
   let text = typeof input === "string" ? input.trim() : "";
   if (!text) throw new Refusal(400, "Paste your site's address.");
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) text = `https://${text}`;
+  // With no scheme, a local or private address is a developer's own machine, which serves plain http. Anything else gets https.
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) text = `${/^(localhost|127\.|10\.|192\.168\.|\[::1\])/i.test(text) ? "http" : "https"}://${text}`;
   if (!URL.canParse(text)) throw new Refusal(400, "That isn't a web address. Try something like https://app.example.com.");
   const url = new URL(text);
   if (url.protocol !== "https:" && url.protocol !== "http:") throw new Refusal(400, "Use an address that starts with https://.");

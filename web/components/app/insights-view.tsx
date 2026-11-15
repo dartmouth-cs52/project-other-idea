@@ -156,9 +156,9 @@ export function InsightsView({ siteId, refreshKey }: { siteId: string; refreshKe
                 <span className="min-w-0 text-base">{row.question}</span>
                 <span className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
                   {row.outcome === "finished" && <DoneMark className="size-4" />}
-                  {OUTCOME_LABEL[row.outcome]}
-                  {row.helped !== null && <span>, {row.helped ? "helped" : "did not help"}</span>}
-                  <span>, {when(row.started_at)}</span>
+                  <span>
+                    {[OUTCOME_LABEL[row.outcome], row.helped === null ? null : row.helped ? "helped" : "did not help", when(row.started_at)].filter(Boolean).join(", ")}
+                  </span>
                 </span>
               </button>
             </li>
