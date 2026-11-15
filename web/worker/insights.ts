@@ -12,6 +12,7 @@
 // product or its help docs would have answered them.
 
 import type { Sql } from "./db";
+import { cantFind, guideHealth } from "./health";
 
 /** A guide with no ending reported, and nothing new for this long, was abandoned. */
 const ABANDONED_AFTER = "30 minutes";
@@ -27,7 +28,7 @@ const UNANSWERED = `(g.helped is distinct from true and (g.helped = false or (${
 export async function insights(sql: Sql, site: string, days: number) {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
 
-  const [summary, outcomes, unanswered, recent, abandonedAt, wrongClicks] = await Promise.all([
+  const [summary, outcomes, recent, abandonedAt, wrongClicks, cannotFind, health, alerts] = await Promise.all([
     sql.query(
       `select count(*)::int as guides,
         count(*) filter (where ${UNANSWERED})::int as unanswered,
@@ -41,16 +42,6 @@ export async function insights(sql: Sql, site: string, days: number) {
       [site, since],
     ),
     sql.query(`select ${OUTCOME} as outcome, count(*)::int as count from guides g where g.site_id = $1 and g.started_at >= $2 group by 1 order by 2 desc`, [site, since]),
-    // The headline: questions asked more than once that keep going unanswered. Each is something the company can fix.
-    sql.query(
-      `select g.question_key as key, (array_agg(g.question order by g.started_at desc))[1] as question,
-        count(*)::int as asked, count(*) filter (where ${UNANSWERED})::int as unanswered, max(g.started_at) as last_asked,
-        (array_agg(g.id order by g.started_at desc) filter (where ${UNANSWERED}))[1] as example
-      from guides g where g.site_id = $1 and g.started_at >= $2
-      group by g.question_key having count(*) filter (where ${UNANSWERED}) >= 2
-      order by unanswered desc, asked desc limit 10`,
-      [site, since],
-    ),
     sql.query(
       `select g.id, g.question, g.started_at, g.started_path, g.origin, g.step_count, g.helped, ${OUTCOME} as outcome,
         (select count(*)::int from steps s where s.guide_id = g.id and s.strayed) as wrong_clicks,
@@ -78,9 +69,14 @@ export async function insights(sql: Sql, site: string, days: number) {
       order by wrong desc, shown desc limit 8`,
       [site, since],
     ),
+    // The lead: what people asked and couldn't find, grouped by meaning and counted by person.
+    cantFind(sql, site, since),
+    // Groups whose guides stopped finishing, week over week, always over the last eight weeks.
+    guideHealth(sql, site),
+    sql.query(`select question_group as key, max(sent_at) as sent_at, bool_or(emailed) as emailed from health_alerts where site_id = $1 and sent_at > now() - interval '30 days' group by 1`, [site]),
   ]);
 
-  return { days, summary: summary[0], outcomes, unanswered, recent, abandonedAt, wrongClicks };
+  return { days, summary: summary[0], outcomes, recent, abandonedAt, wrongClicks, cantFind: cannotFind, health, alerts };
 }
 
 /** "2026-11" for the month a date falls in, in UTC. Bills are counted by UTC month. */

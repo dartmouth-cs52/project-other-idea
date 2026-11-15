@@ -1,6 +1,6 @@
 import { DEFAULT_APPEARANCE, MODES, STREAM_TYPE, type Mode, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { Guide, type HandoffWay, type Reporter, type Watch } from "./guide.ts";
-import { startLearning } from "./learn.ts";
+import { startLearning, visitorId } from "./learn.ts";
 import { Ui } from "./ui.ts";
 
 // Entry point of the script customers paste into their site:
@@ -30,13 +30,15 @@ async function boot() {
   // The reply comes as lines of JSON. The first lines say what kind of reply
   // it is (on a site with Answers on) and name the control to point at, each as
   // soon as the model has decided. The last is the whole reply.
+  // So the dashboard can count people and not questions. The server keeps only a hash of it, made with the site's id.
+  const visitor = visitorId();
   const sendTurn = async (request: Omit<TurnRequest, "site">, watch: Watch = {}, signal?: AbortSignal): Promise<TurnReply> => {
     // Aborting hangs up on the server, which stops asking the model and records the step as dropped.
     const response = await fetch(`${api}/v1/turn`, {
       method: "POST",
       signal,
       headers: { "Content-Type": "application/json", Accept: STREAM_TYPE },
-      body: JSON.stringify({ ...request, site }),
+      body: JSON.stringify({ ...request, site, ...(visitor ? { visitor } : {}) }),
     });
     if (!response.ok) throw new Error(`Turn failed with ${response.status}: ${await response.text()}`);
     if (!response.body || !(response.headers.get("Content-Type") ?? "").includes(STREAM_TYPE)) return response.json();

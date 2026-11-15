@@ -438,6 +438,7 @@ export function parseTurn(body: unknown): TurnRequest | undefined {
 
   const request: TurnRequest = { site: raw.site, goal, step: Math.min(Math.max(Number(raw.step) || 0, 0), 100), history, snapshot };
   if (typeof raw.guide === "string" && GUIDE_ID.test(raw.guide)) request.guide = raw.guide;
+  if (typeof raw.visitor === "string" && /^[0-9a-f-]{36}$/.test(raw.visitor)) request.visitor = raw.visitor;
   if (raw.event) request.event = text(raw.event, 600);
   if (raw.change) request.change = text(raw.change, 2000);
   if (raw.offTrack === true) request.offTrack = true;

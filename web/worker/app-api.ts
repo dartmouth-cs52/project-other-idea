@@ -7,6 +7,7 @@
 //   POST   /api/app/sites/:id/read              read a few more public pages
 //   GET    /api/app/sites/:id/insights          the dashboard: questions, outcomes, what to fix
 //   GET    /api/app/sites/:id/guides/:guide     one guide, step by step
+//   GET    /api/app/sites/:id/groups?key=…      the guides for one question, grouped by meaning
 //   GET    /api/app/sites/:id/controls?route=…  the controls known on a page, for "Point here instead"
 //   POST   /api/app/sites/:id/corrections       point a step of a guide at another control from now on
 //   DELETE /api/app/sites/:id/corrections/:id   take a correction back
@@ -23,6 +24,7 @@ import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
+import { groupGuides } from "./health";
 import { finishedCsv, finishedGuides, guideSteps, insights, monthOf } from "./insights";
 import { MAX_PAGES, readMore, startReading, type BrowserBinding, type Reading } from "./reader";
 
@@ -88,7 +90,7 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
 
     if (path === "/sites" && request.method === "POST") return reply(await addSite(sql, org, await body(request)), 201);
 
-    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?)?$/.exec(path);
+    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?)?$/.exec(path);
     if (match) {
       const id = match[1] ?? "";
       if (!SITE_ID.test(id)) throw new Refusal(404, "No such site.");
@@ -114,6 +116,11 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
         const headers = new Headers({ "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="${name}"`, "cache-control": "no-store" });
         for (const cookie of cookies) headers.append("set-cookie", cookie);
         return new Response(finishedCsv(list), { headers });
+      }
+      if (sub === "/groups" && request.method === "GET") {
+        await ownedSite(sql, org, id);
+        const days = Math.min(Math.max(Number(url.searchParams.get("days")) || 30, 1), 365);
+        return reply({ guides: await groupGuides(sql, id, url.searchParams.get("key") ?? "", new Date(Date.now() - days * 86_400_000).toISOString()) });
       }
       if (sub === "/controls" && request.method === "GET") {
         const site = await ownedSite(sql, org, id);
