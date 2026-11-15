@@ -144,6 +144,21 @@ export class Store {
   }
 
   /**
+   * Counts a step the widget hung up on, because the page changed while the
+   * model was answering. The step is asked again from the new page and
+   * recorded then, so only the count is kept. The column is from db/migrations/0008.
+   */
+  cancelStep(request: TurnRequest): Promise<void> | undefined {
+    const guide = request.guide;
+    if (!guide) return undefined;
+    const write = this.quietly("count a dropped step (has db/migrations/0008 been applied?)", async () => {
+      await this.sql`update guides set cancelled_steps = cancelled_steps + 1 where id = ${guide} and site_id = ${request.site}`;
+    });
+    this.track(guide, write);
+    return write;
+  }
+
+  /**
    * Adds the controls an answer named that are nowhere Haptic can see. With
    * the step's sources, that says which help articles may be out of date. The
    * column is from db/migrations/0007.

@@ -314,6 +314,11 @@ function GuideDrawer({ siteId, guideId, onClose }: { siteId: string; guideId: st
               {guide.helped !== null ? `, ${guide.helped ? "said it helped" : "said it did not help"}` : ""}, started on {guide.started_path}
               {guide.origin ? ` at ${guide.origin}` : ""}, {when(guide.started_at)}
             </p>
+            {guide.cancelled_steps > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {guide.cancelled_steps === 1 ? "One step was" : `${guide.cancelled_steps} steps were`} asked again because the page changed while Haptic was answering. Pages that load slowly after a click cause this.
+              </p>
+            )}
             <ol className="flex flex-col gap-3">
               {guide.steps.map((step) => (
                 <li key={step.n} className={cn("flex flex-col gap-2 rounded-xl border bg-muted p-4")}>
