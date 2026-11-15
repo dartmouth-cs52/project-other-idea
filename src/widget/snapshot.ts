@@ -933,23 +933,29 @@ function captionOf(el: Element, after: boolean): string {
     const text = cleanText(wordsIn(node, 120), 61);
     return text.length > 60 ? "" : text.replace(/\s*[:*]+$/, "");
   };
+  const step = (from: Node) => (after ? from.nextSibling : from.previousSibling);
   let node: Element | null = el;
   for (let depth = 0; depth < 4 && node && node !== document.body; depth++) {
-    const step = (from: Element) => (after ? from.nextElementSibling : from.previousElementSibling);
-    for (let beside = step(node), tried = 0; beside && tried < 2; beside = step(beside), tried++) {
+    // Inside an editor the words beside a control are the visitor's own.
+    if ((node.parentElement as HTMLElement | null)?.isContentEditable) return "";
+    // The nearest words beside it, whether bare words in the same box or a box of their own:
+    // in "from account # [ ] to account # [ ]" the second field is "to account #".
+    for (let beside = step(node), tried = 0; beside && tried < 3; beside = step(beside)) {
+      if (beside.nodeType === Node.TEXT_NODE) {
+        const text = cleanText(beside.textContent ?? "", 61);
+        if (text.length > 1 && text.length <= 60 && /[\p{L}\p{N}]/u.test(text)) return text.replace(/\s*[:*]+$/, "");
+        if (text) tried++;
+        continue;
+      }
+      if (!(beside instanceof Element)) continue;
+      tried++;
+      // A heading names the part of the page the field is in, and what comes before it belongs to other parts.
+      if (beside.matches(HEADINGS)) return "";
       const text = wordsOf(beside);
       if (text) return text;
       // Another field, or another field's box: the caption beyond it belongs to that field.
-      if (holdsTyping(beside) || beside.matches("select") || beside.querySelector("input, select, textarea")) break;
+      if (holdsTyping(beside) || beside.matches("select") || beside.querySelector("input, select, textarea")) return "";
     }
-    // Inside an editor the words beside a control are the visitor's own.
-    if ((node.parentElement as HTMLElement | null)?.isContentEditable) break;
-    // Bare words sitting next to the field inside the same box.
-    const loose = Array.from(node.parentElement?.childNodes ?? [])
-      .filter((child) => child.nodeType === Node.TEXT_NODE)
-      .map((child) => cleanText(child.textContent ?? "", 61))
-      .find((text) => text.length > 1 && text.length <= 60);
-    if (loose) return loose.replace(/\s*[:*]+$/, "");
     node = node.parentElement;
     if (node && ["FORM", "TABLE", "TBODY", "FIELDSET", "UL", "OL"].includes(node.tagName)) break;
   }

@@ -354,3 +354,24 @@ test("a clickable panel stays listed when the clickable inside it says something
     'clickable "Open the weekly report" [main]',
   ]);
 });
+
+// Captions guessed from the words beside a field --------------------------------
+
+test("a field is named by the nearest words before it, never by another field or what lies beyond one", { skip }, async () => {
+  const snapshot = await read(`<form>
+    <p><b>Amount:</b> $<input id="amount"></p>
+    <div>From account #<select><option>12345</option></select> to account #<select><option>13344</option></select></div>
+    <table><tr><td>Find by Date:</td><td><input></td></tr><tr><td>Between</td><td><input> and <input></td></tr></table>
+    <h2>Notes</h2><div role="textbox" contenteditable="true">Typed words</div>
+  </form>`);
+  assert.deepEqual(lines(snapshot), [
+    'textbox "Amount" [form]',
+    'select "From account #" [form] choices: [number]',
+    'select "to account #" [form] choices: [number]',
+    'textbox "Find by Date" [form]',
+    'textbox "Between" [form]',
+    'textbox "and" [form]',
+    // A heading is the name of the part of the page, not of the field under it.
+    'textbox [form › Notes]',
+  ]);
+});
