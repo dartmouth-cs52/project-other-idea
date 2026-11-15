@@ -34,11 +34,15 @@ export interface ModelReply {
   sources?: string[];
 }
 
-/** The fixed sentence for each reason. `site` is the product's name. */
+/**
+ * The fixed sentence for each reason. "Not covered" does not say the product
+ * can't do the thing: Haptic only knows it could not find it.
+ */
 export function cannotHelpSay(reason: Reason, site: SiteContext): string {
-  if (reason === "sensitive") return "I can't answer that one. It needs someone from the team.";
-  if (reason === "off_topic") return `I can only help with ${site.name || "this site"}.`;
-  return "The help docs don't cover that.";
+  const name = site.name || "this site";
+  if (reason === "sensitive") return `That needs an answer from a person at ${name}.`;
+  if (reason === "off_topic") return `I can only help with using ${name}.`;
+  return `I couldn't find that on ${name} or in its help docs.`;
 }
 
 // The topics the model never decides. Matching is by plain words, so it can be

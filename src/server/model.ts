@@ -110,12 +110,12 @@ const Reply = z.object({
  * sentence is still being written.
  */
 const AnswerReply = z.object({
-  mode: z.enum(MODES).describe('"guide" to point the way, "answer" to answer in words from the help articles, "cannot_help" otherwise'),
-  target: z.string().nullable().describe('Id of the element to point at, like "e12", or null'),
-  status: z.enum(["continue", "done"]),
-  reason: z.enum(REASONS).nullable().describe('Why, when mode is "cannot_help". Otherwise null'),
-  say: z.string().describe("A step: one or two short sentences. An answer: one to four. Empty when mode is cannot_help"),
-  sources: z.array(z.string()).describe('For an answer, the ids of the help articles it rests on, like ["a2"]. Otherwise empty'),
+  mode: z.enum(MODES).describe("\"guide\": a step, or the sentence that ends a guide. \"answer\": an explanation taken from the help articles, with or without a pointer. \"cannot_help\": neither is possible."),
+  target: z.string().nullable().describe("Id of the element to point at, like \"e12\", or null. Always null with \"cannot_help\"."),
+  status: z.enum(["continue", "done"]).describe("\"continue\" if the visitor must act on the target before the next step. Otherwise \"done\". Always \"done\" with \"cannot_help\"."),
+  reason: z.enum(REASONS).nullable().describe("null unless mode is \"cannot_help\". Then \"not_covered\", \"sensitive\" or \"off_topic\"."),
+  say: z.string().describe("With \"guide\", one or two short sentences. With \"answer\", one to four. With \"cannot_help\", an empty string."),
+  sources: z.array(z.string()).describe("Ids of the help articles the answer is taken from, like [\"a2\"]. Empty unless mode is \"answer\"."),
 });
 
 /** The first fields of a reply, as soon as each is complete in the text streamed so far. */

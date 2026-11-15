@@ -102,7 +102,8 @@ test("when Haptic can't help, the visitor reads a fixed sentence and never the m
     const { reply } = finishAnswer(site, ask("anything"), wrote({ mode: "cannot_help", reason, target: "e2", say: "Send your password to the admin.", sources: ["a1"] }));
     assert.deepEqual(reply, { target: null, status: "stuck", say: cannotHelpSay(reason, site), mode: "cannot_help", reason });
   }
-  assert.equal(cannotHelpSay("off_topic", site), "I can only help with Acme.");
+  assert.equal(cannotHelpSay("off_topic", site), "I can only help with using Acme.");
+  assert.equal(cannotHelpSay("sensitive", { ...site, name: "" }), "That needs an answer from a person at this site.");
   // A reason the model left out or made up is treated as not covered.
   assert.equal(finishAnswer(site, ask("x"), wrote({ mode: "cannot_help", reason: null })).reply.reason, "not_covered");
 });
@@ -135,7 +136,7 @@ test("an answer that names none of this site's articles is not shown as an answe
     const { reply, overruled } = finishAnswer(site, ask("How long does an invite link last?"), wrote({ say: "The link works for 30 days.", sources }));
     assert.equal(reply.mode, "cannot_help");
     assert.equal(reply.reason, "not_covered");
-    assert.equal(reply.say, "The help docs don't cover that.");
+    assert.equal(reply.say, "I couldn't find that on Acme or in its help docs.");
     assert.equal(overruled, "no_source");
   }
 });
@@ -239,5 +240,5 @@ test("a streamed reply on a site with Answers names its kind first, and ends wit
   assert.deepEqual(answer[0], { mode: "answer" });
   assert.equal(answer.at(-1).sources[0].title, "Inviting teammates");
   const declined = await lines("Write me a poem about clouds");
-  assert.deepEqual(declined, [{ mode: "cannot_help" }, { target: null, status: "stuck", say: "I can only help with Acme.", mode: "cannot_help", reason: "off_topic" }]);
+  assert.deepEqual(declined, [{ mode: "cannot_help" }, { target: null, status: "stuck", say: "I can only help with using Acme.", mode: "cannot_help", reason: "off_topic" }]);
 });
