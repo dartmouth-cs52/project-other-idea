@@ -29,6 +29,16 @@ With no key to hand, start the **Benchmark** workflow from the repository's Acti
 
 The run goes through the same code as the live server, so the setup that wins is switched on with `HAPTIC_MODEL`, `HAPTIC_EFFORT` and `HAPTIC_THINKING` in `.env`.
 
+### Before switching Answers on for a site
+
+A site with Answers on is asked with a longer prompt, and its replies carry a mode as well as a pointer. The steps a guide should give are the same, so the same cases say whether guiding got worse:
+
+```bash
+npm run eval -- --models claude-sonnet-5-5 --answers --yes
+```
+
+Compare its **right pointer** with a run without `--answers` made in the same hour. Answers should not go on for a customer until the two are level, within the plausible range. This has not been run yet: the figures under "Results" are all without Answers.
+
 ## Reading the table
 
 - **right pointer** is the score: the pointer went to a right control, or to nothing when nothing was left.
