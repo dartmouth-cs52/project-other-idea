@@ -63,22 +63,27 @@ function insideEditor(el: Element): boolean {
   return false;
 }
 
+const MAX_NODES_FOR_WORDS = 600;
+
 /**
  * The words in an element as a person reads them, and never anything a
  * visitor typed. An input, a text area and an editor are passed over, and so
  * are a dropdown's choices and anything hidden from screen readers. `skip` is
- * a selector for more to pass over. Reading stops once `max` characters are in hand.
+ * a selector for more to pass over, and `except` one element to pass over. Reading
+ * stops once `max` characters are in hand.
  */
-function wordsIn(el: Element, max = 200, skip = ""): string {
+function wordsIn(el: Element, max = 200, skip = "", except?: Element): string {
   if (holdsTyping(el) || insideEditor(el)) return "";
   let text = "";
+  let visited = 0;
   const walk = (node: Node) => {
-    if (text.length > max) return;
+    // A box can hold thousands of nodes and no words. Looking stops well before that costs anything.
+    if (text.length > max || visited++ > MAX_NODES_FOR_WORDS) return;
     if (node.nodeType === Node.TEXT_NODE) {
       text += node.textContent ?? "";
       return;
     }
-    if (!(node instanceof Element)) return;
+    if (!(node instanceof Element) || node === except) return;
     if (NOT_WORDS.has(node.tagName) || holdsTyping(node) || node.getAttribute("aria-hidden") === "true" || (skip && node.matches(skip))) return;
     for (const child of node.childNodes) walk(child);
     if (!WITHIN_A_SENTENCE.has(node.tagName)) text += " ";
@@ -106,8 +111,36 @@ interface Candidate extends SnapElement {
   /** In the page's furniture (header, navigation, footer, tabs), which leads everywhere else. */
   nav: boolean;
   region: string;
+  /** The heading the control comes under. */
+  heading: string;
+  /** What tells it apart from others listed the same: the row it is in, or the words beside it. */
+  row?: string;
+  /** Its place among controls that nothing else tells apart: "2 of 3". */
+  place?: string;
   /** Outside the open dialog. Kept only if it is drawn on top of it, like a list the dialog opened. */
   outside: boolean;
+}
+
+/** A piece of page text, and whether it is on screen. */
+interface TextBlock {
+  text: string;
+  visible: boolean;
+}
+
+/** The server keeps this much of a control's surroundings, so the parts are fitted to it here. */
+const MAX_CONTEXT = 120;
+
+/**
+ * A control's surroundings in one line: the region, the heading, the row and
+ * its place among its like. When that is too long the heading gives way,
+ * because the row and the place are what tell two controls apart.
+ */
+function contextOf(c: Candidate): string {
+  const region = c.region === "page" ? "" : c.region;
+  const rest = [c.row ? `row: ${c.row}` : "", c.place ?? ""].filter(Boolean);
+  const room = MAX_CONTEXT - [region, ...rest].filter(Boolean).join(" › ").length - 3;
+  const heading = c.heading.length > room ? (room > 12 ? `${c.heading.slice(0, room - 1).trimEnd()}…` : "") : c.heading;
+  return [region, heading, ...rest].filter(Boolean).join(" › ");
 }
 
 interface Scope {
@@ -131,7 +164,7 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
   own = namedIn(question);
   const candidates: Candidate[] = [];
   const headings: string[] = [];
-  const texts: { text: string; visible: boolean }[] = [];
+  const texts: TextBlock[] = [];
   const viewportHeight = window.innerHeight;
   let visited = 0;
 
@@ -141,7 +174,9 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
   const modal = findOpenModal(ignore);
   const root = document.body;
 
-  const visit = (el: Element, scope: Scope, parentPointer: boolean, insideControl: boolean, inSvg = false, outside = !!modal) => {
+  // `held` collects the page text inside a box that was taken for a control but
+  // may yet turn out to be only a wrapper. If it does, its words are page text after all.
+  const visit = (el: Element, scope: Scope, parentPointer: boolean, insideControl: boolean, inSvg = false, outside = !!modal, held?: TextBlock[]) => {
     if (visited++ > MAX_VISITED || el === ignore || SKIP_TAGS.has(el.tagName)) return;
     if (el.hasAttribute("inert") || el.hasAttribute("data-haptic-ignore") || el.getAttribute("aria-hidden") === "true") {
       // An app hides the page behind its dialog this way, and the dialog itself is inside what it hid only by mistake.
@@ -180,7 +215,7 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
     if (role) {
       const rect = el.getBoundingClientRect();
       if (rect.width > 0 || rect.height > 0) {
-        added = { el, id: "", role, label: labelOf(el, role), nav: ["nav", "header", "aside", "menu", "tabs", "footer"].includes(scope.region), region: scope.region, outside };
+        added = { el, id: "", role, label: labelOf(el, role), nav: ["nav", "header", "aside", "menu", "tabs", "footer"].includes(scope.region), region: scope.region, heading: scope.heading, outside };
         const options = optionsOf(el);
         if (options.length) added.options = options;
         const icon = iconOf(el);
@@ -189,17 +224,15 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
         if (state.length) added.state = state;
         const href = hrefOf(el);
         if (href) added.href = href;
-        const context = [scope.region === "page" ? "" : scope.region, scope.heading].filter(Boolean).join(" › ");
-        if (context) added.context = context;
         if (rect.bottom <= 0) added.offscreen = "above";
         else if (rect.top >= viewportHeight) added.offscreen = "below";
         candidates.push(added);
       }
-    } else if (!insideControl && !svg && !outside && TEXT_TAGS.has(el.tagName) && texts.length < 300) {
+    } else if ((!insideControl || held) && !svg && !outside && TEXT_TAGS.has(el.tagName) && (held ?? texts).length < 300) {
       const own = ownText(el);
       if (own.length >= 3) {
         const rect = el.getBoundingClientRect();
-        texts.push({ text: cleanText(own, 160), visible: rect.bottom > 0 && rect.top < viewportHeight });
+        (held ?? texts).push({ text: cleanText(own, 160), visible: rect.bottom > 0 && rect.top < viewportHeight });
       }
     }
 
@@ -208,19 +241,28 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
 
     const before = candidates.length;
     const inside = insideControl || role !== "";
-    for (const child of el.children) visit(child, childScope, pointerHere, inside, svg, outside);
-    if (el.shadowRoot) for (const child of el.shadowRoot.children) visit(child, childScope, pointerHere, inside, svg, outside);
+    // Only a box that is not a control in its own right can turn out to be a wrapper.
+    const mayBeWrapper = !!added && (role === "clickable" || (!isNative(el) && !isFocusable(el)));
+    const mine: TextBlock[] | undefined = mayBeWrapper ? [] : role ? undefined : held;
+    for (const child of el.children) visit(child, childScope, pointerHere, inside, svg, outside, mine);
+    if (el.shadowRoot) for (const child of el.shadowRoot.children) visit(child, childScope, pointerHere, inside, svg, outside, mine);
 
     // A wrapper around real buttons or links is just a container, whether it
     // looked clickable or was given a role, like a menu entry around its link.
     // One that can be reached with the keyboard is a control in its own right:
     // a row that opens what it shows, with a button or two inside it.
     const within = added ? candidates.slice(before).filter((c) => c !== added) : [];
+    let wrapper = false;
     if (added && !isNative(el) && !isFocusable(el) && within.some((c) => c.role !== "clickable" && isNative(c.el))) {
-      candidates.splice(candidates.indexOf(added), 1);
+      wrapper = true;
     } else if (added?.role === "clickable" && within.some((c) => c.role === "clickable" && c.label.length >= added!.label.length * 0.6)) {
       // A clickable box around a clickable box that says the same thing: the inner one is the control.
+      wrapper = true;
+    }
+    if (added && wrapper) {
       candidates.splice(candidates.indexOf(added), 1);
+      // Its words were held back as a control's own. It is no control, so they are the page's.
+      if (mine?.length) (held ?? texts).push(...mine);
     }
   };
 
@@ -229,6 +271,11 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
   // With a dialog open, the rest of the page counts only where it is drawn over the dialog.
   let usable = mergeCells(modal ? candidates.filter((c) => !c.outside || onTop(c.el)) : candidates);
   nameRows(usable);
+  tellTwinsApart(usable);
+  for (const c of usable) {
+    const context = contextOf(c);
+    if (context) c.context = context;
+  }
 
   // Over the cap, keep what's on screen first, then the page's furniture, then
   // the rest in page order. A region that is one long run of links, like a box
@@ -239,8 +286,9 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
     const rank = (c: Candidate) => {
       if (!c.offscreen) return 0;
       if (!c.nav) return 2;
-      const seen = (perRegion.get(c.context ?? c.region) ?? 0) + 1;
-      perRegion.set(c.context ?? c.region, seen);
+      const where = `${c.region}|${c.heading}`;
+      const seen = (perRegion.get(where) ?? 0) + 1;
+      perRegion.set(where, seen);
       return seen > REGION_SHARE ? 3 : 1;
     };
     const ranked = usable.map((c) => ({ c, rank: rank(c) }));
@@ -250,7 +298,7 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
   usable = [];
 
   const elements = new Map<string, Element>();
-  const listed = chosen.map(({ el, nav: _nav, region: _region, outside: _outside, ...element }, index) => {
+  const listed = chosen.map(({ el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, ...element }, index) => {
     element.id = `e${index + 1}`;
     elements.set(element.id, el);
     return element;
@@ -271,7 +319,8 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
 /** Identifies the same control across two snapshots, where ids differ. */
 export function elementKey(element: Pick<SnapElement, "role" | "label" | "icon" | "href" | "context">): string {
   // The row a control is in is part of what it is: "Remove" beside Sam is not "Remove" beside Priya.
-  const row = /row: (.*)$/.exec(element.context ?? "")?.[1] ?? "";
+  // Its place among its like ("2 of 3") is left out: that shifts when one of them goes, and the control is still the same one.
+  const row = /row: (.*?)(?: › \d+ of \d+)?$/.exec(element.context ?? "")?.[1] ?? "";
   return `${element.role}|${element.label}|${element.icon ?? ""}|${element.href ?? ""}|${row}`;
 }
 
@@ -484,9 +533,13 @@ function mergeCells(candidates: Candidate[]): Candidate[] {
  */
 function nameRows(candidates: Candidate[]) {
   const groups = new Map<string, Candidate[]>();
+  const named = new Map<Element, Candidate>();
   for (const c of candidates) {
     const key = `${c.role}|${c.label}|${c.icon ?? ""}`;
-    groups.set(key, [...(groups.get(key) ?? []), c]);
+    const group = groups.get(key);
+    if (group) group.push(c);
+    else groups.set(key, [c]);
+    if (c.label) named.set(c.el, c);
   }
   for (const group of groups.values()) {
     if (group.length < 2) continue;
@@ -494,11 +547,71 @@ function nameRows(candidates: Candidate[]) {
       const row = c.el.parentElement?.closest(ROW);
       if (!row) continue;
       // A row that is itself listed, or holds a listed box around this control, has already said what it is.
-      const around = candidates.find((other) => other !== c && other.label && other.el !== c.el && other.el.contains(c.el) && (row.contains(other.el) || other.el === row));
+      // The outermost such box is the one that speaks for the row.
+      let around: Candidate | undefined;
+      for (let box: Element | null = c.el.parentElement; box; box = box === row ? null : box.parentElement) around = named.get(box) ?? around;
       const name = around ? cleanText(around.label, 40) : rowName(row, c.el);
-      if (name) c.context = [c.context, `row: ${name}`].filter(Boolean).join(" › ");
+      if (name) c.row = name;
     }
   }
+}
+
+/** How many boxes out from a control to look for words that stand beside it alone. */
+const BESIDE_DEPTH = 6;
+
+/**
+ * The words beside a control in the nearest box around it that says anything:
+ * the value next to its "Remove", the name next to its "Edit". A box that
+ * holds another control listed the same cannot tell the two apart, so the
+ * search stops there. `holds` says how many of them each box holds, and `not`
+ * is a name already found to be shared, to look past.
+ */
+function wordsBeside(control: Element, holds: Map<Element, number>, not = ""): string {
+  for (let box = control.parentElement, depth = 0; box && box !== document.body && depth < BESIDE_DEPTH; box = box.parentElement, depth++) {
+    if ((holds.get(box) ?? 0) > 1) return "";
+    // Marks left standing alone once the control is taken out, like the brackets around a link, are not words.
+    const words = cleanText(wordsIn(box, 60, CONTROLS, control).split(" ").filter((piece) => /[\p{L}\p{N}]/u.test(piece)).join(" "), 40);
+    if (words && words !== not) return words;
+  }
+  return "";
+}
+
+/** Controls listed word for word the same, in groups. */
+function twins(candidates: Candidate[]): Candidate[][] {
+  const groups = new Map<string, Candidate[]>();
+  for (const c of candidates) {
+    const key = `${c.role}|${c.label}|${c.icon ?? ""}|${c.href ?? ""}|${c.region}|${c.heading}|${c.row ?? ""}`;
+    const group = groups.get(key);
+    if (group) group.push(c);
+    else groups.set(key, [c]);
+  }
+  return [...groups.values()].filter((group) => group.length > 1);
+}
+
+/**
+ * Tells apart the controls that are still listed word for word the same once
+ * rows have been named. First by the words beside each, when it has some to
+ * itself: three "Remove" buttons, each next to the value it removes. What is
+ * left is told apart by its place among its like, in page order: "2 of 3".
+ * Two fields with the same placeholder and nothing else to go by are the usual case.
+ */
+function tellTwinsApart(candidates: Candidate[]) {
+  for (const group of twins(candidates)) {
+    // A row that names several of them has said all it can.
+    if (group[0]?.row) continue;
+    const holds = new Map<Element, number>();
+    for (const c of group) {
+      for (let box = c.el.parentElement, depth = 0; box && depth < BESIDE_DEPTH; box = box.parentElement, depth++) holds.set(box, (holds.get(box) ?? 0) + 1);
+    }
+    const names = group.map((c) => wordsBeside(c.el, holds));
+    group.forEach((c, index) => {
+      let name = names[index] ?? "";
+      // Two of them beside the same words, like "All": the next box out may say more.
+      if (name && names.indexOf(name) !== names.lastIndexOf(name)) name = wordsBeside(c.el, holds, name) || name;
+      if (name) c.row = name;
+    });
+  }
+  for (const group of twins(candidates)) group.forEach((c, index) => (c.place = `${index + 1} of ${group.length}`));
 }
 
 /** What a row is about: its heading, or else the first words in it that are not a control's. */

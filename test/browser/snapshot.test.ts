@@ -171,3 +171,53 @@ test("a name for screen readers that leaves out the words on the control is give
     'combobox "Type" [main]',
   ]);
 });
+
+// Telling same-named controls apart --------------------------------------------
+
+/** Dropdowns built from boxes. Each chosen value sits beside a "Remove" button, inside a box that takes clicks. */
+const VARIABLES = `<main>${["datacenter:A", "server:All", "pod:All", "zone:Everything here"]
+  .map((pair, index) => {
+    const [name, value] = pair.split(":");
+    return `<div><label for="v${index}">${name}</label><div style="cursor:pointer"><div><div><div>${value}</div>[<button aria-label="Remove"><svg width="12" height="12"></svg></button>]</div><div><input id="v${index}" role="combobox"></div></div></div></div>`;
+  })
+  .join("")}</main>`;
+
+test("same-named controls with no row around them are named by the words beside each", { skip }, async () => {
+  const snapshot = await read(VARIABLES);
+  assert.deepEqual(lines(snapshot), [
+    'button "Remove" [main › row: A]',
+    'combobox "datacenter" [main]',
+    // Two of them stand beside "All", so each takes in the next box out, which holds its caption.
+    'button "Remove" [main › row: server All]',
+    'combobox "server" [main]',
+    'button "Remove" [main › row: pod All]',
+    'combobox "pod" [main]',
+    'button "Remove" [main › row: Everything here]',
+    'combobox "zone" [main]',
+  ]);
+});
+
+test("controls that some heading or address already tells apart are not given the words beside them", { skip }, async () => {
+  const snapshot = await read(`<main><h2>History</h2><p>Long ago [<a href="/edit?section=1">edit</a>] things were made by hand.</p>
+    <h2>Design</h2><p>Today [<a href="/edit?section=2">edit</a>] they are not.</p>
+    <p>See <a href="/a">this</a> and also <a href="/b">this</a>.</p></main>`);
+  assert.deepEqual(lines(snapshot), ['link "edit" [main › History] → /edit', 'link "edit" [main › Design] → /edit', 'link "this" [main › Design] → /a', 'link "this" [main › Design] → /b']);
+});
+
+test("the words in a box that took clicks, and was then left out as a wrapper, are still sent as page text", { skip }, async () => {
+  const snapshot = await read(VARIABLES);
+  assert.ok(snapshot.text.includes("Everything here"), JSON.stringify(snapshot.text));
+});
+
+test("controls that are still listed the same are numbered, and the number is no part of what identifies one", { skip }, async () => {
+  const snapshot = await read(`<form><input placeholder="Please enter"><input placeholder="Please enter"><button>OK</button></form>
+    <ul><li>$100.00 <button>Remove</button></li><li>$100.00 <button>Remove</button></li><li>$250.00 <button>Remove</button></li></ul>`);
+  assert.deepEqual(lines(snapshot), [
+    'textbox "Please enter" [form › 1 of 2]',
+    'textbox "Please enter" [form › 2 of 2]',
+    'button "OK" [form]',
+    'button "Remove" [row: $100.00 › 1 of 2]',
+    'button "Remove" [row: $100.00 › 2 of 2]',
+    'button "Remove" [row: $250.00]',
+  ]);
+});
