@@ -4,7 +4,8 @@ import { loadSite, SITES_DIR } from "../src/server/sites.ts";
 import { DEFAULT_APPEARANCE, STREAM_TYPE, type SiteContext, type TurnReply, type TurnRequest } from "../src/shared/types.ts";
 import { bundleWidget } from "../src/widget/build.ts";
 import { CASES_DIR, type CaseFile } from "./cases.ts";
-import type { Act, GuideSet, Reached } from "./guide.ts";
+import { faults, type Act, type GuideSet, type Reached, type Says } from "./guide.ts";
+import { watch, type Net } from "./net.ts";
 
 // What the recorder, the whole-guide runs and the look tool share: a browser
 // with the real widget on a page, and a way to answer each step it asks for.
@@ -82,13 +83,23 @@ export async function siteFor(set: GuideSet): Promise<SiteContext | undefined> {
   return undefined;
 }
 
-export async function loadGuideSet(name: string): Promise<GuideSet> {
+/**
+ * Loads eval/guides/<name>.ts. A set whose guides are to be run or recorded is
+ * checked first: a guide that could never be scored as reached would count
+ * against Haptic whatever it did, so such a set is not used at all. Looking at
+ * a page needs no guide, so `eval:look` passes `checked: false`.
+ */
+export async function loadGuideSet(name: string, checked = true): Promise<GuideSet> {
+  let set: GuideSet;
   try {
-    return (await import(`./guides/${name}.ts`)).default as GuideSet;
+    set = (await import(`./guides/${name}.ts`)).default as GuideSet;
   } catch (error) {
     if ((error as { code?: string }).code === "ERR_MODULE_NOT_FOUND") throw new Error(`There is no eval/guides/${name}.ts.`);
     throw error;
   }
+  const wrong = checked ? faults(set) : [];
+  if (wrong.length) throw new Error(`eval/guides/${name}.ts cannot be used as it is:\n${wrong.map((line) => `  ${line}`).join("\n")}`);
+  return set;
 }
 
 export async function perform(page: Page, act: Act): Promise<void> {
@@ -114,6 +125,8 @@ async function dismiss(page: Page, selectors: string[] = []): Promise<void> {
 export interface Opened {
   page: Page;
   close: () => Promise<void>;
+  /** What the page sent, and what was stopped. Only on a site other people use: see eval/net.ts. */
+  net?: Net;
 }
 
 /**
@@ -123,7 +136,10 @@ export interface Opened {
  */
 export async function open(browser: Browser, set: GuideSet, path: string, answer: Answer, site?: SiteContext): Promise<Opened> {
   // A site that forbids scripts from elsewhere would block the tag. Its owner would allow it; here the rule is set aside.
-  const context = await browser.newContext({ bypassCSP: true, viewport: { width: 1366, height: 800 } });
+  // On a site other people use, a service worker could send requests the net below never sees, so none is allowed to start.
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: 1366, height: 800 }, ...(set.sandbox ? {} : { serviceWorkers: "block" }) });
+  // The net goes on first, so that every route added after it, the widget's own among them, is asked before it.
+  const net = set.sandbox ? undefined : await watch(context, set);
   const api = set.hasTag ? set.origin : WIDGET_ORIGIN;
   if (!set.hasTag) await context.addInitScript(addTag(`${api}/widget.js`, set.siteId));
 
@@ -171,10 +187,13 @@ export async function open(browser: Browser, set: GuideSet, path: string, answer
 
   const page = await context.newPage();
   if (set.before) {
+    // What the set's author wrote to sign in has been checked by them, so it goes through and is counted.
+    if (net) net.signingIn = true;
     await page.goto(set.origin + set.before.path, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await dismiss(page, set.dismiss);
     for (const act of set.before.acts) await perform(page, act);
     await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
+    if (net) net.signingIn = false;
     // An address that differs from this one only after its "#" would not load a page at all.
     await page.goto("about:blank");
   }
@@ -184,7 +203,7 @@ export async function open(browser: Browser, set: GuideSet, path: string, answer
   await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
   await dismiss(page, set.dismiss);
   await page.waitForTimeout(BEFORE_ASKING_MS);
-  return { page, close: () => context.close() };
+  return { page, close: () => context.close(), ...(net ? { net } : {}) };
 }
 
 /** Whether the page is where a guide was meant to end. Says what is missing when it is not. */
@@ -205,7 +224,105 @@ export async function reachedOrWhy(page: Page, reached: Reached, waitMs = 4000):
   };
   if (reached.text && !(await shown(page.getByText(reached.text)))) return `"${reached.text}" is not on the page`;
   if (reached.selector && !(await shown(page.locator(reached.selector)))) return `nothing visible matches ${reached.selector}`;
+  if (reached.absent) {
+    try {
+      // Gone from the page, or still there and no longer shown.
+      await page.locator(reached.absent).first().waitFor({ state: "hidden", timeout: waitMs });
+    } catch {
+      return `${reached.absent} is still on the page`;
+    }
+  }
   return "";
+}
+
+/** The words of a text, lower case, for comparing what was said with what the page shows. */
+const wordsOf = (text: string): string[] => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+
+/**
+ * A sentence that hedges gives no answer, whatever else it says: "it may be
+ * out of stock", "check whether it is offered", "I can't confirm". In the
+ * languages the guides are asked in.
+ */
+export const HEDGES =
+  /\b(it|they|this|that|there) (may|might|could) (be|have)\b|\b(probably|possibly|perhaps|presumably|not sure|unsure)\b|\b(check|see|verify|confirm) (whether|if)\b|\bi (can't|cannot|can not|couldn't) (see|tell|confirm|find|be sure)\b|\b(vielleicht|möglicherweise|wahrscheinlich|eventuell)\b|\bprüfen sie,? ob\b|\b(peut-être|probablement|sans doute)\b|\b(quizás|quizá|tal vez|probablemente)\b/i;
+
+/** The pieces of an answer the page shows, each cut to the part that counts. */
+function pieces(texts: string[], part: string | undefined): string[] {
+  return texts.map((text) => (part ? (new RegExp(part, "i").exec(text)?.[0] ?? "") : text).trim());
+}
+
+/** Whether a sentence says a piece of text: its words in order, or in any order when `anyOrder` is set. */
+function sayIt(said: string[], piece: string, anyOrder = false): boolean {
+  const wanted = wordsOf(piece);
+  if (!wanted.length) return false;
+  if (anyOrder) return wanted.every((word) => said.includes(word));
+  return said.some((_, start) => wanted.every((word, offset) => said[start + offset] === word));
+}
+
+/** What the page shows for an answer: the text of every visible element the selector matches. */
+export interface Read {
+  shown?: string[];
+  notShown?: string[];
+}
+
+/**
+ * Whether a sentence gives the true answer to a question that asks for a
+ * fact. Says what is wrong when it does not. `read` holds what the page shows
+ * for the answer, already read from it: see `readAnswers`.
+ */
+export function saidOrWhy(says: Says, sentence: string, read: Read = {}): string {
+  const hedge = HEDGES.exec(sentence);
+  if (hedge) return `the sentence hedges ("${hedge[0]}"), which is not an answer`;
+  for (const pattern of says.not ?? []) {
+    const found = new RegExp(pattern, "i").exec(sentence);
+    if (found) return `the sentence says "${found[0]}", which is the wrong answer`;
+  }
+  for (const pattern of says.all ?? []) if (!new RegExp(pattern, "i").test(sentence)) return `the sentence does not say ${pattern}`;
+  const said = wordsOf(sentence);
+  if (says.shown) {
+    const shown = read.shown ?? [];
+    if (!shown.length) return `the page showed nothing at ${says.shown.selector} to check the answer against`;
+    for (const [index, piece] of pieces(shown, says.shown.part).entries()) {
+      if (!piece) return `the page's "${shown[index]!.slice(0, 60)}" has no part matching ${says.shown.part}`;
+      if (!sayIt(said, piece, says.shown.anyOrder)) return `the sentence does not say "${piece}", which is what the page shows`;
+    }
+  }
+  if (says.notShown) {
+    for (const piece of pieces(read.notShown ?? [], says.notShown.part)) {
+      if (piece && sayIt(said, piece, says.notShown.anyOrder)) return `the sentence names "${piece}", which the page shows is not the answer`;
+    }
+  }
+  return "";
+}
+
+/** The text of every visible element a selector matches, at most sixty, after waiting up to `waitMs` for one. Empty when the page is gone or still loading. */
+async function visibleTexts(page: Page, selector: string, waitMs = 0): Promise<string[]> {
+  try {
+    const found = page.locator(selector);
+    if (waitMs) await found.first().waitFor({ state: "visible", timeout: waitMs }).catch(() => undefined);
+    const texts: string[] = [];
+    for (let index = 0, count = Math.min(await found.count(), 60); index < count; index++) {
+      if (await found.nth(index).isVisible()) texts.push(((await found.nth(index).textContent()) ?? "").replace(/\s+/g, " ").trim());
+    }
+    return texts.filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/** Reads from the page the answers a `says` takes from it `when` it is now: at the start, or at the end. */
+export async function readAnswers(page: Page, says: Says | undefined, when: "start" | "end"): Promise<Read> {
+  const read: Read = {};
+  // The page a guide starts on may still be drawing its data. It is there all along, so it is worth a short wait.
+  const wait = when === "start" ? 5000 : 0;
+  if (says?.shown && (says.shown.when ?? "end") === when) read.shown = await visibleTexts(page, says.shown.selector, wait);
+  if (says?.notShown && (says.notShown.when ?? "end") === when) read.notShown = await visibleTexts(page, says.notShown.selector, wait);
+  return read;
+}
+
+/** `saidOrWhy` with what is read at the end read from the page as it is now, and what was read at the start passed in. */
+export async function saysOrWhy(page: Page, says: Says, sentence: string, atStart: Read = {}): Promise<string> {
+  return saidOrWhy(says, sentence, { ...atStart, ...(await readAnswers(page, says, "end")) });
 }
 
 /** Types a question into the widget, as a visitor would. */

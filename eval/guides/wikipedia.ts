@@ -248,6 +248,11 @@ const guides: Guide[] = [
     ],
     // Any of the three leads to a diff of the article, not of its talk page.
     reached: { url: "title=Haptic_technology&(.*&)?diff=" },
+    // The question asks for a fact, and the history's top row answers it: when, by whom and what. The article's own
+    // footer says when it was last edited, so a sentence that gives that date tells the visitor which change was the
+    // latest. The talk page's latest change has another date and does not pass. The date is read from the article
+    // when the guide starts, because it changes whenever anyone edits it.
+    says: { shown: { selector: "#footer-info-lastmod", part: "\\d{1,2} [A-Za-z]+ \\d{4}", anyOrder: true, when: "start" } },
   },
 
   // The one control here that takes money. It leads to another site, so the guide stops on it.

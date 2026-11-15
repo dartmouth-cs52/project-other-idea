@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 import type { Snapshot } from "../src/shared/types.ts";
 import { ask, launch, loadGuideSet, open, perform } from "./browser.ts";
 import type { Act, GuideSet } from "./guide.ts";
+import { describeSent } from "./net.ts";
 
 // Shows a page the way the widget reads it: every control it would list for
 // the model, with the role, label, icon, state, link and surroundings it
@@ -57,7 +58,7 @@ async function main() {
     set = { siteId: "site_look", origin: url.origin, hasTag: false, guides: [] };
     path = url.pathname + url.search + url.hash;
   } else {
-    set = await loadGuideSet(where);
+    set = await loadGuideSet(where, false);
     path = pathGiven ?? "/";
   }
   const acts = (values.do ?? []).map(parseAct);
@@ -65,11 +66,12 @@ async function main() {
   const browser = await launch();
   try {
     let seen: Snapshot | undefined;
-    const { page, close } = await open(browser, set, path, (request) => {
+    const { page, close, net } = await open(browser, set, path, (request) => {
       seen = request.snapshot;
       return { target: null, status: "done", say: "Looked." };
     });
-    for (const act of acts) {
+    for (const [index, act] of acts.entries()) {
+      net?.acting(`did --do number ${index + 1}`);
       await perform(page, act);
       await page.waitForTimeout(600);
     }
@@ -79,6 +81,14 @@ async function main() {
     await close();
     if (!seen) throw new Error("The widget never sent the page. It may not have loaded here.");
     print(seen, values.text, values.json);
+    // On a site that is not a sandbox, what the page sent other than plain reads. With --json it goes to the error stream, so the JSON stays whole.
+    if (net) {
+      const lines = describeSent(net.log);
+      const say = values.json ? console.error : console.log;
+      say(lines.length ? `\n${lines.join("\n")}` : "\nThe page sent nothing but plain reads.");
+      const spoiled = net.spoiled();
+      if (spoiled) say(`\nA guide run here would not be scored: ${spoiled.why}.`);
+    }
   } finally {
     await browser.close();
   }

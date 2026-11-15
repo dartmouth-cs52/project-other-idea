@@ -148,7 +148,8 @@ const guides: Guide[] = [
       { expect: [{ label: "Raw", role: "tab" }], act: { click: '[role="tab"]:has-text("Raw")' } },
       DONE,
     ],
-    reached: { url: "/catalog/default/api/streetlights/definition$", selector: '[role="tab"][aria-selected="true"]:has-text("Raw")' },
+    // The API's own page has the definition further down, with a Raw tab of its own: the same source, as the step above says.
+    reached: { url: "/catalog/default/api/streetlights(/definition)?$", selector: '[role="tab"][aria-selected="true"]:has-text("Raw")' },
   },
 
   // Tabs on an entity page. The visitor clicks the tab next to the one they were shown.
@@ -200,7 +201,8 @@ const guides: Guide[] = [
 
   // A form with a text field, radio buttons and checkboxes, then a second page.
   // It stops at the owner: once one is typed the app asks the visitor to sign in to GitHub,
-  // which no guide here does, and without that the repository cannot be created.
+  // which no guide here does, and without that the repository cannot be created. So the
+  // "Log in" button of the "Login Required" dialog is as far as anyone can go, and ends it too.
   {
     id: "new-site-from-template",
     start: "/create",
@@ -222,6 +224,7 @@ const guides: Guide[] = [
           { label: "Owner(Required)", role: "button" },
           { label: "Repository(Required)", role: "combobox" },
           { label: "Repository(Required)", role: "button" },
+          { label: "Log in", role: "button" },
         ],
         say: "Type the GitHub user or organisation that will own the repository.",
       },
@@ -317,5 +320,7 @@ export default {
   // The first entry is a divider in the sidebar, harmless to click, which is there once the app
   // has drawn. The others never match, and the recorder waits a second and a half for each.
   dismiss: ["nav hr", PAUSE, PAUSE, PAUSE],
+  // The catalogue is read with a POST: its rows, the choices of its filters, and the entities a page names.
+  reads: "^POST demo\\.backstage\\.io/api/catalog/(entities/by-query|entities/by-refs|entity-facets)$",
   guides,
 } satisfies GuideSet;

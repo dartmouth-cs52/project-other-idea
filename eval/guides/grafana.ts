@@ -26,8 +26,9 @@ const EXPAND_ALERTING = button("Expand section: Alerting");
 
 const guides: Guide[] = [
   {
-    // Ends on the panel's menu, which is hidden until the mouse is over the panel, so the widget never lists it.
-    // The recorder has no way to hover and then click, and asking again moves the mouse away, so the guide stops there.
+    // The panel's menu is hidden until the mouse is over the panel, so the widget does not list it until then. The
+    // recorder has no way to hover and then click, and asking again moves the mouse away, so a recording stops there.
+    // A whole-guide run goes on: the raw numbers are in the panel's Inspect drawer, which opens on its Data tab.
     id: "find-panel-data",
     start: "/dashboards",
     goal: "I'm looking for the raw numbers behind the Simple graph chart on the Time series graphs dashboard",
@@ -36,7 +37,11 @@ const guides: Guide[] = [
       { expect: [role("combobox", "Search or jump to...")], act: { fill: ['input[placeholder="Search or jump to..."]', "time series graphs"] }, say: "Type the dashboard's name." },
       { expect: [role("option", "Dashboards: Time series graphs Examples")], act: { click: '[role="option"]:has-text("Time series graphs")' } },
       { expect: [SIMPLE_GRAPH_MENU], unlisted: true, act: { hover: SIMPLE_GRAPH } },
+      { expect: [SIMPLE_GRAPH_MENU], act: { click: '[data-testid="data-testid Panel menu Simple graph"]' } },
+      { expect: [role("menuitem", "Inspect")], act: { click: '[role="menuitem"]:has-text("Inspect")' } },
+      DONE,
     ],
+    reached: { text: "Inspect: Simple graph" },
   },
   {
     id: "time-range-wrong-click",
@@ -79,7 +84,13 @@ const guides: Guide[] = [
       { expect: [role("menuitem", "View v")], act: { click: '[role="menuitem"]:has-text("View")' } },
       DONE,
     ],
-    reached: { url: "viewPanel=" },
+    // Both halves of the question: the panel fills the screen, and in it only B-series is drawn. Grafana marks a
+    // series it has hidden in the legend's own markup. Testing only the address passed a run that never isolated it.
+    reached: {
+      url: "viewPanel=",
+      selector:
+        '[data-testid="data-testid Panel header Simple graph"]:has([data-testid="data-testid VizLegend series B-series"]:not([class*="LegendLabelDisabled"])):not(:has([data-testid^="data-testid VizLegend series"]:not([data-testid="data-testid VizLegend series B-series"]):not([class*="LegendLabelDisabled"])))',
+    },
   },
   {
     // Stops at the menu entry. Opening "Share internally" already makes a short link on the server, before anything is copied.
@@ -121,7 +132,8 @@ const guides: Guide[] = [
       { expect: [role("radio", "Firing")], act: { click: '[role="radiogroup"][aria-labelledby="filter-label-state"] button:has-text("Firing")' } },
       DONE,
     ],
-    reached: { url: "state:firing" },
+    // The list of alert rules filtered to the firing ones, or the list of alerts filtered the same way: both show only what is going off.
+    reached: { url: "state:firing|/alerting/alerts\\?.*alertstate%7C%3D%7Cfiring" },
   },
   {
     // Stops at Save: this is a public instance, and nothing is to be created on it.
@@ -166,5 +178,12 @@ export default {
   about: "Grafana Play, the public playground of Grafana, used without signing in. It stands for analytics and monitoring dashboards: dense, icon-heavy and full of custom controls.",
   // Opening either share panel creates a short link on the server straight away, and a snapshot is published.
   never: "Share internally|Share externally|Snapshot|Copy link|Copy URL|Shorten",
+  // What a page has to send to draw itself: each panel's query (at its old address and its new one), the same for a
+  // Prometheus data source's own read addresses, the search for dashboards, and the question of which features are
+  // switched on. All of them only read.
+  reads:
+    "^POST play\\.grafana\\.org/(api/ds/query|ofrep/v1/evaluate/flags|api/datasources/uid/[^/]+/resources/api/v1/(query|query_range|query_exemplars|labels|series|metadata|label/[^/]+/values)|apis/query\\.grafana\\.app/[^/]+/namespaces/[^/]+/query|apis/dashboard\\.grafana\\.app/[^/]+/namespaces/[^/]+/(notebooks/search|dashboards/search/hybrid))$",
+  // Usage counts, and the note Explore makes of every query it runs. The page sends these whoever is looking and works without them.
+  chatter: "^POST play\\.grafana\\.org/api/(frontend-metrics|ma/events|query-history)$",
   guides,
 } satisfies GuideSet;

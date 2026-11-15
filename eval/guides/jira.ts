@@ -52,7 +52,9 @@ const guides: Guide[] = [
     goal: "Pull up ticket KAFKA-1 for me, I need to see everything that was edited on it and by whom",
     steps: [
       { expect: [QUICK_SEARCH], act: { fill: ["#quickSearchInput", "KAFKA-1"] }, say: "Type KAFKA-1 into the search box." },
-      // The suggestion opens the ticket, and so does pressing Enter in the box.
+      // The suggestion opens the ticket. Pressing Enter in the box does not: it runs Jira's quick search, which sends a
+      // visitor who is not signed in to the sign-in page (seen on 15 November 2026). The ticket and its History tab
+      // need no account.
       {
         expect: [link("The log4j appender still uses the SyncProducer API KAFKA-1"), QUICK_SEARCH],
         point: link("The log4j appender still uses the SyncProducer API KAFKA-1"),
@@ -121,6 +123,8 @@ const guides: Guide[] = [
     start: SEARCH_KAFKA,
     goal: "Wo kann ich hier eine JQL-Abfrage selbst eintippen, statt die Filter einzeln anzuklicken?",
     steps: [{ expect: [ADVANCED], act: { click: 'a.switcher-item:has-text("Advanced")' } }, { expect: [{ label: "Advanced Query", role: "combobox" }], say: "Type your query here." }],
+    // The answer is a place: once the query box is on show the visitor is where they can type, pointed at or not.
+    reached: { selector: "textarea#advanced-search" },
   },
   // Two things asked at once. An icon-only button, a menu, a page load, then a column header on a page of over 300 controls.
   {
@@ -143,10 +147,13 @@ const guides: Guide[] = [
     reached: { url: "ORDER(%20|\\+)BY(%20|\\+)created", selector: "#issuetable" },
   },
   // Two buttons say Export: this one is for the whole search, the other for the single issue open beside it.
-  // The menu entry opens a dialog. Its Export button starts the download, so the guide ends on it.
+  // A CSV entry opens a dialog, whose Export button starts the download. An Excel CSV entry starts it at once.
+  // Either is where the guide ends, unpressed. It starts from a search that cannot grow, Kafka's tickets from
+  // 2011 (229 of them), because Jira refuses to export more than 1,000 and the whole project has far more:
+  // an Excel entry on that search ended on Jira's error page.
   {
     id: "export-spreadsheet",
-    start: SEARCH_KAFKA,
+    start: "/jira/issues/?jql=project%20%3D%20KAFKA%20AND%20created%20%3C%20%222012-01-01%22%20ORDER%20BY%20created%20ASC",
     goal: "get these tickets into excel",
     steps: [
       { expect: [{ label: "Export", role: "button", context: "header › Search" }], act: { click: "button.header-views" } },
@@ -161,7 +168,13 @@ const guides: Guide[] = [
         act: { click: "#currentCsvFields" },
       },
       // The dialog is not marked as modal, so the page behind it is listed too, with its two other Export buttons. The dialog's is the one in a footer.
-      { expect: [{ label: "Export", role: "button", context: "footer" }] },
+      {
+        expect: [
+          { label: "Export", role: "button", context: "footer" },
+          { label: "Excel CSV (Current fields)", role: "menuitem" },
+          { label: "Excel CSV (All fields)", role: "menuitem" },
+        ],
+      },
     ],
   },
   // The visitor is pointed at Components and clicks Reports, the link above it.
@@ -233,5 +246,14 @@ export default {
   origin: "https://issues.apache.org",
   hasTag: false,
   about: "The Apache Software Foundation's public Jira, read without signing in: a real production install of the issue tracker most large companies run. It stands for issue tracking and work management.",
+  // Jira asks for a good deal with a POST that only reads: the scripts and styles a page needs, the rows of a search,
+  // the form of a search criterion, the entries of the sort and export menus, the rules a form checks itself against,
+  // and the ticket shown beside a search.
+  reads:
+    "^POST issues\\.apache\\.org/jira/(rest/wrm/2\\.0/resources|rest/issueNav/1/issueTable(/stable)?|rest/issueNav/1/issueNav/operations/views|rest/orderbycomponent/latest/orderByOptions/primary|rest/scriptrunner/behaviours/latest/validators\\.json|secure/QueryComponent(RendererEdit|RendererValue)?!(Default|Jql)\\.jspa|secure/AjaxIssueAction!default\\.jspa)$",
+  // A dashboard's report on itself, and three notes Jira keeps about this visitor: how they like to search (split or
+  // list, basic or advanced) and which project they last opened. The notes are stopped, and the page carries on all the same.
+  chatter:
+    "^(POST issues\\.apache\\.org/jira/(plugins/servlet/gadgets/dashboard-diagnostics|rest/issueNav/latest/preferredSearchLayout|rest/querycomponent/latest/userSearchMode)|PUT issues\\.apache\\.org/jira/rest/projects/1\\.0/project/[^/]+/lastVisited)$",
   guides,
 } satisfies GuideSet;

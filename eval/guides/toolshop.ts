@@ -26,7 +26,7 @@ const select = (label: string): Matcher => ({ label, role: "select" });
 // button inside it. The wrapper's label runs on into the words of its closed dropdown. Both sit
 // in the same spot and a click on either opens the menu, so both are right.
 const CATEGORIES: Matcher[] = [{ label: "Categories Hand Tools Power Tools Other Special Tools Rentals", role: "menuitem" }, button("Categories")];
-const ACCOUNT_MENU: Matcher[] = [{ label: "Jane Doe My account My favorites My profile My invoices My messages Sign out", role: "menuitem" }, button("Jane Doe")];
+const ACCOUNT_MENU: Matcher[] = [{ label: "Jack Howe My account My favorites My profile My invoices My messages Sign out", role: "menuitem" }, button("Jack Howe")];
 // The basket in the header is an icon with a count: the wrapper is listed as "1", the link inside by its aria-label.
 const BASKET: Matcher[] = [{ label: "1", role: "menuitem", icon: "cart-shopping" }, { label: "cart", role: "link", icon: "cart-shopping" }];
 
@@ -41,7 +41,8 @@ const guides: Guide[] = [
     steps: [
       { expect: [select("sort"), checkbox("Hammer"), checkbox("ForgeFlex Tools")], act: { select: ['[data-test="sort"]', "Price (Low - High)"] }, say: "Open this list and pick Price (Low - High)." },
       { expect: [checkbox("Hammer"), checkbox("ForgeFlex Tools")], act: { check: '#filters label:has-text("Hammer") input' }, say: "Tick Hammer." },
-      { expect: [checkbox("ForgeFlex Tools")], act: { check: '#filters label:has-text("ForgeFlex Tools") input' }, say: "Tick ForgeFlex Tools." },
+      // The brands are further down the filters, so a visitor scrolls to find the box. Scrolling is not a step.
+      { expect: [checkbox("ForgeFlex Tools")], act: { check: '#filters label:has-text("ForgeFlex Tools") input' }, scrollFirst: 300, say: "Tick ForgeFlex Tools." },
       DONE,
     ],
     reached: { selector: 'app-overview:has(label:has-text("ForgeFlex Tools") input:checked):has(label:has-text("Hammer") input:checked) a.card >> nth=0 >> text=Thor Hammer' },
@@ -63,14 +64,18 @@ const guides: Guide[] = [
   },
   // Asked from a category page, where the product's card is the only way to it. The product page
   // is drawn only once its data has arrived, which is after the widget has looked.
+  // It ends with the saw in the basket: the basket already held the pliers, so it now counts two, on
+  // the saw's own page. The question used to be "I'd like to order the circular saw", which a person
+  // watching would not call done until the order was placed; the script never went that far.
   {
     id: "buy-circular-saw",
     start: "/category/power-tools",
-    goal: "I'd like to order the circular saw",
+    goal: "How do I add the circular saw to my basket?",
     steps: [
       { expect: [link("Circular Saw A B C D E $80.19")], act: { click: 'a.card:has-text("Circular Saw")' } },
       { expect: [button("Add to cart")], unlisted: true, act: { click: "#btn-add-to-cart" } },
     ],
+    reached: { url: "/product/[0-9A-Za-z]+$", text: "Circular Saw", selector: '[data-test="cart-quantity"]:text-is("2")' },
   },
   // Rentals sit at the bottom of the Categories menu. Each rental is a <div tabindex="0"> with a
   // click handler, no role and no pointer cursor, so the widget has nothing to list for it.
@@ -96,9 +101,13 @@ const guides: Guide[] = [
       { expect: BASKET, act: { click: '[data-test="nav-cart"]' }, say: "Click the basket icon at the top." },
       { expect: [{ label: "", icon: "xmark" }], unlisted: true, act: { click: "app-cart a.btn-danger" } },
     ],
+    // The pliers were all the basket held: their row has gone, and the basket says so.
+    reached: { text: "The cart is empty", absent: 'app-cart tr:has-text("Pliers")' },
   },
-  // The whole checkout, from the basket to an order placed with one of the made-up payment methods.
-  // The address step shows the street and city from the profile; country looks empty and the rest is.
+  // The checkout, from the basket to the payment step, where the shop accepts a plan in monthly
+  // instalments. The address step shows the street and city from the profile; country looks empty and
+  // the rest is. It ends when the plan is accepted, which answers the question: placing the order
+  // after that is not what was asked.
   {
     id: "pay-in-instalments",
     start: "/checkout",
@@ -114,9 +123,10 @@ const guides: Guide[] = [
       { expect: [select("Payment Method")], act: { select: ['[data-test="payment-method"]', "Buy Now Pay Later"] }, say: "Open this list and pick Buy Now Pay Later." },
       { expect: [select("Monthly Installments")], act: { select: ["#monthly_installments", "3 Monthly Installments"] }, say: "Pick how many months." },
       { expect: [button("Check payment")], act: { click: '[data-test="finish"]' } },
-      // The same button turns into Confirm once the payment check has come back, after the widget has looked.
-      { expect: [button("Confirm")], unlisted: true, act: { click: 'button[data-test="finish"]:has-text("Confirm")' } },
     ],
+    // The shop says the payment went through, with a number of monthly instalments chosen. That list is only there
+    // when the payment method is Buy Now Pay Later, so another method that goes through does not pass.
+    reached: { selector: 'app-checkout:has(#monthly_installments option:checked:not([value=""])) [data-test="payment-success-message"]' },
   },
   // Leads up to Send and stops: the message is never sent.
   {
@@ -137,8 +147,8 @@ const guides: Guide[] = [
     start: "/account",
     goal: "I've got a new mobile number. Where do I update it?",
     steps: [
-      { expect: [...ACCOUNT_MENU, link("Profile")], act: { click: '[data-test="nav-categories"]' }, say: "Click Jane Doe at the top." },
-      { expect: [...ACCOUNT_MENU, link("Profile")], act: { click: '[data-test="nav-menu"]' }, say: "Not that one. Click Jane Doe.", sayStartsWith: "Not that one." },
+      { expect: [...ACCOUNT_MENU, link("Profile")], act: { click: '[data-test="nav-categories"]' }, say: "Click Jack Howe at the top." },
+      { expect: [...ACCOUNT_MENU, link("Profile")], act: { click: '[data-test="nav-menu"]' }, say: "Not that one. Click Jack Howe.", sayStartsWith: "Not that one." },
       { expect: [link("My profile"), link("Profile")], act: { click: '[data-test="nav-my-profile"]' } },
       { expect: [textbox("Phone")], act: { fill: ['[data-test="phone"]', "555 0100"] }, say: "Type your new number." },
       // The account is shared with everyone who practises on this site, so its profile is left as it was.
@@ -190,9 +200,10 @@ export default {
   // the same: someone placed 3 orders as customer2@ in the second hour.
   // customer3@ also has no past orders, which latest-order needs. So this signs in as customer2@,
   // the least used of the three, which has past orders and an address like Jane Doe's (street and
-  // city filled in, the rest empty). It can still be locked by someone else in any given hour.
-  // ACCOUNT_MENU above still names Jane Doe. Whole-guide runs never read it, but it has to name
-  // Jack Howe before this file is recorded again.
+  // city filled in, the rest empty). It can still be locked by someone else in any given hour: then
+  // every guide ends as an error, which is left out of the rate. It does not fall back on another
+  // customer: the two others are the ones most often locked, the account menu and the profile are
+  // matched by the customer's name, and customer3@ has no order for latest-order to show.
   //
   // Which pliers. Every product starts the hour with 25 in stock, and a product with none has its
   // Add to cart button switched off, which is what stopped this block before. Combination Pliers

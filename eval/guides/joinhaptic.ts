@@ -61,5 +61,7 @@ export default {
   origin: "https://joinhaptic.com",
   hasTag: false,
   about: "Haptic's own public site: a simple marketing page with an accordion and a two-step form.",
+  // The site's pages report their loading times to the network in front of them. Nothing else here is sent but plain reads.
+  chatter: "^POST joinhaptic\\.com/cdn-cgi/rum$",
   guides,
 } satisfies GuideSet;

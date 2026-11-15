@@ -188,15 +188,61 @@ Each run ends one of these ways:
 
 | End | Meaning |
 |---|---|
-| reached | The visitor ended up where the guide's script says they wanted to be. |
+| reached | The visitor ended up where the guide's script says they wanted to be, or, for a question that asks for a fact, was told the true answer. |
 | stopped short | The model said it was done, or had nothing to point at, somewhere else. |
-| went in circles | It was still giving steps four past the length of the script. |
-| stalled | The widget stopped asking for steps: it gave up, or what the visitor did never registered. |
-| cut short | On a site other people use, it pointed at a control that could send, buy, save or delete, and the run stopped before pressing it. Left out of the rate, since it shows nothing either way. |
+| went in circles | It was still giving steps four past the length of the script, and on the way pointed again at a control already used on a page that looked the same. |
+| ran long | It was still giving steps four past the length of the script, each on something new. |
+| stalled | The widget stopped asking for steps: it gave up, what the visitor did never registered, or the control could not be reached at all. |
+| cut short | On a site other people use, it pointed at a control that could send, buy, save or delete, and the run stopped before pressing it, or a step set off a request that would have written to the site, which was stopped. |
+| error | The benchmark could not tell: the site was down, sign-in was refused, the model or the server failed. |
 
-**control covered** counts the steps where the caption or something else sat on top of the control, so a visitor could not have clicked its middle. The demo app's pages need the local server (`HAPTIC_MODEL=mock npm run dev`). A guide of one step is skipped, because the single-step case already covers it.
+"cut short" and "error" say nothing about Haptic either way, so they are left out of the rate and counted beside it. However a run ends short of the goal, the line says what the widget was showing.
+
+A guide is reached in one of these ways, and the guide file says which (`eval/guide.ts` has the types):
+
+- `reached`: the page shows what it should (an address, a text, a selector) and, with `absent`, no longer shows what the visitor wanted rid of.
+- A last step with no `act`: the guide is over when the model points at that control, the one that would save or send. With `given`, only while the page is as `given` says, for a filter that must be set before the visitor is shown Search.
+- `says`, for a question that asks for a fact: the last sentence gives the true answer. This reaches the guide as fully as the walk-through. Where the answer can change it is read from the page, when the guide starts or when it ends, and never written into the script; so are wrong answers the sentence must not name. A sentence that hedges ("it may be", "check whether") never passes. A "done" that points at where the answer is, with the answer said, is judged and not clicked. These runs have the kind "answer", and the table also gives the rate without them, as a check that a rise is honest.
+
+A guide set with a guide that no run could ever score as reached is refused, with the guide named.
+
+**What the visitor does.** It uses each control the way a person would (`eval/visitor.ts`): it presses with the real mouse, types key by key, opens a list and picks from it what the sentence names when the widget stays quiet, and types what the script or the sentence says before anything of its own. A control under its own label or row is pressed at its middle; only something unrelated on top counts as **control covered**, and a control no part of which can be reached is a result in itself. `--visitor old` runs the visitor as it was before this (fill on every input, "Test", the second entry of every dropdown, a click by script when covered), for one release, so that a rise in the score can be split into the benchmark's share and the product's.
+
+**Following the widget.** A widget that reports `guideState` on its host element looks once more after "done" with a pointer, and the runner waits for that before judging. A "continue" with no pointer while it is "watching" means "do this": the runner presses the key the sentence names, or says in the log that it could not do what was asked. With no `guideState`, a "done" with a pointer ends the guide as before.
+
+Under the table, **on the way** shows what the rate hides: steps against the script, runs that ended on "done" with a pointer, runs where the model said done and the script says the visitor is not there, passes by the answer in words, passes that then pointed at more, passes after asking for something already done, answers the widget set aside when it asked again for the same step, closing questions, and questions asked only because the visitor scrolled (a step can ask the visitor to scroll first with `scrollFirst`).
+
+`--trace` writes, beside the results file, the whole request the widget sent at every answer (the controls, the event, the history, the page text), the message this checkout's server would build from it, the reply, and what the visitor did.
+
+The demo app's pages need the local server (`HAPTIC_MODEL=mock npm run dev`). A guide of one step is skipped, because the single-step case already covers it.
 
 It drives a browser with Playwright, which this project does not install: `npm install --no-save playwright && npx playwright install chromium`.
+
+## Nothing is written to a site other people use
+
+Twice a whole-guide run did something on a live site that it should not have: it typed made-up sign-in details into a public Jira, and it pressed a "Copy link" that makes a short link on the server. A list of risky words on buttons cannot catch the next one, so there is a net under it (`eval/net.ts`).
+
+On every guide set that is not marked `sandbox: true`, each request a page makes is looked at before it leaves the browser, in whole-guide runs, in the recorder and in `eval:look` alike:
+
+- A plain read (GET, HEAD, OPTIONS) goes through.
+- Anything else goes through only when it is known to read: a GraphQL request whose every operation is a query, a request the guide set lists in `reads` (a search or a chart's query that the site sends as a POST), or what the set's own `before` sends to sign in.
+- Everything else is stopped inside the browser and never reaches a server.
+
+Most of what is stopped is the page talking to itself: usage counts and error reports, sent to another site, sent as a beacon, or listed in the set's `chatter`. A stopped request to the site itself that nobody has vouched for is different. After something the visitor did, it is taken for the step trying to write, and the guide ends "cut short" with the request named. Before the visitor did anything, the page may be missing something it needs, so the guide ends as an error that says what to add to the guide set. Neither is counted in the rate.
+
+Every request let through or stopped is in the results file (method, host and path, never the query or the body), the table has three columns for them, and under the table each site's unvouched-for requests are listed. "sent: tried to write" should be 0. When it is not, read the line under the table the same day.
+
+To find what a site needs, look at its pages with no model: `npm run -s eval:look -- grafana "/d/000000016/time-series-graphs"` prints what was let through and what was stopped after the list of controls. Put a request in `reads` only when it cannot save, send, create or delete anything.
+
+Two limits. Messages sent over a WebSocket that is already open are counted and not stopped. And service workers are switched off on these sites, so that none can send what the net does not see.
+
+### What needs recording again
+
+These guide files no longer match what the widget sends, and are not recorded again until the widget work under way has settled. The whole-guide runs do not depend on them.
+
+- `parabank`: its matchers describe the widget before it was reworked.
+- `ui5`, `wikipedia`, `toolshop` (five marks) and `orangehrm` (the chip's cross, the sort arrows): `unlisted` marks on controls the widget now lists. Toolshop's `{ label: "Excavator" }` no longer fits, and orangehrm's unnamed fields are now named.
+- The guides whose scripts changed on 15 November 2026: antdpro `rule-template` and `basic-form`, grafana `find-panel-data`, jira `export-spreadsheet` (new start), orangehrm `new-department` and `rejected-leave`, toolshop `buy-circular-saw` (new question) and `pay-in-instalments`, and the toolshop guides that name the signed-in customer.
 
 ## The held-out split
 

@@ -69,9 +69,11 @@ const guides: Guide[] = [
   },
 
   // The same action on every row, a dialog in three steps, and a dropdown inside the dialog.
-  // It ends where the widget has nothing to point at. What is left (Next, a required Starting Time, Finish) is
-  // not recorded: the widget does not send which option a Select shows, so when the visitor has picked the
-  // option themselves and asks again, nothing on its list says the template is already chosen.
+  // It ends on Finish, unpressed, once the dialog is TradeCode 97's, holds 规则模板二 and has the required
+  // Starting Time. Finish only says "Configuration is successful", whichever template was chosen, so pressing
+  // it would prove less than this: the dialog keeps each page's fields after it moves on, so they can be read.
+  // A recording stops at the option: the widget does not send which option a Select shows, so when the visitor
+  // has picked it themselves and asks again, nothing on its list says the template is already chosen.
   {
     id: "rule-template",
     start: TABLE,
@@ -88,6 +90,12 @@ const guides: Guide[] = [
       { expect: [{ label: "Rule Template", role: "combobox" }], act: { press: ['.ant-modal [id="1_template"]', "Enter"] }, say: "Open Rule Template and choose 规则模板二." },
       // The list of options is drawn outside the dialog, and with a dialog open the widget lists only the dialog.
       { expect: [{ label: "规则模板二", role: "option" }], unlisted: true, act: { click: '.ant-select-dropdown .ant-select-item-option[title="规则模板二"]' } },
+      { expect: [button("Next")], act: { click: '.ant-modal button:has-text("Next")' } },
+      { expect: [any("Starting Time")], act: { fill: ['[id="2_time"]', "2026-12-01 09:00:00"] }, say: "Pick a starting time." },
+      {
+        expect: [button("Finish")],
+        given: { selector: '.ant-modal:has([id="0_name"][value="TradeCode 97"]):has([title="规则模板二"]):has([id="2_time"][value]:not([value=""])) button:has-text("Finish")' },
+      },
     ],
   },
 
@@ -110,7 +118,13 @@ const guides: Guide[] = [
     start: TABLE,
     goal: "can I see more rows at once? 50 on a page would be good",
     steps: [
-      { expect: [{ label: "Page Size", role: "combobox" }], act: { press: ['.ant-pagination-options input[role="combobox"]', "Enter"] }, say: "Open the page size list below the table and choose 50 / page." },
+      // A visitor looks down the page for it first. Scrolling is not a step: a widget that asks again because of it is counted.
+      {
+        expect: [{ label: "Page Size", role: "combobox" }],
+        act: { press: ['.ant-pagination-options input[role="combobox"]', "Enter"] },
+        scrollFirst: 400,
+        say: "Open the page size list below the table and choose 50 / page.",
+      },
       { expect: [{ label: "50 / page", role: "option" }], act: { click: '.ant-pagination-options .ant-select-item-option[title="50 / page"]' } },
       DONE,
     ],
@@ -131,6 +145,10 @@ const guides: Guide[] = [
       { expect: [MEASURE], act: { fill: ["#basic_standard", "Test standard"] }, say: "Say how it will be measured." },
       { expect: [button("Submit")] },
     ],
+    // The question asks which fields must be filled in. The page marks each required field's label, so a sentence that
+    // names every one of them answers it, wherever the visitor is. The labels are read from the page when the guide
+    // starts, in the words the page uses: an answer that gives the fields only in translation does not pass.
+    says: { shown: { selector: ".ant-form-item-required", when: "start" } },
   },
 
   // Settings two levels down, then three switches that all read "开 关".

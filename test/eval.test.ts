@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseModel } from "../eval/ask.ts";
 import { findListed, KINDS, loadCaseFiles, matches, plausibleRange, score, type Case } from "../eval/cases.ts";
+import { saidOrWhy } from "../eval/browser.ts";
+import { DONE, faults, type Guide, type GuideSet } from "../eval/guide.ts";
+import { judge, Net, onlyQueries } from "../eval/net.ts";
 
 const item: Case = {
   id: "sample-1",
@@ -137,4 +140,138 @@ test("every saved case is well formed, and can be passed unless it says the widg
       if (saved.expect.trap?.length) assert.ok(findListed(saved.expect.trap, listed), `${name}: ${saved.id} guards against a control that is not in its snapshot`);
     }
   }
+});
+
+// The net that keeps a run from writing to a site other people use. test/net.browser.test.ts tries it in a browser.
+
+const live = { origin: "https://app.example.com", reads: "^POST app\\.example\\.com/api/search$", chatter: "^POST app\\.example\\.com/api/usage$" };
+const post = (url: string, body?: string) => ({ method: "POST", url, body });
+
+test("a GraphQL request is a read only when every operation in it is a query", () => {
+  const body = (query: string) => JSON.stringify({ query });
+  assert.ok(onlyQueries(body("query Issues($first: Int) { issues(first: $first) { id } }")));
+  assert.ok(onlyQueries(body("{ me { name } }")));
+  assert.ok(onlyQueries(body("fragment Row on Issue { id }\nquery List { issues { ...Row } }")));
+  assert.ok(onlyQueries(JSON.stringify([{ query: "{ a }" }, { query: "query B { b }" }])));
+  assert.ok(!onlyQueries(body("mutation Rename { rename(id: 1) { id } }")));
+  assert.ok(!onlyQueries(body("query A { a }\nmutation B { b }")), "one mutation among queries is still a write");
+  assert.ok(!onlyQueries(JSON.stringify([{ query: "{ a }" }, { query: "mutation { b }" }])));
+  assert.ok(!onlyQueries(body("subscription S { s }")));
+  // The word "query" inside a comment or a string does not make a mutation a query.
+  assert.ok(!onlyQueries(body('# query\nmutation M { say(text: "query { a }") }')));
+  assert.ok(onlyQueries(body('query Q { find(text: "mutation { x }") { id } }')));
+  assert.ok(!onlyQueries(JSON.stringify({ extensions: { persistedQuery: { sha256Hash: "abc" } } })), "a query sent by its hash cannot be read, so it is not known to be one");
+  assert.ok(!onlyQueries("name=x&query=y"));
+  assert.ok(!onlyQueries(JSON.stringify({ query: { match: "x" } })));
+  assert.ok(!onlyQueries(null));
+});
+
+test("on a site other people use, a request goes through only when it is known to read", () => {
+  assert.deepEqual(judge({ method: "GET", url: "https://app.example.com/anything" }, live), { act: "pass" });
+  assert.deepEqual(judge({ method: "OPTIONS", url: "https://app.example.com/api/save" }, live), { act: "pass" });
+  assert.equal(judge(post("https://app.example.com/api/search?text=secret"), live).act, "let");
+  assert.equal(judge(post("https://app.example.com/graphql", JSON.stringify({ query: "{ me { id } }" })), live).act, "let");
+  // Not listed, so stopped, and nobody has said it is harmless.
+  assert.deepEqual(judge(post("https://app.example.com/api/save"), live), { act: "stop", why: "not known to be a read", unknown: true });
+  assert.deepEqual(judge({ method: "DELETE", url: "https://app.example.com/api/search" }, live), { act: "stop", why: "not known to be a read", unknown: true });
+  assert.equal(judge(post("https://app.example.com/graphql", JSON.stringify({ query: "mutation { save }" })), live).act, "stop");
+  // The page's own reports are stopped too, and are not held against the run.
+  for (const quiet of [judge(post("https://stats.elsewhere.net/collect"), live), judge(post("https://app.example.com/api/usage"), live), judge({ ...post("https://app.example.com/ping"), beacon: true }, live)]) {
+    assert.equal(quiet.act, "stop");
+    assert.equal(quiet.act === "stop" && quiet.unknown, false);
+  }
+  // Another host of the same site is the site: a write there is a write.
+  assert.deepEqual(judge(post("https://api.example.com/save"), live), { act: "stop", why: "not known to be a read", unknown: true });
+  // What the set's own sign-in sends was checked by its author.
+  assert.equal(judge(post("https://app.example.com/login"), live, true).act, "let");
+});
+
+test("a stopped request the visitor's step set off spoils the run, and says which step", () => {
+  const net = new Net(live);
+  assert.equal(net.decide(post("https://app.example.com/api/usage")), false);
+  assert.equal(net.decide(post("https://app.example.com/api/search")), true);
+  assert.equal(net.spoiled(), undefined);
+  net.acting('used button "Copy link"');
+  assert.equal(net.decide(post("https://app.example.com/api/short-urls?x=1")), false);
+  assert.equal(net.decide(post("https://app.example.com/api/short-urls?x=2")), false);
+  const spoiled = net.spoiled();
+  assert.ok(spoiled?.byAStep);
+  assert.match(spoiled.why, /after the visitor used button "Copy link", the page tried to send POST app\.example\.com\/api\/short-urls, which was stopped/);
+  assert.deepEqual(net.log.stopped.at(-1), { method: "POST", to: "app.example.com/api/short-urls", why: "not known to be a read", times: 2, after: 'used button "Copy link"' });
+
+  const fresh = new Net(live);
+  fresh.decide(post("https://app.example.com/api/unknown"));
+  assert.equal(fresh.spoiled()?.byAStep, false);
+});
+
+/** The guide sets this project tunes against. The held-out sets are left alone here as everywhere. */
+const TUNED = ["demo", "hard", "joinhaptic", "ui5", "antdpro", "orangehrm", "toolshop", "parabank", "grafana", "backstage", "jira", "wikipedia"];
+
+test("no live guide set lets a request through that saves, sends or deletes", async () => {
+  const writes: Record<string, string[]> = {
+    grafana: ["POST play.grafana.org/api/short-urls", "POST play.grafana.org/api/snapshots", "POST play.grafana.org/api/dashboards/db", "DELETE play.grafana.org/api/ds/query", "POST play.grafana.org/api/datasources/uid/x/resources/api/v1/admin/tsdb/delete_series"],
+    jira: ["POST issues.apache.org/jira/login.jsp", "POST issues.apache.org/jira/rest/api/2/issue", "POST issues.apache.org/jira/secure/AjaxIssueEditAction.jspa", "POST issues.apache.org/jira/rest/api/2/filter"],
+    backstage: ["POST demo.backstage.io/api/catalog/locations", "DELETE demo.backstage.io/api/catalog/entities/by-uid/1", "POST demo.backstage.io/api/scaffolder/v2/tasks"],
+    wikipedia: ["POST en.wikipedia.org/w/index.php", "POST en.wikipedia.org/w/api.php"],
+    joinhaptic: ["POST joinhaptic.com/request-access/", "POST joinhaptic.com/api/request"],
+    orangehrm: ["POST opensource-demo.orangehrmlive.com/web/index.php/api/v2/pim/employees", "PUT opensource-demo.orangehrmlive.com/web/index.php/api/v2/pim/employees/7/personal-details"],
+  };
+  for (const name of TUNED) {
+    const set = (await import(`../eval/guides/${name}.ts`)).default as GuideSet;
+    if (set.sandbox) {
+      assert.ok(!set.reads && !set.chatter, `${name} is a sandbox, where nothing is stopped, so it needs no "reads" or "chatter"`);
+      continue;
+    }
+    assert.ok(writes[name], `${name} is a site other people use, so this test has to try some of its writes`);
+    for (const line of writes[name]) {
+      const [method = "", to = ""] = line.split(" ");
+      assert.deepEqual(judge({ method, url: `https://${to}` }, set), { act: "stop", why: "not known to be a read", unknown: true }, `${name} would let ${line} through, or call it chatter`);
+    }
+  }
+});
+
+test("a guide that no run could ever score as reached is refused, and says which", () => {
+  const pressedLast: Guide = { id: "pressed-last", start: "/", goal: "x", steps: [{ expect: [{ label: "A" }], act: { click: "#a" } }, { expect: [{ label: "B" }], act: { click: "#b" } }] };
+  const one = (guide: Guide): GuideSet => ({ siteId: "s", origin: "https://example.com", hasTag: false, guides: [guide] });
+  assert.match(faults(one(pressedLast))[0] ?? "", /^pressed-last: no run of it can be scored as reached/);
+  // Each way of being scored is enough on its own.
+  assert.deepEqual(faults(one({ ...pressedLast, reached: { absent: "#row" } })), []);
+  assert.deepEqual(faults(one({ ...pressedLast, says: { all: ["yes"] } })), []);
+  assert.deepEqual(faults(one({ ...pressedLast, steps: [pressedLast.steps[0]!, { expect: [{ label: "B" }] }] })), []);
+  // A guide of one step is never run whole, and DONE without a test is still refused.
+  assert.deepEqual(faults(one({ ...pressedLast, steps: [pressedLast.steps[0]!] })), []);
+  assert.equal(faults(one({ ...pressedLast, steps: [pressedLast.steps[0]!, DONE] })).length, 1);
+  assert.match(faults(one({ ...pressedLast, says: {} }))[0] ?? "", /"says" has to give the answer/);
+  assert.match(faults(one({ ...pressedLast, reached: { url: "(" } }))[0] ?? "", /reached\.url is not a pattern/);
+});
+
+test("every guide set this project tunes against can be run", async () => {
+  for (const name of TUNED) {
+    const set = (await import(`../eval/guides/${name}.ts`)).default as GuideSet;
+    assert.deepEqual(faults(set), [], `eval/guides/${name}.ts`);
+  }
+});
+
+test("an answer in words passes only when it says the true answer, and nothing wrong", () => {
+  const stock = { shown: { selector: ".out" }, notShown: { selector: ".in" } };
+  const read = { shown: ["Notebook Professional 17"], notShown: ["Notebook Basic 17", "Notebook Professional 15"] };
+  assert.equal(saidOrWhy(stock, "Only the Notebook Professional 17 is out of stock.", read), "");
+  assert.match(saidOrWhy(stock, "The Notebook Basic 17 is out of stock.", read), /does not say "Notebook Professional 17"/);
+  assert.match(saidOrWhy(stock, "The Notebook Professional 17 and the Notebook Basic 17 are out of stock.", read), /names "Notebook Basic 17", which the page shows is not the answer/);
+  assert.match(saidOrWhy(stock, "Out of stock, so far: nothing.", { notShown: read.notShown }), /showed nothing at \.out/);
+  // A hedge is not an answer, even with the right words in it.
+  assert.match(saidOrWhy(stock, "It may be the Notebook Professional 17. Check whether the list says so.", read), /hedges \("It may be"\)/);
+  assert.match(saidOrWhy({ all: ["\\bcash.on.delivery\\b"] }, "Vielleicht gibt es Cash on Delivery."), /hedges/);
+
+  // A fixed answer, and the same words said the wrong way round.
+  const cash = { all: ["\\bcash.on.delivery\\b"], not: ["\\b(isn't|is not|not) (offered|available)\\b"] };
+  assert.equal(saidOrWhy(cash, "Yes. Choose Cash on Delivery in this list to pay the driver."), "");
+  assert.match(saidOrWhy(cash, "Cash on Delivery isn't offered here."), /says "isn't offered", which is the wrong answer/);
+  assert.match(saidOrWhy(cash, "Pay by card."), /does not say/);
+
+  // A date read from the page may be written either way round, and only the part that counts is needed.
+  const when = { shown: { selector: ".lastmod", part: "\\d{1,2} \\w+ \\d{4}", anyOrder: true } };
+  const page = { shown: ["This page was last edited on 20 September 2026, at 19:55 (UTC)."] };
+  assert.equal(saidOrWhy(when, "The latest edit is from September 20, 2026, by Quivico.", page), "");
+  assert.match(saidOrWhy(when, "The latest edit is from 19 September 2026.", page), /does not say "20 September 2026"/);
 });
