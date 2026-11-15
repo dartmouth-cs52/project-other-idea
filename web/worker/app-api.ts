@@ -13,7 +13,8 @@
 // Every site is looked up together with the caller's organization, so a site
 // id, which is public, is never enough to read or change someone's data.
 
-import { DEFAULT_APPEARANCE, type PageNode, type SiteContext } from "../../src/shared/types";
+import { cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
+import { DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
@@ -82,13 +83,16 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
 
     if (path === "/sites" && request.method === "POST") return reply(await addSite(sql, org, await body(request)), 201);
 
-    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/finished|\/guides\/([^/]+))?$/.exec(path);
+    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/finished|\/docs|\/guides\/([^/]+))?$/.exec(path);
     if (match) {
       const id = match[1] ?? "";
       if (!SITE_ID.test(id)) throw new Refusal(404, "No such site.");
       const sub = match[2];
       if (!sub && request.method === "GET") return reply(await siteStatus(sql, env, org, id));
       if (!sub && request.method === "PATCH") return reply(await changeSite(sql, env, org, id, await body(request)));
+      if (!sub && request.method === "DELETE") return reply(await deleteSite(sql, org, id, await body(request)));
+      if (sub === "/docs" && request.method === "POST") return reply(await addDoc(sql, env, org, id, await body(request)), 201);
+      if (sub === "/docs" && request.method === "DELETE") return reply(await removeDoc(sql, env, org, id, url.searchParams.get("source") ?? ""));
       if (sub === "/read" && request.method === "POST") return reply(await readSite(sql, env, org, id, (await body(request)).restart === true));
       if (sub === "/insights" && request.method === "GET") {
         await ownedSite(sql, org, id);
@@ -262,7 +266,102 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string) 
     connected: origins.some((row) => row.allowed),
     origins,
     reading: readingSummary(site.reading, site.context.pages ?? []),
+    appearance: { ...DEFAULT_APPEARANCE, ...site.context.appearance },
+    notes: site.context.notes ?? "",
+    docs: docsSummary(site.context.docs ?? []),
   };
+}
+
+/** The docs as the settings page lists them: no text, and whether each one is in the prompt. */
+function docsSummary(docs: Doc[]) {
+  const fit = docsThatFit(docs);
+  const used = docs.filter((doc) => fit.has(doc.source)).reduce((sum, doc) => sum + doc.text.length, 0);
+  return {
+    budget: DOCS_BUDGET,
+    used,
+    list: docs.map((doc) => ({
+      title: doc.title,
+      source: doc.source,
+      pasted: doc.source.startsWith("pasted:"),
+      chars: doc.text.length,
+      inPrompt: fit.has(doc.source),
+    })),
+  };
+}
+
+const HEX = /^#[0-9a-f]{6}$/i;
+const MAX_NOTES = 20_000;
+
+/** The widget's look, checked field by field. Anything not given keeps its value. */
+function appearanceFrom(input: unknown, current: Appearance): Appearance {
+  if (!input || typeof input !== "object") throw new Refusal(400, "appearance must be an object.");
+  const raw = input as Record<string, unknown>;
+  const next = { ...current };
+  if (raw.accent !== undefined) {
+    if (typeof raw.accent !== "string" || !HEX.test(raw.accent)) throw new Refusal(400, "The colour must be a hex value like #1E6EF4.");
+    next.accent = raw.accent.toUpperCase();
+  }
+  if (raw.position !== undefined) {
+    if (raw.position !== "bottom-right" && raw.position !== "bottom-left") throw new Refusal(400, "The corner must be bottom-right or bottom-left.");
+    next.position = raw.position;
+  }
+  if (raw.launcherLabel !== undefined) {
+    const label = typeof raw.launcherLabel === "string" ? cleanText(raw.launcherLabel, 24) : "";
+    if (!label) throw new Refusal(400, "Give the button a label, such as Ask.");
+    next.launcherLabel = label;
+  }
+  return next;
+}
+
+/** Adds a help doc, from its address or pasted in. Fetching a page takes a few seconds. */
+async function addDoc(sql: Sql, env: AppEnv, org: Organization, id: string, input: Record<string, unknown>) {
+  const site = await ownedSite(sql, org, id);
+  const docs = site.context.docs ?? [];
+  if (docs.length >= MAX_DOCS) throw new Refusal(400, `A site can have up to ${MAX_DOCS} help docs. Remove one first.`);
+  let doc: Doc;
+  if (typeof input.url === "string" && input.url.trim()) {
+    let text = input.url.trim();
+    if (!/^https?:\/\//i.test(text)) text = `https://${text}`;
+    if (!URL.canParse(text)) throw new Refusal(400, "That isn't a web address.");
+    try {
+      doc = await docFromUrl(new URL(text));
+    } catch (error) {
+      throw new Refusal(400, `Haptic couldn't read that page. ${(error as Error).message}`);
+    }
+  } else {
+    const title = typeof input.title === "string" ? input.title : "";
+    const text = typeof input.text === "string" ? input.text : "";
+    if (!title.trim() || !text.trim()) throw new Refusal(400, "Give the doc a title and some text.");
+    doc = pastedDoc(title, text.slice(0, MAX_DOC_CHARS * 2));
+  }
+  if (doc.text.length < 40) throw new Refusal(400, "There was almost no text there. Paste the text instead.");
+  if (doc.text.length > MAX_DOC_CHARS) throw new Refusal(400, `That doc is ${doc.text.length.toLocaleString()} characters. One doc can be up to ${MAX_DOC_CHARS.toLocaleString()}. Split it, or paste the part that matters.`);
+  if (docs.some((existing) => existing.source === doc.source)) throw new Refusal(400, "That page is already one of the help docs.");
+  await sql`
+    update sites set context = jsonb_set(context, '{docs}', coalesce(context->'docs', '[]'::jsonb) || ${JSON.stringify([doc])}::jsonb), updated_at = now()
+    where id = ${id} and company_id = ${org.id}`;
+  return siteStatus(sql, env, org, id);
+}
+
+async function removeDoc(sql: Sql, env: AppEnv, org: Organization, id: string, source: string) {
+  const site = await ownedSite(sql, org, id);
+  const docs = (site.context.docs ?? []).filter((doc) => doc.source !== source);
+  await sql`update sites set context = jsonb_set(context, '{docs}', ${JSON.stringify(docs)}::jsonb), updated_at = now() where id = ${id} and company_id = ${org.id}`;
+  return siteStatus(sql, env, org, id);
+}
+
+/**
+ * Deletes a site and everything recorded on it: its guides, steps and the
+ * origins it was seen on. The caller types the site's address to confirm.
+ */
+async function deleteSite(sql: Sql, org: Organization, id: string, input: Record<string, unknown>) {
+  const site = await ownedSite(sql, org, id);
+  const host = new URL(site.origin).host;
+  if (typeof input.confirm !== "string" || input.confirm.trim().toLowerCase() !== host.toLowerCase()) {
+    throw new Refusal(400, `Type ${host} to confirm.`);
+  }
+  await sql`delete from sites where id = ${id} and company_id = ${org.id}`;
+  return { deleted: id };
 }
 
 async function changeSite(sql: Sql, env: AppEnv, org: Organization, id: string, input: Record<string, unknown>) {
@@ -271,7 +370,17 @@ async function changeSite(sql: Sql, env: AppEnv, org: Organization, id: string, 
   if (!name) throw new Refusal(400, "Give the site a name.");
   const origins = input.allowedOrigins === undefined ? site.allowed_origins : originList(input.allowedOrigins);
   if (!origins.length) throw new Refusal(400, "Keep at least one origin, or the widget can't run anywhere.");
-  await sql`update sites set name = ${name}, allowed_origins = ${origins}, updated_at = now() where id = ${id} and company_id = ${org.id}`;
+  const appearance = input.appearance === undefined ? null : appearanceFrom(input.appearance, { ...DEFAULT_APPEARANCE, ...site.context.appearance });
+  if (input.notes !== undefined && typeof input.notes !== "string") throw new Refusal(400, "notes must be text.");
+  const notes = typeof input.notes === "string" ? input.notes.trim() : null;
+  if (notes !== null && notes.length > MAX_NOTES) throw new Refusal(400, `Notes can be up to ${MAX_NOTES.toLocaleString()} characters.`);
+  // Only the fields given change, inside the context too, so a page read finishing meanwhile keeps its pages.
+  await sql`
+    update sites set name = ${name}, allowed_origins = ${origins},
+      context = jsonb_set(jsonb_set(context, '{appearance}', coalesce(${appearance === null ? null : JSON.stringify(appearance)}::jsonb, context->'appearance', '{}'::jsonb)),
+        '{notes}', coalesce(to_jsonb(${notes}::text), context->'notes', '""'::jsonb)),
+      updated_at = now()
+    where id = ${id} and company_id = ${org.id}`;
   // The widget server keeps its copy of a site for up to a minute, so a newly allowed address starts working within that.
   return siteStatus(sql, env, org, id);
 }
