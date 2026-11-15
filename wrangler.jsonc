@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "haptic-widget",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-11-01",
+  // Bundles the widget into dist/ before the Worker is built, so the two never drift apart.
+  "build": { "command": "npm run build" },
+  // Each site's context, under its id. Written by `npm run site:publish`.
+  "kv_namespaces": [{ "binding": "SITES", "id": "b481eb9c6ba24efe9889ef52a4f17e8a" }],
+  // One visitor on one site gets 30 steps a minute.
+  "ratelimits": [{ "name": "TURN_LIMIT", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }],
+  "vars": {
+    // "mock" is the keyword stand-in, which needs no API key. Set a Claude model ID here once the
+    // ANTHROPIC_API_KEY secret is on the Worker: npx wrangler secret put ANTHROPIC_API_KEY
+    "HAPTIC_MODEL": "mock"
+  },
+  "workers_dev": true,
+  // The address in every customer's script tag. It must never change.
+  "routes": [{ "pattern": "widget.joinhaptic.com", "custom_domain": true }]
+}

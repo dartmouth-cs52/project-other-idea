@@ -38,7 +38,7 @@ npm run tag ──▶ data/sites/<id>.json ──▶ server ◀── widget.js 
 | `appearance`, `allowedOrigins` | The company: the widget's color, corner and label, and which origins it may run on. |
 | `source` | The inputs it was built from, so it can be rebuilt unattended. |
 
-**How a step works.** The widget lists every control on the page with a short id (`e12`), its role, label and state. It never reads what's typed into fields, and masks emails and long numbers. The model replies with the id to point at, a sentence to show, and whether to wait for the visitor. After the visitor acts, the widget waits for the page to stop changing and sends the new page with a summary of what changed. If they click something else, Haptic says so and gives the step that gets them back. Guide state is kept in `sessionStorage`, so a click that loads a new page picks up where it left off.
+**How a step works.** The widget lists every control on the page with a short id (`e12`), its role, label and state. It never reads what's typed into fields, and masks emails and long numbers. The model replies with the id to point at, a sentence to show, and whether to wait for the visitor. The reply is streamed, so the pointer moves as soon as the id is known, before the sentence is finished. After the visitor acts, the widget waits for the page to stop changing and sends the new page with a summary of what changed. If they click something else, Haptic says so and gives the step that gets them back. Guide state is kept in `sessionStorage`, so a click that loads a new page picks up where it left off.
 
 The crawl only sees HTML the server sends. Pages drawn by JavaScript or behind a login come back nearly empty, and the command says so when that happens. The widget reads each page live either way, so those sites lean on notes and docs for now.
 
@@ -69,11 +69,22 @@ It prints the tag to paste before `</body>`. `npm run tag -- --help` lists every
 
 `npm test` runs the unit tests and `npm run typecheck` checks types.
 
-`npm run eval -- --models mock` runs the benchmark: 57 fixed steps on the demo app with known right answers, scored for any model. See [`eval/README.md`](eval/README.md).
+`npm run eval -- --models mock` runs the benchmark: 74 fixed steps with known right answers, on the demo app and on joinhaptic.com, scored for any model. See [`eval/README.md`](eval/README.md).
 
 ## Deployment
 
-The website deploys to Cloudflare from `web/`. See [`web/README.md`](web/README.md#deploying). The widget server is not deployed yet.
+The website deploys to Cloudflare from `web/`. See [`web/README.md`](web/README.md#deploying).
+
+The widget server runs as a Cloudflare Worker at `https://widget.joinhaptic.com`, the address in every customer's script tag. `worker/index.ts` is its entry point, and it gives the same answers as the Node server because both run `src/server/app.ts`. The settings are in `wrangler.jsonc`.
+
+```bash
+npm run deploy                              # builds the widget, then publishes the Worker
+npm run site:publish -- site_ab12cd34ef     # copies a site built with `npm run tag` to the online server
+```
+
+Build a site for the online server with `HAPTIC_PUBLIC_URL=https://widget.joinhaptic.com npm run tag -- --url …`, so the tag it prints points there. A published site is picked up within a minute.
+
+The online server answers with the keyword stand-in until it has a model to call: `HAPTIC_MODEL` in `wrangler.jsonc` is `mock`. To switch it on, put the key on the Worker with `npx wrangler secret put ANTHROPIC_API_KEY`, set `HAPTIC_MODEL` to a Claude model ID, and deploy.
 
 ## Authors
 
