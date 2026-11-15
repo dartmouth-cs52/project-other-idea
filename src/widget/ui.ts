@@ -45,13 +45,24 @@ button { font: inherit; cursor: pointer; }
 .cursor svg { display: block; overflow: visible; }
 .cursor path { fill: var(--accent); stroke: #fff; stroke-width: 3; stroke-linejoin: round; paint-order: stroke; }
 .caption { position: fixed; display: flex; align-items: center; gap: 8px; max-width: min(320px, calc(100vw - 24px)); background: #1c1917; color: #fafaf9;
-  border-radius: 14px; padding: 6px 6px 6px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.22); pointer-events: auto; }
+  border-radius: 14px; padding: 6px 6px 6px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.22); }
 .caption .close { display: inline-flex; align-items: center; justify-content: center; flex: none; align-self: flex-start; width: 24px; height: 24px; border: 0;
-  border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; }
+  border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; pointer-events: auto; }
 .caption .close:hover { background: rgba(250,250,249,.25); }
 .caption .close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
 @media (prefers-reduced-motion: reduce) { .cursor { transition: none; } }
 `;
+
+/**
+ * Where a guide is, for anything outside that needs to know: tests, the
+ * benchmark, a customer's own script.
+ * - "idle": no guide has run on this page yet.
+ * - "asking": a question has been sent and the answer is not yet on show.
+ * - "pointing": a pointer is on show and the widget is waiting for the visitor to use it.
+ * - "watching": a sentence is on show with no pointer, and the widget is waiting for the visitor to do what it says.
+ * - "finished": the guide is over. Its last sentence may still be on show. It stays this way until the next question.
+ */
+export type GuideState = "idle" | "asking" | "pointing" | "watching" | "finished";
 
 export interface UiHandlers {
   onAsk: (question: string) => void;
@@ -69,7 +80,28 @@ export class Ui {
   private readonly cursor: HTMLElement;
   private readonly caption: HTMLElement;
   private readonly captionText: HTMLElement;
+  private readonly dock: HTMLElement;
+  /** The side the site put the launcher on. It moves to the other side only while it would cover what is pointed at. */
+  private readonly side: "left" | "right";
+  /** The control the guide pointed at. */
+  private pointed?: Element;
+  /** What the pointer is on: the control, or the part of it that takes a click. */
   private target?: Element;
+  /** Whether `target` has been chosen with the control on screen, where what lies at its middle can be seen. */
+  private aimed = false;
+  /** Where in the target's box the tip went, for the box it was found for, so the page is looked at only when the box moves. */
+  private tip?: { box: string; dx: number; dy: number };
+  /** The caption is above the control rather than below it, because something opened where it was. */
+  private captionAbove = false;
+  /** What lay under the caption once it was placed, and whether the caption has moved for this control yet. */
+  private under?: { el: Element | null; moved: boolean };
+  private looked = 0;
+  /**
+   * Something on the page that took the keyboard from the ask box the moment
+   * it had it: a menu or a list that keeps the keyboard to itself and is not
+   * a dialog. While it is open the widget sits inside it, as it does in a dialog.
+   */
+  private captor?: Element;
   private frame = 0;
   /** Where the pointer last was, so each move starts from there. */
   private at: { x: number; y: number };
@@ -100,6 +132,8 @@ export class Ui {
     this.cursor = pick(".cursor");
     this.caption = pick(".caption");
     this.captionText = pick(".caption span");
+    this.dock = pick(".dock");
+    this.side = side;
     const launcher = pick<HTMLButtonElement>(".launcher");
     pick(".launcher span").textContent = appearance.launcherLabel;
     this.at = { x: side === "left" ? 60 : window.innerWidth - 60, y: window.innerHeight - 40 };
@@ -116,14 +150,22 @@ export class Ui {
     pick(".stop").addEventListener("click", handlers.onStop);
     pick(".close").addEventListener("click", handlers.onStop);
 
-    // Typing in the ask box mustn't trigger the page's keyboard shortcuts or focus traps.
+    // Typing in the ask box mustn't trigger the page's keyboard shortcuts or
+    // focus traps. Escape is the page's, though, unless it is closing our own
+    // ask box: an open menu or dialog closes on it.
     for (const type of ["keydown", "keyup", "keypress", "focusin"]) {
       this.host.addEventListener(type, (event) => {
-        if (type === "keydown" && (event as KeyboardEvent).key === "Escape") this.panel.hidden = true;
+        if ((event as KeyboardEvent).key === "Escape") {
+          const fromPanel = this.panel.contains(event.composedPath()[0] as Node);
+          if (!fromPanel || (type === "keydown" && this.panel.hidden)) return;
+          if (type === "keydown") this.panel.hidden = true;
+        }
         event.stopPropagation();
       });
     }
+    this.watchKeyboard();
     this.host.setAttribute("popover", "manual");
+    this.setState("idle");
     this.place();
     setInterval(this.place, 500);
   }
@@ -137,9 +179,11 @@ export class Ui {
    * back out when it closes.
    */
   place = () => {
-    const modal = findOpenModal(this.host);
-    const home = modal ?? document.documentElement;
+    if (this.captor && !(this.captor.isConnected && this.captor.getClientRects().length > 0)) this.captor = undefined;
+    const home = this.captor ?? findOpenModal(this.host) ?? document.documentElement;
     if (this.host.parentNode === home) return;
+    // Moving takes the keyboard from whatever of ours had it, so it is given back.
+    const focused = this.host.shadowRoot?.activeElement as HTMLElement | null | undefined;
     home.appendChild(this.host);
     try {
       // Being a popover puts us in the top layer too, above anything the page stacks with z-index.
@@ -147,7 +191,34 @@ export class Ui {
     } catch {
       // No popover support. The fixed position and z-index still apply.
     }
+    focused?.focus();
   };
+
+  /**
+   * Notices the page pulling the keyboard out of the ask box the moment the
+   * visitor put it there, which is what a menu that keeps the keyboard to
+   * itself does, and moves the widget into whatever took it. A visitor who
+   * moves the keyboard themselves, by clicking what took it or with Tab, is
+   * left alone. Nothing is listened to outside our own element.
+   */
+  private watchKeyboard() {
+    let wanted = 0;
+    let tabbed = 0;
+    this.host.addEventListener("pointerdown", () => (wanted = performance.now()));
+    this.input.addEventListener("keydown", (event) => {
+      if (event.key === "Tab") tabbed = performance.now();
+    });
+    this.input.addEventListener("focusout", (event) => {
+      const to = event.relatedTarget;
+      const now = performance.now();
+      if (!(to instanceof Element) || to === this.captor || to.contains(this.host) || now - wanted > 500 || now - tabbed < 500) return;
+      // What the visitor clicked has the mouse over it. A list that takes the keyboard back does not.
+      if (to.matches(":hover")) return;
+      this.captor = to;
+      this.place();
+      this.input.focus();
+    });
+  }
 
   /** Show the ask box busy with a message, or back to the input when `text` is empty. */
   setBusy(text: string) {
@@ -164,8 +235,13 @@ export class Ui {
 
   /** Move the pointer to an element and show the caption beside it. With no text yet, the pointer goes alone. */
   pointAt(el: Element, text: string) {
-    this.target = el;
-    this.mark(el);
+    if (el !== this.pointed) {
+      this.pointed = el;
+      this.tip = undefined;
+      this.captionAbove = false;
+      this.under = undefined;
+      this.aim(el);
+    }
     this.captionText.textContent = text;
     this.caption.hidden = text === "";
     this.cursor.hidden = false;
@@ -187,7 +263,12 @@ export class Ui {
   }
 
   clearPointer() {
+    this.pointed = undefined;
     this.target = undefined;
+    this.tip = undefined;
+    this.under = undefined;
+    this.captionAbove = false;
+    this.dockOn(this.side);
     this.mark(undefined);
     cancelAnimationFrame(this.frame);
     this.ring.hidden = true;
@@ -199,6 +280,15 @@ export class Ui {
     this.caption.hidden = true;
   }
 
+  /** Where the guide is. Kept as a property of our own element, beside `pointedAt`, and nowhere on the customer's page. */
+  get state(): GuideState {
+    return (this.host as HTMLElement & { guideState?: GuideState }).guideState ?? "idle";
+  }
+
+  setState(state: GuideState) {
+    (this.host as HTMLElement & { guideState?: GuideState }).guideState = state;
+  }
+
   /**
    * Keeps the control the pointer is on readable from outside, as a property
    * of our own element. Nothing on the customer's page is touched. Tests and
@@ -208,19 +298,42 @@ export class Ui {
     (this.host as HTMLElement & { pointedAt?: Element }).pointedAt = el;
   }
 
+  /** Chooses what the pointer goes on for the control `el`, and says so in `pointedAt`. */
+  private aim(el: Element) {
+    const rect = el.getBoundingClientRect();
+    this.aimed = rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
+    this.target = partToClick(el, this.aimed);
+    this.mark(this.target);
+  }
+
   /** Follows the target every frame, so scrolling and layout shifts don't strand the pointer. */
   private track = () => {
     const el = this.target;
     if (!el) return;
     this.frame = requestAnimationFrame(this.track);
+    try {
+      this.follow(el);
+    } catch (error) {
+      // Something about the page we did not expect. The pointer stays where it was, and nothing is thrown into the page.
+      console.warn("[Haptic]", error);
+    }
+  };
+
+  private follow(el: Element) {
     if (!el.isConnected) {
       this.ring.hidden = true;
       return;
     }
-    const rect = el.getBoundingClientRect();
+    let rect = el.getBoundingClientRect();
     const onScreen = rect.bottom > 0 && rect.top < window.innerHeight && rect.width + rect.height > 0;
     this.ring.hidden = !onScreen;
     if (!onScreen) return;
+    // A control pointed at while it was scrolled out of view is looked at again once it is in view.
+    if (!this.aimed && this.pointed) {
+      this.aim(this.pointed);
+      if (this.target !== el) return;
+      rect = el.getBoundingClientRect();
+    }
 
     const pad = 4;
     this.ring.style.left = `${rect.left - pad}px`;
@@ -228,15 +341,169 @@ export class Ui {
     this.ring.style.width = `${rect.width + pad * 2}px`;
     this.ring.style.height = `${rect.height + pad * 2}px`;
 
-    // The tip sits in the element's lower right corner, so the pointer hangs off it and never covers the label.
-    this.at = { x: rect.right - Math.min(10, rect.width * 0.2), y: rect.bottom - Math.min(7, rect.height * 0.25) };
+    this.at = this.tipOn(el, rect);
     this.cursor.style.transform = `translate(${this.at.x - POINTER_TIP.x}px, ${this.at.y - POINTER_TIP.y}px)`;
 
+    // The caption goes below the control, or above it when there is no room below or when something opened below.
     const box = this.caption.getBoundingClientRect();
-    const below = rect.bottom + 14 + box.height < window.innerHeight;
-    const top = below ? rect.bottom + 14 : Math.max(8, rect.top - box.height - 12);
+    const fitsBelow = rect.bottom + 14 + box.height < window.innerHeight;
+    const fitsAbove = rect.top - box.height - 12 >= 8;
+    const above = this.captionAbove ? fitsAbove || !fitsBelow : !fitsBelow;
+    const top = above ? Math.max(8, rect.top - box.height - 12) : rect.bottom + 14;
     const left = Math.min(Math.max(8, rect.left), window.innerWidth - box.width - 8);
     this.caption.style.left = `${left}px`;
     this.caption.style.top = `${top}px`;
-  };
+
+    const now = performance.now();
+    if (now - this.looked < 200) return;
+    this.looked = now;
+    const caption = this.caption.hidden ? undefined : { left, top, right: left + box.width, bottom: top + box.height };
+    this.keepLauncherOff(rect, caption);
+    if (caption) this.keepCaptionOff(el, caption);
+  }
+
+  /**
+   * Where the tip goes: in the control's lower right corner, so the pointer
+   * hangs off it and never covers its label. Something else can lie on that
+   * corner, like a panel's resize handle, so the tip moves in until it is on
+   * the control itself.
+   */
+  private tipOn(el: Element, rect: DOMRect): { x: number; y: number } {
+    const box = `${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.width)},${Math.round(rect.height)}`;
+    if (this.tip?.box !== box) {
+      const right = rect.width - Math.min(10, rect.width * 0.2);
+      const spots = [
+        [right, rect.height - Math.min(7, rect.height * 0.25)],
+        [right, rect.height / 2],
+        [rect.width / 2, rect.height / 2],
+      ] as const;
+      const [dx, dy] = spots.find(([x, y]) => onIt(el, rect.left + x, rect.top + y)) ?? spots[2];
+      this.tip = { box, dx, dy };
+    }
+    return { x: rect.left + this.tip.dx, y: rect.top + this.tip.dy };
+  }
+
+  /**
+   * Keeps the caption off what the control opens. A list, a menu or a
+   * calendar opens beside the control, usually right where the caption is. If
+   * something new comes up under the caption, it moves to the other side, once.
+   */
+  private keepCaptionOff(el: Element, caption: { left: number; top: number; right: number; bottom: number }) {
+    const x = (caption.left + caption.right) / 2;
+    const y = (caption.top + caption.bottom) / 2;
+    const hit = x >= 0 && y >= 0 && x <= window.innerWidth && y <= window.innerHeight ? document.elementFromPoint(x, y) : null;
+    const now = hit && hit !== this.host ? hit : null;
+    if (!this.under) {
+      this.under = { el: now, moved: false };
+      return;
+    }
+    const was = this.under.el;
+    if (this.under.moved || !now || now === was || now.contains(el) || el.contains(now) || (was && now.contains(was))) return;
+    // Inside what was there before, only a box drawn over it is new. Text that scrolls under the caption is not.
+    if (was?.contains(now) && !drawnOver(now, was)) return;
+    this.captionAbove = !this.captionAbove;
+    this.under = { el: null, moved: true };
+  }
+
+  /** Keeps the launcher off the control being pointed at and off its caption, by moving it to the other corner while it would cover them. */
+  private keepLauncherOff(rect: DOMRect, caption?: { left: number; top: number; right: number; bottom: number }) {
+    const box = this.dock.getBoundingClientRect();
+    const at = (side: "left" | "right") => {
+      const left = side === "left" ? 20 : window.innerWidth - 20 - box.width;
+      return { left, right: left + box.width, top: box.top, bottom: box.bottom };
+    };
+    const covers = (side: "left" | "right") => overlaps(at(side), rect, 8) || (!!caption && overlaps(at(side), caption, 4));
+    const other = this.side === "left" ? "right" : "left";
+    this.dockOn(covers(this.side) && !covers(other) ? other : this.side);
+  }
+
+  private dockOn(side: "left" | "right") {
+    if (this.dock.classList.contains(side)) return;
+    this.dock.classList.remove("left", "right");
+    this.dock.classList.add(side);
+  }
+}
+
+interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** Whether `el` sits in a box drawn over the page, inside `within`: a list, a menu, or anything positioned on its own. */
+function drawnOver(el: Element, within: Element): boolean {
+  for (let at: Element | null = el; at && at !== within; at = at.parentElement) {
+    if (at.matches('[role="listbox"], [role="menu"], [role="tree"], [role="grid"], [role="dialog"], [role="tooltip"], [popover]')) return true;
+    const position = getComputedStyle(at).position;
+    if (position === "absolute" || position === "fixed") return true;
+  }
+  return false;
+}
+
+function overlaps(a: Box, b: Box, margin: number): boolean {
+  return a.left < b.right + margin && a.right > b.left - margin && a.top < b.bottom + margin && a.bottom > b.top - margin;
+}
+
+/** Whether a click at this point would land on `el`. A point off the screen cannot be tested and counts. */
+function onIt(el: Element, x: number, y: number): boolean {
+  if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return true;
+  const hit = document.elementFromPoint(x, y);
+  if (!hit || el.contains(hit)) return true;
+  // A control inside a shadow root is hit as the element that hosts it.
+  for (let at: Node | null = el; at; at = at.parentNode ?? (at as ShadowRoot).host ?? null) if (at === hit) return true;
+  return false;
+}
+
+const FRAMES = "iframe, frame, object, embed";
+
+/**
+ * The part of a control the pointer should go on. Usually the control
+ * itself. Two kinds are not:
+ * - A field drawn as a speck under its label, as styled tick boxes and some
+ *   pickers are. The label is what shows and what takes the click, and
+ *   pointing at the speck would cover the row instead. A see-through field
+ *   of full size, like a select's input under the words of its value, is
+ *   where the visitor clicks, and stays the target.
+ * - A large box whose middle is a frame. A click there goes into the frame,
+ *   and the page never hears it. What names the box, or its first part that
+ *   is not a frame, takes the click instead. This needs the box on screen,
+ *   where what lies at its middle can be seen: `canLook`.
+ */
+function partToClick(el: Element, canLook: boolean): Element {
+  const rect = el.getBoundingClientRect();
+  if (rect.width < 4 || rect.height < 4) {
+    const label = shownLabelOf(el);
+    if (label) return label;
+  }
+  if (!canLook || rect.width < 120 || rect.height < 80 || el.matches(FRAMES)) return el;
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+  const middle = document.elementFromPoint(Math.min(x, window.innerWidth - 1), Math.min(Math.max(y, 0), window.innerHeight - 1));
+  if (!middle?.matches(FRAMES) || !el.contains(middle)) return el;
+  const named = (el.getAttribute("aria-labelledby") ?? "")
+    .split(/\s+/)
+    .map((id) => (id ? document.getElementById(id) : null))
+    .find((part): part is HTMLElement => !!part && el.contains(part) && hasBox(part));
+  if (named) return named;
+  return Array.from(el.children).find((part) => !part.matches(FRAMES) && !part.contains(middle) && hasBox(part)) ?? el;
+}
+
+function hasBox(el: Element): boolean {
+  const rect = el.getBoundingClientRect();
+  return rect.width >= 8 && rect.height >= 8;
+}
+
+/** The label a visitor sees for a field that is itself hidden or tiny: its own label, what names it, or a small box around it. */
+function shownLabelOf(el: Element): Element | undefined {
+  const labels = Array.from((el as HTMLInputElement).labels ?? []);
+  const named = (el.getAttribute("aria-labelledby") ?? "").split(/\s+/).map((id) => (id ? document.getElementById(id) : null));
+  const found = [...labels, el.closest("label"), ...named].find((part): part is HTMLElement => !!part && hasBox(part));
+  if (found) return found;
+  let around = el.parentElement;
+  for (let depth = 0; around && around !== document.body && depth < 3; depth++, around = around.parentElement) {
+    const rect = around.getBoundingClientRect();
+    if (hasBox(around) && rect.width * rect.height < 60_000) return around;
+  }
+  return undefined;
 }

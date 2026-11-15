@@ -1398,7 +1398,9 @@ function labelOf(el: Element, role: string): string {
   raw ||= el.getAttribute("title") || "";
   if (!raw && !typedIn) raw = (el instanceof HTMLImageElement ? el.alt : el.querySelector("img[alt]")?.getAttribute("alt")) || el.querySelector("svg title")?.textContent || "";
   // A custom field or tick box, built from boxes with no words of its own.
-  if (!raw.trim() && (role === "textbox" || role === "combobox" || role === "searchbox" || role === "spinbutton" || role === "slider" || ticks)) raw = captionOf(el, ticks) || captionOf(el, !ticks);
+  // A tick box is captioned by the words after it. A field that is typed in or chosen from is captioned by the words
+  // before it only: the words after it belong to whatever comes next, a paragraph or the next part of the page.
+  if (!raw.trim() && (role === "textbox" || role === "combobox" || role === "searchbox" || role === "spinbutton" || role === "slider" || ticks)) raw = ticks ? captionOf(el, true) || captionOf(el, false) : captionOf(el, false);
   // Some pages hand over text that has been escaped twice.
   raw = raw.replace(/&amp;/g, "&").replace(/&#x2F;/gi, "/").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
   return cleanText(raw, 80);
