@@ -101,7 +101,48 @@ Sonnet with thinking off looked like the pick from that table, and it was switch
 
 Read this with care. Each run asked every case once, the ranges of the top three overlap, and the timings are from GitHub's runner at one time of day. A case that expects nothing is also strict: a model that ends a guide by pointing at where the answer is counts as a miss.
 
+## The Answers benchmark
+
+The cases above ask one thing: did the pointer go to the right control. A site with Answers on can also answer in words from its help docs, and say it can't help. Those need different questions and different scores, so they have a benchmark of their own, in `eval/answers/`.
+
+```bash
+npm run eval:answers -- --models mock
+npm run eval:answers -- --models claude-sonnet-5-5,claude-haiku-5-5 --judge --yes
+```
+
+A case is one question on one page, with what a right reply does. Each file in `eval/answers/` holds a site with its help docs, the pages its questions are asked on as the widget sees them, and the cases. `eval/answers/demo.json` is the demo app with the help centre in `demo/help`, and `eval/answers/attacks.json` asks the same site questions meant to make it misbehave. The mix follows the research report: mostly questions one article answers, then questions that need two, questions the docs do not cover, how-to questions that should be pointed at and not told, and a tenth of follow-ups, vague, off-topic and planted ones.
+
+Each score is reported on its own. There is no blended score, because the mistakes do not cost the same: declining a question the docs cover is an annoyance, and answering one they do not is a statement made in the customer's name.
+
+- **right kind of reply**: a guide, an answer or a refusal, as the case expects, and for the right reason when it declines.
+- **declined what it should**: of the questions nothing should answer in words (not in the docs, a price or a refund, nothing to do with the site, an attack), how many it did not answer.
+- **declined what the docs cover**: of the questions the docs do answer, how many it refused anyway. Lower is better.
+- **right article**: of its answers, how many rest on the articles the answer is in, and on no others.
+- **right pointer**: where a case says what to point at, or that nothing should be.
+- **nothing forbidden said**: a price, or what a planted instruction asked for, did not reach the visitor.
+- **overruled by the server**: how many replies the checks in `src/server/answers.ts` changed after the model wrote them. A high number means the prompt is leaning on the code.
+- **ms to kind of reply** is when the widget can first show something. **cents a reply** is worked out from the tokens.
+
+`--judge` adds two more, from a second model that reads each answer beside a reference: **judged right**, and **judged all in the docs**. Model judges differ a great deal from each other in how lenient they are, and rewording a judge's prompt can reverse a ranking. So there is one judge with one prompt (`eval/judge.ts`), asked yes-or-no questions, and it is checked first against answers that have been labelled by hand:
+
+```bash
+npm run eval:answers -- --check-judge --yes
+```
+
+`eval/answers/judge-check.json` holds those answers, each with whether it is right and whether it is all in the docs. Do not compare two runs judged by different models or prompts.
+
+A case file can set `marks`, the scores a run has to reach, and `--gate` fails the command when one is missed. That is the check to run for a customer before Answers goes live for them, and again when their docs, the prompt or the model changes. **The marks are for the team to set before a run, not after it.**
+
+To refresh a file's site and pages after the help docs or the widget change (the questions are written by hand and are kept):
+
+```bash
+npm run eval:answers:record -- demo        # needs the local server and the site built with --answers on
+```
+
+**None of this has been run against a real model yet.** With the stand-in model the commands run end to end, which shows the scoring works and nothing more. The labels in `judge-check.json` and the expected replies in the case files were written with the help of a model and checked against the help docs by a second pass, not yet by a person on the team: read a sample before trusting a score built on them.
+
 ## What this does not measure yet
 
 - Whole guides driven end to end by a model. Each case starts from the right path, so a model is never scored on recovering from its own wrong step.
+- Real visitors' questions. Every Answers case was written for the benchmark. Once a site has Answers on, replace them with questions from its log.
 - Customers' apps behind a login. The demo app is small and tidy and joinhaptic.com is a simple public site. Scores on them are an upper bound.
