@@ -49,12 +49,11 @@ button { font: inherit; cursor: pointer; }
   border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; }
 .caption .close:hover { background: rgba(250,250,249,.25); }
 .caption .close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
-.caption { flex-wrap: wrap; }
-.caption > span { flex: 1 1 0; min-width: 0; }
-.helped { display: flex; align-items: center; gap: 6px; flex-basis: 100%; padding: 2px 0 2px; color: rgba(250,250,249,.7); font-size: 13px; }
-.helped span { margin-right: auto; }
-.helped button { height: 26px; border: 0; border-radius: 999px; padding: 0 12px; background: rgba(250,250,249,.15); color: #fafaf9; font-size: 13px; }
-.helped button:hover { background: rgba(250,250,249,.25); }
+.helped { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 2px 8px 12px; }
+.helped span { margin-right: auto; color: #78716c; }
+.helped button { display: inline-flex; align-items: center; justify-content: center; height: 32px; border: 0; border-radius: 999px; padding: 0 14px;
+  background: #e7e5e4; color: #1c1917; font-weight: 500; }
+.helped button:hover { background: #d6d3d1; }
 @media (prefers-reduced-motion: reduce) { .cursor { transition: none; } }
 `;
 
@@ -88,10 +87,11 @@ export class Ui {
     const side = appearance.position === "bottom-left" ? "left" : "right";
     root.innerHTML = `<style>${CSS}</style>
       <div class="ring" hidden></div>
-      <div class="caption" hidden><span></span><button class="close" aria-label="Stop guide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button><div class="helped" hidden></div></div>
+      <div class="caption" hidden><span></span><button class="close" aria-label="Stop guide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="cursor" hidden><svg viewBox="0 0 24 24" width="24" height="24"><path d="${POINTER_PATH}"/></svg></div>
       <div class="dock ${side}">
         <div class="panel" hidden>
+          <div class="helped" hidden></div>
           <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
           <div class="status" hidden><span></span><button class="stop" type="button">Stop</button></div>
         </div>
@@ -113,9 +113,10 @@ export class Ui {
       if (!answer || !this.onHelped) return;
       this.onHelped(answer === "yes");
       this.onHelped = undefined;
-      // Thanks takes the question's place, and the whole caption goes a moment later.
-      this.helped.replaceChildren(Object.assign(document.createElement("span"), { textContent: "Thanks. That helps us improve." }));
-      setTimeout(() => this.helped.isConnected && !this.helped.hidden && this.clear(), 1500);
+      // Thanks takes the question's place for a moment, then the ask box is all that is left.
+      this.helped.replaceChildren(Object.assign(document.createElement("span"), { textContent: "Thanks." }));
+      const shown = this.helped.firstChild;
+      setTimeout(() => this.helped.firstChild === shown && this.hideHelped(), 1500);
     });
     const launcher = pick<HTMLButtonElement>(".launcher");
     pick(".launcher span").textContent = appearance.launcherLabel;
@@ -173,8 +174,10 @@ export class Ui {
     this.form.hidden = text !== "";
     this.status.hidden = text === "";
     this.statusText.textContent = text;
-    if (text) this.panel.hidden = false;
-    else this.input.value = "";
+    if (text) {
+      this.panel.hidden = false;
+      this.hideHelped();
+    } else this.input.value = "";
   }
 
   closePanel() {
@@ -184,7 +187,6 @@ export class Ui {
   /** Move the pointer to an element and show the caption beside it. With no text yet, the pointer goes alone. */
   pointAt(el: Element, text: string) {
     this.target = el;
-    this.hideHelped();
     this.captionText.textContent = text;
     this.caption.hidden = text === "";
     this.cursor.hidden = false;
@@ -197,20 +199,25 @@ export class Ui {
   /** Show text with nothing to point at, above the launcher. */
   say(text: string) {
     this.clearPointer();
-    this.hideHelped();
     this.captionText.textContent = text;
     this.caption.hidden = false;
-    this.placeAboveLauncher();
+    this.placeAboveDock();
   }
 
-  /** Adds "Did this help?" under the caption that is showing. `answer` is called once, if they tap Yes or No. */
+  /**
+   * Reopens the ask box with "Did this help?" above it. The caption keeps to
+   * one sentence and no buttons, so the question lives in the panel.
+   * `answer` is called once, if they tap Yes or No.
+   */
   askIfHelped(answer: (helped: boolean) => void) {
-    if (this.caption.hidden) return;
     this.onHelped = answer;
     this.helped.replaceChildren(...this.helpedRow());
     this.helped.hidden = false;
-    // The caption grew. Following a target moves it each frame anyway; on its own it has to be put back.
-    if (!this.target) this.placeAboveLauncher();
+    this.form.hidden = false;
+    this.status.hidden = true;
+    this.panel.hidden = false;
+    // The dock grew. A caption with no target sits above it, so it moves up too.
+    if (!this.target && !this.caption.hidden) this.placeAboveDock();
   }
 
   private helpedRow(): Node[] {
@@ -227,11 +234,14 @@ export class Ui {
     this.onHelped = undefined;
   }
 
-  private placeAboveLauncher() {
+  /** Puts a caption that has nothing to point at just above the launcher, and above the panel when it is open. */
+  private placeAboveDock() {
     const box = this.caption.getBoundingClientRect();
-    const left = this.host.shadowRoot?.querySelector(".dock.left") ? 20 : window.innerWidth - box.width - 20;
+    const dock = this.host.shadowRoot?.querySelector(".dock");
+    const left = dock?.classList.contains("left") ? 20 : window.innerWidth - box.width - 20;
+    const top = (dock?.getBoundingClientRect().top ?? window.innerHeight - 60) - box.height - 12;
     this.caption.style.left = `${Math.max(12, left)}px`;
-    this.caption.style.top = `${Math.max(12, window.innerHeight - box.height - 76)}px`;
+    this.caption.style.top = `${Math.max(12, top)}px`;
   }
 
   clearPointer() {
@@ -243,7 +253,6 @@ export class Ui {
 
   clear() {
     this.clearPointer();
-    this.hideHelped();
     this.caption.hidden = true;
   }
 
