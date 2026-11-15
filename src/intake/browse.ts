@@ -242,11 +242,15 @@ export async function browseSite(startUrl: string, options: BrowseOptions): Prom
   }
 
   tidy(result.pages);
-  // Over budget, the pages farthest from the start go first, the last found first among equals.
+  // Over budget, the pages farthest from the start go first, and among those the one that costs most.
   let kept = [...result.pages];
   let map = compact(kept);
+  const cost = (node: PageNode) => renderSiteMap([node]).length;
   while (kept.length > 1 && renderSiteMap(sorted(map)).length > MAP_BUDGET) {
-    const farthest = kept.reduce((far, node) => ((depthOf.get(node) ?? 0) >= (depthOf.get(far) ?? 0) ? node : far));
+    const farthest = kept.reduce((far, node) => {
+      const [a, b] = [depthOf.get(node) ?? 0, depthOf.get(far) ?? 0];
+      return a > b || (a === b && cost(node) >= cost(far)) ? node : far;
+    });
     kept = kept.filter((node) => node !== farthest);
     result.cut.push(farthest.path);
     map = compact(kept);
