@@ -41,6 +41,9 @@ interface Scope {
   heading: string;
 }
 
+/** An area the visitor writes in: a rich-text box, or anything the page says is a text field. */
+const EDITABLE = '[contenteditable]:not([contenteditable="false"]), [role="textbox"]';
+
 export function takeSnapshot(ignore: Element): PageSnapshot {
   const candidates: Candidate[] = [];
   const headings: string[] = [];
@@ -55,6 +58,8 @@ export function takeSnapshot(ignore: Element): PageSnapshot {
   const visit = (el: Element, scope: Scope, parentPointer: boolean, insideControl: boolean) => {
     if (visited++ > MAX_VISITED || el === ignore || SKIP_TAGS.has(el.tagName)) return;
     if (el.hasAttribute("inert") || el.hasAttribute("data-haptic-ignore") || el.getAttribute("aria-hidden") === "true") return;
+    // What is inside an area the visitor writes in is their own writing. The area is listed as a field, and nothing in it is read.
+    if (el.parentElement?.closest(EDITABLE)) return;
     if (!isRendered(el)) {
       // display:contents has no box of its own, but its children do.
       if (getComputedStyle(el).display === "contents") for (const child of el.children) visit(child, scope, parentPointer, insideControl);
@@ -294,7 +299,9 @@ function labelOf(el: Element, role: string): string {
   }
   // Never use a field's contents as its label.
   if (!raw && role !== "textbox" && role !== "select") raw = visibleText(el);
-  raw ||= el.getAttribute("title") || (el instanceof HTMLImageElement ? el.alt : el.querySelector("img[alt]")?.getAttribute("alt")) || el.querySelector("svg title")?.textContent || "";
+  raw ||= el.getAttribute("title") || "";
+  // A picture inside a field is something the visitor put there, so it does not name the field.
+  if (!raw && role !== "textbox") raw = (el instanceof HTMLImageElement ? el.alt : el.querySelector("img[alt]")?.getAttribute("alt")) || el.querySelector("svg title")?.textContent || "";
   return cleanText(raw, 80);
 }
 
