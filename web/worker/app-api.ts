@@ -16,7 +16,7 @@
 import { DEFAULT_APPEARANCE, type PageNode, type SiteContext } from "../../src/shared/types";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
-import { approvalFor, database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
+import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
 import { insights, guideSteps } from "./insights";
 import { MAX_PAGES, readMore, startReading, type BrowserBinding, type Reading } from "./reader";
 
@@ -35,6 +35,15 @@ export interface AppEnv extends AuthEnv {
 const SITE_ID = /^site_[a-z0-9_]{3,40}$/;
 const MAX_SITES = 5;
 const MAX_ORIGINS = 20;
+const MAX_REFUSED_SHOWN = 5;
+
+interface SeenOrigin {
+  origin: string;
+  allowed: boolean;
+  first_seen_at: string;
+  last_seen_at: string;
+  requests: number;
+}
 
 class Refusal extends Error {
   constructor(
@@ -125,13 +134,12 @@ async function me(sql: Sql, user: SignedInUser) {
       const [row] = await sql`select "emailVerified" as verified from neon_auth."user" where id = ${user.id}`;
       if (row?.verified !== true) return { user: who, approved: false, reason: "unverified" };
     }
-    const approval = await approvalFor(sql, user.email);
-    if (!approval) return { user: who, approved: false, reason: "not_approved" };
-    org = await joinOrganization(sql, approval, user.id);
+    org = await joinOrganization(sql, user.email, user.id);
+    if (!org) return { user: who, approved: false, reason: "not_approved" };
   }
   const sites = await sql`
     select s.id, s.name, s.origin, s.created_at,
-      exists (select 1 from site_origins o where o.site_id = s.id and o.allowed) as connected
+      exists (select 1 from site_origins o where o.site_id = s.id and o.origin = any(s.allowed_origins)) as connected
     from sites s where s.company_id = ${org.id} order by s.created_at`;
   return { user: who, approved: true, organization: org, sites };
 }
@@ -224,8 +232,13 @@ function readingSummary(reading: Reading | null, pages: PageNode[]) {
 
 async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string) {
   const site = await ownedSite(sql, org, id);
-  const origins = await sql`
-    select origin, allowed, first_seen_at, last_seen_at, requests from site_origins where site_id = ${id} order by allowed desc, last_seen_at desc`;
+  // Whether an origin is allowed is read from the list as it stands now, not from what it was when
+  // the script last called, so allowing an address shows at once. Anyone can send a request with a
+  // made-up Origin header, so only the few refused origins seen most recently are shown.
+  const seen = (await sql`
+    select origin, first_seen_at, last_seen_at, requests from site_origins where site_id = ${id} order by last_seen_at desc`) as Omit<SeenOrigin, "allowed">[];
+  const all = seen.map((row) => ({ ...row, allowed: site.allowed_origins.includes(row.origin) }));
+  const origins = [...all.filter((row) => row.allowed), ...all.filter((row) => !row.allowed).slice(0, MAX_REFUSED_SHOWN)];
   const widget = (env.WIDGET_URL ?? "https://widget.joinhaptic.com").replace(/\/$/, "");
   return {
     id: site.id,
@@ -234,7 +247,6 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string) 
     allowedOrigins: site.allowed_origins,
     createdAt: site.created_at,
     scriptUrl: `${widget}/widget.js`,
-    tag: `<script src="${widget}/widget.js" data-site="${site.id}" async></script>`,
     // Connected means the script has called from an origin the site allows. Seen but refused is the other common failure.
     connected: origins.some((row) => row.allowed),
     origins,
@@ -249,7 +261,7 @@ async function changeSite(sql: Sql, env: AppEnv, org: Organization, id: string, 
   const origins = input.allowedOrigins === undefined ? site.allowed_origins : originList(input.allowedOrigins);
   if (!origins.length) throw new Refusal(400, "Keep at least one origin, or the widget can't run anywhere.");
   await sql`update sites set name = ${name}, allowed_origins = ${origins}, updated_at = now() where id = ${id} and company_id = ${org.id}`;
-  // Origins seen before and refused may be allowed now. The next request from each one updates its row.
+  // The widget server keeps its copy of a site for up to a minute, so a newly allowed address starts working within that.
   return siteStatus(sql, env, org, id);
 }
 
@@ -321,7 +333,15 @@ async function approve(request: Request, env: AppEnv, sql: Sql, url: URL) {
   if (scope === "domain" && isPersonalEmail(entry.email)) throw new Refusal(400, `${emailDomain(entry.email)} is a free mailbox, so it can't be approved as a whole domain.`);
   const company = entry.company.slice(0, 200);
   if (scope === "domain") {
-    await sql`insert into approvals (domain, company, request_key) values (${emailDomain(entry.email)}, ${company}, ${key}) on conflict (domain) do nothing`;
+    // If people at this domain were approved one by one and already share exactly one organization,
+    // the domain takes it on, so the next person joins that company and does not start a second.
+    const domain = emailDomain(entry.email);
+    await sql`
+      insert into approvals (domain, company, request_key, organization_id)
+      values (${domain}, ${company}, ${key}, (
+        select case when count(distinct organization_id) = 1 then min(organization_id::text)::uuid end
+        from approvals where split_part(email, '@', 2) = ${domain} and organization_id is not null))
+      on conflict (domain) do update set organization_id = coalesce(approvals.organization_id, excluded.organization_id)`;
   } else {
     await sql`insert into approvals (email, company, request_key) values (${entry.email}, ${company}, ${key}) on conflict (email) do nothing`;
   }

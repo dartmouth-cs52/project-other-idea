@@ -20,70 +20,81 @@ export interface Organization {
   role: string;
 }
 
-/** The organization a user belongs to. Haptic gives each person one; if they somehow have several, the oldest wins. */
+/**
+ * The organization a user belongs to, if it is one Haptic made from an
+ * approval. Neon Auth lets any signed-in person create an organization of
+ * their own through its API, so membership alone proves nothing: only an
+ * organization the approved list points at lets someone in. A member the
+ * owner invited into such an organization counts too.
+ */
 export async function organizationOf(sql: Sql, userId: string): Promise<Organization | undefined> {
   const rows = await sql`
     select o.id, o.name, m.role from neon_auth.member m join neon_auth.organization o on o.id = m."organizationId"
-    where m."userId" = ${userId} order by m."createdAt" limit 1`;
+    where m."userId" = ${userId}::uuid and exists (select 1 from approvals a where a.organization_id = o.id)
+    order by m."createdAt" limit 1`;
   return rows[0] as Organization | undefined;
 }
 
-export interface Approval {
-  id: string;
-  email: string | null;
-  domain: string | null;
-  company: string;
-  organization_id: string | null;
-}
-
-/** The approval that lets this address in: its own row first, then its domain's. */
-export async function approvalFor(sql: Sql, email: string): Promise<Approval | undefined> {
-  const domain = email.slice(email.lastIndexOf("@") + 1);
-  const rows = await sql`
-    select id, email, domain, company, organization_id from approvals
-    where email = ${email} or domain = ${domain} order by (email is not null) desc limit 1`;
-  return rows[0] as Approval | undefined;
-}
-
 /**
- * Puts a newly approved person in their company's organization. The first
- * person from an approval creates it and owns it. Everyone after them from an
- * approved domain joins it as a member. One statement, with the approval row
- * locked, so two people signing in at the same moment cannot make two.
+ * Puts an approved person in their company's organization, or returns nothing
+ * when neither their address nor its domain is approved.
+ *
+ * An address can be covered by two approvals, its own and its domain's. If
+ * either already has an organization, the person joins that one as a member
+ * and the other approval is pointed at it too. Only when neither has one is
+ * an organization made, with this person as its owner. That keeps a company
+ * to one organization whichever order its people were approved in.
+ *
+ * Two statements in one transaction. The first locks the approvals, so two
+ * sign-ins at the same moment take turns. The second then starts with a fresh
+ * view of the database, and sees whatever the sign-in before it made. Joining
+ * twice changes nothing: Neon's member table would accept a second row.
  */
-export async function joinOrganization(sql: Sql, approval: Approval, userId: string): Promise<Organization> {
-  const slug = `${slugify(approval.company)}-${crypto.randomUUID().slice(0, 6)}`;
-  const rows = await sql`
-    with a as (select id, company, organization_id from approvals where id = ${approval.id} for update),
-    made as (
-      insert into neon_auth.organization (name, slug, "createdAt")
-      select company, ${slug}, now() from a where organization_id is null
-      returning id, name
-    ),
-    claimed as (update approvals set organization_id = (select id from made) where id = ${approval.id} and exists (select 1 from made) returning id),
-    org as (
-      select id, name, 'owner' as role from made
-      union all
-      select o.id, o.name, 'member' from a join neon_auth.organization o on o.id = a.organization_id
-    ),
-    joined as (
-      insert into neon_auth.member ("organizationId", "userId", role, "createdAt")
-      select id, ${userId}, role, now() from org
-      returning "organizationId"
-    )
-    select org.id, org.name, org.role from org, joined, (select count(*) from claimed) c`;
-  const org = rows[0] as Organization | undefined;
-  if (!org) throw new Error("The organization could not be made or found for this approval.");
-  return org;
+export async function joinOrganization(sql: Sql, email: string, userId: string): Promise<Organization | undefined> {
+  const domain = email.slice(email.lastIndexOf("@") + 1);
+  const suffix = crypto.randomUUID().slice(0, 6);
+  const [, rows] = await sql.transaction([
+    sql`select id from approvals where email = ${email} or domain = ${domain} order by id for update`,
+    sql`
+      with a as (
+        select id, company, organization_id, (email is not null) as own from approvals where email = ${email} or domain = ${domain}
+      ),
+      existing as (
+        select o.id, o.name from a join neon_auth.organization o on o.id = a.organization_id order by a.own desc limit 1
+      ),
+      made as (
+        insert into neon_auth.organization (name, slug, "createdAt")
+        select company,
+          coalesce(nullif(left(trim(both '-' from regexp_replace(lower(company), '[^a-z0-9]+', '-', 'g')), 40), ''), 'company') || '-' || ${suffix},
+          now()
+        from a where not exists (select 1 from existing) order by own desc limit 1
+        returning id, name
+      ),
+      org as (
+        select id, name, 'owner'::text as role from made
+        union all
+        select id, name, 'member'::text from existing
+      ),
+      claimed as (
+        update approvals set organization_id = (select id from org)
+        where id in (select id from a) and exists (select 1 from org) and organization_id is distinct from (select id from org)
+        returning id
+      ),
+      joined as (
+        insert into neon_auth.member ("organizationId", "userId", role, "createdAt")
+        select org.id, ${userId}::uuid, org.role, now() from org
+        where not exists (select 1 from neon_auth.member m where m."organizationId" = org.id and m."userId" = ${userId}::uuid)
+        returning role
+      )
+      select org.id, org.name,
+        coalesce(
+          (select role from joined),
+          (select m.role from neon_auth.member m where m."organizationId" = org.id and m."userId" = ${userId}::uuid order by m."createdAt" limit 1)
+        ) as role,
+        (select count(*) from claimed) as claimed
+      from org`,
+  ]);
+  const org = (rows as Organization[])[0];
+  return org ? { id: org.id, name: org.name, role: org.role } : undefined;
 }
 
-function slugify(text: string): string {
-  return (
-    text
-      .toLowerCase()
-      .normalize("NFKD")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 40) || "company"
-  );
-}
