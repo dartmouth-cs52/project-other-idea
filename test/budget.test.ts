@@ -201,7 +201,7 @@ test("past its budget a site gets the fixed sentence, the model is not called, a
   assert.deepEqual(alerts, ["hour:50", "hour:100"]);
 
   // The fixed sentence is marked, so the widget does not take it for a guide that finished.
-  const resting = { target: null, status: "done", say: FIXED_SAY.resting, paused: true };
+  const resting = { target: null, status: "stuck", say: FIXED_SAY.resting, paused: true };
   assert.deepEqual(await (await app(turn(), "1.1.1.1"))?.json(), resting);
   const streamed = await app(turn({ Accept: STREAM_TYPE }), "1.1.1.1");
   assert.deepEqual(JSON.parse(((await streamed?.text()) ?? "").trim()), resting);

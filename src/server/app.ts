@@ -68,7 +68,10 @@ const MAX_BODY_BYTES = 512 * 1024;
  * words are fixed, so nothing typed into the ask box or planted on a page can
  * change them. They go out as an ordinary reply, which every copy of the
  * widget already knows how to show, marked `paused` so the widget does not
- * take it for a guide that finished.
+ * take it for a guide that finished. Its status is "stuck", so a widget from
+ * before the mark existed, still cached in a visitor's browser, ends the
+ * guide as one that found no way forward, which is not billed, and not as one
+ * that arrived.
  */
 export const FIXED_SAY = {
   off: "The guide is switched off for now.",
@@ -78,7 +81,7 @@ export const FIXED_SAY = {
   visitorLimit: "That's as much as the guide can do for you today. Try again tomorrow.",
 } as const;
 
-const fixedReply = (say: string): TurnReply => ({ target: null, status: "done", say, paused: true });
+const fixedReply = (say: string): TurnReply => ({ target: null, status: "stuck", say, paused: true });
 
 /** Returns the handler. It answers `undefined` for addresses that are not its own, so a host can serve other things. */
 export function createApp(parts: AppParts) {

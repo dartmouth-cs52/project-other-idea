@@ -177,7 +177,7 @@ test("a guide's first question is passed on before the model answers, and later 
 });
 
 test("a site that is switched off gets no launcher, and a step that still arrives never reaches the model", async () => {
-  const off = { target: null, status: "done", say: FIXED_SAY.off, paused: true };
+  const off = { target: null, status: "stuck", say: FIXED_SAY.off, paused: true };
   // Once by the host's switch and once by the site's own setting.
   for (const { app, turns } of [makeApp(false, { isOff: () => true }), makeApp(false, {}, { ...site, off: true })]) {
     const config = await app(new Request(`https://widget.test/v1/sites/${site.id}`, { headers: { Origin: "https://app.test" } }), "1.1.1.1");
