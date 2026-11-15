@@ -4,7 +4,8 @@ import { extname, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PublicSiteConfig, SiteContext, SnapElement, Snapshot, TurnRequest } from "../shared/types.ts";
 import { buildWidget, WIDGET_FILE } from "../widget/build.ts";
-import { MODEL, runTurn, TurnError } from "./model.ts";
+import { measureTurn, MODEL, TurnError } from "./model.ts";
+import { recordTurn } from "./record.ts";
 import { loadSite } from "./sites.ts";
 
 // The Haptic server: serves the widget file, each site's public settings, and
@@ -60,7 +61,9 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     if (!originAllowed(site, origin)) return json(res, 403, { error: `${origin} isn't an allowed origin for this site.` });
     if (overLimit(`${site.id} ${req.socket.remoteAddress}`)) return json(res, 429, { error: "Too many requests. Try again in a minute." });
     try {
-      return json(res, 200, await runTurn(site, request));
+      const measure = await measureTurn(site, request);
+      void recordTurn(request, measure);
+      return json(res, 200, measure.reply);
     } catch (error) {
       if (!(error instanceof TurnError)) throw error;
       console.error(`turn ${site.id}: ${error.message}`);

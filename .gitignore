@@ -6,3 +6,5 @@ dist/
 *.log
 # Site contexts are built by `npm run tag`. The demo's is rebuilt on demand.
 data/
+# Benchmark runs. The cases in eval/cases are kept; each run's numbers are not.
+eval/results/

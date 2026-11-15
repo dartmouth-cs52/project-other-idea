@@ -11,7 +11,9 @@
     "tag": "tsx --env-file-if-exists=.env src/intake/cli.ts",
     "build": "tsx src/widget/build.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/*.test.ts"
+    "test": "tsx --test test/*.test.ts",
+    "eval": "tsx --env-file-if-exists=.env eval/run.ts",
+    "eval:record-demo": "tsx eval/record-demo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

@@ -69,6 +69,8 @@ It prints the tag to paste before `</body>`. `npm run tag -- --help` lists every
 
 `npm test` runs the unit tests and `npm run typecheck` checks types.
 
+`npm run eval -- --models mock` runs the benchmark: 57 fixed steps on the demo app with known right answers, scored for any model. See [`eval/README.md`](eval/README.md).
+
 ## Deployment
 
 The website deploys to Cloudflare from `web/`. See [`web/README.md`](web/README.md#deploying). The widget server is not deployed yet.
