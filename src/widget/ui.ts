@@ -460,9 +460,11 @@ const FRAMES = "iframe, frame, object, embed";
 /**
  * The part of a control the pointer should go on. Usually the control
  * itself. Two kinds are not:
- * - A field drawn as a tiny or see-through box under its label, as styled
- *   tick boxes and some pickers are. The label is what shows and what takes
- *   the click, and pointing at the box would cover the row instead.
+ * - A field drawn as a speck under its label, as styled tick boxes and some
+ *   pickers are. The label is what shows and what takes the click, and
+ *   pointing at the speck would cover the row instead. A see-through field
+ *   of full size, like a select's input under the words of its value, is
+ *   where the visitor clicks, and stays the target.
  * - A large box whose middle is a frame. A click there goes into the frame,
  *   and the page never hears it. What names the box, or its first part that
  *   is not a frame, takes the click instead. This needs the box on screen,
@@ -470,7 +472,7 @@ const FRAMES = "iframe, frame, object, embed";
  */
 function partToClick(el: Element, canLook: boolean): Element {
   const rect = el.getBoundingClientRect();
-  if (rect.width < 4 || rect.height < 4 || getComputedStyle(el).opacity === "0") {
+  if (rect.width < 4 || rect.height < 4) {
     const label = shownLabelOf(el);
     if (label) return label;
   }

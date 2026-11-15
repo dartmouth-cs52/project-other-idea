@@ -885,9 +885,21 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     popup ??= box;
     return true;
   };
-  const whereOf = (path: EventTarget[]): Where => {
-    const onTarget = path.includes(target) || path.some((node) => node instanceof HTMLLabelElement && (node.control === target || node.contains(target)));
+  /**
+   * Whether a press at this point, landing on a box wrapped round the target,
+   * was on the target: many selects draw the chosen value over a see-through
+   * input, so the visitor's click lands on the words, inside the input's box.
+   */
+  const inTargetBox = (controls: Element[], point?: { x: number; y: number }) => {
+    if (!point) return false;
+    const box = target.getBoundingClientRect();
+    if (point.x < box.left || point.x > box.right || point.y < box.top || point.y > box.bottom) return false;
+    return controls.some((node) => node.contains(target));
+  };
+  const whereOf = (path: EventTarget[], point?: { x: number; y: number }): Where => {
     const controls = path.filter((node): node is Element => node instanceof Element && isControl(node));
+    const onTarget =
+      path.includes(target) || path.some((node) => node instanceof HTMLLabelElement && (node.control === target || node.contains(target))) || inTargetBox(controls, point);
     const first = controls[0];
     return {
       onTarget,
@@ -954,7 +966,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   const onPress = (event: Event) => {
     const path = outside(event);
     if (!path || (event as PointerEvent).button !== 0) return;
-    const where = whereOf(path);
+    const where = whereOf(path, { x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY });
     const el = path.find((node): node is Element => node instanceof Element && isControl(node)) ?? (where.onTarget ? target : undefined);
     pressed = { x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY, ...(el ? { el } : {}) };
     feed({ type: "press", at: performance.now(), where });
@@ -963,7 +975,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   const onCancel = () => feed({ type: "cancel", at: performance.now() });
   const onClick = (event: Event) => {
     const path = outside(event);
-    if (path) feed({ type: "click", at: performance.now(), where: whereOf(path) });
+    if (path) feed({ type: "click", at: performance.now(), where: whereOf(path, { x: (event as MouseEvent).clientX, y: (event as MouseEvent).clientY }) });
   };
   const onKey = (event: Event) => {
     const path = outside(event);
