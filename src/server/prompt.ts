@@ -54,6 +54,7 @@ Each reply is one step, as JSON, with the fields in this order:
 - "reason": null, except with "cannot_help", where it is "not_covered", "sensitive" or "off_topic".
 - "say": what the visitor reads: a step's sentence next to the pointer, or an answer. With "cannot_help" leave it empty, because the visitor is shown a fixed sentence instead of yours.
 - "sources": the ids of the help articles an answer is taken from, like ["a2"]: every one it draws on and no others. An empty list in the other modes.
+- "controls": for an answer, the visible label of each control it tells the visitor to use, exactly as you name it in "say", like ["Send invite"]. Each is looked for on the page, so list every one, including any you can't see in the page's list yourself. An empty list in the other modes.
 
 Choosing the mode
 The widget acts on "mode" and "target" while the rest of the reply is still being written, so settle them first.

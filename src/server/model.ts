@@ -89,6 +89,8 @@ export interface TurnMeasure {
   cited: string[];
   /** Set when the server did not let the reply through as the model wrote it, with why. */
   overruled?: Overruled;
+  /** Controls an answer named that are on none of the pages Haptic knows. The articles in `cited` may be out of date. */
+  unseen?: string[];
   /** The sentence exactly as the model wrote it, before it was tidied and checked. The benchmark compares the two. */
   wrote: string;
   /** The rules in rules.ts that changed the sentence. Empty for nearly every step. */
@@ -116,6 +118,7 @@ const AnswerReply = z.object({
   reason: z.enum(REASONS).nullable().describe("null unless mode is \"cannot_help\". Then \"not_covered\", \"sensitive\" or \"off_topic\"."),
   say: z.string().describe("With \"guide\", one or two short sentences. With \"answer\", one to four. With \"cannot_help\", an empty string."),
   sources: z.array(z.string()).describe("Ids of the help articles the answer is taken from, like [\"a2\"]. Empty unless mode is \"answer\"."),
+  controls: z.array(z.string()).describe("The visible label of each control the answer tells the visitor to use, like [\"Send invite\"]. Empty unless mode is \"answer\"."),
 });
 
 /** The first fields of a reply, as soon as each is complete in the text streamed so far. */
@@ -229,7 +232,7 @@ export async function measureTurn(site: SiteContext, request: TurnRequest, setti
     // Nothing fit to show was left. The pointer, if there is one, still says where to go.
     finished = { reply: { target, status: answered.reply.status, say: say || (target ? SAY_WITHOUT_WORDS.pointing : SAY_WITHOUT_WORDS.nothing) }, cited: [], broke };
   }
-  const { reply, cited, broke, overruled } = finished;
+  const { reply, cited, broke, overruled, unseen } = finished;
   modeKnown(reply.mode);
   targetKnown(reply.target);
   if (broke.length) console.warn(`turn ${site.id} step ${request.step}: the sentence broke the rules for ${broke.join(", ")}.`);
@@ -246,6 +249,7 @@ export async function measureTurn(site: SiteContext, request: TurnRequest, setti
     broke,
     cited,
     ...(overruled ? { overruled } : {}),
+    ...(unseen ? { unseen } : {}),
     ...(answered.tokens ? { tokens: answered.tokens } : {}),
     usd: answered.usd,
   };
@@ -387,7 +391,9 @@ function mockAnswerTurn(site: SiteContext, request: TurnRequest): ModelReply {
     if (best) {
       // "…and where is it" gets a pointer too, when the control the question names is on the page.
       const named = request.snapshot.elements.find((element) => element.label.length > 3 && goal.includes(element.label.toLowerCase()));
-      return { mode: "answer", target: named?.id ?? null, status: "done", reason: null, say: best.say, sources: [best.id] };
+      // The controls it names: whatever the answer says to press, click or choose.
+      const controls = [...best.say.matchAll(/\b(?:press|click|choose|select|open)\s+(?:the\s+)?([A-Z][A-Za-z]*(?:\s+[a-z]+){0,3}?)(?=[.,;]|\s+(?:on|in|at|to|and|then)\b|$)/g)].map((found) => found[1] ?? "");
+      return { mode: "answer", target: named?.id ?? null, status: "done", reason: null, say: best.say, sources: [best.id], controls };
     }
   }
   const step = mockTurn(request);

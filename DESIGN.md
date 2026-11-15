@@ -498,7 +498,9 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
   under the mouse or keyboard focus. If the answer is about a control on the
   page, the pointer goes to it with no caption, because the words are in the
   chat. A step's sentence stays in the caption beside the pointer. When Haptic
-  can't help, the same Muted bubble holds one fixed sentence.
+  can't help, the same Muted bubble holds one fixed sentence. If the answer
+  names a control Haptic can't find in the product, one more line of 12px
+  Muted text under the articles says so.
 - **A person is one button away, when Haptic can't help.** Under a reply that
   says Haptic can't help, after a "No" to "Did this help?", and after three
   questions with no "Yes", the chat shows one secondary button, "Contact

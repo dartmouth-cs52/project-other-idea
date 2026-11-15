@@ -56,6 +56,7 @@ button { font: inherit; cursor: pointer; }
 .sources { margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid #e7e5e4; list-style: none; font-size: 12px; line-height: 16px; color: #78716c; }
 .sources li + li { margin-top: 6px; }
 .sources .from { margin-bottom: 4px; }
+.reply .missing { margin-top: 8px; font-size: 12px; line-height: 16px; color: #78716c; }
 .sources .title { display: block; color: #1c1917; font-weight: 500; text-decoration: none; }
 .sources a.title:hover, .sources a.title:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
 .helped { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 2px 8px 12px; }
@@ -123,7 +124,7 @@ export class Ui {
       <div class="cursor" hidden><svg viewBox="0 0 24 24" width="24" height="24"><path d="${POINTER_PATH}"/></svg></div>
       <div class="dock ${side}">
         <div class="panel" hidden>
-          <div class="thread" hidden><p class="asked"></p><div class="reply"><p></p><ul class="sources" hidden></ul></div></div>
+          <div class="thread" hidden><p class="asked"></p><div class="reply"><p></p><ul class="sources" hidden></ul><p class="missing" hidden></p></div></div>
           <div class="helped" hidden></div>
           <div class="handoff" hidden>
             <div class="row offer"><span></span><button type="button" class="open"></button></div>
@@ -235,14 +236,18 @@ export class Ui {
    * help. Every word is set as text, and a link is only made for an http or
    * https address.
    */
-  showAnswer(question: string, reply: Pick<TurnReply, "say" | "sources">) {
-    const [asked, text, list] = [".asked", ".reply p", ".sources"].map((selector) => this.thread.querySelector(selector) as HTMLElement);
+  showAnswer(question: string, reply: Pick<TurnReply, "say" | "sources" | "missing">) {
+    const [asked, text, list, missing] = [".asked", ".reply p", ".sources", ".missing"].map((selector) => this.thread.querySelector(selector) as HTMLElement);
     asked!.textContent = question;
     text!.textContent = reply.say;
     const sources = reply.sources ?? [];
     // Says where the words came from, then each article.
     list!.replaceChildren(Object.assign(document.createElement("li"), { className: "from", textContent: "From the help docs" }), ...sources.map(sourceRow));
     list!.hidden = sources.length === 0;
+    // A control the article names that isn't in the product any more, as far as Haptic can see. Better said than left for the visitor to hunt for.
+    const gone = (reply.missing ?? []).slice(0, 2).map((label) => `"${label}"`);
+    missing!.textContent = gone.length ? `I can't see ${gone.join(" or ")} on this page or the others I know, so this may no longer be right.` : "";
+    missing!.hidden = gone.length === 0;
     this.thread.hidden = false;
     this.panel.hidden = false;
     this.thread.scrollTop = 0;

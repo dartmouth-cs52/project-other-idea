@@ -306,6 +306,13 @@ export interface TurnReply {
   reason?: Reason;
   /** Only with mode "answer": the articles the answer rests on. Never empty. */
   sources?: Source[];
+  /**
+   * Only with mode "answer": labels of controls the answer tells the visitor
+   * to use that are on neither the page they are looking at nor any other page
+   * Haptic knows. The help article that names them may be out of date. The
+   * page is in hand when the answer is written, so this is checked, not guessed.
+   */
+  missing?: string[];
 }
 
 // Paths ---------------------------------------------------------------------

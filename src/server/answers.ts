@@ -1,4 +1,4 @@
-import { MODES, REASONS, type Mode, type Reason, type SiteContext, type Source, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { MODES, REASONS, type Mode, type Reason, type SiteContext, type Snapshot, type Source, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { articlesOf, type Article } from "./prompt.ts";
 import { checkSay, SAY_WITHOUT_WORDS, tidySay, type Rule } from "./rules.ts";
 
@@ -17,6 +17,10 @@ import { checkSay, SAY_WITHOUT_WORDS, tidySay, type Rule } from "./rules.ts";
 //   the visitor's own account are never answered in words, whatever the docs
 //   say. A step's sentence may not state a price or a refund rule either.
 // - An answer is held to the same rules as any sentence (rules.ts), with more room.
+// - A control the answer names is looked for on the page the visitor is on.
+//   Help docs go out of date, and an answer built on an article that names a
+//   button the product no longer has would send the visitor looking for it. A
+//   bot that only reads docs cannot know. Haptic has the page.
 
 /** An answer is one to four short sentences. This is room for that. */
 export const MAX_ANSWER_SAY = 600;
@@ -32,6 +36,8 @@ export interface ModelReply {
   reason?: Reason | null;
   /** Ids of help articles, like "a2". */
   sources?: string[];
+  /** The labels of the controls an answer tells the visitor to use. */
+  controls?: string[];
 }
 
 /**
@@ -73,6 +79,8 @@ export interface Finished {
   reply: TurnReply;
   /** The articles the answer rests on, by where each came from. For the log. */
   cited: string[];
+  /** Labels of controls the answer named that are on none of the pages Haptic knows. With `cited`, this is which articles may be out of date. */
+  unseen?: string[];
   overruled?: Overruled;
   broke: Rule[];
 }
@@ -106,11 +114,13 @@ export function finishAnswer(site: SiteContext, request: TurnRequest, raw: Model
       .slice(0, MAX_SOURCES);
     if (!cited.length) return cannotHelp("not_covered", "no_source");
     if (!say) return cannotHelp("not_covered", "no_words");
+    const missing = missingControls(site, request.snapshot, raw.controls ?? []);
     return {
       // With nothing to act on there is nothing to wait for.
-      reply: { target, status: target ? raw.status : "done", say, mode, sources: cited.map((article) => asSource(article, site, now)) },
+      reply: { target, status: target ? raw.status : "done", say, mode, sources: cited.map((article) => asSource(article, site, now)), ...(missing.length ? { missing } : {}) },
       cited: cited.map((article) => article.doc.source),
       broke,
+      ...(missing.length ? { unseen: missing } : {}),
     };
   }
 
@@ -143,4 +153,54 @@ export function declinedReply(site: SiteContext, answers: boolean): Finished {
   const reply: TurnReply = { target: null, status: "stuck", say: SAY_WITHOUT_WORDS.nothing };
   if (answers) Object.assign(reply, { mode: "cannot_help", reason: "not_covered" } satisfies Partial<TurnReply>);
   return { reply, cited: [], broke: [], overruled: "declined" };
+}
+
+/** The most controls checked for one answer. */
+const MAX_CONTROLS = 6;
+/** A site map with fewer controls than this, over all its pages, says nothing about what the product has. */
+const MIN_KNOWN_CONTROLS = 5;
+
+/** A label made comparable: lower case, single spaces, and none of the quotes, dots or arrows a sentence wraps a label in. */
+const plainLabel = (label: string): string =>
+  label
+    .toLowerCase()
+    .replace(/["'“”‘’`…›»→]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s.,:;]+|[\s.,:;]+$/g, "");
+
+/**
+ * Whether two labels mean the same control. An article says "Save" where the
+ * button says "Save changes", so one may hold the other as whole words. A very
+ * short label has to match exactly: "A" is not in every label with an "a".
+ */
+function sameControl(named: string, label: string): boolean {
+  if (!named || !label) return false;
+  if (named === label) return true;
+  const [short, long] = named.length <= label.length ? [named, label] : [label, named];
+  return short.length >= 4 && ` ${long} `.includes(` ${short} `);
+}
+
+/**
+ * The controls an answer names that are on neither the page the visitor is
+ * looking at nor any other page Haptic knows.
+ *
+ * It only speaks when it can know. With a dialog open or the list cut short,
+ * the page in hand is not the whole page. And where the crawl found next to
+ * nothing, as it does for a product drawn in the browser or behind a login,
+ * a control that isn't on this page is most likely just on another one. In
+ * both cases nothing is reported.
+ */
+export function missingControls(site: SiteContext, snapshot: Snapshot, controls: string[]): string[] {
+  if (snapshot.dialog !== undefined || snapshot.truncated) return [];
+  const known = site.pages.flatMap((page) => [...page.buttons, ...page.fields, ...page.links.map((link) => link.label)]).map(plainLabel);
+  if (known.length < MIN_KNOWN_CONTROLS) return [];
+  const seen = [...snapshot.elements.map((element) => plainLabel(element.label)), ...known];
+
+  const missing: string[] = [];
+  for (const raw of [...new Set(controls)].slice(0, MAX_CONTROLS)) {
+    const label = String(raw).slice(0, 80).trim();
+    const named = plainLabel(label);
+    if (named && !seen.some((other) => sameControl(named, other))) missing.push(label);
+  }
+  return missing;
 }

@@ -137,7 +137,24 @@ export class Store {
       ]);
     });
     this.track(guide, write);
-    return write.then(() => this.recordCost(guide, request.step, measure)).then(() => this.recordKind(guide, request.step, measure));
+    return write
+      .then(() => this.recordCost(guide, request.step, measure))
+      .then(() => this.recordKind(guide, request.step, measure))
+      .then(() => this.recordUnseen(guide, request.step, measure));
+  }
+
+  /**
+   * Adds the controls an answer named that are nowhere Haptic can see. With
+   * the step's sources, that says which help articles may be out of date. It
+   * is rare, so nothing is sent for a step without any. The column is from
+   * db/migrations/0007.
+   */
+  private recordUnseen(guide: string, step: number, measure: TurnMeasure): Promise<void> {
+    const unseen = measure.unseen;
+    if (!unseen?.length) return Promise.resolve();
+    return this.quietly("record controls an answer named that aren't in the product (has db/migrations/0007 been applied?)", async () => {
+      await this.sql`update steps set unseen = ${unseen} where guide_id = ${guide} and n = ${step}`;
+    });
   }
 
   /**

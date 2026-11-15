@@ -101,3 +101,17 @@ test("on a site with Answers, the kind of reply and the docs it rested on are ad
   await new Store(declined.sql).recordStep(request, { ...measure, reply: { target: null, status: "done", say: "The help docs don't cover that.", mode: "cannot_help", reason: "not_covered" }, overruled: "no_source" }, undefined);
   assert.deepEqual(declined.sent[3]!.values, ["cannot_help", "not_covered", [], "no_source", GUIDE, 2]);
 });
+
+test("a control an answer named that is nowhere in the product is recorded with the step", async () => {
+  const { sql, sent } = standIn();
+  const stale: TurnMeasure = {
+    ...measure,
+    reply: { target: null, status: "done", say: "Open the project and press Archive project.", mode: "answer", sources: [{ title: "Archiving" }], missing: ["Archive project"] },
+    cited: ["help/archiving.md"],
+    unseen: ["Archive project"],
+  };
+  await new Store(sql).recordStep(request, stale, undefined);
+  assert.equal(sent.length, 5);
+  assert.match(sent[4]!.text, /^update steps set unseen = \? where guide_id = \? and n = \?$/);
+  assert.deepEqual(sent[4]!.values, [["Archive project"], GUIDE, 2]);
+});

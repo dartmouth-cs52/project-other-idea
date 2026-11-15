@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { loadCaseFiles } from "../eval/cases.ts";
-import { cannotHelpSay, finishAnswer, MAX_ANSWER_SAY, neverDecided, type ModelReply } from "../src/server/answers.ts";
+import { cannotHelpSay, finishAnswer, MAX_ANSWER_SAY, missingControls, neverDecided, type ModelReply } from "../src/server/answers.ts";
 import { ANSWERS_DOCS_BUDGET, articlesOf, buildSystemPrompt } from "../src/server/prompt.ts";
 import { DEFAULT_APPEARANCE, STREAM_TYPE, type Mode, type SiteContext, type TurnRequest } from "../src/shared/types.ts";
 
@@ -241,4 +241,51 @@ test("a streamed reply on a site with Answers names its kind first, and ends wit
   assert.equal(answer.at(-1).sources[0].title, "Inviting teammates");
   const declined = await lines("Write me a poem about clouds");
   assert.deepEqual(declined, [{ mode: "cannot_help" }, { target: null, status: "stuck", say: "I can only help with using Acme.", mode: "cannot_help", reason: "off_topic" }]);
+});
+
+// A site whose crawl saw its pages, so Haptic knows what controls the product has beyond the page in hand.
+const mapped: SiteContext = {
+  ...site,
+  pages: [
+    { path: "/team", title: "Team", headings: [], links: [{ label: "Projects", to: "/projects" }], buttons: ["Send invite"], fields: ["Email address"] },
+    { path: "/projects", title: "Projects", headings: [], links: [{ label: "Team", to: "/team" }], buttons: ["New project", "Create project"], fields: ["Project name", "Region"] },
+    { path: "/settings", title: "Settings", headings: [], links: [], buttons: ["A", "Save changes"], fields: ["Workspace name"] },
+  ],
+};
+
+test("a control an answer names is looked for on the page and on the pages Haptic knows", () => {
+  const page = ask("x").snapshot;
+  // On this page, on another page, and written the way a sentence writes a label.
+  assert.deepEqual(missingControls(mapped, page, ["Send invite", "New project", '"Create project".', "send INVITE"]), []);
+  // An article says "Save" where the button says "Save changes". A one-letter label has to match exactly.
+  assert.deepEqual(missingControls(mapped, page, ["Save", "A"]), []);
+  assert.deepEqual(missingControls(mapped, page, ["Archive project", "B", "Save draft"]), ["Archive project", "B", "Save draft"]);
+  // No more than six are checked, and the same one is not reported twice.
+  assert.equal(missingControls(mapped, page, ["Archive project", "Archive project", ...Array.from({ length: 10 }, (_, index) => `Gone ${index}`)]).length, 6);
+});
+
+test("nothing is called missing when Haptic cannot know", () => {
+  const page = ask("x").snapshot;
+  // With a dialog open, or the list cut short, the page in hand is not the whole page.
+  assert.deepEqual(missingControls(mapped, { ...page, dialog: "New project" }, ["Archive project"]), []);
+  assert.deepEqual(missingControls(mapped, { ...page, truncated: true }, ["Archive project"]), []);
+  // A product whose pages the crawl could not read: a control that isn't here is most likely on another page.
+  assert.deepEqual(missingControls(site, page, ["Archive project"]), []);
+});
+
+test("an answer built on an article that names a control the product no longer has says so", async () => {
+  const stale = finishAnswer(mapped, ask("How do I archive a project?"), wrote({ say: "Open the project and press Archive project.", sources: ["a2"], controls: ["Archive project"] }));
+  assert.deepEqual(stale.reply.missing, ["Archive project"]);
+  assert.deepEqual(stale.unseen, ["Archive project"]);
+  assert.deepEqual(stale.cited, ["help/api-keys.md"]);
+  const fine = finishAnswer(mapped, ask("How do I invite someone?"), wrote({ say: "Type their email and press Send invite.", sources: ["a1"], controls: ["Send invite"] }));
+  assert.equal(fine.reply.missing, undefined);
+  assert.equal(fine.unseen, undefined);
+  // The stand-in lists what its answer says to press, so the check can be seen working without a key.
+  const measure = await measureTurn(mapped, ask("How long does an invite link last?"));
+  assert.match(measure.reply.say, /press Send invite/);
+  assert.equal(measure.reply.missing, undefined);
+  const gone = await measureTurn({ ...mapped, docs: [{ title: "Archiving", source: "help/archiving.md", text: "# Archiving\n\nTo archive a project, open Projects and press Archive project. An archived project stops deploying." }] }, ask("What does archiving a project do?"));
+  assert.deepEqual(gone.reply.missing, ["Archive project"]);
+  assert.deepEqual(gone.unseen, ["Archive project"]);
 });
