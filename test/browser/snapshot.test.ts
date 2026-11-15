@@ -352,7 +352,7 @@ test("a clickable panel stays listed when the clickable inside it says something
   </main>`);
   assert.deepEqual(lines(snapshot), [
     'clickable "Simple graph" [main]',
-    'clickable [main › Simple graph]',
+    'clickable "part of Simple graph" [main › Simple graph]',
     'clickable "A-series B-series" [main › Simple graph]',
     // A box that says what the box inside it says is only its wrapper.
     'clickable "Open the weekly report" [main]',
@@ -538,4 +538,26 @@ test("with a list open over a layer that covers the window, what lies under the 
     </div>`, { before: (page) => page.focus("#field") });
   // The field the list belongs to has the keyboard, and is typed in to narrow the list.
   assert.deepEqual(lines(snapshot), ['textbox "Pick a letter"', 'option "A" [list]', 'option "B" [list]', 'option "C, scrolled out of the list" [list]']);
+});
+
+// Names taken from the right place ---------------------------------------------------------
+
+test("a dialog is not named by a button in its title bar, and a select is named by its box, not by its choice or its tags", { skip }, async () => {
+  const snapshot = await read(`<div role="dialog" aria-modal="true" style="position:fixed;inset:40px;background:#fff">
+      <h2><input aria-label="Search"><button>Clear</button></h2>
+      <h3>Results</h3><button>View Full Results</button>
+      <div aria-label="Type"><div role="button" tabindex="0" aria-haspopup="listbox">all</div></div>
+      <div><div>Owner</div><div><div><div><span>Sam Smith</span><span style="cursor:pointer">x</span></div><div><input role="combobox"></div></div></div></div>
+      <section aria-label="Sales chart"><div tabindex="0" style="width:200px;height:60px"></div></section>
+    </div>`);
+  assert.equal(snapshot.dialog, "Results");
+  assert.deepEqual(lines(snapshot), [
+    'textbox "Search" [dialog]',
+    'button "Clear" [dialog]',
+    'button "View Full Results" [dialog › Results]',
+    'button "Type" (opens a list) [dialog › Results]',
+    'clickable "x" [dialog › Results]',
+    'combobox "Owner" [dialog › Results]',
+    'clickable "part of Sales chart" [dialog › Sales chart]',
+  ]);
 });

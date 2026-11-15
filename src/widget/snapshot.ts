@@ -294,6 +294,8 @@ interface Candidate extends SnapElement {
   place?: string;
   /** Outside the open dialog. Kept only if it is drawn on top of it, like a list the dialog opened. */
   outside: boolean;
+  /** Its name is the name of the box it is in, as it has none of its own. */
+  boxNamed?: boolean;
 }
 
 /** A piece of page text, whether it is on screen, and its place in the page. */
@@ -374,6 +376,16 @@ function contextOf(c: Candidate): string {
 interface Scope {
   region: string;
   heading: string;
+  /** The name of the box the control is in, when that box is set apart and named: a panel, a group, a named landmark. */
+  box?: string;
+}
+
+/** Controls inside a heading, like a search box and its button in a dialog's title bar. Their words are theirs, not the heading's. */
+const NOT_HEADING_WORDS = "button, [role='button'], select, [role='combobox'], [role='checkbox'], [role='switch'], [role='slider']";
+
+/** A heading's own words, leaving out the words of controls set inside it. */
+function headingWords(heading: Element): string {
+  return cleanText(wordsIn(heading, 160, NOT_HEADING_WORDS), 80);
 }
 
 /** A heading on the page, with what decides whether it is among the few that are sent. */
@@ -423,7 +435,7 @@ function headingOfBox(el: Element): string {
     }
   };
   look(el, 0);
-  return found ? cleanText(wordsIn(found, 160), 80) : "";
+  return found ? headingWords(found) : "";
 }
 
 /** Which of a long page's headings are sent: the ones on screen first, then the higher levels, kept in page order. */
@@ -520,15 +532,16 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
     const landmark = LANDMARKS[explicitRole] ?? LANDMARKS[el.tagName];
     // A part of the page that is set apart keeps its heading to itself: a panel's title is not the heading of what comes after the panel.
     const section = !landmark && el !== root && el !== modal && (SECTION_TAGS.has(el.tagName) || SECTION_ROLES.has(explicitRole));
+    const boxName = el === modal || (landmark && el !== root) ? nameOfBox(el) : section ? headingOfBox(el) : "";
     const childScope: Scope =
-      el === modal ? { region: "dialog", heading: "" }
-      : landmark && el !== root ? { region: landmark, heading: nameOfBox(el) }
-      : section ? { region: scope.region, heading: headingOfBox(el) || scope.heading }
+      el === modal ? { region: "dialog", heading: "", box: boxName }
+      : landmark && el !== root ? { region: landmark, heading: boxName, box: boxName }
+      : section ? { region: scope.region, heading: boxName || scope.heading, box: boxName || scope.box }
       : scope;
 
     const headingTag = /^H([1-6])$/.exec(el.tagName);
     if ((headingTag || explicitRole === "heading") && !hoverBox) {
-      const text = cleanText(wordsIn(el, 160), 80);
+      const text = headingWords(el);
       if (text) {
         scope.heading = text;
         const level = Number(el.getAttribute("aria-level")) || Number(headingTag?.[1]) || 2;
@@ -555,6 +568,12 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
         if (options.length) added.options = options;
         const icon = iconOf(el);
         if (icon) added.icon = icon;
+        // A chart or a tile with no name of its own is known by the box that names it, and says so:
+        // "part of Simple graph". Otherwise an event reads "The user clicked clickable."
+        if (!added.label && !icon && scope.box && !SHOWS_A_VALUE.has(role)) {
+          added.label = cleanText(`part of ${scope.box}`, 80);
+          added.boxNamed = true;
+        }
         const state = stateOf(el, role);
         // Fully transparent controls have always been listed: row actions that fade in. One that a stylesheet shows on hover says so.
         const fades = !hoverBox && hiddenChecked < MAX_HIDDEN_CHECKED && getComputedStyle(el).opacity === "0" && ++hiddenChecked > 0 && shownWhenOver(el, false, true);
@@ -596,7 +615,7 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
     let wrapper = false;
     if (added && !isNative(el) && !isFocusable(el) && within.some((c) => c.role !== "clickable" && isNative(c.el))) {
       wrapper = true;
-    } else if (added?.role === "clickable" && within.some((c) => c.role === "clickable" && saysMostOf(c.label, added!.label))) {
+    } else if (added?.role === "clickable" && within.some((c) => c.role === "clickable" && saysMostOf(c.boxNamed ? "" : c.label, added!.label))) {
       // A clickable box around a clickable box that says the same thing: the inner one is the control.
       // A panel named "Simple graph" around its legend, "A-series B-series", says something else and stays.
       wrapper = true;
@@ -650,7 +669,7 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
   usable = [];
 
   const elements = new Map<string, Element>();
-  const listed = chosen.map(({ el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, ...element }, index) => {
+  const listed = chosen.map(({ el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, ...element }, index) => {
     element.id = `e${index + 1}`;
     elements.set(element.id, el);
     return element;
@@ -1132,16 +1151,27 @@ function rowName(row: Element, control: Element, piecesOf: (row: Element) => Pie
  */
 const CONTROLS = "input, select, textarea, button, a[href], [role='button'], [role='combobox'], [role='textbox'], [role='searchbox'], [contenteditable]:not([contenteditable='false'])";
 
+/**
+ * Whether a box holds something pressed on its own, shown by a pointer cursor
+ * that starts there: the cross on a chosen value's tag. Such a box is that
+ * value, not a caption.
+ */
+function holdsPressable(box: Element): boolean {
+  return Array.from(box.querySelectorAll("*"))
+    .slice(0, 30)
+    .some((inner) => getComputedStyle(inner).cursor === "pointer" && !!inner.parentElement && getComputedStyle(inner.parentElement).cursor !== "pointer");
+}
+
 function captionOf(el: Element, after: boolean): string {
   // A box that is a control, or holds one, is not a caption: its words are that control's, or what a visitor typed into it.
   const wordsOf = (node: Element): string => {
-    if (holdsTyping(node) || node.matches(CONTROLS) || node.querySelector(CONTROLS)) return "";
+    if (holdsTyping(node) || node.matches(CONTROLS) || node.querySelector(CONTROLS) || holdsPressable(node)) return "";
     const text = cleanText(wordsIn(node, 120, "", undefined, true), 61);
     return text.length > 60 ? "" : text.replace(/\s*[:*]+$/, "");
   };
   const step = (from: Node) => (after ? from.nextSibling : from.previousSibling);
   let node: Element | null = el;
-  for (let depth = 0; depth < 4 && node && node !== document.body; depth++) {
+  for (let depth = 0; depth < 6 && node && node !== document.body; depth++) {
     // Inside an editor the words beside a control are the visitor's own.
     if ((node.parentElement as HTMLElement | null)?.isContentEditable) return "";
     // The nearest words beside it, whether bare words in the same box or a box of their own:
@@ -1217,6 +1247,21 @@ function withShownWords(name: string, el: Element): string {
   return `${shown.length > 48 ? `${shown.slice(0, 47).trimEnd()}…` : shown} (${name})`;
 }
 
+/** Whether a control shows the choice made in a list it opens: a combobox, or a button that opens a listbox. */
+function opensAList(el: Element, role: string): boolean {
+  return role === "combobox" || ["listbox", "tree", "grid"].includes((el.getAttribute("aria-haspopup") ?? "").toLowerCase());
+}
+
+/** The aria-label or aria-labelledby of the box just around a control, which some pages put there rather than on the control. */
+function nameAround(el: Element): string {
+  for (let box = el.parentElement, depth = 0; box && box !== document.body && depth < 2; box = box.parentElement, depth++) {
+    if (box.matches(CONTROLS) || box.hasAttribute("role")) return "";
+    const name = nameOfBox(box);
+    if (name) return name;
+  }
+  return "";
+}
+
 function labelOf(el: Element, role: string): string {
   const root = el.getRootNode() as Document | ShadowRoot;
   /** Named by a part of itself, which is then a name the visitor can see. */
@@ -1248,6 +1293,8 @@ function labelOf(el: Element, role: string): string {
     // The name attribute is for the server, but when it reads as words it is better than nothing.
     raw ||= wordsOfName(el.getAttribute("name") ?? "");
   }
+  // A control that shows the choice it opens a list for is named by what its page calls it, not by that choice.
+  if (!raw && !typedIn && opensAList(el, role)) raw = nameAround(el) || captionOf(el, false);
   // Never use a field's contents as its label.
   if (!raw && role !== "textbox" && role !== "select" && !typedIn) raw = visibleText(el);
   // What the page shows in an empty field is the page's own words for it.
@@ -1430,10 +1477,15 @@ function coversThePage(dialog: Element, ignore: Element): boolean {
   return !top.contains(dialog) || getComputedStyle(top).position === "fixed";
 }
 
+/**
+ * A dialog's name: what aria-labelledby points to, or its aria-label, or else
+ * the first heading in it that has words of its own. A title bar that holds a
+ * search box and a "Clear" button is not called "Clear".
+ */
 function dialogLabel(el: Element): string {
-  const labelledBy = el.getAttribute("aria-labelledby");
-  const named = labelledBy ? document.getElementById(labelledBy) : null;
-  const heading = el.querySelector("h1, h2, h3, [role='heading']");
-  const raw = el.getAttribute("aria-label") || (named && wordsIn(named, 200, "", undefined, true)) || (heading && wordsIn(heading)) || "";
-  return cleanText(raw, 60);
+  const named = nameOfBox(el);
+  if (named) return cleanText(named, 60);
+  let words = "";
+  for (const heading of Array.from(el.querySelectorAll(HEADINGS)).slice(0, 4)) if ((words = headingWords(heading))) break;
+  return cleanText(words, 60);
 }
