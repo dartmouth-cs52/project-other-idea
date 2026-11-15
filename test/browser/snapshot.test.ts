@@ -571,3 +571,91 @@ test("scrolling a long page alone changes no control, though it changes which ar
   assert.equal(await change((page) => page.evaluate("window.scrollTo(0, document.body.scrollHeight)")), "Nothing visible on the page changed.");
   assert.match(await change((page) => page.evaluate("window.scrollTo(0, document.body.scrollHeight); document.getElementById('more').click()")), /^New: button "Added"\.$/m);
 });
+
+// Forms built from boxes, with captions in labels tied to nothing (OrangeHRM) --------------------------
+
+/** OrangeHRM's markup: captions in <label>s tied to no field, custom selects, date fields, chips, sortable headings, a pager and a dialog. */
+const BOXES = `<style>
+  .oxd-label.required::after { content: " *"; }
+  .oxd-select-text, .oxd-icon, .oxd-pagination-page-item, .sort-item { cursor: pointer; }
+  .oxd-table-header-sort-dropdown { display: none; }
+  .oxd-icon { display: inline-block; width: 12px; height: 12px; }
+</style>
+<form class="oxd-form">
+  <div class="oxd-input-group"><div class="oxd-input-group__label-wrapper"><label class="oxd-label">Employee Name</label></div>
+    <div><div class="oxd-autocomplete-wrapper"><div class="oxd-autocomplete-text-input"><input placeholder="Type for hints..."></div></div></div></div>
+  <div class="oxd-input-group"><div class="oxd-input-group__label-wrapper"><label class="oxd-label">Job Title</label></div>
+    <div><div class="oxd-select-wrapper"><div tabindex="0" class="oxd-select-text oxd-select-text--active"><div class="oxd-select-text-input">-- Select --</div><div class="oxd-select-text--after"><i class="oxd-icon bi-caret-down-fill"></i></div></div></div></div></div>
+  <div class="oxd-input-group"><div class="oxd-input-group__label-wrapper"><label class="oxd-label">Vacancy</label></div>
+    <div><div class="oxd-select-wrapper"><div tabindex="0" class="oxd-select-text oxd-select-text--active"><div class="oxd-select-text-input">-- Select --</div><div class="oxd-select-text--after"><i class="oxd-icon bi-caret-down-fill"></i></div></div></div></div></div>
+  <div class="oxd-input-group"><div class="oxd-input-group__label-wrapper"><label class="oxd-label required">From Date</label></div>
+    <div><div class="oxd-date-wrapper"><div class="oxd-date-input"><input placeholder="yyyy-dd-mm"><i class="oxd-icon bi-calendar"></i></div></div></div></div>
+  <div class="oxd-input-group"><div class="oxd-input-group__label-wrapper"><label class="oxd-label">To Date</label></div>
+    <div><div class="oxd-date-wrapper"><div class="oxd-date-input"><input placeholder="yyyy-dd-mm"><i class="oxd-icon bi-calendar"></i></div></div></div></div>
+  <div class="oxd-multiselect-chips-area"><span class="oxd-chip">Pending Approval<i class="oxd-icon bi-x --clear"></i></span><span class="oxd-chip">Scheduled<i class="oxd-icon bi-x --clear"></i></span></div>
+</form>
+<div role="table"><div role="rowgroup"><div role="row">
+  <div role="columnheader"><div class="oxd-checkbox-wrapper"><label><input type="checkbox"><span class="oxd-checkbox-input"></span></label></div></div>
+  <div role="columnheader">Id<div class="oxd-table-header-sort"><i class="oxd-icon bi-arrow-down-up"></i><div role="dropdown" class="oxd-table-header-sort-dropdown"><ul><li class="sort-item"><span>Ascending</span></li><li class="sort-item"><span>Descending</span></li></ul></div></div></div>
+  <div role="columnheader">Last Name<div class="oxd-table-header-sort"><i class="oxd-icon bi-arrow-down-up"></i><div role="dropdown" class="oxd-table-header-sort-dropdown"><ul><li class="sort-item"><span>Ascending</span></li><li class="sort-item"><span>Descending</span></li></ul></div></div></div>
+</div></div></div>
+<nav aria-label="Pagination Navigation"><ul class="oxd-pagination__ul">
+  <li class="oxd-pagination-page-item"><button type="button" class="oxd-pagination-page-item oxd-pagination-page-item--page oxd-pagination-page-item--page-selected">1</button></li>
+  <li class="oxd-pagination-page-item"><button type="button" class="oxd-pagination-page-item oxd-pagination-page-item--page">2</button></li>
+  <li class="oxd-pagination-page-item"><button type="button" class="oxd-pagination-page-item oxd-pagination-page-item--page">3</button></li>
+  <li class="oxd-pagination-page-item"><button type="button" class="oxd-pagination-page-item oxd-pagination-page-item--previous-next"><i class="oxd-icon bi-chevron-right"></i></button></li>
+</ul></nav>
+<div role="dialog" aria-modal="true" style="position:fixed;left:300px;top:200px;width:400px;height:200px;background:#fff">
+  <div role="document"><button class="oxd-dialog-close-button">×</button><p class="oxd-text oxd-text--card-title">Add Organization Unit</p><hr>
+  <form><div class="oxd-input-group"><div class="oxd-input-group__label-wrapper"><label class="oxd-label">Name</label></div><div><input></div></div><button type="submit">Save</button></form></div>
+</div>
+`;
+
+test("a field or a custom select under a label tied to nothing is named by that label, with a placeholder as a hint after it", { skip }, async () => {
+  const snapshot = await read(BOXES.replace(/<div role="dialog"[\s\S]*$/, ""));
+  assert.deepEqual(lines(snapshot), [
+    'textbox "Employee Name (Type for hints...)" [form]',
+    'clickable "Job Title" icon:caret-down-fill [form]',
+    'clickable "Vacancy" icon:caret-down-fill [form]',
+    'textbox "From Date (yyyy-dd-mm)" (required) [form]',
+    'clickable icon:calendar [form › row: From Date]',
+    'textbox "To Date (yyyy-dd-mm)" [form]',
+    'clickable icon:calendar [form › row: To Date]',
+    'clickable icon:x [form › row: Pending Approval]',
+    'clickable icon:x [form › row: Scheduled]',
+    // A column heading names its column, not the tick box in the heading before it, and a closed sort menu's words are not read.
+    "checkbox",
+    'clickable icon:arrow-down-up [row: Id]',
+    'clickable icon:arrow-down-up [row: Last Name]',
+    'button "1" (current) [nav › Pagination Navigation]',
+    'button "2" [nav › Pagination Navigation]',
+    'button "3" [nav › Pagination Navigation]',
+    'button icon:chevron-right [nav › Pagination Navigation]',
+  ]);
+});
+
+test("a dialog with no name and no heading is named by its first words", { skip }, async () => {
+  const snapshot = await read(BOXES);
+  assert.equal(snapshot.dialog, "Add Organization Unit");
+});
+
+test("the current one of a row is marked only when one alone carries such a class name", { skip }, async () => {
+  const snapshot = await read(`<ul><li class="tab"><a href="/a">A</a></li><li class="tab is-active"><a href="/b">B</a></li><li class="tab"><a href="/c">C</a></li></ul>
+    <div><button class="step">One</button><button class="step inactive">Two</button><button class="step">Three</button></div>
+    <div><button class="chip selected">Red</button><button class="chip selected">Blue</button><button class="chip">Green</button></div>
+    <div><button aria-pressed="true" class="opt">Bold</button><button class="opt active">Italic</button></div>`);
+  assert.deepEqual(lines(snapshot), [
+    'link "A" → /a',
+    'link "B" (current) → /b',
+    'link "C" → /c',
+    'button "One"',
+    'button "Two"',
+    'button "Three"',
+    'button "Red"',
+    'button "Blue"',
+    'button "Green"',
+    // The page has said which with an attribute, so a class name is not read.
+    'button "Bold" (pressed)',
+    'button "Italic"',
+  ]);
+});

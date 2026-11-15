@@ -28,7 +28,7 @@ const MAYBE_CLICKABLE = new Set(["DIV", "SPAN", "LI", "IMG", "TD", "TR", "TH", "
 /** Tags that take a tabindex so that they can be scrolled or jumped to, not so that they can be clicked. */
 const FOCUSABLE_NOT_CLICKABLE = new Set(["BODY", "MAIN", "PRE", "CODE", "TABLE", "FORM", "DIALOG"]);
 const ICON_CLASS =
-  /(?:^|\s)(?:lucide|tabler-icon|bi|ri|fa|mdi|pi|ti|anticon|aui-iconfont|oo-ui-icon|glyphicon|codicon|octicon|icon)-(?!solid|regular|brands|fw|lg|sm|xs|spin|btn|button|default|container|wrapper|small|medium|large|only)([a-z][a-z0-9-]+)/;
+  /(?:^|\s)(?:lucide|tabler-icon|bi|ri|fa|mdi|pi|ti|anticon|aui-iconfont|oo-ui-icon|glyphicon|codicon|octicon|icon)-(?!solid|regular|brands|fw|lg|sm|xs|spin|btn|button|default|container|wrapper|small|medium|large|only)([a-z][a-z0-9-]*)/;
 /** What repeats down a page: the row, card or entry a control sits in. */
 const ROW = 'tr, li, article, [role="row"], [role="listitem"], [role="option"], [role="treeitem"], [role="gridcell"]';
 /** A select's choices are part of the page, so they are listed: this many, each this long. */
@@ -641,6 +641,7 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
     : cover ? candidates.filter((c) => inCover(c.el) || onTop(c.el, ignore))
     : candidates,
   );
+  markChosen(usable);
   nameRows(usable);
   tellTwinsApart(usable);
   for (const c of usable) {
@@ -984,6 +985,42 @@ function mergeCells(candidates: Candidate[]): Candidate[] {
   return dropped.size ? candidates.filter((c) => !dropped.has(c)) : candidates;
 }
 
+/** A class name that marks the chosen one of a set: "page-selected", "active", "is-current". "inactive" is not one. */
+const MARKS_CHOSEN = /(?:^|[-_]|is)(?:selected|active|current)$/i;
+
+/**
+ * Marks the current one of a row of controls, like a pager's page buttons,
+ * when the page says which only with a class name. When no control in the row
+ * says it is current, selected, pressed or checked, and exactly one carries a
+ * class name ending in "selected", "active" or "current" that the others lack,
+ * on itself or on a box it alone fills, that one is "current". Without it the
+ * model pointed at page 1 for "page 2" every time.
+ */
+function markChosen(candidates: Candidate[]) {
+  const rows = new Map<Element, Candidate[]>();
+  for (const c of candidates) {
+    // A button alone in a list entry stands in that entry's place in the row.
+    const slot = c.el.parentElement?.childElementCount === 1 ? c.el.parentElement : c.el;
+    const row = slot.parentElement;
+    if (!row) continue;
+    const list = rows.get(row);
+    if (list) list.push(c);
+    else rows.set(row, [c]);
+  }
+  const marks = (c: Candidate) => {
+    const slot = c.el.parentElement?.childElementCount === 1 ? c.el.parentElement : undefined;
+    return [...Array.from(c.el.classList), ...Array.from(slot?.classList ?? [])].filter((name) => MARKS_CHOSEN.test(name));
+  };
+  for (const row of rows.values()) {
+    if (row.length < 2 || row.some((c) => c.state?.some((state) => ["current", "selected", "pressed", "checked"].includes(state)))) continue;
+    const each = row.map(marks);
+    const seen = new Map<string, number>();
+    for (const names of each) for (const name of new Set(names)) seen.set(name, (seen.get(name) ?? 0) + 1);
+    const chosen = row.filter((_, index) => each[index]!.some((name) => seen.get(name) === 1));
+    if (chosen.length === 1) chosen[0]!.state = [...(chosen[0]!.state ?? []), "current"];
+  }
+}
+
 /**
  * Tells apart controls that would otherwise be listed word for word the same,
  * by the row, card or entry each sits in: "Remove [row: Priya]". Without it a
@@ -1180,39 +1217,56 @@ function holdsPressable(box: Element): boolean {
 }
 
 function captionOf(el: Element, after: boolean): string {
+  return captionNode(el, after).text;
+}
+
+/**
+ * The caption beside a field, and the box it was read from, when that was a
+ * box and not bare words. A `<label>` that is tied to no other field is the
+ * page saying plainly what the field is called.
+ */
+function captionNode(el: Element, after: boolean): { text: string; from?: Element } {
   // A box that is a control, or holds one, is not a caption: its words are that control's, or what a visitor typed into it.
   const wordsOf = (node: Element): string => {
     if (holdsTyping(node) || node.matches(CONTROLS) || node.querySelector(CONTROLS) || holdsPressable(node)) return "";
-    const text = cleanText(wordsIn(node, 120, "", undefined, true), 61);
+    const text = cleanText(wordsIn(node, 120), 61);
     return text.length > 60 ? "" : text.replace(/\s*[:*]+$/, "");
   };
   const step = (from: Node) => (after ? from.nextSibling : from.previousSibling);
   let node: Element | null = el;
   for (let depth = 0; depth < 6 && node && node !== document.body; depth++) {
     // Inside an editor the words beside a control are the visitor's own.
-    if ((node.parentElement as HTMLElement | null)?.isContentEditable) return "";
+    if ((node.parentElement as HTMLElement | null)?.isContentEditable) return { text: "" };
+    // A column heading names its column. The heading beside it names another.
+    if (depth > 0 && node.matches("th, [role='columnheader']")) return { text: "" };
     // The nearest words beside it, whether bare words in the same box or a box of their own:
     // in "from account # [ ] to account # [ ]" the second field is "to account #".
     for (let beside = step(node), tried = 0; beside && tried < 3; beside = step(beside)) {
       if (beside.nodeType === Node.TEXT_NODE) {
         const text = cleanText(beside.textContent ?? "", 61);
-        if (text.length > 1 && text.length <= 60 && /[\p{L}\p{N}]/u.test(text)) return text.replace(/\s*[:*]+$/, "");
+        if (text.length > 1 && text.length <= 60 && /[\p{L}\p{N}]/u.test(text)) return { text: text.replace(/\s*[:*]+$/, "") };
         if (text) tried++;
         continue;
       }
       if (!(beside instanceof Element)) continue;
       tried++;
       // A heading names the part of the page the field is in, and what comes before it belongs to other parts.
-      if (beside.matches(HEADINGS)) return "";
+      if (beside.matches(HEADINGS)) return { text: "" };
       const text = wordsOf(beside);
-      if (text) return text;
+      if (text) return { text, from: beside };
       // Another field, or another field's box: the caption beyond it belongs to that field.
-      if (holdsTyping(beside) || beside.matches("select") || beside.querySelector("input, select, textarea")) return "";
+      if (holdsTyping(beside) || beside.matches("select") || beside.querySelector("input, select, textarea")) return { text: "" };
     }
     node = node.parentElement;
     if (node && ["FORM", "TABLE", "TBODY", "FIELDSET", "UL", "OL"].includes(node.tagName)) break;
   }
-  return "";
+  return { text: "" };
+}
+
+/** The `<label>` a caption was read from, when it was one, or the only one in its box, and is tied to no field. */
+function untiedLabel(from: Element | undefined): HTMLLabelElement | undefined {
+  const label = from instanceof HTMLLabelElement ? from : from?.querySelectorAll("label").length === 1 ? from.querySelector("label") : null;
+  return label && !label.control && !label.hasAttribute("for") ? label : undefined;
 }
 
 /** A field's name attribute as words, when it is made of words: "customer.phoneNumber" is, "_r_4_" is not. */
@@ -1305,13 +1359,27 @@ function labelOf(el: Element, role: string): string {
     // A button's value is its caption, not user data.
     if (!raw && el instanceof HTMLInputElement && role === "button") raw = el.value || el.type;
     if (!raw && ticks) raw = captionOf(el, true) || captionOf(el, false);
-    raw ||= el.getAttribute("placeholder") || el.getAttribute("title") || "";
+    // A placeholder is often a hint ("yyyy-dd-mm", "Type for hints...") and the page's caption sits in a
+    // <label> beside the field, tied to nothing. Then the caption is the name and the hint follows it, so
+    // two date fields are not both called "yyyy-dd-mm".
+    const hint = el.getAttribute("placeholder");
+    if (!raw && hint) {
+      const caption = captionNode(el, false);
+      if (caption.text && untiedLabel(caption.from) && caption.text !== hint) raw = `${caption.text} (${hint})`;
+    }
+    raw ||= hint || el.getAttribute("title") || "";
     if (!raw && !ticks) raw = captionOf(el, false);
     // The name attribute is for the server, but when it reads as words it is better than nothing.
     raw ||= wordsOfName(el.getAttribute("name") ?? "");
   }
   // A control that shows the choice it opens a list for is named by what its page calls it, not by that choice.
   if (!raw && !typedIn && opensAList(el, role)) raw = nameAround(el) || captionOf(el, false);
+  // A box the keyboard can reach, standing where a field stands under a <label> tied to nothing, is that
+  // field: a custom select that shows "-- Select --" is "Job Title".
+  if (!raw && role === "clickable" && isFocusable(el)) {
+    const caption = captionNode(el, false);
+    if (untiedLabel(caption.from)) raw = caption.text;
+  }
   // Never use a field's contents as its label.
   if (!raw && role !== "textbox" && role !== "select" && !typedIn) raw = visibleText(el);
   // What the page shows in an empty field is the page's own words for it.
@@ -1402,6 +1470,10 @@ function isRequired(el: Element, role: string): boolean {
   if (!CAN_BE_REQUIRED.has(role)) return false;
   if ((el as HTMLInputElement).required === true || el.getAttribute("aria-required") === "true") return true;
   const names = namesOf(el);
+  if (!names.length && role !== "radio" && role !== "checkbox" && role !== "switch") {
+    const label = untiedLabel(captionNode(el, false).from);
+    if (label) names.push(label);
+  }
   if (role === "radio" || role === "checkbox" || role === "switch") {
     const group = el.parentElement?.closest("fieldset, [role='radiogroup'], [role='group']");
     if (group) {
@@ -1504,5 +1576,8 @@ function dialogLabel(el: Element): string {
   if (named) return cleanText(named, 60);
   let words = "";
   for (const heading of Array.from(el.querySelectorAll(HEADINGS)).slice(0, 4)) if ((words = headingWords(heading))) break;
+  // A dialog with no name and no heading is named by its first words, which are its title drawn as text,
+  // unless those are a field's caption or a link's.
+  words ||= rowPieces(el).find((piece) => /\p{L}{3}/u.test(piece.text) && !piece.node.parentElement?.closest(`label, ${CONTROLS}`))?.text ?? "";
   return cleanText(words, 60);
 }
