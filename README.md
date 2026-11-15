@@ -84,7 +84,7 @@ npm run site:publish -- site_ab12cd34ef     # copies a site built with `npm run 
 
 Build a site for the online server with `HAPTIC_PUBLIC_URL=https://widget.joinhaptic.com npm run tag -- --url …`, so the tag it prints points there. A published site is picked up within a minute.
 
-The online server answers with the keyword stand-in until it has a model to call: `HAPTIC_MODEL` in `wrangler.jsonc` is `mock`. To switch it on, put the key on the Worker with `npx wrangler secret put ANTHROPIC_API_KEY`, set `HAPTIC_MODEL` to a Claude model ID, and deploy.
+The online server calls the model named by `HAPTIC_MODEL` in `wrangler.jsonc`, which the benchmark chose (see [`eval/README.md`](eval/README.md), "Results"). Its key is the repository's `ANTHROPIC_API_KEY` secret, which the deploy workflow copies onto the Worker. Set `HAPTIC_MODEL` to `mock` to run it on the keyword stand-in, which needs no key.
 
 ## Authors
 
