@@ -5,6 +5,7 @@ import { DEFAULT_APPEARANCE, STREAM_TYPE, type SiteContext, type TurnReply, type
 import { bundleWidget } from "../src/widget/build.ts";
 import { CASES_DIR, type CaseFile } from "./cases.ts";
 import type { Act, GuideSet, Reached } from "./guide.ts";
+import { watch, type Net } from "./net.ts";
 
 // What the recorder, the whole-guide runs and the look tool share: a browser
 // with the real widget on a page, and a way to answer each step it asks for.
@@ -114,6 +115,8 @@ async function dismiss(page: Page, selectors: string[] = []): Promise<void> {
 export interface Opened {
   page: Page;
   close: () => Promise<void>;
+  /** What the page sent, and what was stopped. Only on a site other people use: see eval/net.ts. */
+  net?: Net;
 }
 
 /**
@@ -123,7 +126,10 @@ export interface Opened {
  */
 export async function open(browser: Browser, set: GuideSet, path: string, answer: Answer, site?: SiteContext): Promise<Opened> {
   // A site that forbids scripts from elsewhere would block the tag. Its owner would allow it; here the rule is set aside.
-  const context = await browser.newContext({ bypassCSP: true, viewport: { width: 1366, height: 800 } });
+  // On a site other people use, a service worker could send requests the net below never sees, so none is allowed to start.
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: 1366, height: 800 }, ...(set.sandbox ? {} : { serviceWorkers: "block" }) });
+  // The net goes on first, so that every route added after it, the widget's own among them, is asked before it.
+  const net = set.sandbox ? undefined : await watch(context, set);
   const api = set.hasTag ? set.origin : WIDGET_ORIGIN;
   if (!set.hasTag) await context.addInitScript(addTag(`${api}/widget.js`, set.siteId));
 
@@ -171,10 +177,13 @@ export async function open(browser: Browser, set: GuideSet, path: string, answer
 
   const page = await context.newPage();
   if (set.before) {
+    // What the set's author wrote to sign in has been checked by them, so it goes through and is counted.
+    if (net) net.signingIn = true;
     await page.goto(set.origin + set.before.path, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await dismiss(page, set.dismiss);
     for (const act of set.before.acts) await perform(page, act);
     await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
+    if (net) net.signingIn = false;
     // An address that differs from this one only after its "#" would not load a page at all.
     await page.goto("about:blank");
   }
@@ -184,7 +193,7 @@ export async function open(browser: Browser, set: GuideSet, path: string, answer
   await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
   await dismiss(page, set.dismiss);
   await page.waitForTimeout(BEFORE_ASKING_MS);
-  return { page, close: () => context.close() };
+  return { page, close: () => context.close(), ...(net ? { net } : {}) };
 }
 
 /** Whether the page is where a guide was meant to end. Says what is missing when it is not. */

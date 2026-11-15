@@ -6,6 +6,7 @@ import { modelAsker, parseModel, serverAsker, type Asker } from "./ask.ts";
 import { ask, launch, loadGuideSet, open, reachedOrWhy, siteFor, type Browser, type Page } from "./browser.ts";
 import { matches, plausibleRange } from "./cases.ts";
 import type { Guide, GuideSet } from "./guide.ts";
+import { countSent, type Net, type SentLog } from "./net.ts";
 
 // Whole guides, start to finish. For each guide in eval/guides/<name>.ts a
 // browser opens the site, asks the question in the real widget, and then does
@@ -82,6 +83,8 @@ interface GuideRun {
   /** The goal was reached, and the model then pointed at something more. */
   overran: boolean;
   trail: StepLog[];
+  /** On a site other people use: what its pages sent other than plain reads, and what was stopped. See eval/net.ts. */
+  sent?: SentLog;
 }
 
 /** What a visitor types into a field nobody scripted a value for. */
@@ -112,18 +115,26 @@ async function drive(browser: Browser, set: GuideSet, guide: Guide, site: SiteCo
   // A script that ends on a control it does not press is over when that control is pointed at.
   const stopAt = last && last.expect.length && !last.act ? last.expect : [];
   const limit = guide.steps.length + EXTRA_STEPS;
-  const result = (end: End, why: string, overran = false): GuideRun => ({
-    site: set.siteId,
-    guide: guide.id,
-    kind: guide.kind ?? "task",
-    heldOut: !!(guide.heldOut || set.heldOut),
-    end,
-    why,
-    steps: trail.length,
-    scripted: guide.steps.length,
-    overran,
-    trail,
-  });
+  let net: Net | undefined;
+  const result = (end: End, why: string, overran = false): GuideRun => {
+    // A request to the site was stopped and nobody has said it is harmless. Whatever
+    // the page shows now, it is not what a visitor would see, so the run is not scored.
+    const spoiled = end === "error" ? undefined : net?.spoiled();
+    if (spoiled) [end, why, overran] = [spoiled.byAStep ? "cut short" : "error", spoiled.why, false];
+    return {
+      site: set.siteId,
+      guide: guide.id,
+      kind: guide.kind ?? "task",
+      heldOut: !!(guide.heldOut || set.heldOut),
+      end,
+      why,
+      steps: trail.length,
+      scripted: guide.steps.length,
+      overran,
+      trail,
+      ...(net ? { sent: net.log } : {}),
+    };
+  };
   // Signing in or loading the page can fail on a site that is slow or down. That is one guide lost, not the run.
   let opened: Awaited<ReturnType<typeof open>>;
   try {
@@ -157,6 +168,7 @@ async function drive(browser: Browser, set: GuideSet, guide: Guide, site: SiteCo
     return result("error", `the site could not be opened: ${(error instanceof Error ? error.message : String(error)).split("\n")[0]}`);
   }
   const { page, close } = opened;
+  net = opened.net;
   const reachedNow = async (wait: number) => (guide.reached ? (await reachedOrWhy(page, guide.reached, wait)) === "" : false);
 
   try {
@@ -167,6 +179,8 @@ async function drive(browser: Browser, set: GuideSet, guide: Guide, site: SiteCo
       const deadline = Date.now() + NEXT_STEP_MS;
       while (replies.length <= at && !failure && Date.now() < deadline) await page.waitForTimeout(100);
       if (failure) return result("error", failure);
+      // The step before set off a request that was stopped. Nothing after it would mean anything.
+      if (net?.spoiled()) return result("cut short", "");
       if (replies.length <= at) {
         const caption = await captionNow();
         if (await reachedNow(500)) return result("reached", "");
@@ -249,6 +263,7 @@ async function drive(browser: Browser, set: GuideSet, guide: Guide, site: SiteCo
           break;
         }
       }
+      net?.acting(`used ${describeElement(pointed)}`);
       try {
         if (field === "select") {
           // The scripted choice when the list has it, and otherwise any choice other than the one showing.
@@ -281,6 +296,8 @@ async function drive(browser: Browser, set: GuideSet, guide: Guide, site: SiteCo
 
       // "done" with a pointer is the model's last word: it showed where, and a visitor uses it. Nothing more is coming.
       if (reply.status === "done") {
+        // A request the click set off has to have begun before the run is judged.
+        if (net) await page.waitForTimeout(700);
         if (stopAt.length) return result("stopped short", `it ended on ${describeElement(pointed)} without reaching ${stopAt.map((matcher) => `"${matcher.label}"`).join(" or ")}`);
         const why = guide.reached ? await reachedOrWhy(page, guide.reached) : "the script has no way to tell";
         return why ? result("stopped short", `it ended by pointing at ${describeElement(pointed)}, but ${why}`) : result("reached", "");
@@ -355,6 +372,7 @@ async function main() {
     const reached = judged.filter((run) => run.end === "reached");
     const range = plausibleRange(reached.length, judged.length);
     const steps = mine.flatMap((run) => run.trail);
+    const sent = countSent(mine.map((run) => run.sent));
     return {
       "": label,
       "got there": `${reached.length}/${judged.length} (${percent(reached.length, judged.length)})`,
@@ -367,6 +385,10 @@ async function main() {
       "steps, reached vs script": reached.length ? `${middle(reached.map((run) => run.steps))} vs ${middle(reached.map((run) => run.scripted))}` : "n/a",
       "control covered": steps.filter((step) => step.covered).length,
       "ms to pointer": steps.length ? middle(steps.map((step) => step.msToTarget)) : 0,
+      // On sites other people use: requests that were not plain reads. See eval/net.ts.
+      "sent: let through": sent.let,
+      "sent: stopped": sent.stopped,
+      "sent: tried to write": sent.unknown,
     };
   };
   console.log("");
@@ -375,6 +397,16 @@ async function main() {
     ...(runs.some((run) => run.heldOut) ? [row("held out", runs.filter((run) => run.heldOut)), row("tuned on", runs.filter((run) => !run.heldOut))] : []),
     row("all", runs),
   ]);
+
+  // Every request that was stopped with nobody vouching for it, by site, so a write attempt is seen the day it happens.
+  for (const item of work) {
+    const unknown = new Map<string, number>();
+    for (const run of runs) {
+      if (run.site !== item.set.siteId) continue;
+      for (const sent of run.sent?.stopped ?? []) if (sent.after !== undefined) unknown.set(`${sent.method} ${sent.to}`, (unknown.get(`${sent.method} ${sent.to}`) ?? 0) + sent.times);
+    }
+    if (unknown.size) console.log(`\n${item.name}: stopped, and not known to be harmless: ${[...unknown].map(([request, times]) => `${request} (${times})`).join(", ")}`);
+  }
 
   await mkdir(RESULTS_DIR, { recursive: true });
   const out = `${RESULTS_DIR}guides-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;

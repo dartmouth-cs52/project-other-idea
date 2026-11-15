@@ -74,7 +74,12 @@ async function record(browser: Browser, set: GuideSet, guide: Guide, site: CaseF
     return found ? { target: found.id, status: "continue", say: step.say ?? `Click ${found.label}.` } : { target: null, status: "done", say: "That's done." };
   };
 
-  const { page, close } = await open(browser, set, guide.start, answer, site);
+  const { page, close, net } = await open(browser, set, guide.start, answer, site);
+  /** Does one scripted act, and says which, so that a request it sets off can be traced to it. */
+  const act = async (index: number) => {
+    net?.acting(`did step ${index + 1} of the script`);
+    await perform(page, guide.steps[index]!.act!);
+  };
   const turn = async (count: number) => {
     const deadline = Date.now() + STEP_WAIT_MS;
     while (answered < count && !problem) {
@@ -101,7 +106,7 @@ async function record(browser: Browser, set: GuideSet, guide: Guide, site: CaseF
           expect: { targets: step.expect, status: "continue", unheard: true },
         });
         answered++;
-        await perform(page, step.act);
+        await act(index);
         await page.waitForTimeout(1200);
         continue;
       }
@@ -110,7 +115,7 @@ async function record(browser: Browser, set: GuideSet, guide: Guide, site: CaseF
       if (step.unlisted) {
         // The widget had nothing to point at, so its guide is over. The visitor
         // finds the control themselves and, still not there, asks again.
-        await perform(page, step.act);
+        await act(index);
         await page.waitForTimeout(1200);
         if (guide.steps[index + 1]) {
           askedAgain = true;
@@ -121,9 +126,13 @@ async function record(browser: Browser, set: GuideSet, guide: Guide, site: CaseF
       // Wait until the pointer is on the page, as a visitor would before acting.
       await page.locator("haptic-root .cursor").waitFor({ state: "visible", timeout: 5000 });
       await page.waitForTimeout(150);
-      await perform(page, step.act);
+      await act(index);
     }
     const last = guide.steps[guide.steps.length - 1];
+    // On a site other people use, a script may only read. A request that was stopped means the script, or the set's "reads", is wrong.
+    if (net) await page.waitForTimeout(700);
+    const spoiled = net?.spoiled();
+    if (spoiled) throw new Error(`${guide.id}: ${spoiled.why}.`);
     if (guide.reached) {
       const why = await reachedOrWhy(page, guide.reached);
       if (why) throw new Error(`${guide.id}: the script ran to its end, but ${why}. Fix the script or its "reached".`);

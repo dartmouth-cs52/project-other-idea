@@ -233,5 +233,14 @@ export default {
   origin: "https://issues.apache.org",
   hasTag: false,
   about: "The Apache Software Foundation's public Jira, read without signing in: a real production install of the issue tracker most large companies run. It stands for issue tracking and work management.",
+  // Jira asks for a good deal with a POST that only reads: the scripts and styles a page needs, the rows of a search,
+  // the form of a search criterion, the entries of the sort and export menus, the rules a form checks itself against,
+  // and the ticket shown beside a search.
+  reads:
+    "^POST issues\\.apache\\.org/jira/(rest/wrm/2\\.0/resources|rest/issueNav/1/issueTable(/stable)?|rest/issueNav/1/issueNav/operations/views|rest/orderbycomponent/latest/orderByOptions/primary|rest/scriptrunner/behaviours/latest/validators\\.json|secure/QueryComponent(RendererEdit|RendererValue)?!(Default|Jql)\\.jspa|secure/AjaxIssueAction!default\\.jspa)$",
+  // A dashboard's report on itself, and three notes Jira keeps about this visitor: how they like to search (split or
+  // list, basic or advanced) and which project they last opened. The notes are stopped, and the page carries on all the same.
+  chatter:
+    "^(POST issues\\.apache\\.org/jira/(plugins/servlet/gadgets/dashboard-diagnostics|rest/issueNav/latest/preferredSearchLayout|rest/querycomponent/latest/userSearchMode)|PUT issues\\.apache\\.org/jira/rest/projects/1\\.0/project/[^/]+/lastVisited)$",
   guides,
 } satisfies GuideSet;

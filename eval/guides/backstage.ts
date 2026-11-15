@@ -317,5 +317,7 @@ export default {
   // The first entry is a divider in the sidebar, harmless to click, which is there once the app
   // has drawn. The others never match, and the recorder waits a second and a half for each.
   dismiss: ["nav hr", PAUSE, PAUSE, PAUSE],
+  // The catalogue is read with a POST: its rows, the choices of its filters, and the entities a page names.
+  reads: "^POST demo\\.backstage\\.io/api/catalog/(entities/by-query|entities/by-refs|entity-facets)$",
   guides,
 } satisfies GuideSet;

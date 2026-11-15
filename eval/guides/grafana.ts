@@ -166,5 +166,12 @@ export default {
   about: "Grafana Play, the public playground of Grafana, used without signing in. It stands for analytics and monitoring dashboards: dense, icon-heavy and full of custom controls.",
   // Opening either share panel creates a short link on the server straight away, and a snapshot is published.
   never: "Share internally|Share externally|Snapshot|Copy link|Copy URL|Shorten",
+  // What a page has to send to draw itself: each panel's query (at its old address and its new one), the same for a
+  // Prometheus data source's own read addresses, the search for dashboards, and the question of which features are
+  // switched on. All of them only read.
+  reads:
+    "^POST play\\.grafana\\.org/(api/ds/query|ofrep/v1/evaluate/flags|api/datasources/uid/[^/]+/resources/api/v1/(query|query_range|query_exemplars|labels|series|metadata|label/[^/]+/values)|apis/query\\.grafana\\.app/[^/]+/namespaces/[^/]+/query|apis/dashboard\\.grafana\\.app/[^/]+/namespaces/[^/]+/(notebooks/search|dashboards/search/hybrid))$",
+  // Usage counts, and the note Explore makes of every query it runs. The page sends these whoever is looking and works without them.
+  chatter: "^POST play\\.grafana\\.org/api/(frontend-metrics|ma/events|query-history)$",
   guides,
 } satisfies GuideSet;

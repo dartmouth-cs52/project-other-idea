@@ -323,6 +323,8 @@ export default {
   origin: "https://opensource-demo.orangehrmlive.com",
   hasTag: false,
   about: "OrangeHRM's open-source demo: a human-resources system (employees, leave, time, recruitment, administration), standing for the HR software every large company runs.",
+  // The dashboard reports on the installation to its maker each time it loads. Everything else the pages read is a plain GET.
+  chatter: "^POST opensource-demo\\.orangehrmlive\\.com/web/index\\.php/events/push$",
   before: {
     path: "/web/index.php/auth/login",
     acts: [

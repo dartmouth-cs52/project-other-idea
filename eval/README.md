@@ -192,11 +192,29 @@ Each run ends one of these ways:
 | stopped short | The model said it was done, or had nothing to point at, somewhere else. |
 | went in circles | It was still giving steps four past the length of the script. |
 | stalled | The widget stopped asking for steps: it gave up, or what the visitor did never registered. |
-| cut short | On a site other people use, it pointed at a control that could send, buy, save or delete, and the run stopped before pressing it. Left out of the rate, since it shows nothing either way. |
+| cut short | On a site other people use, it pointed at a control that could send, buy, save or delete, and the run stopped before pressing it, or a step set off a request that would have written to the site, which was stopped. Left out of the rate, since it shows nothing either way. |
 
 **control covered** counts the steps where the caption or something else sat on top of the control, so a visitor could not have clicked its middle. The demo app's pages need the local server (`HAPTIC_MODEL=mock npm run dev`). A guide of one step is skipped, because the single-step case already covers it.
 
 It drives a browser with Playwright, which this project does not install: `npm install --no-save playwright && npx playwright install chromium`.
+
+## Nothing is written to a site other people use
+
+Twice a whole-guide run did something on a live site that it should not have: it typed made-up sign-in details into a public Jira, and it pressed a "Copy link" that makes a short link on the server. A list of risky words on buttons cannot catch the next one, so there is a net under it (`eval/net.ts`).
+
+On every guide set that is not marked `sandbox: true`, each request a page makes is looked at before it leaves the browser, in whole-guide runs, in the recorder and in `eval:look` alike:
+
+- A plain read (GET, HEAD, OPTIONS) goes through.
+- Anything else goes through only when it is known to read: a GraphQL request whose every operation is a query, a request the guide set lists in `reads` (a search or a chart's query that the site sends as a POST), or what the set's own `before` sends to sign in.
+- Everything else is stopped inside the browser and never reaches a server.
+
+Most of what is stopped is the page talking to itself: usage counts and error reports, sent to another site, sent as a beacon, or listed in the set's `chatter`. A stopped request to the site itself that nobody has vouched for is different. After something the visitor did, it is taken for the step trying to write, and the guide ends "cut short" with the request named. Before the visitor did anything, the page may be missing something it needs, so the guide ends as an error that says what to add to the guide set. Neither is counted in the rate.
+
+Every request let through or stopped is in the results file (method, host and path, never the query or the body), the table has three columns for them, and under the table each site's unvouched-for requests are listed. "sent: tried to write" should be 0. When it is not, read the line under the table the same day.
+
+To find what a site needs, look at its pages with no model: `npm run -s eval:look -- grafana "/d/000000016/time-series-graphs"` prints what was let through and what was stopped after the list of controls. Put a request in `reads` only when it cannot save, send, create or delete anything.
+
+Two limits. Messages sent over a WebSocket that is already open are counted and not stopped. And service workers are switched off on these sites, so that none can send what the net does not see.
 
 ## The held-out split
 

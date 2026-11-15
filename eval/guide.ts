@@ -98,6 +98,21 @@ export interface GuideSet {
    * resets a shared demo for everyone.
    */
   never?: string;
+  /**
+   * On a site that is not a sandbox, every request a page makes that is not a
+   * plain read is stopped in the browser: see eval/net.ts. This is a pattern
+   * for the site's own requests that only read and are still sent as a POST,
+   * like a search or a chart's query. It is matched, whatever the case,
+   * against the method, host and path: "POST play.grafana.org/api/ds/query".
+   * Never list a request here that saves, sends, creates or deletes.
+   */
+  reads?: string;
+  /**
+   * A pattern, matched the same way, for what the site's pages send by
+   * themselves whoever is looking: usage counts and error reports. They are
+   * stopped like anything else, but are not taken for something a step did.
+   */
+  chatter?: string;
   /** Every guide here is kept out of prompt tuning: a whole site the prompt has never been adjusted against. */
   heldOut?: boolean;
   guides: Guide[];
