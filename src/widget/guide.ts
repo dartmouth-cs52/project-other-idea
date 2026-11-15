@@ -350,20 +350,18 @@ export class Guide {
 
   /**
    * Ends a guide the server would not go on with. It did not finish, so it is
-   * reported as a step that failed, and "Did this help?" is not asked. When
-   * it happens on the first question no step was ever recorded, and there is
-   * no guide on the server to report on.
+   * reported as a step that failed, and "Did this help?" is not asked. The
+   * server has the guide on record from its first question, so there is one
+   * to report on even when this is the first reply.
    */
   private pause(text: string) {
-    const recorded = this.step > 0;
     this.stopWaiting?.();
     this.stopWaiting = undefined;
     forget();
     this.ui.setBusy("");
     this.ui.closePanel();
     this.ui.say(text);
-    if (recorded) this.end("error");
-    else this.id = "";
+    this.end("error");
   }
 
   /**
