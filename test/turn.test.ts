@@ -121,6 +121,18 @@ test("the model is told not to answer what has nothing to do with the site (aske
   assert.match(buildSystemPrompt({ ...site, name: "" }), /finding things on this website\./);
 });
 
+test("the model is told to go where an action's options are when the visitor wants it done a particular way (grafana: asked for a link that keeps a relative time range, it pointed at Copy link)", () => {
+  assert.match(rules, /When the visitor wants something done a particular way, like an export in a certain format or a link with certain settings, point at what opens that action's options, not at a button that does it in one click\./);
+});
+
+test("the model is told to state only what it was shown (grafana: 'the link will keep showing the last hour', and 'the list is now filtered' after the page reported the filter gone)", () => {
+  assert.match(rules, /State as fact only what the page or the site's own notes and docs show\./);
+  assert.match(rules, /Don't say what a control will do beyond what its name says\./);
+  assert.match(rules, /When what changed doesn't show that the goal was reached, say what to check, not that it worked\./);
+  // It is about the sentence, so it sits with the rules for writing it.
+  assert.ok(rules.indexOf("State as fact only") > rules.indexOf('Writing "say"'));
+});
+
 test("the question asked after the last step is worded as a closing one", () => {
   const at = new Date("2026-11-15T12:00:00Z");
   const closing = buildUserMessage({ ...request('The user clicked link "Billing".'), closing: true }, at);
