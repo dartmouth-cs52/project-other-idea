@@ -103,8 +103,8 @@ const DRESS_TAG = /<\/?(?:b|i|em|strong|u|code|span)\s*\/?>/gi;
 const NO_WIDTH = /[\u200B\u2060\uFEFF]/g;
 /** The two joiners are part of how some languages are written, but only between letters, never beside a space or at an end. */
 const LOOSE_JOINER = /(?<=^|[\s.!?,;:])[\u200C\u200D]+|[\u200C\u200D]+(?=$|[\s.!?,;:])/g;
-/** A check mark or a picture where a sentence would start. Inside a sentence it may be part of a control's name. */
-const SIGN_AFTER_STOP = /(?<=[.!?…])\s*(?:[\p{So}\p{Sk}\uFE0F\u200D]+\s*)+/gu;
+/** A check mark or a picture where a sentence would start, with the marks that can trail a picture. Inside a sentence it may be part of a control's name. */
+const SIGN_AFTER_STOP = /(?<=[.!?…])\s*(?:[\p{So}\u{1F3FB}-\u{1F3FF}\uFE0F\u200D]+\s*)+/gu;
 /** "its menu.Step 1": a full stop with a new sentence right behind it. */
 const NO_SPACE_AFTER_STOP = /(\p{Ll}[.!?])(?=\p{Lu}\p{Ll})/gu;
 /**

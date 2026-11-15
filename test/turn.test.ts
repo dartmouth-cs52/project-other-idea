@@ -346,8 +346,9 @@ test("tidying leaves alone what only looks like stray text", async () => {
     "Click “Save.”",
     "Klicken Sie auf »Speichern«.",
     "Tick 'Remember me.'",
-    // A picture that is part of a control's name.
+    // A picture that is part of a control's name, and a mark at the start of a sentence that is not a picture.
     "Click the 👍 button.",
+    "Open a terminal. `npm start` runs it.",
     // Persian is written with a joiner that has no width between letters.
     "روی می" + String.fromCharCode(0x200c) + "خواهم کلیک کنید.",
     "点击保存。然后点击提交。",
