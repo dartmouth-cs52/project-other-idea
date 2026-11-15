@@ -40,16 +40,25 @@ export default function Privacy() {
         reads before anything leaves the browser.
       </p>
       <p>
-        To work out the next step, the question and that description of the page are sent to our server and to
-        Anthropic, which provides the AI model.
+        Haptic is AI and can make mistakes, so check anything that matters before relying on it. To work out the next
+        step, the question and that description of the page are sent to our server and to Anthropic, which provides
+        the AI model.
       </p>
       <p>
-        Our server keeps a record of each guide for the company whose product it is, so they can see what people ask
-        and where a guide fell short. The record holds the question, the page it was asked on, the name of each
-        control Haptic pointed at and what it said, any click on something else, how the guide ended, whether the
-        person said it helped, and how long each step took. Emails, phone numbers and long numbers are masked first.
-        The description of the page is not kept, and the record does not say who asked. It is stored in a database
-        run for us by Neon.
+        We keep the question that was asked, what Haptic said and the names of the controls it pointed at, which page
+        of the product each step was on, what was clicked along the way, how the guide ended, and whether the person
+        said it helped. Emails, phone numbers and long numbers are masked first. The company whose product it is can
+        see these in its Haptic dashboard. We do not keep the description of the page, anything typed into the page,
+        or pictures of the page.
+      </p>
+      <p>
+        From visits where nobody asks Haptic anything, we keep only a count of how often it loaded on each site. To
+        limit how much one visitor can ask, our server uses their network address. It is not kept with their
+        questions.
+      </p>
+      <p>
+        We keep this for as long as the company uses Haptic, and delete it when the company asks. Nothing in it says
+        who asked, unless they put that in their question. We do not use it to train AI models.
       </p>
       <p>Progress through a guide is kept in the browser for that tab, and is cleared when the tab closes.</p>
 
