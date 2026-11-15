@@ -68,6 +68,7 @@ test("what the visitor reads is tidied, whatever the model wrote", async () => {
   const { tidySay } = await import("../src/server/model.ts");
   assert.equal(tidySay("Now fill in your Company name.}"), "Now fill in your Company name.");
   assert.equal(tidySay("Type your last name.\n\n"), "Type your last name.");
+  assert.equal(tidySay("Click Component to switch the kind.</br>"), "Click Component to switch the kind.");
   assert.equal(tidySay("  Click Save.\n}\n"), "Click Save.");
   // A sentence that is already clean is left alone, brackets inside it included.
   assert.equal(tidySay('Click the link that reads "[email]".'), 'Click the link that reads "[email]".');

@@ -83,6 +83,8 @@ export interface SnapElement {
   context?: string;
   /** Set when the element is scrolled out of view. */
   offscreen?: "above" | "below";
+  /** The choices of a dropdown, as the page words them. Which one is chosen is never sent. */
+  options?: string[];
 }
 
 export interface Snapshot {

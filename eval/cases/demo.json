@@ -704,6 +704,10 @@
      "path": "/demo/settings-billing",
      "title": "Plan and billing · Acme Console",
      "headings": [
+      "Plan and billing",
+      "Current plan",
+      "Payment method",
+      "Invoices",
       "Update payment method"
      ],
      "text": [
@@ -798,6 +802,10 @@
      "path": "/demo/settings-billing",
      "title": "Plan and billing · Acme Console",
      "headings": [
+      "Plan and billing",
+      "Current plan",
+      "Payment method",
+      "Invoices",
       "Update payment method"
      ],
      "text": [
@@ -897,6 +905,10 @@
      "path": "/demo/settings-billing",
      "title": "Plan and billing · Acme Console",
      "headings": [
+      "Plan and billing",
+      "Current plan",
+      "Payment method",
+      "Invoices",
       "Update payment method"
      ],
      "text": [
@@ -1101,7 +1113,7 @@
      "truncated": false
     },
     "event": "The user clicked button \"Save payment method\".",
-    "change": "Dialog \"Update payment method\" closed.\nNew text: \"Plan and billing\", \"Current plan\", \"Payment method\", \"Invoices\", \"Team plan, $49 a month.\"."
+    "change": "Dialog \"Update payment method\" closed.\nNew text: \"Team plan, $49 a month.\", \"Visa ending in 4242\", \"Invoices are emailed on the 1st of each month.\", \"Payment method updated.\"."
    },
    "expect": {
     "targets": [],
@@ -1258,19 +1270,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -1378,19 +1390,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -1509,19 +1521,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -1609,19 +1621,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -1720,19 +1732,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -1843,19 +1855,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -2124,19 +2136,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -2252,19 +2264,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -2391,19 +2403,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -2623,6 +2635,7 @@
      "path": "/demo/projects",
      "title": "Projects · Acme Console",
      "headings": [
+      "Projects",
       "New project"
      ],
      "text": [
@@ -2640,6 +2653,10 @@
        "id": "e2",
        "role": "select",
        "label": "Region",
+       "options": [
+        "US East",
+        "EU West"
+       ],
        "context": "form"
       },
       {
@@ -2706,6 +2723,7 @@
      "path": "/demo/projects",
      "title": "Projects · Acme Console",
      "headings": [
+      "Projects",
       "New project"
      ],
      "text": [
@@ -2723,6 +2741,10 @@
        "id": "e2",
        "role": "select",
        "label": "Region",
+       "options": [
+        "US East",
+        "EU West"
+       ],
        "context": "form"
       },
       {
@@ -2857,7 +2879,7 @@
      "truncated": false
     },
     "event": "The user clicked \"Create project\" instead of select \"Region\".",
-    "change": "Dialog \"New project\" closed.\nNew text: \"Projects\", \"storefront-api\", \"marketing-site\", \"internal-tools\", \"billing-service\"."
+    "change": "Dialog \"New project\" closed.\nNew text: \"storefront-api\", \"marketing-site\", \"internal-tools\", \"billing-service\"."
    },
    "expect": {
     "targets": [],
@@ -3155,6 +3177,11 @@
        "id": "e10",
        "role": "select",
        "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
        "context": "form"
       },
       {
@@ -3516,19 +3543,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -3649,19 +3676,19 @@
        "id": "e9",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e10",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e11",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e12",
@@ -3798,6 +3825,11 @@
        "id": "e10",
        "role": "select",
        "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
        "context": "form"
       },
       {
@@ -4394,6 +4426,11 @@
        "id": "e10",
        "role": "select",
        "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
        "context": "form"
       },
       {
@@ -4538,6 +4575,11 @@
        "id": "e10",
        "role": "select",
        "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
        "context": "form"
       },
       {
@@ -4693,6 +4735,11 @@
        "id": "e10",
        "role": "select",
        "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
        "context": "form"
       },
       {
@@ -4933,6 +4980,11 @@
        "id": "e10",
        "role": "select",
        "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
        "context": "form"
       },
       {
@@ -5069,6 +5121,11 @@
        "id": "e10",
        "role": "select",
        "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
        "context": "form"
       },
       {
@@ -5216,6 +5273,11 @@
        "id": "e10",
        "role": "select",
        "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
        "context": "form"
       },
       {
@@ -6088,19 +6150,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -6221,19 +6283,19 @@
        "id": "e9",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e10",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e11",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e12",
@@ -6417,19 +6479,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
