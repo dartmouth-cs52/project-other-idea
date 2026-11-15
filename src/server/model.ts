@@ -26,7 +26,7 @@ const EFFORTS: readonly string[] = ["low", "medium", "high"];
 
 function settingsFrom(env: ModelEnv): TurnSettings {
   return {
-    model: env.HAPTIC_MODEL || "claude-opus-5-5",
+    model: env.HAPTIC_MODEL || "claude-sonnet-5-5",
     // Each step is a small decision and the visitor is waiting on it, so the least effort is the default.
     effort: EFFORTS.includes(env.HAPTIC_EFFORT ?? "") ? (env.HAPTIC_EFFORT as Effort) : "low",
     thinking: env.HAPTIC_THINKING === "off" ? "off" : "default",
