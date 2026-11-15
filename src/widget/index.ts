@@ -1,4 +1,4 @@
-import { DEFAULT_APPEARANCE, STREAM_TYPE, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { DEFAULT_APPEARANCE, localDate, STREAM_TYPE, TURN_VERSION, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { Guide } from "./guide.ts";
 import { Ui } from "./ui.ts";
 
@@ -30,7 +30,7 @@ async function boot() {
     const response = await fetch(`${api}/v1/turn`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: STREAM_TYPE },
-      body: JSON.stringify({ ...request, site }),
+      body: JSON.stringify({ ...request, site, version: TURN_VERSION, today: localDate() }),
     });
     if (!response.ok) throw new Error(`Turn failed with ${response.status}: ${await response.text()}`);
     if (!response.body || !(response.headers.get("Content-Type") ?? "").includes(STREAM_TYPE)) return response.json();
