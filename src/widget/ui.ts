@@ -1,4 +1,5 @@
 import type { Appearance } from "../shared/types.ts";
+import { findOpenModal } from "./snapshot.ts";
 
 // Everything Haptic draws: the launcher, the ask box, the pointer, the
 // highlight ring and the caption. It all lives in one shadow root on one host
@@ -128,17 +129,15 @@ export class Ui {
   }
 
   /**
-   * Keeps our element on top and usable. A page's modal <dialog> sits in the
-   * browser's top layer and makes everything outside it inert, so while one is
-   * open we move inside it, and move back out when it closes.
+   * Keeps our element on top and usable. A dialog shuts out everything
+   * outside it: the browser's own <dialog> makes the rest of the page inert,
+   * and the ones apps build pull the keyboard back whenever it leaves them,
+   * or mark the rest of the page inert themselves. So while a dialog is open
+   * we move inside it, where a visitor can still type a question, and move
+   * back out when it closes.
    */
   place = () => {
-    let modal: Element | undefined;
-    try {
-      modal = Array.from(document.querySelectorAll("dialog:modal")).pop();
-    } catch {
-      // :modal unsupported, so there's no top layer to compete with.
-    }
+    const modal = findOpenModal(this.host);
     const home = modal ?? document.documentElement;
     if (this.host.parentNode === home) return;
     home.appendChild(this.host);

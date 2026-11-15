@@ -487,19 +487,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -769,6 +769,11 @@
        "id": "e10",
        "role": "select",
        "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
        "context": "form"
       },
       {
@@ -1017,19 +1022,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -1308,19 +1313,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -1420,19 +1425,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -2105,6 +2110,11 @@
        "id": "e10",
        "role": "select",
        "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
        "context": "form"
       },
       {
@@ -2198,19 +2208,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -2303,19 +2313,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -2408,19 +2418,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -2518,19 +2528,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -3055,19 +3065,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -3401,19 +3411,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -3604,6 +3614,11 @@
        "id": "e10",
        "role": "select",
        "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
        "context": "form"
       },
       {
@@ -3766,19 +3781,19 @@
        "id": "e6",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Sam"
       },
       {
        "id": "e7",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Priya"
       },
       {
        "id": "e8",
        "role": "button",
        "label": "Remove",
-       "context": "main › Team"
+       "context": "main › Team › row: Jordan"
       },
       {
        "id": "e9",
@@ -3994,6 +4009,7 @@
      "path": "/demo/projects",
      "title": "Projects · Acme Console",
      "headings": [
+      "Projects",
       "New project"
      ],
      "text": [
@@ -4011,6 +4027,10 @@
        "id": "e2",
        "role": "select",
        "label": "Region",
+       "options": [
+        "US East",
+        "EU West"
+       ],
        "context": "form"
       },
       {
@@ -4125,7 +4145,7 @@
      "truncated": false
     },
     "event": "The user clicked \"Cancel\" instead of textbox \"Project name\".",
-    "change": "Dialog \"New project\" closed.\nNew text: \"Projects\", \"storefront-api\", \"marketing-site\", \"internal-tools\"."
+    "change": "Dialog \"New project\" closed.\nNew text: \"storefront-api\", \"marketing-site\", \"internal-tools\"."
    },
    "expect": {
     "targets": [
@@ -4175,6 +4195,7 @@
      "path": "/demo/projects",
      "title": "Projects · Acme Console",
      "headings": [
+      "Projects",
       "New project"
      ],
      "text": [
@@ -4192,6 +4213,10 @@
        "id": "e2",
        "role": "select",
        "label": "Region",
+       "options": [
+        "US East",
+        "EU West"
+       ],
        "context": "form"
       },
       {
@@ -4267,6 +4292,7 @@
      "path": "/demo/projects",
      "title": "Projects · Acme Console",
      "headings": [
+      "Projects",
       "New project"
      ],
      "text": [
@@ -4284,6 +4310,10 @@
        "id": "e2",
        "role": "select",
        "label": "Region",
+       "options": [
+        "US East",
+        "EU West"
+       ],
        "context": "form"
       },
       {
@@ -4427,7 +4457,7 @@
      "truncated": false
     },
     "event": "The user clicked \"Create project\" instead of select \"Region\".",
-    "change": "Dialog \"New project\" closed.\nNew text: \"Projects\", \"storefront-api\", \"marketing-site\", \"internal-tools\", \"billing-service\"."
+    "change": "Dialog \"New project\" closed.\nNew text: \"storefront-api\", \"marketing-site\", \"internal-tools\", \"billing-service\"."
    },
    "expect": {
     "targets": [],

@@ -107,6 +107,7 @@ function renderElement(element: SnapElement): string {
   if (element.icon) line += ` icon:${element.icon}`;
   if (element.state?.length) line += ` (${element.state.join(", ")})`;
   if (element.context) line += ` [${element.context}]`;
+  if (element.options?.length) line += ` choices: ${element.options.map((option) => option.replace(/\|/g, "/")).join(" | ")}`;
   if (element.href) line += ` → ${element.href}`;
   if (element.offscreen) line += ` ${element.offscreen} the visible area`;
   return line;

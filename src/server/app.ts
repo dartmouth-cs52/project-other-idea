@@ -160,6 +160,8 @@ export function parseTurn(body: unknown): TurnRequest | undefined {
     const state = texts(item.state, 6, 16);
     if (state.length) element.state = state;
     if (item.offscreen === "above" || item.offscreen === "below") element.offscreen = item.offscreen;
+    const options = texts(item.options, 12, 30);
+    if (options.length) element.options = options;
     elements.push(element);
   }
   const snapshot: Snapshot = {

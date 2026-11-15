@@ -81,7 +81,8 @@ const TARGET_SO_FAR = /"target"\s*:\s*(?:"([^"]*)"|null)/;
  * Sonnet with thinking off did in about one reply in eight.
  */
 export function tidySay(say: string): string {
-  return say.replace(/[\s}]+$/, "").trimStart();
+  // It is shown as plain text, so a line-break tag would be read out as one.
+  return say.replace(/<\/?br\s*\/?>/gi, " ").replace(/[\s}]+$/, "").trimStart();
 }
 
 /** Thrown for failures the visitor's browser should hear about with a specific status. */
