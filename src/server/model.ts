@@ -85,12 +85,19 @@ function mockTurn(request: TurnRequest): TurnReply {
   const words = (text: string) => text.toLowerCase().match(/[a-z]{3,}/g) ?? [];
   const goal = new Set(words(request.goal));
   const used = request.history.filter((turn) => turn.role === "assistant").map((turn) => turn.text);
+  // After a wrong click, point again at the control it meant, if that is still on the page.
+  const strayed = /instead of|without using/.test(request.event ?? "");
+  if (strayed) {
+    const meant = /Click (.+)\.$/.exec(used.pop() ?? "")?.[1];
+    const again = request.snapshot.elements.find((element) => element.label === meant && !element.state?.includes("disabled"));
+    if (again) return { target: again.id, status: "continue", say: `Not that one. Click ${again.label}.` };
+  }
   let best: { id: string; label: string; score: number } | undefined;
   for (const element of request.snapshot.elements) {
-    if (!element.label || element.state?.includes("disabled") || used.includes(`Click ${element.label}.`)) continue;
+    if (!element.label || element.state?.includes("disabled") || used.some((text) => text.endsWith(`Click ${element.label}.`))) continue;
     const score = words(element.label).filter((word) => goal.has(word)).length;
     if (score > (best?.score ?? 0)) best = { id: element.id, label: element.label, score };
   }
   if (!best) return { target: null, status: "done", say: request.step ? "That should be it." : "I don't see that on this page." };
-  return { target: best.id, status: "continue", say: `Click ${best.label}.` };
+  return { target: best.id, status: "continue", say: `${strayed ? "Not that one. " : ""}Click ${best.label}.` };
 }
