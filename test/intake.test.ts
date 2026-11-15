@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { pageNode, tidy } from "../src/intake/browse.ts";
+import { compact, pageNode, tidy } from "../src/intake/browse.ts";
 import { extractPage } from "../src/intake/crawl.ts";
 import { pageKey, parentKey, reasonNotToFollow } from "../src/intake/paths.ts";
 import type { PageReading, ReadControl } from "../src/intake/reader.ts";
@@ -72,6 +72,7 @@ test("the intake names pages the way the widget names the visitor's path", () =>
   assert.equal(pageKey("https://a.com/wiki/Cat#History"), "/wiki/Cat");
   assert.equal(pageKey("https://a.com/w/index.php?title=Cat&action=history"), "/w/index.php?title=Cat&action=history");
   assert.equal(pageKey("https://a.com/overview.htm?id=13344"), "/overview.htm");
+  assert.equal(pageKey("https://a.com/projects/KAFKA?selectedItem=com.atlassian.jira.jira-projects-plugin:report-page"), "/projects/KAFKA?selectedItem=com.atlassian.jira.jira-projects-plugin:report-page");
   assert.equal(parentKey("/catalog/default/component/artist-lookup"), "/catalog/default/component");
   assert.equal(parentKey("/app/index.html#/category/KB"), "/app/index.html#/category");
   assert.equal(parentKey("/contact"), "/");
@@ -83,10 +84,12 @@ test("links that sign out, act, send a form or carry a token are never loaded", 
     ["https://a.com/auth/logout", ""],
     ["https://a.com/account", "Sign out"],
     ["https://a.com/web/index.php/auth/login", "Log in"],
+    ["https://a.com/jira/login.jsp?os_destination=x", "Report a problem"],
     ["https://a.com/items/5/delete", "Open"],
     ["https://a.com/shop?add-to-cart=12", "Pliers"],
     ["https://a.com/cart/add/12", "Pliers"],
     ["https://a.com/save?name=x", "Keep"],
+    ["https://a.com/transfer.htm?amount=5&to=12345", "Again"],
     ["https://a.com/browse/KAFKA-1?atl_token=abc", "KAFKA-1"],
     ["https://a.com/d/abc/graphs?shareView=link", "Graphs"],
     ["https://a.com/secure/VoteOrWatchIssue.jspa", "Votes"],
@@ -102,6 +105,8 @@ test("links that sign out, act, send a form or carry a token are never loaded", 
     "https://a.com/issues/closed-this-week",
     "https://a.com/settings",
     "https://a.com/dashboard/new",
+    "https://a.com/parabank/transfer.htm",
+    "https://a.com/web/index.php/claim/viewClaimModule",
     "https://a.com/app/index.html#/category/KB",
     "https://a.com/w/index.php?title=Cat&action=history",
   ]) {
@@ -137,9 +142,11 @@ test("a page in the map keeps what a visitor can use there and leaves out the pa
       { role: "clickable", label: "Card of Sam" },
       { role: "clickable", label: "Reports", nav: true },
       { role: "textbox", label: "Search people" },
+      { role: "clickable", label: "Robin Reader", nav: true },
     ]),
     "/people",
     "https://a.com",
+    ["robin reader"],
   );
   assert.deepEqual(node.links, [
     { label: "Home", to: "/" },
@@ -166,4 +173,20 @@ test("a title every page shares gives way to each page's first heading, and a re
     ["", [], undefined],
     ["Acme", [], undefined],
   ]);
+});
+
+test("a group of links that some pages repeat is kept on the first of them, and what most pages share stays on all", () => {
+  const tabs = [{ label: "Contact", to: "/people/:id/contact" }, { label: "Job", to: "/people/:id/job" }];
+  const nav = { label: "Home", to: "/" };
+  const pages = [
+    ...["/", "/a", "/b", "/c", "/d"].map((path) => page(path, { links: [nav] })),
+    page("/people/:id", { links: [nav, ...tabs], buttons: ["Save"] }),
+    page("/people/:id/contact", { links: [nav, ...tabs], buttons: ["Save"] }),
+    page("/people/:id/job", { links: [nav, ...tabs], buttons: ["Save"] }),
+  ];
+  const map = compact(pages);
+  assert.deepEqual(map.map((item) => item.links.length), [1, 1, 1, 1, 1, 3, 1, 1]);
+  assert.deepEqual(map.map((item) => item.buttons.length), [0, 0, 0, 0, 0, 1, 0, 0]);
+  assert.equal(renderSiteMap(map).split("Contact → ").length - 1, 1);
+  assert.equal(pages[6]!.links.length, 3, "the pages given are left as they were");
 });

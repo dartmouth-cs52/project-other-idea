@@ -22,12 +22,18 @@ export function pageKey(address: string): string {
   return path + whichPage(url.searchParams) + (route && route !== "/" ? `#${route}` : "");
 }
 
-/** The part of a query that names a page: short, wordlike values only, so ids, tokens and search text stay out. */
+/**
+ * The part of a query that names a page: wordlike values only, so ids, tokens
+ * and search text stay out. The widget keeps values of up to 30 letters; here
+ * they may be longer, because some apps tell their pages apart only by a long
+ * one ("?selectedItem=com.atlassian.jira.jira-projects-plugin:report-page"),
+ * and the reader would otherwise take them all for one page.
+ */
 function whichPage(params: URLSearchParams): string {
   const kept: string[] = [];
   for (const [key, value] of params) {
     if (kept.length === 2) break;
-    if (!/^[A-Za-z][\w-]{0,15}$/.test(key) || !/^[A-Za-z][A-Za-z_:.-]{0,29}$/.test(value)) continue;
+    if (!/^[A-Za-z][\w-]{0,15}$/.test(key) || !/^[A-Za-z][A-Za-z_:.-]{0,59}$/.test(value)) continue;
     kept.push(`${key}=${value}`);
   }
   return kept.length ? `?${kept.join("&")}` : "";
@@ -52,8 +58,8 @@ const ACTION_WORDS = [
   "delete", "remove", "destroy", "drop", "purge", "erase", "trash", "wipe", "reset", "clear", "clean", "initiali[sz]e", "shut-?down", "start-?up", "restart",
   "revoke", "cancel", "approve", "reject", "deny", "decline", "accept", "confirm", "verify", "disable", "enable", "activate", "deactivate", "suspend",
   "subscribe", "unsubscribe", "vote", "unvote", "watch", "unwatch", "follow", "unfollow", "like", "unlike", "star", "unstar", "bookmark", "flag", "report-?abuse",
-  "share", "snapshot", "shorten", "short-?url", "export", "download", "print", "install", "uninstall", "upgrade", "execute", "trigger", "run", "rerun", "retry",
-  "send", "publish", "unpublish", "transfer", "pay", "payment", "checkout", "purchase", "buy", "donate", "archive", "unarchive", "restore", "rollback", "revert", "undo",
+  "share", "snapshot", "shorten", "shortener", "short-?url", "export", "download", "print", "install", "uninstall", "upgrade", "execute", "trigger", "run", "rerun", "retry",
+  "publish", "unpublish", "purchase", "buy", "donate", "archive", "unarchive", "restore", "rollback", "revert", "undo",
   "lock", "unlock", "block", "unblock", "impersonate", "switch-?user", "sudo", "toggle", "merge", "close", "reopen", "resolve", "redeem",
   "move", "copy", "clone", "duplicate", "import", "upload", "sync", "refresh", "deploy", "invite", "join", "leave-?group", "mark", "dismiss", "rotate",
 ];
@@ -63,7 +69,7 @@ const ACTION_WORDS = [
  * last part of a path with no query. Anywhere else they are taken as the form
  * being sent: "/cart/add/12", "?add-to-cart=12", "/save?name=x".
  */
-const FORM_WORDS = ["new", "create", "add", "edit", "update", "apply", "assign", "claim", "set", "save", "submit", "generate"];
+const FORM_WORDS = ["new", "create", "add", "edit", "update", "apply", "assign", "claim", "set", "save", "submit", "send", "generate", "transfer", "pay", "payment", "checkout"];
 const asWord = (words: string[]) => new RegExp(`(?:^|[^a-z])(?:${words.join("|")})(?:$|[^a-z])`, "i");
 const ACTION = asWord(ACTION_WORDS);
 const FORM = asWord(FORM_WORDS);
@@ -71,6 +77,7 @@ const FORM = asWord(FORM_WORDS);
 const TOKEN_KEY = /token|csrf|xsrf|nonce|sesskey|signature|^sig$|^auth|secret|^key$|otp|^code$|^hash$|^state$/i;
 /** Labels of links that sign in, sign up or sign out. A sign-in page adds nothing to the map, and the others must not be loaded. */
 const ACCOUNT_LABEL = /\b(log ?in|log ?out|sign ?in|sign ?out|sign ?up|register|log ?off)\b/i;
+const ACCOUNT_PATH = /(?:^|[^a-z])(?:log-?in|sign-?in|sign-?up|register|auth)(?:$|[^a-z])/i;
 
 /**
  * Why a link must not be loaded, or "" when it may be. `skip` holds patterns
@@ -94,12 +101,16 @@ export function reasonNotToFollow(address: string, label: string, skip: RegExp[]
   };
   for (const pattern of skip) if (pattern.test(url.href) || pattern.test(label)) return `matches ${pattern}`;
   if (ACCOUNT_LABEL.test(label)) return "signs in, up or out";
+  if (url.pathname.split("/").some((segment) => ACCOUNT_PATH.test(words(segment)))) return "signs in, up or out";
   const segments = url.pathname.split("/").filter(Boolean);
   const hasQuery = [...url.searchParams].length > 0;
   for (const [index, segment] of segments.entries()) {
     const text = words(segment.replace(/;.*$/, ""));
     if (ACTION.test(text)) return "its address names an action";
-    if (FORM.test(text) && (hasQuery || index < segments.length - 1)) return "its address sends a form";
+    // "/cart/add/12" sends a form; "/claim/viewClaimModule" is a section that happens to be named like one.
+    const next = segments[index + 1];
+    const sends = index === segments.length - 1 ? hasQuery : next !== undefined && normalizePath(`/${next.replace(/;.*$/, "")}`) === "/:id";
+    if (FORM.test(text) && sends) return "its address sends a form";
   }
   for (const [key, value] of url.searchParams) {
     if (TOKEN_KEY.test(key)) return "its address carries a token";

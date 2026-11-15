@@ -54,7 +54,8 @@ function headings(ignore: Element): string[] {
   const found: string[] = [];
   for (const el of Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, h6, [role='heading']"))) {
     if (found.length >= 12) break;
-    if (ignore.contains(el) || el.closest(RECORD) || el.closest("[aria-hidden='true'], [inert]")) continue;
+    // A heading inside a list item titles one entry of a list, like a post in a feed.
+    if (ignore.contains(el) || el.closest(RECORD) || el.closest("li, [role='listitem'], [aria-hidden='true'], [inert]")) continue;
     if (typeof el.checkVisibility === "function" ? !el.checkVisibility({ visibilityProperty: true }) : !el.getClientRects().length) continue;
     const text = cleanText(el.textContent ?? "", 60);
     if (text && !found.includes(text)) found.push(text);

@@ -38,6 +38,8 @@ export interface BrowseOptions {
   skip: RegExp[];
   /** Path prefixes to stay inside. Empty for the whole site. */
   within: string[];
+  /** Words to keep out of the map wherever they appear, like the name of the account the reader signed in with. */
+  hide?: string[];
   /** More pages to start from, besides the site's address. */
   also: string[];
   /** Told about each page as it is read. */
@@ -58,11 +60,15 @@ const PAGE_TIMEOUT_MS = 60_000;
 /** How long to wait for the page to stop fetching. Pages that poll never stop, so this is a cap, not a requirement. */
 const IDLE_MS = 8_000;
 /** How long to wait for the list of controls to stop growing once the page has loaded. */
-const SETTLE_MS = 8_000;
+const SETTLE_MS = 12_000;
 const SETTLE_STEP_MS = 700;
+/** Readings in a row that must agree. An app that is still waiting for its data can hold still for a moment with only its frame drawn. */
+const STEADY_READINGS = 3;
 const EMPTY_MS = 3_000;
-/** Pages reached through links in a page's content, as opposed to its navigation, read under any one parent path. Ten product pages say no more than two. */
+/** Pages of records (a row, a card, an address with an id) read under any one parent path. Ten product pages say no more than two. */
 const PER_KIND = 2;
+/** Links followed from the body of any one page, as opposed to its navigation, like the links in an article's text. */
+const FOLLOW_FROM_BODY = 8;
 /**
  * The most characters of site map sent with every step. It is paid for on
  * every step of every guide, so pages far from the start are dropped first
@@ -70,6 +76,8 @@ const PER_KIND = 2;
  */
 export const MAP_BUDGET = 8_000;
 const MAX_LINKS = 25;
+/** Of those, links in the body of the page rather than its navigation, like the links inside an article's text. */
+const MAX_CONTENT_LINKS = 10;
 const MAX_BUTTONS = 20;
 const MAX_FIELDS = 15;
 const MAX_HEADINGS = 8;
@@ -166,9 +174,11 @@ export async function browseSite(startUrl: string, options: BrowseOptions): Prom
         // A page drawn by JavaScript keeps adding controls after it has loaded. Read it once the list stops growing.
         // A page with nothing to use yet may still be drawing, so an empty one gets a few seconds more.
         let last = -1;
+        let same = 0;
         for (const began = Date.now(); Date.now() < began + SETTLE_MS; ) {
           const now = await run<number>("count");
-          if (now === last && (now > 0 || Date.now() > began + EMPTY_MS)) break;
+          same = now === last ? same + 1 : 1;
+          if (same >= STEADY_READINGS && (now > 0 || Date.now() > began + EMPTY_MS)) break;
           last = now;
           await page.waitForTimeout(SETTLE_STEP_MS);
         }
@@ -188,7 +198,7 @@ export async function browseSite(startUrl: string, options: BrowseOptions): Prom
       if (done.has(key)) continue;
       done.add(key);
       queued.add(key);
-      const node = pageNode(reading, key, start.origin);
+      const node = pageNode(reading, key, start.origin, options.hide);
       result.pages.push(node);
       depthOf.set(node, visit.depth);
       if (node.links.length + node.buttons.length + node.fields.length < 3) result.thin.push(key);
@@ -196,6 +206,7 @@ export async function browseSite(startUrl: string, options: BrowseOptions): Prom
 
       if (visit.depth >= options.maxDepth) continue;
       // The page's own navigation first: it leads to the sections of the site.
+      let fromBody = 0;
       for (const link of [...reading.links].sort((a, b) => Number(b.nav && !b.record) - Number(a.nav && !a.record))) {
         let url: URL;
         try {
@@ -215,11 +226,13 @@ export async function browseSite(startUrl: string, options: BrowseOptions): Prom
           result.skipped.push({ url: url.href, reason: why });
           continue;
         }
-        if (!link.nav || link.record) {
+        if (link.record || target.includes(":id")) {
           const parent = parentKey(target);
           const count = perParent.get(parent) ?? 0;
           if (count >= PER_KIND) continue;
           perParent.set(parent, count + 1);
+        } else if (!link.nav && ++fromBody > FOLLOW_FROM_BODY) {
+          continue;
         }
         enqueue(url.href, visit.depth + 1);
       }
@@ -230,24 +243,52 @@ export async function browseSite(startUrl: string, options: BrowseOptions): Prom
 
   tidy(result.pages);
   // Over budget, the pages farthest from the start go first, the last found first among equals.
-  const order = [...result.pages];
-  while (result.pages.length > 1 && renderSiteMap(sorted(result.pages)).length > MAP_BUDGET) {
-    const farthest = order.reduce((far, node) => ((depthOf.get(node) ?? 0) >= (depthOf.get(far) ?? 0) ? node : far));
-    order.splice(order.indexOf(farthest), 1);
-    result.pages.splice(result.pages.indexOf(farthest), 1);
+  let kept = [...result.pages];
+  let map = compact(kept);
+  while (kept.length > 1 && renderSiteMap(sorted(map)).length > MAP_BUDGET) {
+    const farthest = kept.reduce((far, node) => ((depthOf.get(node) ?? 0) >= (depthOf.get(far) ?? 0) ? node : far));
+    kept = kept.filter((node) => node !== farthest);
     result.cut.push(farthest.path);
+    map = compact(kept);
   }
-  result.pages = sorted(result.pages);
+  result.pages = sorted(map);
   return result;
+}
+
+/**
+ * Pages of one kind repeat each other: every tab of an employee's record lists
+ * the same eight other tabs. The site map lists what most pages share once at
+ * the top, and this does the same for what only some share: a link or button
+ * that three or more pages have, but not most, is kept on the first page that
+ * has it and left off the rest. Pages are taken in the order they were read,
+ * so the first is the one nearest the start.
+ */
+export function compact(pages: PageNode[]): PageNode[] {
+  // The same test the site map uses for what goes at the top (renderSiteMap in src/server/prompt.ts).
+  const linkText = (link: { label: string; to: string }) => `${link.label} → ${link.to}`;
+  const counts = new Map<string, number>();
+  for (const page of pages) for (const item of new Set([...page.links.map(linkText), ...page.buttons])) counts.set(item, (counts.get(item) ?? 0) + 1);
+  const sharedMin = Math.max(3, Math.ceil(pages.length / 2));
+  const placed = new Set<string>();
+  const once = (item: string) => {
+    const count = counts.get(item) ?? 0;
+    if (count < 3 || count >= sharedMin) return true;
+    if (placed.has(item)) return false;
+    placed.add(item);
+    return true;
+  };
+  return pages.map((page) => ({ ...page, links: page.links.filter((link) => once(linkText(link))), buttons: page.buttons.filter(once) }));
 }
 
 const sorted = (pages: PageNode[]) => [...pages].sort((a, b) => a.path.localeCompare(b.path));
 
 /** One page of the map: what a visitor can use there, without the page's data. */
-export function pageNode(reading: PageReading, key: string, origin: string): PageNode {
+export function pageNode(reading: PageReading, key: string, origin: string, hide: string[] = []): PageNode {
   // Controls inside a table row, a card or an entry belong to the data on the page, like a person's name in a list
   // of employees. That is not the site's map, and it would put one account's data in front of every visitor.
-  const own = reading.controls.filter((control) => !control.record);
+  // So does the name of the account the reader is signed in as, which the person running the intake can name.
+  const hidden = (text: string) => hide.some((words) => words && text.toLowerCase().includes(words.toLowerCase()));
+  const own = reading.controls.filter((control) => !control.record && !hidden(control.label));
   const name = (control: ReadControl) => cleanText(control.label || (control.icon ? `${control.icon} icon` : ""), LABEL_CHARS);
   const unique = (items: string[], max: number) => [...new Set(items.filter(Boolean))].slice(0, max);
 
@@ -255,6 +296,7 @@ export function pageNode(reading: PageReading, key: string, origin: string): Pag
   /** Links that lead to no other page, like href="#": the app handles the click itself, so they are buttons to a visitor. */
   const inPlace: ReadControl[] = [];
   const toRecord = new Map<string, number>();
+  let inContent = 0;
   for (const control of own) {
     if (control.role !== "link" || control.opensMenu) continue;
     let url: URL | undefined;
@@ -272,6 +314,7 @@ export function pageNode(reading: PageReading, key: string, origin: string): Pag
     }
     const label = name(control);
     if (!label || links.length >= MAX_LINKS || links.some((link) => link.label === label && link.to === to)) continue;
+    if (!control.nav && ++inContent > MAX_CONTENT_LINKS) continue;
     // Many links to pages of one kind, like products: two say where they lead.
     if (to.includes(":id")) {
       const seen = toRecord.get(to) ?? 0;
@@ -284,11 +327,14 @@ export function pageNode(reading: PageReading, key: string, origin: string): Pag
   const buttons = unique(
     own
       .filter((control) => BUTTON_ROLES.has(control.role) || (control.role === "link" && (control.opensMenu || inPlace.includes(control))) || (control.role === "clickable" && control.nav))
-      .map(name),
+      .map(name)
+      // Page numbers and lone symbols, like the × of a chip, say nothing about the site.
+      .filter((label) => /\p{L}{2}/u.test(label)),
     MAX_BUTTONS,
   );
   const fields = unique(own.filter((control) => FIELD_ROLES.has(control.role)).map(name), MAX_FIELDS);
-  const node: PageNode = { path: key, title: reading.title, headings: unique(reading.headings, MAX_HEADINGS), links, buttons, fields };
+  const headings = unique(reading.headings.filter((heading) => !hidden(heading)), MAX_HEADINGS);
+  const node: PageNode = { path: key, title: hidden(reading.title) ? "" : reading.title, headings, links, buttons, fields };
   if (reading.description) node.description = reading.description;
   return node;
 }

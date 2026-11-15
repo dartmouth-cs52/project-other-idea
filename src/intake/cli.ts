@@ -35,6 +35,8 @@ Options:
   --skip <pattern>     Leave alone pages whose address or link text matches this. Repeat for more.
   --within <path>      Stay inside this path, like /app/. Repeat for more.
   --also <url>         Another page to start reading from. Repeat for more.
+  --hide <words>       Keep these words out of the map, like the name of the account in --session.
+                       Repeat for more. Not kept in the site file: give it again on refresh.
   --allow <origin>     Another origin the widget may run on, like a staging site. Repeat for more.
   --accent <hex>       Color of the pointer and its highlight. Default ${DEFAULT_APPEARANCE.accent}.
   --position <side>    bottom-right or bottom-left. Default bottom-right.
@@ -57,6 +59,7 @@ const { values, positionals } = parseArgs({
     skip: { type: "string", multiple: true },
     within: { type: "string", multiple: true },
     also: { type: "string", multiple: true },
+    hide: { type: "string", multiple: true },
     allow: { type: "string", multiple: true },
     accent: { type: "string" },
     position: { type: "string" },
@@ -103,6 +106,7 @@ async function readPages(source: SiteSource): Promise<CrawlResult> {
     skip: (source.skip ?? []).map((pattern) => new RegExp(pattern, "i")),
     within: source.within ?? [],
     also: source.also ?? [],
+    hide: values.hide ?? [],
     onPage: (path, done) => console.log(`  ${String(done).padStart(3)} ${path}`),
   });
   const reasons = new Map<string, number>();

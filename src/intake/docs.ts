@@ -45,12 +45,18 @@ async function fromPath(path: string): Promise<Doc[]> {
 
 function fromHtml(html: string, source: string): Doc {
   const $ = cheerio.load(html);
-  const title = $("h1").first().text().trim() || $("title").first().text().trim() || source;
+  const titleFrom = (scope: ReturnType<typeof $>) => scope.find("h1").first().text().trim();
   $("script, style, noscript, nav, header, footer, aside, svg").remove();
   // Block elements end a line, so headings and list items don't run together.
   $("p, li, h1, h2, h3, h4, tr, br, div").each((_, el) => void $(el).append("\n"));
-  const main = $("main, article, [role='main']").first();
-  const text = (main.length ? main : $("body")).text();
+  // A help page can have more than one of these, like a search box's results drawn as an article before the page's own.
+  // The one with the most words is the page.
+  const candidates = $("main, article, [role='main']").toArray();
+  const main = candidates.sort((a, b) => $(b).text().length - $(a).text().length)[0];
+  const body = main ? $(main) : $("body");
+  // The heading of the page itself, before a site-wide one like "Product Support" above it.
+  const title = titleFrom(body) || $("h1").first().text().trim() || $("title").first().text().trim() || source;
+  const text = body.text();
   return { title, source, text: text.replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim() };
 }
 
