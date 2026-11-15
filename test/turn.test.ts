@@ -133,6 +133,33 @@ test("the model is told to state only what it was shown (grafana: 'the link will
   assert.ok(rules.indexOf("State as fact only") > rules.indexOf('Writing "say"'));
 });
 
+test("the new marks on a control are printed as sent, and the two that are not plain are explained (backstage: 'Next' was pointed at while required choices were empty)", () => {
+  const page = buildUserMessage({
+    ...request(""),
+    snapshot: {
+      path: "/create",
+      title: "Create",
+      headings: [],
+      text: [],
+      truncated: false,
+      elements: [
+        { id: "e1", role: "radio", label: "Light", state: ["required"], context: "form › Mode" },
+        { id: "e2", role: "link", label: "Help", state: ["opens a menu", "collapsed"], context: "nav" },
+        { id: "e3", role: "button", label: "Menu for panel Simple graph", state: ["shows on hover"], context: "main › Simple graph" },
+        { id: "e4", role: "textbox", label: "Please enter", context: "form › 2 of 2" },
+        { id: "e5", role: "button", label: "B-series (All series selected)", context: "main" },
+      ],
+    },
+  });
+  assert.ok(page.includes('e1 radio "Light" (required) [form › Mode]'));
+  assert.ok(page.includes('e2 link "Help" (opens a menu, collapsed) [nav]'));
+  assert.ok(page.includes('e3 button "Menu for panel Simple graph" (shows on hover) [main › Simple graph]'));
+  assert.ok(page.includes('e4 textbox "Please enter" [form › 2 of 2]'));
+  assert.ok(page.includes('e5 button "B-series (All series selected)" [main]'));
+  assert.match(rules, /A field or group marked "required" has to be filled in or chosen before its form's button will work\./);
+  assert.match(rules, /An element marked as showing on hover is hidden until the mouse is over that spot: point at it and say to move the mouse there\./);
+});
+
 test("the question asked after the last step is worded as a closing one", () => {
   const at = new Date("2026-11-15T12:00:00Z");
   const closing = buildUserMessage({ ...request('The user clicked link "Billing".'), closing: true }, at);
