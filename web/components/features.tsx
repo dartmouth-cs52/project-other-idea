@@ -29,7 +29,10 @@ export function Features() {
   );
 }
 
-/** A card is the same surface everywhere on the site: Muted fill, hairline border, 14px corners. */
+/**
+ * A card is the same surface everywhere on the site: Muted fill, hairline border, 14px corners.
+ * The demo's white window sits straight on that fill, with no panel of its own behind it.
+ */
 function Feature({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
     <article className="grid items-center gap-6 rounded-xl border bg-muted p-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-4">
@@ -37,7 +40,7 @@ function Feature({ title, description, children }: { title: string; description:
         <h3 className="font-medium">{title}</h3>
         <p className="mt-1 text-muted-foreground">{description}</p>
       </div>
-      <div className="rounded-lg bg-secondary p-4 sm:p-6">{children}</div>
+      <div>{children}</div>
     </article>
   );
 }
