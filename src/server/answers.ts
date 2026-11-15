@@ -73,7 +73,8 @@ export function neverDecided(question: string, answer: string): boolean {
  * - never_decided: an answer on a topic only a person at the company decides
  * - declined: the model's provider declined the request
  */
-export type Overruled = "no_source" | "no_words" | "never_decided" | "declined";
+/** Why the server changed a reply. "blocked": it pointed at a control the site's owner ruled out (src/shared/corrections.ts). */
+export type Overruled = "no_source" | "no_words" | "never_decided" | "declined" | "blocked";
 
 export interface Finished {
   reply: TurnReply;

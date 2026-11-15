@@ -9,7 +9,7 @@ A fixed set of questions with known right answers, and a command that runs any m
 
 A case is one step of one guide, frozen: the page as the widget saw it, the question, what had happened so far, and which controls are a right answer. A guide of five steps is five cases. Cases live in `eval/cases/`, one JSON file per site, and each file carries the site's context, because that is part of what the model reads.
 
-`eval/cases/demo.json` holds 57 cases from 14 guides on the demo app, including a wrong click, a question with no answer in the app, and forms inside dialogs. `eval/cases/joinhaptic.json` holds 17 cases from 6 guides on the live joinhaptic.com: a real public site with an accordion, a footer and a two-step form.
+`eval/cases/demo.json` holds 57 cases from 14 guides on the demo app, including a wrong click, a question with no answer in the app, and forms inside dialogs. `eval/cases/joinhaptic.json` holds 17 cases from 6 guides on the live joinhaptic.com: a real public site with an accordion, a footer and a two-step form. `eval/cases/corrections.json` holds 7 cases on the demo app for a site with corrections and controls ruled out (see below). The results under "Results" are from the 74 cases in the first two.
 
 ## Running it
 
@@ -28,6 +28,17 @@ Each model can take settings after `@`: `low`, `medium` or `high` for effort, an
 With no key to hand, start the **Benchmark** workflow from the repository's Actions tab instead. It runs the same command on GitHub and signs in with workload identity federation, so no key is stored. The setup is at the top of `.github/workflows/benchmark.yml`. `--repeat 3` asks each case three times, which steadies the timings. `npm run eval -- --help` lists the rest.
 
 The run goes through the same code as the live server, so the setup that wins is switched on with `HAPTIC_MODEL`, `HAPTIC_EFFORT` and `HAPTIC_THINKING` in `.env`.
+
+### Corrections and controls never to point at
+
+`eval/cases/corrections.json` is the demo app with two corrections from its owner and two controls ruled out. Three cases are right only if a correction is followed: one for a question like the one corrected, one for the same question asked on another page, and one for another question on the corrected page. One is a question on a corrected page that the correction must not change. Two ask for a ruled-out control, on a copy of the settings page with a danger zone written into the snapshot by hand, since the demo app has no such controls, and one asks for something else on that page.
+
+```bash
+npm run eval -- --models claude-sonnet-5-5 --cases corrections --yes
+npm run eval -- --models claude-sonnet-5-5 --cases corrections --without-corrections --yes
+```
+
+The second run takes the corrections and the list away, which shows what they change. **pointed at a ruled-out control** counts every pointer at one of the file's ruled-out controls, and must be 0 with the list in place: the server takes such a reply back whatever the model wrote. The Benchmark workflow takes the same choices, as `cases` and `corrections`.
 
 ### Before switching Answers on for a site
 

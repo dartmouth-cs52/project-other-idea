@@ -121,13 +121,17 @@ export class Store {
     });
   }
 
-  /** Saves a site built by `npm run tag`. A site the team made by hand has no company until one claims it. */
+  /**
+   * Saves a site built by `npm run tag`. A site the team made by hand has no company until one claims it.
+   * Corrections and controls never to point at are made in the dashboard, so a publish keeps them unless it brings its own.
+   */
   async saveSite(site: SiteContext): Promise<void> {
     await this.sql`
       insert into sites (id, name, origin, allowed_origins, context)
       values (${site.id}, ${site.name}, ${site.origin}, ${site.allowedOrigins}, ${JSON.stringify(site)}::jsonb)
-      on conflict (id) do update set name = excluded.name, origin = excluded.origin,
-        allowed_origins = excluded.allowed_origins, context = excluded.context, updated_at = now()`;
+      on conflict (id) do update set name = excluded.name, origin = excluded.origin, allowed_origins = excluded.allowed_origins,
+        context = jsonb_strip_nulls(jsonb_build_object('corrections', sites.context->'corrections', 'blocked', sites.context->'blocked')) || excluded.context,
+        updated_at = now()`;
   }
 
   seenAt(site: SiteContext, origin: string, allowed: boolean): Promise<void> | undefined {

@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { measureTurn, tidySay, TurnError, type TurnSettings } from "../src/server/model.ts";
+import { isBlocked } from "../src/shared/corrections.ts";
 import { loadCaseFiles, plausibleRange, score, type Case } from "./cases.ts";
 import { middle, parseModel, percent } from "./models.ts";
 
@@ -24,6 +25,9 @@ const HELP = `Usage: npm run eval -- --models <list> [options]
   --limit <n>       Only the first n cases, for a quick check.
   --answers         Ask every case as a site with Answers on would be asked: the longer prompt and the reply
                     with a mode. The right pointers are the same, so this shows whether guiding got worse.
+  --without-corrections
+                    Ask every case as if its site had no corrections and no controls ruled out, to see what they change.
+                    eval/cases/corrections.json is the file where it shows.
   --yes             Don't stop to show the number of calls first.
 
 Real models need ANTHROPIC_API_KEY, and every call is billed.`;
@@ -42,7 +46,11 @@ interface Run {
   clean: boolean;
   /** The rules for a sentence that the model's own sentence broke, like "link" or "length". Part of it was not shown. */
   broke: string[];
+  /** The pointer went to a control the site's owner ruled out. Must never happen with them in place. */
+  pointedAtBlocked?: boolean;
   said: string;
+  /** The id pointed at, or null. */
+  target?: string | null;
   servedBy: string;
   tokens?: { input: number; cacheRead: number; cacheWrite: number; output: number };
   error?: string;
@@ -56,6 +64,7 @@ async function main() {
       repeat: { type: "string", default: "1" },
       limit: { type: "string" },
       answers: { type: "boolean", default: false },
+      "without-corrections": { type: "boolean", default: false },
       yes: { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
@@ -68,14 +77,22 @@ async function main() {
   const repeat = Math.max(1, Number(values.repeat) || 1);
   const files = await loadCaseFiles(values.cases?.split(",").filter(Boolean));
   // With --answers each site is asked as if it had Answers switched on. Its help docs and everything else stay as they were.
-  const asked = (site: (typeof files)[number]["file"]["site"]) => (values.answers ? { ...site, answers: { ...site.answers, enabled: true } } : site);
-  let work = files.flatMap(({ name, file }) => file.cases.map((item) => ({ file: name, site: asked(file.site), item })));
+  // With --without-corrections the owner's corrections and ruled-out controls are taken away, and nothing else.
+  const asked = (site: (typeof files)[number]["file"]["site"]) => {
+    const changed = values.answers ? { ...site, answers: { ...site.answers, enabled: true } } : { ...site };
+    if (values["without-corrections"]) {
+      delete changed.corrections;
+      delete changed.blocked;
+    }
+    return changed;
+  };
+  let work = files.flatMap(({ name, file }) => file.cases.map((item) => ({ file: name, site: asked(file.site), ruledOut: file.site.blocked ?? [], item })));
   if (values.limit) work = work.slice(0, Math.max(1, Number(values.limit) || 1));
   if (!work.length) throw new Error("There are no cases to run. See eval/README.md for how to make some.");
 
   const calls = work.length * models.length * repeat;
   const billed = models.filter((model) => model.settings.model !== "mock").length * work.length * repeat;
-  console.log(`${work.length} cases from ${files.map((file) => file.name).join(", ")}${values.answers ? ", asked with Answers on" : ""}, ${models.length} model setting${models.length === 1 ? "" : "s"}, ${calls} calls${billed ? `, ${billed} of them billed` : ""}.`);
+  console.log(`${work.length} cases from ${files.map((file) => file.name).join(", ")}${values.answers ? ", asked with Answers on" : ""}${values["without-corrections"] ? ", without corrections" : ""}, ${models.length} model setting${models.length === 1 ? "" : "s"}, ${calls} calls${billed ? `, ${billed} of them billed` : ""}.`);
   if (billed && !values.yes) {
     console.log("Add --yes to run it.");
     return;
@@ -83,10 +100,13 @@ async function main() {
 
   // Models take turns on each case, so a slow minute on the network hits them all alike.
   const runs: Run[] = [];
-  for (const { item, site } of work) {
+  for (const { item, site, ruledOut } of work) {
     for (let round = 0; round < repeat; round++) {
       for (const { name, settings } of models) {
-        runs.push(await runOne(name, settings, item, site));
+        const run = await runOne(name, settings, item, site);
+        const pointed = item.request.snapshot.elements.find((element) => element.id === run.target);
+        if (isBlocked(pointed, ruledOut)) run.pointedAtBlocked = true;
+        runs.push(run);
       }
     }
     process.stdout.write(".");
@@ -108,6 +128,7 @@ async function main() {
       "status agrees": percent(answered.filter((run) => run.statusAgrees).length, answered.length),
       "clean sentence": percent(answered.filter((run) => run.clean).length, answered.length),
       "within the rules": percent(answered.filter((run) => run.broke.length === 0).length, answered.length),
+      "pointed at a ruled-out control": answered.filter((run) => run.pointedAtBlocked).length,
       "ms to pointer": middle(answered.map((run) => run.msToTarget).sort((a, b) => a - b), 0.5),
       "typical ms": middle(times, 0.5),
       "slow ms (9 in 10 are faster)": middle(times, 0.9),
@@ -135,7 +156,7 @@ async function runOne(name: string, settings: TurnSettings, item: Case, site: Pa
   try {
     const measure = await measureTurn(site, { ...item.request, site: site.id }, settings);
     const result = score(item, measure.reply);
-    return { ...base, ...result, ms: measure.ms, msToTarget: measure.msToTarget, clean: tidySay(measure.wrote) === measure.wrote, broke: measure.broke, said: measure.reply.say, servedBy: measure.model, ...(measure.tokens ? { tokens: measure.tokens } : {}) };
+    return { ...base, ...result, target: measure.reply.target, ms: measure.ms, msToTarget: measure.msToTarget, clean: tidySay(measure.wrote) === measure.wrote, broke: measure.broke, said: measure.reply.say, servedBy: measure.model, ...(measure.tokens ? { tokens: measure.tokens } : {}) };
   } catch (error) {
     // Bad credentials fail every call the same way, so there's no point going on.
     if (error instanceof TurnError && error.status === 500) throw error;

@@ -88,7 +88,7 @@ async function boot() {
         .then((response) => response.ok)
         .catch(() => false),
   };
-  const guide = new Guide(ui, sendTurn, report, handoff);
+  const guide = new Guide(ui, sendTurn, report, handoff, config.blocked ?? []);
   guide.resume();
 
   // Each page's outline, so the site map keeps up with the product. Sent as

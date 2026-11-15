@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
+import { BLOCKED_SAY, isBlocked } from "../shared/corrections.ts";
 import { MODES, REASONS, type Mode, type Reason, type SiteContext, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { declinedReply, finishAnswer, neverDecided, type Finished, type ModelReply, type Overruled } from "./answers.ts";
 import type { Ceiling } from "./budget.ts";
@@ -168,7 +169,7 @@ export function ceilingFor(site: SiteContext, request: TurnRequest, settings: Tu
   const size = (text: string) => Math.ceil(new TextEncoder().encode(text).length / BYTES_PER_TOKEN);
   let prompt = promptTokens.get(site);
   if (prompt === undefined) promptTokens.set(site, (prompt = size(buildSystemPrompt(site))));
-  const input = size(buildUserMessage(request)) + request.history.reduce((sum, turn) => sum + size(turn.text), 0);
+  const input = size(buildUserMessage(request, site)) + request.history.reduce((sum, turn) => sum + size(turn.text), 0);
   const cost = (cacheWrite: number, cacheRead: number) => costOf(settings.model, { input, cacheRead, cacheWrite, output: MAX_TOKENS }, settings.cache);
   return { cold: cost(prompt, 0), warm: cost(0, prompt) };
 }
@@ -215,6 +216,8 @@ export async function measureTurn(
   let msToMode: number | undefined;
   let declining = false;
   const onPage = (id: string | null): id is string => id !== null && request.snapshot.elements.some((element) => element.id === id);
+  // A control the site's owner ruled out is never pointed at, whatever the model wrote. Not even for a moment, before the reply is checked.
+  const blocked = (id: string | null) => isBlocked(request.snapshot.elements.find((element) => element.id === id), site.blocked);
   const modeKnown = (mode: string | undefined) => {
     if (msToMode !== undefined || !MODES.includes(mode as Mode)) return;
     msToMode = Date.now() - started;
@@ -225,7 +228,7 @@ export async function measureTurn(
     if (msToTarget !== undefined) return;
     msToTarget = Date.now() - started;
     // A reply that declines points at nothing, whatever it names.
-    if (onPage(id) && !declining) watch.onTarget?.(id);
+    if (onPage(id) && !declining && !blocked(id)) watch.onTarget?.(id);
   };
 
   let answered: Answered;
@@ -256,6 +259,9 @@ export async function measureTurn(
     const { say, broke } = checkSay(tidySay(wrote));
     // Nothing fit to show was left. The pointer, if there is one, still says where to go.
     finished = { reply: { target, status: answered.reply.status, say: say || (target ? SAY_WITHOUT_WORDS.pointing : SAY_WITHOUT_WORDS.nothing) }, cited: [], broke };
+  }
+  if (blocked(finished.reply.target)) {
+    finished = { reply: { target: null, status: "done", say: BLOCKED_SAY, blocked: true, ...(answers ? { mode: "guide" as const } : {}) }, cited: [], broke: finished.broke, overruled: "blocked" };
   }
   const { reply, cited, broke, overruled, unseen } = finished;
   modeKnown(reply.mode);
@@ -303,7 +309,7 @@ async function claudeTurn(
   const messages: Anthropic.Beta.BetaMessageParam[] = request.history.map((turn) => ({ role: turn.role, content: turn.text }));
   // The conversation has to start with a user message.
   while (messages[0]?.role === "assistant") messages.shift();
-  messages.push({ role: "user", content: buildUserMessage(request) });
+  messages.push({ role: "user", content: buildUserMessage(request, site) });
 
   // If the model declines a request on policy grounds, the API retries it on a
   // fallback model inside the same call. Haiku has no server-side fallback.

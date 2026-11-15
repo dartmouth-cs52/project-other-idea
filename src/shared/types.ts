@@ -1,3 +1,5 @@
+import type { ControlName, Correction } from "./corrections.ts";
+
 // Shapes shared by the widget (browser), the server and the intake CLI.
 // No DOM or Node APIs here.
 
@@ -39,6 +41,10 @@ export interface SiteContext {
   handoff?: Handoff;
   /** False stops the widget sending outlines of the pages it sees, so the site map is the crawl's alone. On unless set. */
   learn?: boolean;
+  /** "Point here instead": steps the site's owner fixed from the dashboard. See src/shared/corrections.ts. */
+  corrections?: Correction[];
+  /** Controls Haptic must never point at, like "Delete workspace". Enforced by the server and the widget, not left to the prompt. */
+  blocked?: ControlName[];
   createdAt: string;
   updatedAt: string;
 }
@@ -131,6 +137,8 @@ export interface PublicSiteConfig {
   off?: true;
   /** Set when the site has asked not to be learned from its visits. The widget then sends no outlines. */
   learn?: false;
+  /** Controls Haptic must never point at. The widget checks every pointer against it. */
+  blocked?: ControlName[];
   handoff?: PublicHandoff;
 }
 
@@ -204,8 +212,10 @@ export interface TurnRequest {
  * And on a site with Answers on, none of them billed:
  * - answered: the question was answered in words from the help docs
  * - not_covered, sensitive, off_topic: Haptic said it couldn't help, for that reason
+ * And on any site:
+ * - blocked: the step was a control the site's owner said never to point at, so Haptic said it can't help with that here
  */
-export const GUIDE_OUTCOMES = ["finished", "shown", "stopped", "nothing_to_point_at", "loop", "step_limit", "error", "answered", "not_covered", "sensitive", "off_topic"] as const;
+export const GUIDE_OUTCOMES = ["finished", "shown", "stopped", "nothing_to_point_at", "loop", "step_limit", "error", "answered", "not_covered", "sensitive", "off_topic", "blocked"] as const;
 export type GuideOutcome = (typeof GUIDE_OUTCOMES)[number];
 
 /** A guide id, as the widget makes it with crypto.randomUUID(). */
@@ -341,6 +351,8 @@ export interface TurnReply {
    * not finish, and there is nothing to ask the visitor about.
    */
   paused?: true;
+  /** True when the model named a control the site's owner has ruled out. The pointer stays put and `say` is the fixed sentence. */
+  blocked?: true;
   /** Only on a site with Answers on. */
   mode?: Mode;
   /** Only with mode "cannot_help". */
