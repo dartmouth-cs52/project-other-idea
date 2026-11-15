@@ -470,8 +470,11 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
   carries no buttons.
 - **Keep the conversation and the exit in view.** The chat stays open for the
   whole guide, with the question at the top and a stop button in the ask box.
-- **A wrong click is not an error.** Haptic reads the new page and carries on
-  from there without comment.
+- **A wrong click is not an error, and Haptic says so.** The ask box shows
+  "Finding the way from here" at once. The next caption opens with "Not that
+  one." and names the step that gets the person back. It is plain text in the
+  usual caption: no Error red, no alert. If the click also leads to the goal,
+  Haptic carries on without comment.
 - **Finish plainly.** Haptic confirms in a sentence, shows the green tick, and
   reopens the ask box.
 

@@ -1,10 +1,13 @@
 import { build } from "esbuild";
+import { copyFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 // Bundles the widget into the one file the script tag loads.
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 export const WIDGET_FILE = `${root}dist/widget.js`;
+/** The same file under a name the Worker's bundler brings in as a string. */
+export const WIDGET_TEXT_FILE = `${root}dist/widget.txt`;
 
 export async function buildWidget(): Promise<number> {
   const result = await build({
@@ -17,6 +20,7 @@ export async function buildWidget(): Promise<number> {
     metafile: true,
     legalComments: "none",
   });
+  await copyFile(WIDGET_FILE, WIDGET_TEXT_FILE);
   return Object.values(result.metafile.outputs)[0]?.bytes ?? 0;
 }
 

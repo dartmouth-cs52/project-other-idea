@@ -5,15 +5,73 @@ import type { SiteContext, TurnReply, TurnRequest } from "../shared/types.ts";
 import { buildSystemPrompt, buildUserMessage } from "./prompt.ts";
 
 // One model call per step. HAPTIC_MODEL picks the model, or "mock" for a
-// keyword matcher that needs no API key.
+// keyword matcher that needs no API key. The reply is streamed, so the control
+// to point at is known before the sentence that goes with it is finished.
 
-export const MODEL = process.env.HAPTIC_MODEL || "claude-opus-5-5";
+type Effort = "low" | "medium" | "high";
+
+/** How a step is asked for. The server reads these from the environment, and the benchmark tries several. */
+export interface TurnSettings {
+  /** Any Claude model ID, or "mock". */
+  model: string;
+  effort: Effort;
+  /** "off" asks for no thinking before the answer, on the models that allow it. */
+  thinking: "default" | "off";
+}
+
+/** The names the settings are read from: HAPTIC_MODEL, HAPTIC_EFFORT, HAPTIC_THINKING and ANTHROPIC_API_KEY. */
+export type ModelEnv = Record<string, string | undefined>;
+
+const EFFORTS: readonly string[] = ["low", "medium", "high"];
+
+function settingsFrom(env: ModelEnv): TurnSettings {
+  return {
+    model: env.HAPTIC_MODEL || "claude-opus-5-5",
+    // Each step is a small decision and the visitor is waiting on it, so the least effort is the default.
+    effort: EFFORTS.includes(env.HAPTIC_EFFORT ?? "") ? (env.HAPTIC_EFFORT as Effort) : "low",
+    thinking: env.HAPTIC_THINKING === "off" ? "off" : "default",
+  };
+}
+
+// On Node the settings are in process.env when this file loads. A Cloudflare
+// Worker is only handed its settings with each request, so its entry point
+// passes them to configure().
+const startEnv: ModelEnv = typeof process === "undefined" ? {} : process.env;
+export let SETTINGS: TurnSettings = settingsFrom(startEnv);
+/** For trying the early pointer with no API key: the stand-in names its control, then waits this long before finishing. */
+let mockPauseMs = Number(startEnv.HAPTIC_MOCK_PAUSE_MS) || 0;
+let apiKey: string | undefined;
+let client: Anthropic | undefined;
+
+export function configure(env: ModelEnv) {
+  SETTINGS = settingsFrom(env);
+  mockPauseMs = Number(env.HAPTIC_MOCK_PAUSE_MS) || 0;
+  if (env.ANTHROPIC_API_KEY !== apiKey) {
+    apiKey = env.ANTHROPIC_API_KEY;
+    client = undefined;
+  }
+}
+
+/** A step's reply, with what it took to get. */
+export interface TurnMeasure {
+  reply: TurnReply;
+  /** The model that answered. After a fallback it is not the one asked for. */
+  model: string;
+  /** The whole step. */
+  ms: number;
+  /** Until the control to point at was known, which is when the pointer can start moving. */
+  msToTarget: number;
+  tokens?: { input: number; cacheRead: number; cacheWrite: number; output: number };
+}
 
 const Reply = z.object({
   target: z.string().nullable().describe('Id of the element to point at, like "e12", or null'),
   status: z.enum(["continue", "done"]),
   say: z.string().describe("One or two short sentences for the visitor"),
 });
+
+/** The reply's first field, as soon as it is complete in the text streamed so far. */
+const TARGET_SO_FAR = /"target"\s*:\s*(?:"([^"]*)"|null)/;
 
 /** Thrown for failures the visitor's browser should hear about with a specific status. */
 export class TurnError extends Error {
@@ -25,17 +83,62 @@ export class TurnError extends Error {
   }
 }
 
-let client: Anthropic | undefined;
-
 export async function runTurn(site: SiteContext, request: TurnRequest): Promise<TurnReply> {
-  const reply = MODEL === "mock" ? mockTurn(request) : await claudeTurn(site, request);
-  // The model can only point at what's on the page it was shown.
-  if (reply.target && !request.snapshot.elements.some((element) => element.id === reply.target)) reply.target = null;
-  return reply;
+  return (await measureTurn(site, request)).reply;
 }
 
-async function claudeTurn(site: SiteContext, request: TurnRequest): Promise<TurnReply> {
-  client ??= new Anthropic();
+/**
+ * One step, timed. `onTarget` is called once, as soon as the control to point
+ * at is known and only if it is on the page the model was shown. The benchmark
+ * calls this with the settings it wants to compare.
+ */
+export async function measureTurn(
+  site: SiteContext,
+  request: TurnRequest,
+  settings: TurnSettings = SETTINGS,
+  onTarget?: (id: string) => void,
+): Promise<TurnMeasure> {
+  const started = Date.now();
+  let msToTarget: number | undefined;
+  const onPage = (id: string | null): id is string => id !== null && request.snapshot.elements.some((element) => element.id === id);
+  const targetKnown = (id: string | null) => {
+    if (msToTarget !== undefined) return;
+    msToTarget = Date.now() - started;
+    if (onPage(id)) onTarget?.(id);
+  };
+
+  let answer: Omit<TurnMeasure, "ms" | "msToTarget">;
+  if (settings.model === "mock") {
+    const reply = mockTurn(request);
+    if (mockPauseMs > 0) {
+      targetKnown(reply.target);
+      await new Promise((resolve) => setTimeout(resolve, mockPauseMs));
+    }
+    answer = { reply, model: "mock" };
+  } else answer = await claudeTurn(site, request, settings, targetKnown);
+  // The model can only point at what's on the page it was shown.
+  if (!onPage(answer.reply.target)) answer.reply.target = null;
+  targetKnown(answer.reply.target);
+  return { ...answer, ms: Date.now() - started, msToTarget: msToTarget ?? Date.now() - started };
+}
+
+/**
+ * The setting that turns thinking off, for the models that take one. Haiku and
+ * Sonnet each have their own. Opus always thinks, so it gets nothing here.
+ */
+function withoutThinking(model: string): { thinking?: { type: "disabled" } | { type: "between_tools" } } {
+  if (model.includes("haiku")) return { thinking: { type: "disabled" } };
+  if (model.includes("sonnet")) return { thinking: { type: "between_tools" } };
+  return {};
+}
+
+async function claudeTurn(
+  site: SiteContext,
+  request: TurnRequest,
+  settings: TurnSettings,
+  targetKnown: (id: string | null) => void,
+): Promise<Omit<TurnMeasure, "ms" | "msToTarget">> {
+  client ??= new Anthropic(apiKey ? { apiKey } : {});
   const messages: Anthropic.Beta.BetaMessageParam[] = request.history.map((turn) => ({ role: turn.role, content: turn.text }));
   // The conversation has to start with a user message.
   while (messages[0]?.role === "assistant") messages.shift();
@@ -43,21 +146,27 @@ async function claudeTurn(site: SiteContext, request: TurnRequest): Promise<Turn
 
   // If the model declines a request on policy grounds, the API retries it on a
   // fallback model inside the same call. Haiku has no server-side fallback.
-  const fallback = MODEL.includes("haiku") ? {} : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const };
+  const fallback = settings.model.includes("haiku") ? {} : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const };
 
   const started = Date.now();
   let response;
   try {
-    response = await client.beta.messages.parse({
-      model: MODEL,
+    const stream = client.beta.messages.stream({
+      model: settings.model,
       max_tokens: 4000,
       ...fallback,
-      // Each step is a small decision and the visitor is waiting on it.
-      output_config: { effort: "low", format: betaZodOutputFormat(Reply) },
+      ...(settings.thinking === "off" ? withoutThinking(settings.model) : {}),
+      output_config: { effort: settings.effort, format: betaZodOutputFormat(Reply) },
       // Rules and site knowledge are the same for every turn on a site, so they're cached.
       system: [{ type: "text", text: buildSystemPrompt(site), cache_control: { type: "ephemeral" } }],
       messages,
     });
+    // The reply is JSON with "target" first, so it is the first thing that can be acted on.
+    stream.on("text", (_delta, soFar) => {
+      const found = TARGET_SO_FAR.exec(soFar);
+      if (found) targetKnown(found[1] ?? null);
+    });
+    response = await stream.finalMessage();
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) throw new TurnError(500, "The server's Anthropic credentials are missing or invalid.");
     if (error instanceof Anthropic.RateLimitError) throw new TurnError(503, "The model is rate limited. Try again shortly.");
@@ -71,9 +180,15 @@ async function claudeTurn(site: SiteContext, request: TurnRequest): Promise<Turn
       `input ${usage.input_tokens}, cache read ${usage.cache_read_input_tokens ?? 0}, output ${usage.output_tokens}`,
   );
 
-  if (response.stop_reason === "refusal") return { target: null, status: "done", say: "I can't help with that one." };
+  const tokens = {
+    input: usage.input_tokens,
+    cacheRead: usage.cache_read_input_tokens ?? 0,
+    cacheWrite: usage.cache_creation_input_tokens ?? 0,
+    output: usage.output_tokens,
+  };
+  if (response.stop_reason === "refusal") return { reply: { target: null, status: "done", say: "I can't help with that one." }, model: response.model, tokens };
   if (!response.parsed_output) throw new TurnError(502, `The model's reply couldn't be read (stop reason: ${response.stop_reason}).`);
-  return response.parsed_output;
+  return { reply: response.parsed_output, model: response.model, tokens };
 }
 
 /**
@@ -85,12 +200,19 @@ function mockTurn(request: TurnRequest): TurnReply {
   const words = (text: string) => text.toLowerCase().match(/[a-z]{3,}/g) ?? [];
   const goal = new Set(words(request.goal));
   const used = request.history.filter((turn) => turn.role === "assistant").map((turn) => turn.text);
+  // After a wrong click, point again at the control it meant, if that is still on the page.
+  const strayed = /instead of|without using/.test(request.event ?? "");
+  if (strayed) {
+    const meant = /Click (.+)\.$/.exec(used.pop() ?? "")?.[1];
+    const again = request.snapshot.elements.find((element) => element.label === meant && !element.state?.includes("disabled"));
+    if (again) return { target: again.id, status: "continue", say: `Not that one. Click ${again.label}.` };
+  }
   let best: { id: string; label: string; score: number } | undefined;
   for (const element of request.snapshot.elements) {
-    if (!element.label || element.state?.includes("disabled") || used.includes(`Click ${element.label}.`)) continue;
+    if (!element.label || element.state?.includes("disabled") || used.some((text) => text.endsWith(`Click ${element.label}.`))) continue;
     const score = words(element.label).filter((word) => goal.has(word)).length;
     if (score > (best?.score ?? 0)) best = { id: element.id, label: element.label, score };
   }
   if (!best) return { target: null, status: "done", say: request.step ? "That should be it." : "I don't see that on this page." };
-  return { target: best.id, status: "continue", say: `Click ${best.label}.` };
+  return { target: best.id, status: "continue", say: `${strayed ? "Not that one. " : ""}Click ${best.label}.` };
 }
