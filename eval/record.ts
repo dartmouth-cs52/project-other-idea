@@ -133,6 +133,10 @@ async function record(browser: Browser, set: GuideSet, guide: Guide, site: CaseF
     if (net) await page.waitForTimeout(700);
     const spoiled = net?.spoiled();
     if (spoiled) throw new Error(`${guide.id}: ${spoiled.why}.`);
+    if (last && !last.act && last.given) {
+      const why = await reachedOrWhy(page, last.given);
+      if (why) throw new Error(`${guide.id}: the script ran to its last step, but ${why}. Fix the script or the step's "given".`);
+    }
     if (guide.reached) {
       const why = await reachedOrWhy(page, guide.reached);
       if (why) throw new Error(`${guide.id}: the script ran to its end, but ${why}. Fix the script or its "reached".`);

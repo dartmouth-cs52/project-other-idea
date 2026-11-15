@@ -58,7 +58,7 @@ async function main() {
     set = { siteId: "site_look", origin: url.origin, hasTag: false, guides: [] };
     path = url.pathname + url.search + url.hash;
   } else {
-    set = await loadGuideSet(where);
+    set = await loadGuideSet(where, false);
     path = pathGiven ?? "/";
   }
   const acts = (values.do ?? []).map(parseAct);

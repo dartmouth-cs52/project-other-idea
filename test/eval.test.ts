@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseModel } from "../eval/ask.ts";
 import { findListed, KINDS, loadCaseFiles, matches, plausibleRange, score, type Case } from "../eval/cases.ts";
-import type { GuideSet } from "../eval/guide.ts";
+import { saidOrWhy } from "../eval/browser.ts";
+import { DONE, faults, type Guide, type GuideSet } from "../eval/guide.ts";
 import { judge, Net, onlyQueries } from "../eval/net.ts";
 
 const item: Case = {
@@ -227,4 +228,43 @@ test("no live guide set lets a request through that saves, sends or deletes", as
       assert.deepEqual(judge({ method, url: `https://${to}` }, set), { act: "stop", why: "not known to be a read", unknown: true }, `${name} would let ${line} through, or call it chatter`);
     }
   }
+});
+
+test("a guide that no run could ever score as reached is refused, and says which", () => {
+  const pressedLast: Guide = { id: "pressed-last", start: "/", goal: "x", steps: [{ expect: [{ label: "A" }], act: { click: "#a" } }, { expect: [{ label: "B" }], act: { click: "#b" } }] };
+  const one = (guide: Guide): GuideSet => ({ siteId: "s", origin: "https://example.com", hasTag: false, guides: [guide] });
+  assert.match(faults(one(pressedLast))[0] ?? "", /^pressed-last: no run of it can be scored as reached/);
+  // Each way of being scored is enough on its own.
+  assert.deepEqual(faults(one({ ...pressedLast, reached: { absent: "#row" } })), []);
+  assert.deepEqual(faults(one({ ...pressedLast, says: { all: ["yes"] } })), []);
+  assert.deepEqual(faults(one({ ...pressedLast, steps: [pressedLast.steps[0]!, { expect: [{ label: "B" }] }] })), []);
+  // A guide of one step is never run whole, and DONE without a test is still refused.
+  assert.deepEqual(faults(one({ ...pressedLast, steps: [pressedLast.steps[0]!] })), []);
+  assert.equal(faults(one({ ...pressedLast, steps: [pressedLast.steps[0]!, DONE] })).length, 1);
+  assert.match(faults(one({ ...pressedLast, says: {} }))[0] ?? "", /"says" has to give the answer/);
+  assert.match(faults(one({ ...pressedLast, reached: { url: "(" } }))[0] ?? "", /reached\.url is not a pattern/);
+});
+
+test("an answer in words passes only when it says the true answer, and nothing wrong", () => {
+  const stock = { shown: { selector: ".out" }, notShown: { selector: ".in" } };
+  const read = { shown: ["Notebook Professional 17"], notShown: ["Notebook Basic 17", "Notebook Professional 15"] };
+  assert.equal(saidOrWhy(stock, "Only the Notebook Professional 17 is out of stock.", read), "");
+  assert.match(saidOrWhy(stock, "The Notebook Basic 17 is out of stock.", read), /does not say "Notebook Professional 17"/);
+  assert.match(saidOrWhy(stock, "The Notebook Professional 17 and the Notebook Basic 17 are out of stock.", read), /names "Notebook Basic 17", which the page shows is not the answer/);
+  assert.match(saidOrWhy(stock, "Out of stock, so far: nothing.", { notShown: read.notShown }), /showed nothing at \.out/);
+  // A hedge is not an answer, even with the right words in it.
+  assert.match(saidOrWhy(stock, "It may be the Notebook Professional 17. Check whether the list says so.", read), /hedges \("It may be"\)/);
+  assert.match(saidOrWhy({ all: ["\\bcash.on.delivery\\b"] }, "Vielleicht gibt es Cash on Delivery."), /hedges/);
+
+  // A fixed answer, and the same words said the wrong way round.
+  const cash = { all: ["\\bcash.on.delivery\\b"], not: ["\\b(isn't|is not|not) (offered|available)\\b"] };
+  assert.equal(saidOrWhy(cash, "Yes. Choose Cash on Delivery in this list to pay the driver."), "");
+  assert.match(saidOrWhy(cash, "Cash on Delivery isn't offered here."), /says "isn't offered", which is the wrong answer/);
+  assert.match(saidOrWhy(cash, "Pay by card."), /does not say/);
+
+  // A date read from the page may be written either way round, and only the part that counts is needed.
+  const when = { shown: { selector: ".lastmod", part: "\\d{1,2} \\w+ \\d{4}", anyOrder: true } };
+  const page = { shown: ["This page was last edited on 20 September 2026, at 19:55 (UTC)."] };
+  assert.equal(saidOrWhy(when, "The latest edit is from September 20, 2026, by Quivico.", page), "");
+  assert.match(saidOrWhy(when, "The latest edit is from 19 September 2026.", page), /does not say "20 September 2026"/);
 });
