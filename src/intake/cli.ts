@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
+import { webhookAllowed } from "../server/handoff.ts";
 import { docsThatFit, buildSystemPrompt } from "../server/prompt.ts";
 import { listSiteIds, loadSite, saveSite } from "../server/sites.ts";
 import { DEFAULT_APPEARANCE, type SiteContext, type SiteSource } from "../shared/types.ts";
@@ -29,6 +30,12 @@ Options:
   --label <text>       Text on the launcher button. Default "${DEFAULT_APPEARANCE.launcherLabel}".
   --answers <on|off>   Answers: reply in words from the help docs as well as pointing. Off by default.
   --stale-days <n>     With Answers on, mark an answer from an article older than this as possibly out of date.
+  --handoff-webhook <url>    When Haptic can't help, the widget offers a short form (an email address and a note).
+                             It is posted here as JSON, with the conversation and the page. An https address of yours.
+  --handoff-secret <text>    Sign each post with this, in an X-Haptic-Signature header.
+  --handoff-url <url>        Open this page instead, like your contact form.
+  --handoff-email <address>  Or open the visitor's mail program, writing to this address.
+  --handoff-label <text>     The words on the button. Default "Contact support".
   --budget-hour <usd>  The most the site may spend on the model in an hour, in US dollars. Default: the server's.
   --budget-day <usd>   The same for a day.
   --visitor-steps <n>  Steps one visitor may take in a day. For a public demo. Default: no limit.
@@ -47,6 +54,11 @@ const { values, positionals } = parseArgs({
     accent: { type: "string" },
     position: { type: "string" },
     label: { type: "string" },
+    "handoff-webhook": { type: "string" },
+    "handoff-secret": { type: "string" },
+    "handoff-url": { type: "string" },
+    "handoff-email": { type: "string" },
+    "handoff-label": { type: "string" },
     answers: { type: "string" },
     "stale-days": { type: "string" },
     "budget-hour": { type: "string" },
@@ -156,6 +168,15 @@ async function main() {
   const answersOn = values.answers ? values.answers === "on" : existing?.answers?.enabled === true;
   const answers = answersOn || staleDays !== undefined ? { enabled: answersOn, ...(staleDays !== undefined ? { staleAfterDays: staleDays } : {}) } : undefined;
 
+  const handoff = { ...existing?.handoff };
+  for (const [flag, field] of [["handoff-webhook", "webhook"], ["handoff-secret", "secret"], ["handoff-url", "url"], ["handoff-email", "email"], ["handoff-label", "label"]] as const) {
+    if (values[flag] !== undefined) handoff[field] = values[flag];
+  }
+  // A webhook on this machine is let through here for trying it out. The online server refuses one.
+  if (handoff.webhook && !webhookAllowed(handoff.webhook, true)) fail(`--handoff-webhook has to be an https address, not "${handoff.webhook}".`);
+  if (handoff.url && !/^https?:\/\//i.test(handoff.url)) fail(`--handoff-url has to start with https://, not "${handoff.url}".`);
+  if (handoff.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(handoff.email)) fail(`--handoff-email has to be an email address, not "${handoff.email}".`);
+
   const origin = new URL(url).origin;
   const source: SiteSource = { url, maxPages, docs: values.docs ?? existing?.source.docs ?? [] };
   const notesFile = values.notes ?? existing?.source.notesFile;
@@ -179,6 +200,7 @@ async function main() {
     ...(existing?.off ? { off: true } : {}),
     ...(Object.keys(budget).length ? { budget } : {}),
     ...(answers ? { answers } : {}),
+    ...(Object.keys(handoff).length ? { handoff } : {}),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };

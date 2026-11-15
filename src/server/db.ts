@@ -203,6 +203,10 @@ export class Store {
         if (report.helped !== undefined) {
           await this.sql`update guides set helped = ${report.helped} where id = ${guide} and site_id = ${site.id}`;
         }
+        // Last, because the column came later (db/migrations/0006): if it is missing, what is above is already written.
+        if (report.handoff) {
+          await this.sql`update guides set handed_off = true where id = ${guide} and site_id = ${site.id}`;
+        }
         return;
       }
       console.error(`A report for guide ${guide} on ${site.id} came for a guide that was never recorded.`);

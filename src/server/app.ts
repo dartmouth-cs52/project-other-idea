@@ -13,6 +13,7 @@ import {
   type TurnRequest,
 } from "../shared/types.ts";
 import type { Alert, Budget, Gate } from "./budget.ts";
+import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
 import { ceilingFor, measureTurn, TurnError } from "./model.ts";
 import type { TurnMeasure } from "./model.ts";
 
@@ -58,8 +59,12 @@ export interface AppParts {
    * on the list. Must not throw.
    */
   onSeen?(site: SiteContext, origin: string, allowed: boolean): void;
-  /** Told how a guide ended, or whether it helped. Must not throw. */
+  /** Told how a guide ended, whether it helped, or that the visitor asked for a person. Must not throw. */
   onReport?(site: SiteContext, guide: string, report: GuideReport): void;
+  /** How the handoff form is posted to a company's webhook. The web's own fetch unless a test says otherwise. */
+  fetch?: typeof fetch;
+  /** True on a developer's machine, where a webhook may be on the same machine. */
+  localWebhooks?: boolean;
 }
 
 const MAX_BODY_BYTES = 512 * 1024;
@@ -114,6 +119,8 @@ export function createApp(parts: AppParts) {
       if (!allowed) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
       const config: PublicSiteConfig = { name: site.name, appearance: site.appearance };
       if (await switchedOff(parts, site)) config.off = true;
+      const handoff = publicHandoff(site.handoff);
+      if (handoff) config.handoff = handoff;
       return json(200, config);
     }
 
@@ -171,6 +178,23 @@ export function createApp(parts: AppParts) {
       return json(200, { ok: true });
     }
 
+    // The widget's handoff form: an email address and a note, with the
+    // conversation so far. It is passed on to the company's webhook and not kept.
+    if (request.method === "POST" && url.pathname === "/v1/handoff") {
+      const form = parseHandoff(await readJson(request));
+      if (!form) return json(400, { error: "That isn't a valid handoff. It needs an email address." });
+      const site = await parts.loadSite(form.site);
+      if (!site) return json(404, { error: "No site with that id." });
+      if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      // Its own allowance, so a burst of steps doesn't cost someone their way to a person, and the reverse.
+      if (await parts.overLimit(`${site.id} handoff ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
+      if (!site.handoff?.webhook) return json(404, { error: "This site has nowhere to send that." });
+      const sent = await sendHandoff(site, form, origin, parts.fetch ?? fetch, parts.localWebhooks === true);
+      if (!sent) return json(502, { error: "That couldn't be passed on." });
+      if (form.guide) parts.onReport?.(site, form.guide, { site: site.id, handoff: true });
+      return json(200, { ok: true });
+    }
+
     return undefined;
   };
 }
@@ -182,7 +206,8 @@ function parseReport(body: unknown): GuideReport | undefined {
   const report: GuideReport = { site: raw.site };
   if (GUIDE_OUTCOMES.includes(raw.outcome as GuideOutcome)) report.outcome = raw.outcome as GuideOutcome;
   if (typeof raw.helped === "boolean") report.helped = raw.helped;
-  return report.outcome || report.helped !== undefined ? report : undefined;
+  if (raw.handoff === true) report.handoff = true;
+  return report.outcome || report.helped !== undefined || report.handoff ? report : undefined;
 }
 
 /**
