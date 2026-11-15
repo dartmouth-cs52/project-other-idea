@@ -10,6 +10,8 @@ const MAX_HISTORY = 12;
 /** A field counts as filled in once typing pauses this long. */
 const TYPING_PAUSE_MS = 1200;
 const STORAGE_KEY = "haptic.guide";
+/** Shown the moment the visitor does something other than the step, while the next step is worked out. */
+const OFF_TRACK = "Finding the way from here…";
 /** A saved guide older than this isn't picked back up after a page load. */
 const RESUME_WINDOW_MS = 3 * 60 * 1000;
 const CLICKABLE = "a[href], button, summary, select, input, textarea, label, [role], [onclick]";
@@ -21,6 +23,8 @@ interface SavedGuide {
   path: string;
   /** What the visitor did just before the page unloaded, if we saw it. */
   event?: string;
+  /** Set when that was something other than the step they were shown. */
+  strayed?: boolean;
   savedAt: number;
 }
 
@@ -31,6 +35,8 @@ export class Guide {
   private previous?: Snapshot;
   /** The element the last step pointed at, and whether the visitor used it. */
   private last?: { key: string; used: boolean };
+  /** The visitor's last action was not the step they were shown. Cleared once the next step is given. */
+  private strayed = false;
   /** Bumped whenever the guide is stopped or restarted, so stale async work can tell and bail. */
   private run = 0;
   private stopWaiting?: () => void;
@@ -60,10 +66,11 @@ export class Guide {
     this.goal = saved.goal;
     this.history = saved.history;
     this.step = saved.step;
+    this.strayed = saved.strayed === true;
     const here = normalizePath(location.pathname);
     const moved = saved.path === here ? "The page reloaded." : `A new page loaded: the user went from ${saved.path} to ${here}.`;
     const run = this.run;
-    this.ui.setBusy("Looking at this page…");
+    this.ui.setBusy(this.strayed ? OFF_TRACK : "Looking at this page…");
     void settle(this.ui.host).then(() => this.turn(run, [saved.event, moved].filter(Boolean).join(" ")));
   }
 
@@ -75,13 +82,14 @@ export class Guide {
     this.step = 0;
     this.previous = undefined;
     this.last = undefined;
+    this.strayed = false;
     forget();
   }
 
   private async turn(run: number, event?: string, nudged = false): Promise<void> {
     const { ui } = this;
     if (this.step >= MAX_STEPS) return this.finish("That's as far as I can take this one. Ask again to keep going.");
-    ui.setBusy(this.step === 0 ? "Finding it…" : "Next step…");
+    ui.setBusy(this.step === 0 ? "Finding it…" : this.strayed ? OFF_TRACK : "Next step…");
 
     ui.place();
     const page = takeSnapshot(ui.host);
@@ -126,6 +134,7 @@ export class Guide {
     this.step++;
     this.previous = page.snapshot;
     this.last = listed ? { key: elementKey(listed), used: false } : undefined;
+    this.strayed = false;
 
     if (!el || !el.isConnected) return this.finish(reply.say);
     if (listed?.offscreen) el.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -147,10 +156,11 @@ export class Guide {
     this.stopWaiting = waitForAction(el, listed, ui.host, (what) => {
       this.stopWaiting = undefined;
       if (this.last && what.onTarget) this.last.used = true;
+      this.strayed = !what.onTarget;
       // Saved straight away: if this click loads a new page, the next page needs to know about it.
       this.save(what.event);
       ui.clearPointer();
-      ui.setBusy("Next step…");
+      ui.setBusy(this.strayed ? OFF_TRACK : "Next step…");
       void settle(ui.host).then(() => {
         if (run === this.run) void this.turn(run, what.event);
       });
@@ -174,6 +184,7 @@ export class Guide {
       path: normalizePath(location.pathname),
       savedAt: Date.now(),
       ...(event ? { event } : {}),
+      ...(this.strayed ? { strayed: true } : {}),
     };
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(saved));

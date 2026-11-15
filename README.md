@@ -38,7 +38,7 @@ npm run tag ──▶ data/sites/<id>.json ──▶ server ◀── widget.js 
 | `appearance`, `allowedOrigins` | The company: the widget's color, corner and label, and which origins it may run on. |
 | `source` | The inputs it was built from, so it can be rebuilt unattended. |
 
-**How a step works.** The widget lists every control on the page with a short id (`e12`), its role, label and state. It never reads what's typed into fields, and masks emails and long numbers. The model replies with the id to point at, a sentence to show, and whether to wait for the visitor. After the visitor acts, the widget waits for the page to stop changing and sends the new page with a summary of what changed. Guide state is kept in `sessionStorage`, so a click that loads a new page picks up where it left off.
+**How a step works.** The widget lists every control on the page with a short id (`e12`), its role, label and state. It never reads what's typed into fields, and masks emails and long numbers. The model replies with the id to point at, a sentence to show, and whether to wait for the visitor. After the visitor acts, the widget waits for the page to stop changing and sends the new page with a summary of what changed. If they click something else, Haptic says so and gives the step that gets them back. Guide state is kept in `sessionStorage`, so a click that loads a new page picks up where it left off.
 
 The crawl only sees HTML the server sends. Pages drawn by JavaScript or behind a login come back nearly empty, and the command says so when that happens. The widget reads each page live either way, so those sites lean on notes and docs for now.
 
