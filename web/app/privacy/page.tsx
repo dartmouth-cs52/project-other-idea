@@ -33,11 +33,15 @@ export default function Privacy() {
       <h2>Haptic inside a product</h2>
       <p>
         When someone asks Haptic for help, it reads the page they are on. That means the names of buttons, links and
-        fields, the page title, and short pieces of visible text.
+        fields, where each link leads, whether a box is ticked or a section is open, the page title and headings, the
+        page&apos;s address within the product, and short pieces of visible text. While it is guiding someone it also
+        notes which control they used and what changed on the page.
       </p>
       <p>
-        Haptic never reads what people type into fields. It masks emails, phone numbers and long numbers in what it
-        reads before anything leaves the browser.
+        Haptic does not read what people type into fields, or anything inside an area they write in, and it takes no
+        pictures of the page. In what it does read, and in the question itself, it masks anything that looks like an
+        email address, a phone number or a long number before it leaves the browser. It does not mask names or other
+        words, so text that shows on the page can still hold personal details.
       </p>
       <p>
         Haptic is an AI guide and can be wrong, so check anything that matters before relying on it. To work out the
@@ -45,20 +49,29 @@ export default function Privacy() {
         provides the AI model.
       </p>
       <p>
-        We keep the question that was asked, what Haptic said and the names of the controls it pointed at, which page
-        of the product each step was on, what was clicked along the way, how the guide ended, and whether the person
-        said it helped. Emails, phone numbers and long numbers are masked first. The company whose product it is can
-        see these in its Haptic dashboard. We do not keep the description of the page, anything typed into the page,
-        or pictures of the page.
+        We keep the question that was asked, what Haptic said, the names of the controls it pointed at and where on
+        the page they sit, which page of the product each step was on, the product&apos;s web address, what was
+        clicked along the way, when each step happened and how long it took, which AI model answered and what the step
+        cost, how the guide ended, and whether the person said it helped. The company whose product it is can see
+        these in its Haptic dashboard, so it can tell what people ask and where a guide fell short. We do not keep
+        the rest of the description of the page. The record is stored in a database run for us by Neon.
       </p>
       <p>
-        From visits where nobody asks Haptic anything, we keep only a count of how often it loaded on each site. To
-        limit how much one visitor can ask, our server uses their network address. It is not kept with their
-        questions.
+        Haptic does not ask who a visitor is. But a name that shows on the page, in its address or on a control can
+        be in what we keep, along with the time of each step, so the company may be able to tell who asked.
       </p>
       <p>
-        We keep this for as long as the company uses Haptic, and delete it when the company asks. Nothing in it says
-        who asked, unless they put that in their question. We do not use it to train AI models.
+        From a visit where nobody asks Haptic anything, we keep nothing about the visitor. For each web address the
+        script loads on, we keep when it was first and last seen there and a rough count.
+      </p>
+      <p>
+        Our server uses a visitor&apos;s network address to limit how fast they can ask. Where a company also limits
+        how much each visitor can ask in a day, a scrambled form of the address is kept with that day&apos;s count,
+        and cleared when the day ends. The address is not kept with their questions.
+      </p>
+      <p>
+        We keep all of this until the company asks us to delete it. Nothing deletes it on a schedule yet: a person at{" "}
+        {site.company} does it on request. We do not use it to train AI models.
       </p>
       <p>Progress through a guide is kept in the browser for that tab, and is cleared when the tab closes.</p>
 
