@@ -260,37 +260,71 @@ const CHOICES = '[role="option"], [role="menuitem"], [role="menuitemradio"], [ro
 /** Where a calendar could be. */
 const GRIDS = '[role="grid"], table';
 
+// What the visitor keeps in the page between one action and the next: what was
+// on show before the last press, which control was pressed, and the choices it
+// found since. It is kept in a WeakSet on the window and never written into the
+// page, so neither the page nor the widget, which watches the page for changes,
+// sees anything happen.
+
+/** Remembers everything on show before the visitor presses `el`. */
+function markShowing(el: Element) {
+  const key = Symbol.for("haptic benchmark visitor");
+  const state = ((window as unknown as Record<symbol, { was?: WeakSet<Element>; pressed?: Element; choices?: Element[] }>)[key] ??= {});
+  const was = new WeakSet<Element>();
+  const all = document.body ? document.body.querySelectorAll("*") : [];
+  for (let index = 0; index < all.length && index < 30000; index++) {
+    const box = all[index]!.getBoundingClientRect();
+    if (box.width > 0 && box.height > 0) was.add(all[index]!);
+  }
+  state.was = was;
+  state.pressed = el;
+}
+
+/** Whether `el` is the control the visitor pressed last. */
+function pressedLast(el: Element) {
+  const state = (window as unknown as Record<symbol, { pressed?: Element } | undefined>)[Symbol.for("haptic benchmark visitor")];
+  return !!state && state.pressed === el;
+}
+
 /**
- * Marks every choice and grid on show before the visitor presses a control.
- * A sidebar drawn as a menu is on show all along, and is not a list the press
- * opened, so `choicesShowing` leaves out whatever carries this mark.
+ * Every choice on show that was not before the last press, and whether a
+ * calendar is. A choice is what a page marks as one (an option, a menu entry),
+ * or, as a person sees it, a short piece of text that appeared in a layer
+ * floating over the page (a list drawn in a layer of its own), apart from the
+ * one that holds the control itself.
  */
-function markShowing(selector: string) {
+function choicesShowing({ selector, grids }: { selector: string; grids: string }) {
+  const state = ((window as unknown as Record<symbol, { was?: WeakSet<Element>; pressed?: Element; choices?: Element[] }>)[Symbol.for("haptic benchmark visitor")] ??= {});
+  const was = state.was ?? new WeakSet<Element>();
+  const pressed = state.pressed;
   const seen = (el: Element) => {
+    if (was.has(el)) return false;
     const box = el.getBoundingClientRect();
     return box.width > 0 && box.height > 0 && box.bottom > 0 && box.top < window.innerHeight && (typeof el.checkVisibility !== "function" || el.checkVisibility({ visibilityProperty: true }));
   };
-  for (const el of Array.from(document.querySelectorAll("[data-benchmark-was-showing]"))) el.removeAttribute("data-benchmark-was-showing");
-  for (const el of Array.from(document.querySelectorAll(selector)).slice(0, 2000)) if (seen(el)) el.setAttribute("data-benchmark-was-showing", "");
-}
-
-/** Every choice on show that was not there before the press, and whether a calendar is. Each choice is marked so that it can be found again to click. */
-function choicesShowing({ selector, grids }: { selector: string; grids: string }) {
-  const seen = (el: Element) => {
-    const box = el.getBoundingClientRect();
-    return (
-      !el.hasAttribute("data-benchmark-was-showing") &&
-      box.width > 0 &&
-      box.height > 0 &&
-      box.bottom > 0 &&
-      box.top < window.innerHeight &&
-      (typeof el.checkVisibility !== "function" || el.checkVisibility({ visibilityProperty: true }))
-    );
+  const textOf = (el: Element) => (el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim();
+  /** A layer floating over the page that appeared since the press and does not hold the control pressed. */
+  const inNewLayer = (el: Element) => {
+    for (let node = el.parentElement, depth = 0; node && node !== document.body && depth < 12; node = node.parentElement, depth++) {
+      const position = getComputedStyle(node).position;
+      if (position === "absolute" || position === "fixed") return !was.has(node) && !(pressed && node.contains(pressed));
+    }
+    return false;
   };
-  const all = Array.from(document.querySelectorAll(selector)).filter(seen).slice(0, 200);
+  const marked = Array.from(document.querySelectorAll(selector)).filter(seen).slice(0, 200);
+  const drawn: Element[] = [];
+  const all = document.body ? document.body.querySelectorAll("*") : [];
+  for (let index = 0; index < all.length && index < 30000 && drawn.length < 200; index++) {
+    const el = all[index]!;
+    if (!seen(el)) continue;
+    const text = textOf(el);
+    if (!text || text.length > 80 || Array.from(el.children).some((child) => textOf(child) === text)) continue;
+    if (inNewLayer(el)) drawn.push(el);
+  }
+  const both = [...marked, ...drawn.filter((el) => !marked.some((one) => one === el || one.contains(el)))];
   // A list entry that only wraps a real choice is not a second choice.
-  const choices = all.filter((el) => !all.some((other) => other !== el && el.contains(other)));
-  choices.forEach((el, index) => el.setAttribute("data-benchmark-choice", String(index)));
+  const choices = both.filter((el) => !both.some((other) => other !== el && el.contains(other)));
+  state.choices = choices;
   // A calendar: a grid or table on show, most of whose cells are a day of the month.
   const calendar = Array.from(document.querySelectorAll(grids)).some((grid) => {
     if (!seen(grid)) return false;
@@ -300,10 +334,16 @@ function choicesShowing({ selector, grids }: { selector: string; grids: string }
   return {
     calendar,
     choices: choices.map((el) => ({
-      text: (el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 120),
+      text: textOf(el).slice(0, 120),
       chosen: el.getAttribute("aria-selected") === "true" || el.getAttribute("aria-checked") === "true",
     })),
   };
+}
+
+/** The choice `choicesShowing` found at this place in its list. */
+function choiceAt(index: number) {
+  const state = (window as unknown as Record<symbol, { choices?: Element[] } | undefined>)[Symbol.for("haptic benchmark visitor")];
+  return state?.choices?.[index] ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -325,7 +365,8 @@ export async function press(page: Loose, element: Loose, left = false): Promise<
   }
   const spot = (await element.evaluate(inPage(findSpot), left)) as ReturnType<typeof findSpot>;
   if (!spot.reachable) return { pressed: false, covered: spot.covered, by: spot.by };
-  await page.evaluate(inPage(markShowing), `${CHOICES}, ${GRIDS}`).catch(() => undefined);
+  // What is on show now, and which control is pressed, so that what the press opens can be told from the rest.
+  await element.evaluate(inPage(markShowing)).catch(() => undefined);
   await page.mouse.move(spot.x, spot.y, { steps: 4 });
   await page.waitForTimeout(100);
   await page.mouse.down();
@@ -351,6 +392,18 @@ export async function use(page: Loose, element: Loose, shown: Shown): Promise<Us
     // A page's own dropdown list is drawn by the browser, outside the page, so it is set and not clicked through.
     await element.selectOption({ index }, { timeout: 8000 });
     return { did: `picked "${options[index]!.text}"${asScripted >= 0 ? "" : asNamed >= 0 ? ", which the sentence names" : ", for want of a named choice"}` };
+  }
+
+  // Shown the control whose list they opened a moment ago, still open, and told to choose something in it,
+  // a person picks that choice. Pressing the control again would only close the list.
+  const again = (await element.evaluate(inPage(pressedLast)).catch(() => false)) as boolean;
+  if ((control.opens || control.readOnly) && again) {
+    const open = (await page.evaluate(inPage(choicesShowing), { selector: CHOICES, grids: GRIDS })) as ReturnType<typeof choicesShowing>;
+    const named = namedChoice(shown.say, open.choices);
+    if (named >= 0) {
+      const choice = (await page.evaluateHandle(inPage(choiceAt), named)).asElement();
+      if (choice && (await press(page, choice)).pressed) return { did: `picked "${open.choices[named]!.text}" from the list already open, which the sentence names` };
+    }
   }
 
   const typable = control.takesText && !control.readOnly;
@@ -409,8 +462,8 @@ export async function pickWhenQuiet(page: Loose, say: string, scriptedNext?: str
   const showing = (await page.evaluate(inPage(choicesShowing), { selector: CHOICES, grids: GRIDS })) as ReturnType<typeof choicesShowing>;
   const named = namedChoice(say, showing.choices);
   if (named >= 0) {
-    const pressed = await press(page, await page.locator(`[data-benchmark-choice="${named}"]`).first().elementHandle());
-    if (pressed.pressed) return `picked "${showing.choices[named]!.text}" from the list it opened, which the sentence names`;
+    const choice = (await page.evaluateHandle(inPage(choiceAt), named)).asElement();
+    if (choice && (await press(page, choice)).pressed) return `picked "${showing.choices[named]!.text}" from the list it opened, which the sentence names`;
   }
   if (scriptedNext && (showing.choices.length || showing.calendar)) {
     const next = await page.locator(scriptedNext).first().elementHandle({ timeout: 2000 }).catch(() => null);

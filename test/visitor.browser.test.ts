@@ -35,6 +35,7 @@ const PAGE = `<!doctype html><title>Visitor test</title>
 <div class="row"><button id="covered">Covered</button><div class="over"></div></div>
 <div class="row"><button id="half">Half covered</button><div class="dot"></div></div>
 <div class="row"><input id="keys" aria-label="Amount"></div>
+<div class="row"><input id="plain" role="combobox" readonly placeholder="Template"></div>
 <ul role="menu" id="sidebar"><li role="menuitem">Rules</li><li role="menuitem">Settings</li></ul>
 <div class="row"><input id="rule-name" placeholder="Rule name"></div>
 <script>
@@ -56,6 +57,23 @@ const PAGE = `<!doctype html><title>Visitor test</title>
   let keys = 0;
   document.getElementById("keys").addEventListener("keydown", () => keys++);
   window.keysHeard = () => keys;
+  // A list drawn as plain text in a layer of its own over the page, with no roles, as some component libraries draw it.
+  const plain = document.getElementById("plain");
+  plain.addEventListener("mousedown", () => {
+    document.getElementById("layer")?.remove();
+    const box = plain.getBoundingClientRect();
+    const layer = document.createElement("div");
+    layer.id = "layer";
+    layer.style.cssText = "position:absolute;background:#fff;border:1px solid #999;width:200px;left:" + box.left + "px;top:" + (box.bottom + window.scrollY) + "px";
+    for (const text of ["Template one", "Template two"]) {
+      const entry = document.createElement("div");
+      entry.textContent = text;
+      entry.style.padding = "4px";
+      entry.addEventListener("mousedown", (event) => { event.stopPropagation(); window.log.push("picked " + text); layer.remove(); });
+      layer.append(entry);
+    }
+    document.body.append(layer);
+  });
 </script>`;
 
 async function fresh(): Promise<Page> {
@@ -179,5 +197,26 @@ test("a menu that was on show all along is not taken for a list the field opened
   assert.equal(used.opened, undefined, "the sidebar's entries were there before the field was pressed");
   assert.equal(used.did, 'clicked it and typed "Sam Okafor", which suits the field');
   assert.equal(await pickWhenQuiet(page, "Enter a name for the rule."), "", "and nothing in the sidebar is picked");
+  await page.close();
+});
+
+test("a box whose list is already open is not pressed again: the choice the sentence names is picked", { skip }, async () => {
+  const page = await fresh();
+  const box = await page.$("#ro");
+  assert.equal((await use(page, box, shown("Page size", "Open the page size list."))).opened, true);
+  // The widget heard the click and asks again, and the model points at the same box.
+  const again = await use(page, box, shown("Page size", "The list is open. Don't click the box again: choose 50 / page in it."));
+  assert.equal(again.did, 'picked "50 / page" from the list already open, which the sentence names');
+  assert.deepEqual(await log(page), ["picked 50 / page for ro"]);
+  await page.close();
+});
+
+test("a list drawn in a layer of its own, with no roles, is picked from as a person sees it", { skip }, async () => {
+  const page = await fresh();
+  const box = await page.$("#plain");
+  assert.equal((await use(page, box, shown("Template", "Open the Template list."))).opened, true);
+  const again = await use(page, box, shown("Template", "The list is open: choose Template two."));
+  assert.equal(again.did, 'picked "Template two" from the list already open, which the sentence names');
+  assert.deepEqual(await log(page), ["picked Template two"]);
   await page.close();
 });
