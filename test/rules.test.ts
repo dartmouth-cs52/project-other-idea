@@ -120,6 +120,8 @@ test("email addresses, handles and numbers to call are dropped", () => {
     "Llame al 612 345 678 para confirmar su tarjeta.",
     "Call us on 87070 to confirm your card.",
     "Call 02079460958 to confirm.",
+    "Please text 87070 to confirm.",
+    "Send a text to 07911 123456.",
   ]) {
     const checked = checkSay(say);
     assert.ok(checked.broke.includes("phone"), `got through: ${JSON.stringify(say)}`);
@@ -184,6 +186,10 @@ test("a number is only a phone number when the sentence says to call it, or it i
     "Click SMS templates and open Reminder 24h (2026).",
     "Pick 03/04/2026 10:00 in the calendar, then click Call.",
     "Your Support plan includes 1 000 000 events a month.",
+    // "Text" as something to type, and a number beside "order number" or "line", are not a number to ring.
+    "Enter text 12345 in the box.",
+    "Your order number is 1234 5678.",
+    "Open order line 1234 5678.",
     // Two sentences that are each fine are fine together: digits are never added up across them.
     "Click Phone numbers in the sidebar. Your plan includes 3 numbers until 12/31/2026.",
     "Enter the 6-digit code from the SMS sent to the number ending in 4821, then click Verify. It expires in 10 minutes.",

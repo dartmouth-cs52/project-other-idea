@@ -238,10 +238,21 @@ const hasPayment = (text: string): boolean => IBAN.test(text) || WALLET.test(tex
 const CALL_WORDS =
   "call(?:s|ing|ed)?|dial(?:s|ing)?|ring|phone|telephone|tel|fax|sms|hotline|helpline|whatsapp|telegram|viber|llam[ae]\\w*|appel\\w*|t[ée]l[ée]phon\\w*|anruf\\w*|rufen|telefon\\w*|ligue|ligar|chiam\\w*|bellen|bel|zadzwo\\w*|позвон\\w*|звон\\w*";
 const CALL = new RegExp(`\\b(?:${CALL_WORDS})\\b|電話|电话|拨打|致电|전화`, "iu");
-/** The same words, or "text" used as a verb, as the last thing before a number: "call us on", "Tel:", "text". */
-const CALL_JUST_BEFORE = new RegExp(`(?:\\b(?:${CALL_WORDS}|text)\\b|電話|电话|拨打|致电|전화)[.:]?[^.!?;,\\d]{0,30}$`, "iu");
-/** Words for getting hold of someone that are too common to count alone: with one, a number has to be written in groups, the way one to dial is. */
-const REACH = /\b(?:contact\w*|reach|speak|talk|support|desk|line|agent|number|helpdesk)\b/iu;
+/**
+ * The same words as the last thing before a number: "call us on", "Tel:".
+ * And "text" where it is something to do and not something to type: at the
+ * start, or after "to", "and", "or", "please", "then" or "just".
+ */
+const CALL_JUST_BEFORE = new RegExp(
+  `(?:\\b(?:${CALL_WORDS})\\b|(?:^|[.!?;,:]\\s*|\\b(?:to|and|or|please|then|just)\\s+)text\\b|電話|电话|拨打|致电|전화)[.:]?[^.!?;,\\d]{0,30}$`,
+  "iu",
+);
+/**
+ * Words for getting hold of someone that are too common to count alone: with
+ * one, a number has to be written in groups, the way one to dial is. "Number"
+ * and "line" are not here: they sit beside every order and invoice.
+ */
+const REACH = /\b(?:contact\w*|reach|speak|talk|support|desk|agent|helpdesk)\b/iu;
 /** A number that starts with a plus sign and a country, however it is spaced. */
 const INTERNATIONAL = /\+\s?\d(?:[\s().\-/]*\d){6,}/;
 /** Three digits, three and four, the way a North American number is written. */
