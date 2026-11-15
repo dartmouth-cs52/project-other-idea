@@ -126,7 +126,7 @@ A site can have its own limits, and a public demo can also limit each visitor:
 npm run tag -- --id site_ab12cd34ef --budget-hour 5 --budget-day 40 --visitor-steps 60
 ```
 
-To limit each visitor the server has to tell them apart, which it does by network address. It keeps a count of the day's steps against a scrambled form of the address, mixed with the site and the day so it means nothing anywhere else, and clears the list when the day ends.
+To limit each visitor the server has to tell them apart, which it does by network address. It keeps a count of the day's steps against a scrambled form of the address, hashed with a random value made for each site each day so it means nothing anywhere else, and clears the list and the random value when the day ends.
 
 When a site passes 50%, 80% and 100% of a limit, a line goes to the server's log. To have it sent to a chat channel as well, give the server a webhook address (Slack's and Discord's incoming webhooks both work):
 

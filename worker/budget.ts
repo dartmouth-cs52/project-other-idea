@@ -8,15 +8,38 @@ import { admit, emptyMeter, settle, turnOver, type Admission, type Ceiling, type
 
 export class BudgetMeter extends DurableObject {
   private state?: MeterState;
+  private salt?: { day: string; value: string };
 
-  /** Asks whether a step may go ahead, and sets aside what it could cost if so. */
+  /** Asks whether a step may go ahead, and sets aside what it could cost if so. `caller` is empty unless the site limits each visitor. */
   async admit(limits: Limits, caller: string, ceiling: Ceiling): Promise<Admission> {
-    return this.change((state) => admit(state, limits, caller, ceiling));
+    const who = await this.scramble(caller);
+    return this.change((state) => admit(state, limits, who, ceiling));
   }
 
   /** Adds what a step cost and gives back what was set aside for it. */
   async settle(limits: Limits, caller: string, hold: number | undefined, usd: number, steps: number): Promise<Report> {
-    return this.change((state) => settle(state, limits, caller, hold, usd, steps));
+    const who = await this.scramble(caller);
+    return this.change((state) => settle(state, limits, who, hold, usd, steps));
+  }
+
+  /**
+   * A visitor's address as it is kept for a per-visitor limit: hashed with a
+   * random value made for this site each day and thrown away the next. So the
+   * same visitor is a different value on every site and every day, and a
+   * value cannot be turned back into an address by hashing every address
+   * there is, unless the day's random value is read from the same storage.
+   */
+  private async scramble(caller: string): Promise<string> {
+    if (!caller) return "";
+    const day = new Date().toISOString().slice(0, 10);
+    this.salt ??= await this.ctx.storage.get<{ day: string; value: string }>("salt");
+    if (this.salt?.day !== day) {
+      const value = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+      this.salt = { day, value };
+      await this.ctx.storage.put("salt", this.salt);
+    }
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${this.salt.value} ${caller}`));
+    return Array.from(new Uint8Array(digest).slice(0, 8), (byte) => byte.toString(16).padStart(2, "0")).join("");
   }
 
   /**

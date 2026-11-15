@@ -136,8 +136,9 @@ function budgetFor(env: Env): AppParts["budget"] {
   if (!store) return undefined;
   const reach = async (site: SiteContext, caller: string) => {
     const limits = limitsFor(site, { HAPTIC_BUDGET_HOUR: env.HAPTIC_BUDGET_HOUR, HAPTIC_BUDGET_DAY: env.HAPTIC_BUDGET_DAY });
-    // Callers are only told apart when the site limits each one. Their addresses are scrambled before they are kept.
-    const who = limits.perCaller ? await scramble(site.id, caller) : "";
+    // Callers are only told apart when the site limits each one. The site's own object scrambles the
+    // address before it keeps it. This copy of the Worker holds the address only in memory, for a few seconds.
+    const who = limits.perCaller ? caller : "";
     return { limits, who, key: `${site.id} ${who}`, meter: store.get(store.idFromName(site.id)) };
   };
   const remember = (key: string, gate: Gate) => {
@@ -161,18 +162,6 @@ function budgetFor(env: Env): AppParts["budget"] {
       return report;
     },
   };
-}
-
-/**
- * A caller's address as it is kept for a per-visitor limit: mixed with the
- * site and the day, then hashed. The same visitor is a different value on
- * every site and every day, so the count cannot follow anyone further than
- * the limit it is kept for.
- */
-async function scramble(site: string, caller: string): Promise<string> {
-  const day = new Date().toISOString().slice(0, 10);
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${site} ${day} ${caller}`));
-  return Array.from(new Uint8Array(digest).slice(0, 8), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 async function sendAlert(env: Env, text: string): Promise<void> {
