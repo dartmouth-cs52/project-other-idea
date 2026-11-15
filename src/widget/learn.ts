@@ -47,7 +47,7 @@ export function visitorId(): string | undefined {
     }
     return id;
   } catch {
-    // Storage blocked. The server counts this visitor by their network instead.
+    // Storage blocked. Without an id this visitor can't be counted once, so the server doesn't use what they send.
     return undefined;
   }
 }
@@ -85,7 +85,9 @@ export function buildOutline(host: Element): PageOutline | undefined {
 export function startLearning(send: (report: Omit<OutlineReport, "site">) => void, host: Element): () => void {
   const visitor = visitorId();
   const sent = sentKeys();
-  const post = (outline: PageOutline) => send({ ...(visitor ? { visitor } : {}), outline });
+  // Without an id the server can't count this visitor, so there is nothing worth sending.
+  if (!visitor) return () => {};
+  const post = (outline: PageOutline) => send({ visitor, outline });
   let running = false;
   let again = false;
 

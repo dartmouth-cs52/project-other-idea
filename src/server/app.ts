@@ -202,8 +202,9 @@ export function createApp(parts: AppParts) {
       if (!site) return json(404, { error: "No site with that id." });
       if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
       if (await parts.overLimit(`${site.id} outline ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
-      if (site.learn === false) return json(200, { ok: false });
-      parts.onOutline?.(site, await visitorHash(site.id, report.visitor, caller), report.outline);
+      // Without the widget's random id there is no way to count this visitor once, so the outline isn't used.
+      if (site.learn === false || !report.visitor) return json(200, { ok: false });
+      parts.onOutline?.(site, await visitorHash(site.id, report.visitor), report.outline);
       return json(200, { ok: true });
     }
 

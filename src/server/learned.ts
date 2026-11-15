@@ -88,13 +88,14 @@ export function outlineRows(outline: PageOutline): LabelRow[] {
 }
 
 /**
- * What a visitor is counted as on one site: a hash of their widget's id with
- * the site's id, so it means nothing anywhere else. A visitor whose browser
- * keeps no storage is counted by their network address, hashed the same way,
- * which can only make Haptic slower to learn, never quicker.
+ * What a visitor is counted as on one site: a hash of their widget's random id
+ * with the site's id, so it means nothing anywhere else. The id is random, so
+ * the hash can't be turned back into anything. A visitor whose browser keeps
+ * no storage has no id and isn't counted at all: a hash of their network
+ * address could be reversed by trying every address.
  */
-export async function visitorHash(site: string, visitor: string | undefined, caller: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${site} ${visitor ? `v:${visitor}` : `n:${caller}`}`));
+export async function visitorHash(site: string, visitor: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${site} v:${visitor}`));
   return Array.from(new Uint8Array(digest).slice(0, 12), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 

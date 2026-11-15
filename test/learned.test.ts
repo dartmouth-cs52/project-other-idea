@@ -55,12 +55,10 @@ test("an outline is cleaned again on the server: masked labels go whole, long on
 });
 
 test("a visitor is a hash made with the site's id, never the id the widget sent", async () => {
-  const here = await visitorHash("site_a", VISITOR, "1.1.1.1");
+  const here = await visitorHash("site_a", VISITOR);
   assert.match(here, /^[0-9a-f]{24}$/);
   assert.ok(!here.includes(VISITOR.slice(0, 8)));
-  assert.notEqual(here, await visitorHash("site_b", VISITOR, "1.1.1.1"), "the same visitor is someone else on another site");
-  assert.equal(here, await visitorHash("site_a", VISITOR, "2.2.2.2"), "and the same person wherever they connect from");
-  assert.notEqual(await visitorHash("site_a", undefined, "1.1.1.1"), await visitorHash("site_a", undefined, "2.2.2.2"), "without an id, the network stands in");
+  assert.notEqual(here, await visitorHash("site_b", VISITOR), "the same visitor is someone else on another site");
 });
 
 test("a label counts each visitor once, keeps at most ten, and reaches the prompt only past the threshold", () => {
@@ -184,7 +182,10 @@ test("POST /v1/outline: origin checked, visitor hashed, a site that opted out le
   assert.equal((await post(make(site), "https://elsewhere.test", body))?.status, 403);
   assert.equal((await post(make(site), "https://app.test", { site: site.id }))?.status, 400);
   assert.equal((await post(make(site), "https://app.test", body))?.status, 200);
-  assert.deepEqual(heard, [{ visitor: await visitorHash(site.id, VISITOR, "1.1.1.1"), path: "/reports/:id" }]);
+  assert.deepEqual(heard, [{ visitor: await visitorHash(site.id, VISITOR), path: "/reports/:id" }]);
+  const { visitor: _left, ...anonymous } = body;
+  assert.deepEqual(await (await post(make(site), "https://app.test", anonymous))?.json(), { ok: false }, "without a browser id there's no counting a visitor once");
+  assert.equal(heard.length, 1);
   assert.deepEqual(await (await post(make({ ...site, learn: false }), "https://app.test", body))?.json(), { ok: false });
   assert.equal(heard.length, 1);
 
