@@ -103,6 +103,9 @@ async function main() {
   if (positionals[0] === "refresh") {
     const ids = values.all ? await listSiteIds() : positionals.slice(1);
     if (!ids.length) fail("Say which site to refresh: a site id, or --all.");
+    // Refreshing re-reads a site as it is. A setting passed with it would be dropped without a word.
+    const settings = Object.keys(values).filter((flag) => flag !== "all" && flag !== "host");
+    if (settings.length) fail(`refresh changes no settings, so --${settings[0]} would be ignored. To change it: npm run tag -- --id <site id> --${settings[0]} …`);
     let failures = 0;
     for (const id of ids) {
       const site = await loadSite(id);
