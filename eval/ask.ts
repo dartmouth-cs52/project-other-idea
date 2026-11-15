@@ -49,8 +49,12 @@ export function modelAsker(settings: TurnSettings): Asker {
   };
 }
 
-/** The live server lets one caller ask 30 steps a minute on a site. This stays under that. */
-const SERVER_GAP_MS = 2100;
+/**
+ * The live server lets one caller ask 30 steps a minute on a site. This stays
+ * under that. A server with a higher limit, like the staging one, can be asked
+ * faster by setting HAPTIC_SERVER_GAP_MS.
+ */
+const SERVER_GAP_MS = Number(process.env.HAPTIC_SERVER_GAP_MS) || 2100;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**

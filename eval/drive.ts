@@ -42,7 +42,7 @@ const NEXT_STEP_MS = 40_000;
  * On a site other people use, the run stops before a control that could send,
  * buy, save or delete, unless the script says that control is where it ends.
  */
-const RISKY = /\b(delete|remove|discard|pay|buy|purchase|place order|order now|send|submit|publish|save|create|add|apply|confirm|register|sign up|invite|approve|reject|merge|close|archive|transfer|export|download|subscribe)\b/i;
+const RISKY = /\b(delete|remove|discard|pay|buy|purchase|place order|order now|send|submit|publish|save|create|add|apply|confirm|register|sign up|invite|approve|reject|merge|close|archive|transfer|export|download|subscribe|log ?in|sign ?in|log ?out|sign ?out)\b/i;
 
 type End =
   /** The visitor ended up where they wanted to be. */
@@ -228,6 +228,13 @@ async function drive(browser: Browser, set: GuideSet, guide: Guide, site: SiteCo
         if (el instanceof HTMLInputElement && !["checkbox", "radio", "button", "submit", "reset", "image", "file", "range", "color"].includes(el.type)) return el.type || "text";
         return "";
       })) as string;
+
+      // On a site other people use, nobody's password is typed, real or made up: a
+      // sign-in form is where the run ends, unless the script itself fills it in.
+      if (field === "password" && !set.sandbox && !vetted) {
+        log.did = "stopped: no password is typed on a site other people use";
+        return result("cut short", `it pointed at ${describeElement(pointed)}, a password field, on a site other people use`);
+      }
 
       // A visitor on the scripted path types what the script types. The script's
       // own selector says which field a value is for: "expect" alone would not,

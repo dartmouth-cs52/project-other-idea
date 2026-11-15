@@ -165,6 +165,6 @@ export default {
   hasTag: false,
   about: "Grafana Play, the public playground of Grafana, used without signing in. It stands for analytics and monitoring dashboards: dense, icon-heavy and full of custom controls.",
   // Opening either share panel creates a short link on the server straight away, and a snapshot is published.
-  never: "Share internally|Share externally|Snapshot",
+  never: "Share internally|Share externally|Snapshot|Copy link|Copy URL|Shorten",
   guides,
 } satisfies GuideSet;
