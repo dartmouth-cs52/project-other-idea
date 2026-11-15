@@ -19,7 +19,7 @@ const HELP = `Usage: npm run eval:toolkits -- [toolkit] [component] [options]
   toolkit          ${KITS.map((kit) => kit.id).join(", ")}, or all (the default).
   component        A kind of control (${KINDS.slice(0, 6).join(", ")}, ...) or a demo's name. All when left out.
   --widget <dir>   The checkout whose widget is tested. This one when left out.
-  --table <files>  Print the table and the faults from saved results, and run nothing. Several files, separated by commas, are read as one run.
+  --table <files>  Print the table and the faults from saved results, and run nothing. Several files, separated by commas, are read as one run, a demo in a later file replacing the same demo in an earlier one.
   --compare <files> Show each cell of the table beside the same cell of earlier results.
   --pause <ms>     Wait between demos, to keep a modest pace on other people's sites. 2000 by default.
   --shots <dir>    Keep a screenshot and the list the widget sent at each question, to look at a failure by hand.
@@ -95,7 +95,8 @@ async function loadResults(files: string): Promise<RunResults> {
     widget: runs[0]!.widget,
     startedAt: runs.map((run) => run.startedAt).sort()[0]!,
     finishedAt: runs.map((run) => run.finishedAt).sort().at(-1)!,
-    results: runs.flatMap((run) => run.results),
+    // A demo run again in a later file replaces its earlier result.
+    results: [...new Map(runs.flatMap((run) => run.results).map((r) => [`${r.kit}|${r.kind}|${r.demo}|${r.url}`, r])).values()],
   };
 }
 

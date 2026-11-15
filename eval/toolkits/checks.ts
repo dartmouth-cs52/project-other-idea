@@ -147,7 +147,7 @@ interface Where {
 function isControl(c: AxControl & Where): boolean {
   if (!c.shown || c.haptic) return false;
   if (c.role === "gridcell") return !c.holdsControl && (c.tag === "button" || c.selectable);
-  if (c.role === "columnheader") return !c.holdsControl && c.sortable;
+  if (c.role === "columnheader") return !c.holdsControl && c.sortable && c.name !== "";
   return true;
 }
 
@@ -581,7 +581,9 @@ async function runStep(
   }
   result.asked = 1;
   result.event = next.request.event;
-  const judged = judgeEvent(next.request.event, action, used, targetWords(target));
+  // The words a sentence may use for the control: the list's name for it, or else the tree's.
+  const treeName = before.controls.find((c) => c.handle === handle)?.name;
+  const judged = judgeEvent(next.request.event, action, used, targetWords(target) ?? (treeName || undefined));
   result.heard = judged.heard;
   if (judged.why) result.why = judged.why;
 

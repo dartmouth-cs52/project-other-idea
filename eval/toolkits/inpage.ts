@@ -126,9 +126,9 @@ function shown(el: Element): boolean {
   const rendered = typeof el.checkVisibility === "function" ? el.checkVisibility({ visibilityProperty: true }) : el.getClientRects().length > 0;
   if (!rendered) return false;
   const box = visibleRect(el);
-  // A box of a pixel or clipped to nothing is there for screen readers only, like a focus trap's sentinel.
-  const style = getComputedStyle(el);
-  const hiddenForEyes = (box && box.width <= 1.5 && box.height <= 1.5) || /rect\(0(px)?,? 0(px)?,? 0(px)?,? 0(px)?\)/.test(style.clip) || style.clipPath === "inset(50%)";
+  // A box of a pixel is there for screen readers only, like a focus trap's sentinel. A real input
+  // clipped away inside a visible thumb or tick box keeps its full box, and counts.
+  const hiddenForEyes = !!box && box.width <= 1.5 && box.height <= 1.5;
   if (box && !hiddenForEyes) return true;
   // A box drawn in place of a hidden real input: the visitor uses its label.
   const labels = (el as HTMLInputElement).labels;
