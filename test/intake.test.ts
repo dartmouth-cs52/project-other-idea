@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { pageNode, tidy } from "../src/intake/browse.ts";
 import { extractPage } from "../src/intake/crawl.ts";
+import { pageKey, parentKey, reasonNotToFollow } from "../src/intake/paths.ts";
+import type { PageReading, ReadControl } from "../src/intake/reader.ts";
 import { buildSystemPrompt, buildUserMessage, renderSiteMap } from "../src/server/prompt.ts";
 import { DEFAULT_APPEARANCE, normalizePath, cleanText, type PageNode, type SiteContext } from "../src/shared/types.ts";
 
@@ -61,4 +64,106 @@ test("the first turn carries the question, later turns carry what happened", () 
   const later = buildUserMessage({ site: "s", goal: "change my card", step: 2, history: [], snapshot, event: 'The user clicked button "A".', change: "Nothing visible on the page changed." });
   assert.match(later, /What the visitor did: The user clicked button "A"\./);
   assert.match(later, /Nothing visible on the page changed/);
+});
+
+test("the intake names pages the way the widget names the visitor's path", () => {
+  assert.equal(pageKey("https://a.com/parabank/about.htm;jsessionid=8F2C9D11AB34"), "/parabank/about.htm");
+  assert.equal(pageKey("https://a.com/app/index.html#/category/KB/product/HT-1064"), "/app/index.html#/category/KB/product/HT-1064");
+  assert.equal(pageKey("https://a.com/wiki/Cat#History"), "/wiki/Cat");
+  assert.equal(pageKey("https://a.com/w/index.php?title=Cat&action=history"), "/w/index.php?title=Cat&action=history");
+  assert.equal(pageKey("https://a.com/overview.htm?id=13344"), "/overview.htm");
+  assert.equal(parentKey("/catalog/default/component/artist-lookup"), "/catalog/default/component");
+  assert.equal(parentKey("/app/index.html#/category/KB"), "/app/index.html#/category");
+  assert.equal(parentKey("/contact"), "/");
+});
+
+test("links that sign out, act, send a form or carry a token are never loaded", () => {
+  const not = (address: string, label = "") => reasonNotToFollow(address, label);
+  for (const [address, label] of [
+    ["https://a.com/auth/logout", ""],
+    ["https://a.com/account", "Sign out"],
+    ["https://a.com/web/index.php/auth/login", "Log in"],
+    ["https://a.com/items/5/delete", "Open"],
+    ["https://a.com/shop?add-to-cart=12", "Pliers"],
+    ["https://a.com/cart/add/12", "Pliers"],
+    ["https://a.com/save?name=x", "Keep"],
+    ["https://a.com/browse/KAFKA-1?atl_token=abc", "KAFKA-1"],
+    ["https://a.com/d/abc/graphs?shareView=link", "Graphs"],
+    ["https://a.com/secure/VoteOrWatchIssue.jspa", "Votes"],
+    ["https://a.com/app/index.html#/settings/reset", "Settings"],
+    ["https://a.com/report.pdf", "Report"],
+    ["mailto:sam@example.com", "Mail us"],
+  ]) {
+    assert.notEqual(not(address!, label), "", `${address} (${label}) should not be loaded`);
+  }
+  for (const address of [
+    "https://a.com/web/index.php/pim/addEmployee",
+    "https://a.com/category/hand-tools",
+    "https://a.com/issues/closed-this-week",
+    "https://a.com/settings",
+    "https://a.com/dashboard/new",
+    "https://a.com/app/index.html#/category/KB",
+    "https://a.com/w/index.php?title=Cat&action=history",
+  ]) {
+    assert.equal(not(address), "", `${address} should be loaded`);
+  }
+  assert.match(reasonNotToFollow("https://a.com/parabank/admin.htm", "Admin Page", [/admin/i]), /matches/);
+});
+
+const reading = (controls: Partial<ReadControl>[], extra: Partial<PageReading> = {}): PageReading => ({
+  address: "https://a.com/people",
+  title: "People",
+  description: "Everyone at Acme.",
+  headings: ["People"],
+  controls: controls.map((control) => ({ role: "link", label: "", nav: false, record: false, opensMenu: false, ...control })),
+  links: [],
+  signIn: false,
+  ...extra,
+});
+
+test("a page in the map keeps what a visitor can use there and leaves out the page's data", () => {
+  const node = pageNode(
+    reading([
+      { label: "Home", address: "https://a.com/", nav: true },
+      { label: "Help", address: "https://a.com/help", nav: true, opensMenu: true },
+      { label: "Sam Example", address: "https://a.com/people/12345", record: true },
+      { role: "button", label: "Remove", record: true },
+      { label: "Pliers", address: "https://a.com/product/01J9ZK3Q8X" },
+      { label: "Hammer", address: "https://a.com/product/01J9ZK3Q9Y" },
+      { label: "Saw", address: "https://a.com/product/01J9ZK3QAZ" },
+      { label: "Elsewhere", address: "https://other.com/" },
+      { label: "Back to top", address: "https://a.com/people#top" },
+      { role: "button", label: "", icon: "settings" },
+      { role: "clickable", label: "Card of Sam" },
+      { role: "clickable", label: "Reports", nav: true },
+      { role: "textbox", label: "Search people" },
+    ]),
+    "/people",
+    "https://a.com",
+  );
+  assert.deepEqual(node.links, [
+    { label: "Home", to: "/" },
+    { label: "Pliers", to: "/product/:id" },
+    { label: "Hammer", to: "/product/:id" },
+  ]);
+  // A link that goes nowhere else is a button to a visitor: the app, or the page itself, handles the click.
+  assert.deepEqual(node.buttons, ["Help", "Back to top", "settings icon", "Reports"]);
+  assert.deepEqual(node.fields, ["Search people"]);
+  assert.equal(node.description, "Everyone at Acme.");
+});
+
+test("a title every page shares gives way to each page's first heading, and a record's page keeps none of the record", () => {
+  const pages = [
+    page("/a", { title: "Acme", headings: ["Leave", "My leave"], description: "Acme HR" }),
+    page("/b", { title: "Acme", headings: ["Admin"], description: "Acme HR" }),
+    page("/people/:id", { title: "Sam Example - Acme", headings: ["Sam Example"], description: "Sam's page" }),
+    page("/orders/:id", { title: "Acme", headings: ["Order 12"] }),
+  ];
+  tidy(pages);
+  assert.deepEqual(pages.map((item) => [item.title, item.headings, item.description]), [
+    ["Leave", ["My leave"], undefined],
+    ["Admin", [], undefined],
+    ["", [], undefined],
+    ["Acme", [], undefined],
+  ]);
 });
