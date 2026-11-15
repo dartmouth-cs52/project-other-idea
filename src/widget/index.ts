@@ -1,5 +1,6 @@
 import { DEFAULT_APPEARANCE, MODES, STREAM_TYPE, type Mode, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { Guide, type HandoffWay, type Reporter, type Watch } from "./guide.ts";
+import { startLearning } from "./learn.ts";
 import { Ui } from "./ui.ts";
 
 // Entry point of the script customers paste into their site:
@@ -89,6 +90,14 @@ async function boot() {
   };
   const guide = new Guide(ui, sendTurn, report, handoff);
   guide.resume();
+
+  // Each page's outline, so the site map keeps up with the product. Sent as
+  // text/plain, which needs no preflight, and it never matters to the visitor whether it arrives.
+  if (config.learn !== false) {
+    startLearning((body) => {
+      void fetch(`${api}/v1/outline`, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ ...body, site }) }).catch(() => {});
+    }, ui.host);
+  }
 }
 
 const start = () => boot().catch((error) => console.warn("[Haptic]", error));

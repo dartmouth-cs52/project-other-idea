@@ -347,6 +347,13 @@ function roleOf(el: Element, explicitRole: string, pointerStartsHere: boolean): 
   return "";
 }
 
+/** A control's name as the snapshot would give it: its label, or its icon when it has no words. */
+export function nameOf(el: Element): { label: string; icon?: string } {
+  const role = el.matches("a[href], [role='link']") ? "link" : "button";
+  const icon = iconOf(el);
+  return { label: labelOf(el, role), ...(icon ? { icon } : {}) };
+}
+
 /** True for fields the user fills in or picks from, where a click alone isn't the action. */
 export function isField(el: Element): boolean {
   if (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return true;

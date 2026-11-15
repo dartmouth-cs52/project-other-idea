@@ -7,6 +7,7 @@ import { buildWidget, WIDGET_FILE } from "../widget/build.ts";
 import { createApp } from "./app.ts";
 import { describeAlert, MemoryBudget } from "./budget.ts";
 import { Store } from "./db.ts";
+import { labelThreshold, MemoryLearned, withLearned } from "./learned.ts";
 import { SETTINGS } from "./model.ts";
 import { recordTurn } from "./record.ts";
 import { loadSite } from "./sites.ts";
@@ -33,10 +34,19 @@ function overLimit(key: string): boolean {
 
 // With DATABASE_URL set, sites come from Neon as they do online (falling back
 // to data/sites), and guides and steps are recorded there for the dashboard.
-const store = process.env.DATABASE_URL ? new Store(process.env.DATABASE_URL) : undefined;
+// What traffic has taught Haptic is kept in Neon when there is one, and in memory when there isn't.
+// On a developer's machine one visitor is enough for a label to reach the prompt (HAPTIC_LABEL_THRESHOLD).
+const threshold = labelThreshold(process.env);
+const store = process.env.DATABASE_URL ? new Store(process.env.DATABASE_URL, threshold) : undefined;
+const learned = new MemoryLearned();
 
 const app = createApp({
-  loadSite: async (id) => (await store?.loadSite(id)) ?? loadSite(id),
+  loadSite: async (id) => {
+    const fromStore = await store?.loadSite(id);
+    if (fromStore) return fromStore;
+    const site = await loadSite(id);
+    return site && withLearned(site, learned.labels(id), threshold);
+  },
   widget: () => readFile(WIDGET_FILE, "utf8"),
   widgetMaxAge: process.env.NODE_ENV === "production" ? 300 : 0,
   overLimit,
@@ -49,6 +59,7 @@ const app = createApp({
     void store?.recordStep(request, measure, origin);
   },
   onCancel: (request) => void store?.cancelStep(request),
+  onOutline: (site, visitor, outline) => (store ? void store.recordOutline(site, visitor, outline) : learned.record(site.id, visitor, outline)),
   onSeen: (site, origin, allowed) => void store?.seenAt(site, origin, allowed),
   onAsk: (request, _site, origin) => void store?.startGuide(request, origin),
   onReport: (site, guide, report) => void store?.report(site, guide, report),
