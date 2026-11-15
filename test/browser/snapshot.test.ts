@@ -375,3 +375,32 @@ test("a field is named by the nearest words before it, never by another field or
     'textbox [form › Notes]',
   ]);
 });
+
+// Required fields -----------------------------------------------------------------
+
+test("a field the page requires says so, however the page marks it", { skip }, async () => {
+  const snapshot = await read(`<style>.star::before { content: "*"; color: red; }</style><form>
+    <label for="n">Name</label><input id="n" required>
+    <label for="e">Email *</label><input id="e">
+    <label for="p" class="star">Phone</label><input id="p">
+    <div role="radiogroup" aria-labelledby="mode"><span id="mode">Mode<span aria-hidden="true">(Required)</span></span>
+      <label><input type="radio" name="m"> Light</label><label><input type="radio" name="m"> Dark</label></div>
+    <div role="group" data-required="true" aria-label="Topics"><label><input type="checkbox"> One</label></div>
+    <fieldset><legend>Size *</legend><label><input type="radio" name="s"> Small</label></fieldset>
+    <fieldset><legend>Extras</legend><label><input type="checkbox"> Gift wrap</label></fieldset>
+    <label for="o">Comment (not required)</label><textarea id="o">Typed: a star at the end *</textarea>
+    <label>Typed in a field inside its label <textarea>(Required)</textarea></label>
+  </form>`);
+  assert.deepEqual(lines(snapshot), [
+    'textbox "Name" (required) [form]',
+    'textbox "Email *" (required) [form]',
+    'textbox "Phone" (required) [form]',
+    'radio "Light" (required) [form › Mode]',
+    'radio "Dark" (required) [form › Mode]',
+    'checkbox "One" (required) [form › Topics]',
+    'radio "Small" (required) [form › Size *]',
+    'checkbox "Gift wrap" [form › Extras]',
+    'textbox "Comment (not required)" [form]',
+    'textbox "Typed in a field inside its label" [form]',
+  ]);
+});

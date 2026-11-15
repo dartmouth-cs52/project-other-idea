@@ -1085,10 +1085,69 @@ function opens(el: Element, role: string): string {
   return popup === "listbox" || popup === "tree" || popup === "grid" ? "opens a list" : "opens a menu";
 }
 
+/** Roles a visitor fills in, picks from or ticks, which a form can require. */
+const CAN_BE_REQUIRED = new Set(["textbox", "searchbox", "combobox", "select", "spinbutton", "slider", "checkbox", "radio", "switch", "file-upload"]);
+/** A required mark in the words that name a field: "(required)", or a star at either end. */
+const REQUIRED_MARK = /\(\s*required\s*\)|^\*|\*$/i;
+
+/**
+ * Whether the words that name a field carry a required mark. The mark is
+ * usually hidden from screen readers, since the field says it another way, so
+ * hidden words count here. A star drawn by the stylesheet counts too. Nothing
+ * inside a field is read.
+ */
+function markedRequired(name: Element): boolean {
+  if (holdsTyping(name) || insideEditor(name)) return false;
+  let text = "";
+  let visited = 0;
+  const walk = (node: Node) => {
+    if (visited++ > 60 || text.length > 200) return;
+    if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
+    else if (node instanceof Element && !holdsTyping(node) && !NOT_WORDS.has(node.tagName)) for (const child of node.childNodes) walk(child);
+  };
+  walk(name);
+  if (REQUIRED_MARK.test(text.replace(/\s+/g, " ").trim())) return true;
+  return ["::before", "::after"].some((pseudo) => /^["']\s*\*\s*["']$/.test(getComputedStyle(name, pseudo).content));
+}
+
+/** The elements whose words name an element: its labels and what aria-labelledby points to. */
+function namesOf(el: Element): Element[] {
+  const names: Element[] = [];
+  if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) names.push(...Array.from(el.labels ?? []));
+  const root = el.getRootNode() as Document | ShadowRoot;
+  for (const id of (el.getAttribute("aria-labelledby") ?? "").split(/\s+/)) {
+    const named = id ? root.getElementById?.(id) : null;
+    if (named) names.push(named);
+  }
+  return names;
+}
+
+/**
+ * Whether the page says a field must be filled in or ticked. Without this the
+ * model cannot know why the browser refuses "Next", which it does with a bubble
+ * of its own and no change to the page. A radio or a tick box usually takes it
+ * from its group: the group's attributes, or a mark in the group's legend or label.
+ */
+function isRequired(el: Element, role: string): boolean {
+  if (!CAN_BE_REQUIRED.has(role)) return false;
+  if ((el as HTMLInputElement).required === true || el.getAttribute("aria-required") === "true") return true;
+  const names = namesOf(el);
+  if (role === "radio" || role === "checkbox" || role === "switch") {
+    const group = el.parentElement?.closest("fieldset, [role='radiogroup'], [role='group']");
+    if (group) {
+      if (group.getAttribute("aria-required") === "true" || group.getAttribute("data-required") === "true") return true;
+      const legend = group.tagName === "FIELDSET" ? group.querySelector(":scope > legend") : null;
+      names.push(...(legend ? [legend] : []), ...namesOf(group));
+    }
+  }
+  return names.some(markedRequired);
+}
+
 /** A state is at most 16 characters: the server cuts anything longer. */
 function stateOf(el: Element, role: string): string[] {
   const state: string[] = [];
   if ((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true") state.push("disabled");
+  if (isRequired(el, role)) state.push("required");
   const popup = opens(el, role);
   if (popup) state.push(popup);
   const expanded = el.getAttribute("aria-expanded");
