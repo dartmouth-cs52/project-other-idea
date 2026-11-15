@@ -12,6 +12,81 @@ const skip = typeof started === "string" ? started : false;
 after(() => browser?.close());
 const read = (...args: Parameters<NonNullable<typeof browser>["read"]>) => browser!.read(...args);
 
+// What a visitor typed ---------------------------------------------------------
+
+/** A page of fields and editors that hold a person's own words. */
+const RECORDS = `<body style="font:16px sans-serif;padding:40px">
+<h1>Records</h1>
+<button id="target">Save</button>
+<div id="editor" role="textbox" contenteditable="true" style="border:1px solid #999;padding:8px;width:420px">My private draft about the merger with Initech</div>
+<div id="bare" contenteditable="true" style="border:1px solid #999;padding:8px;width:420px">Bare editor text: fire Dana on Friday <a href="https://secret.example/plan">the plan for Dana</a></div>
+<p><textarea id="area" rows="2" cols="50">Patient note: John Smith has diabetes</textarea></p>
+<p><input id="typed" type="text"></p>
+<p><input id="prefilled" type="text" value="Prefilled value: 221B Baker Street"></p>
+<p><select id="sel"><option>Choice one</option><option selected>Chosen: HIV clinic</option></select></p>
+<h2 contenteditable="true">Title typed by the visitor: Layoffs</h2>
+<div role="combobox" contenteditable="true" style="border:1px solid #999;width:200px">searching for Okafor</div>
+<table>
+  <tr><td><div contenteditable="true">Cell note: overdue again</div></td><td><button>Remove</button></td></tr>
+  <tr><td><textarea>Second cell note</textarea></td><td><button>Remove</button></td></tr>
+</table>
+<div role="dialog" aria-labelledby="draft-title" style="border:1px solid #999"><div id="draft-title" contenteditable="true">Untitled: severance letter</div><button>Close</button></div>
+</body>`;
+/** Nothing here may reach the server, whatever the visitor asks or clicks. */
+const TYPED = ["merger with Initech", "fire Dana", "plan for Dana", "secret.example", "John Smith", "Typed by the visitor", "078-05", "Baker Street", "Layoffs", "Okafor", "overdue again", "Second cell note", "severance"];
+
+test("nothing a visitor typed is sent: not as a name, a caption, a row name, a heading, page text or what was clicked", { skip }, async () => {
+  const shown = await browser!.widget(RECORDS, (request, index) => {
+    const save = request.snapshot.elements.find((element) => element.label === "Save");
+    return index === 0 ? { target: save?.id ?? null, status: "continue", say: "Click Save." } : { target: null, status: "done", say: "That is all." };
+  });
+  try {
+    await shown.page.locator("#typed").click();
+    await shown.page.keyboard.type("Typed by the visitor: my SSN is 078-05-1120");
+    await shown.ask("how do I save");
+    // The visitor clicks into an editor, then a link written inside one, instead of the button they were shown.
+    await shown.page.locator("#editor").click();
+    await shown.waitFor(2);
+    for (const body of shown.sent) for (const secret of TYPED) assert.ok(!body.includes(secret), `"${secret}" was sent: ${body.slice(Math.max(0, body.indexOf(secret) - 80), body.indexOf(secret) + 60)}`);
+    // The choices of a dropdown are the page's own words and are sent. Nothing says which one is chosen.
+    const select = (JSON.parse(shown.sent[0] ?? "{}") as { snapshot: { elements: { role: string; label: string; state?: string[]; options?: string[] }[] } }).snapshot.elements.find((element) => element.role === "select");
+    assert.deepEqual(select?.options, ["Choice one", "Chosen: HIV clinic"]);
+    assert.equal(select?.label, "");
+    assert.equal(select?.state, undefined);
+    assert.match(shown.sent[1] ?? "", /The user clicked [^.]*instead of button \\"Save\\"/);
+  } finally {
+    await shown.close();
+  }
+});
+
+test("an editor is listed once, by the name its page gives it, and nothing inside it is listed", { skip }, async () => {
+  const snapshot = await read(`<h1>Notes</h1>
+    <div contenteditable="true" aria-label="Message body">Dear Dana, <a href="/secret">this link</a> <button contenteditable="false">Mention: Priya</button></div>
+    <label id="subject-label">Subject</label><div role="textbox" contenteditable="true" aria-labelledby="subject-label">Typed subject</div>
+    <div contenteditable="true" data-placeholder="Write a comment">Typed comment</div>
+    <div contenteditable="plaintext-only" title="Summary">Typed summary</div>
+    <div role="textbox" tabindex="0" aria-label="Formula"><span>=SUM(typed)</span><a href="/typed-link">typed link</a></div>
+    <p>Words on the page.</p>`);
+  assert.deepEqual(lines(snapshot), [
+    'textbox "Message body" [Notes]',
+    'textbox "Subject" [Notes]',
+    'textbox "Write a comment" [Notes]',
+    'textbox "Summary" [Notes]',
+    'textbox "Formula" [Notes]',
+  ]);
+  assert.deepEqual(snapshot.text, ["Subject", "Words on the page."]);
+});
+
+test("a dialog whose title is being edited is not named by what was typed there", { skip }, async () => {
+  const snapshot = await read(
+    `<dialog aria-labelledby="draft-title"><h2 id="draft-title" contenteditable="true">Untitled: severance letter</h2><button>Close</button></dialog>`,
+    { before: (page) => page.evaluate(() => document.querySelector("dialog")?.showModal()) },
+  );
+  assert.equal(snapshot.dialog, "");
+  assert.deepEqual(lines(snapshot), ["textbox [dialog]", "button \"Close\" [dialog]"]);
+  assert.deepEqual(snapshot.headings, []);
+});
+
 // Masking ---------------------------------------------------------------------
 
 const ACCOUNTS = `<h1>Accounts Overview</h1>

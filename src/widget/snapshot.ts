@@ -1,7 +1,9 @@
 import { cleanText as maskAndTrim, describeElement, normalizePath, namedIn, type SnapElement, type Snapshot } from "../shared/types.ts";
 
 // Turns the live page into the list of elements the model sees. One read-only
-// pass over the DOM. Input values are never read: labels only.
+// pass over the DOM. What a visitor typed is never read: not the value of a
+// field, and not the words inside an editor. Every piece of text taken from
+// the page goes through `wordsIn`, which passes over both.
 
 const MAX_ELEMENTS = 300;
 const MAX_TEXT_CHARS = 2500;
@@ -34,6 +36,64 @@ const MAX_OPTIONS = 12;
 const MAX_OPTION_CHARS = 30;
 /** Controls far down a region that is all links, like a list of related pages, wait behind the rest of the page. */
 const REGION_SHARE = 40;
+
+/** Tags whose contents are never words on the page: code, a drawing, a dropdown's choices. */
+const NOT_WORDS = new Set(["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT", "SELECT", "svg"]);
+/** Tags that only style a few words within a sentence, so no space is owed after them. */
+const WITHIN_A_SENTENCE = new Set(["B", "I", "EM", "STRONG", "U", "S", "SUB", "SUP", "MARK", "SMALL", "CODE", "ABBR", "CITE", "Q", "VAR", "KBD", "WBR"]);
+
+/**
+ * Whether an element holds what a visitor wrote: an input, a text area, an
+ * editor, or a box that says it is a text field. Nothing is ever read from
+ * inside one, because Haptic's promise is that it never reads what is typed.
+ * Such a control is named by what its page calls it, or by nothing.
+ */
+function holdsTyping(el: Element): boolean {
+  const tag = el.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || (el as HTMLElement).isContentEditable === true) return true;
+  const role = el.getAttribute("role");
+  return !!role && /(?:^|\s)(?:textbox|searchbox)(?:\s|$)/.test(role);
+}
+
+/** Whether an element sits inside an editor, even as a part the visitor cannot edit, like a name they mentioned. */
+function insideEditor(el: Element): boolean {
+  for (let host = el.closest("[contenteditable]"); host; host = host.parentElement?.closest("[contenteditable]") ?? null) {
+    if ((host as HTMLElement).isContentEditable) return true;
+  }
+  return false;
+}
+
+/**
+ * The words in an element as a person reads them, and never anything a
+ * visitor typed. An input, a text area and an editor are passed over, and so
+ * are a dropdown's choices and anything hidden from screen readers. `skip` is
+ * a selector for more to pass over. Reading stops once `max` characters are in hand.
+ */
+function wordsIn(el: Element, max = 200, skip = ""): string {
+  if (holdsTyping(el) || insideEditor(el)) return "";
+  let text = "";
+  const walk = (node: Node) => {
+    if (text.length > max) return;
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += node.textContent ?? "";
+      return;
+    }
+    if (!(node instanceof Element)) return;
+    if (NOT_WORDS.has(node.tagName) || holdsTyping(node) || node.getAttribute("aria-hidden") === "true" || (skip && node.matches(skip))) return;
+    for (const child of node.childNodes) walk(child);
+    if (!WITHIN_A_SENTENCE.has(node.tagName)) text += " ";
+  };
+  for (const child of el.childNodes) walk(child);
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * What a control says, for telling the model which one a visitor clicked. It
+ * is masked like everything else, and is empty for anything a visitor typed in.
+ */
+export function shownWords(el: Element, max = 60): string {
+  return cleanText(wordsIn(el, max * 2), max);
+}
 
 export interface PageSnapshot {
   snapshot: Snapshot;
@@ -92,7 +152,7 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
     const svg = el.tagName === "svg" || (inSvg && el.tagName !== "foreignObject");
     if (!isRendered(el)) {
       // display:contents has no box of its own, but its children do.
-      if (getComputedStyle(el).display === "contents") for (const child of el.children) visit(child, scope, parentPointer, insideControl);
+      if (getComputedStyle(el).display === "contents" && !holdsTyping(el)) for (const child of el.children) visit(child, scope, parentPointer, insideControl);
       return;
     }
 
@@ -103,7 +163,7 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
     const childScope = el === modal ? { region: "dialog", heading: "" } : landmark && el !== root ? { region: landmark, heading: "" } : scope;
 
     if (/^H[1-3]$/.test(el.tagName) || explicitRole === "heading") {
-      const text = cleanText(el.textContent ?? "", 80);
+      const text = cleanText(wordsIn(el, 160), 80);
       if (text) {
         scope.heading = text;
         if (headings.length < 12) headings.push(text);
@@ -142,6 +202,9 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
         texts.push({ text: cleanText(own, 160), visible: rect.bottom > 0 && rect.top < viewportHeight });
       }
     }
+
+    // What is inside an editor is what the visitor wrote, links and all. The editor is one control, and that is the end of it.
+    if (holdsTyping(el)) return;
 
     const before = candidates.length;
     const inside = insideControl || role !== "";
@@ -442,7 +505,7 @@ function nameRows(candidates: Candidate[]) {
 function rowName(row: Element, control: Element): string {
   const heading = row.querySelector("h1, h2, h3, h4, h5, h6, th, [role='rowheader'], [role='heading'], [class*='title' i], [class*='name' i], strong, b");
   if (heading && !heading.contains(control)) {
-    const text = cleanText(heading.textContent ?? "", 50);
+    const text = cleanText(wordsIn(heading, 100), 50);
     if (text) return text;
   }
   // The first real words the row says, and failing that the first thing in
@@ -456,7 +519,7 @@ function rowName(row: Element, control: Element): string {
       return;
     }
     if (!(node instanceof Element) || node === control || node.getAttribute("aria-hidden") === "true") return;
-    if (["BUTTON", "SELECT", "INPUT", "TEXTAREA", "SCRIPT", "STYLE", "svg"].includes(node.tagName)) return;
+    if (["BUTTON", "SELECT", "SCRIPT", "STYLE", "svg"].includes(node.tagName) || holdsTyping(node)) return;
     for (const child of node.childNodes) walk(child);
   };
   walk(row);
@@ -470,10 +533,13 @@ function rowName(row: Element, control: Element): string {
  * the caption in the cell or box before the field, and nothing in the markup
  * says so. A tick box or a switch usually has its words after it.
  */
+const CONTROLS = "input, select, textarea, button, a[href], [role='button'], [role='combobox'], [role='textbox'], [role='searchbox'], [contenteditable]:not([contenteditable='false'])";
+
 function captionOf(el: Element, after: boolean): string {
+  // A box that is a control, or holds one, is not a caption: its words are that control's, or what a visitor typed into it.
   const wordsOf = (node: Element): string => {
-    if (node.querySelector("input, select, textarea, button, a[href], [role='button'], [role='combobox'], [contenteditable='true']")) return "";
-    const text = cleanText(node.textContent ?? "", 61);
+    if (holdsTyping(node) || node.matches(CONTROLS) || node.querySelector(CONTROLS)) return "";
+    const text = cleanText(wordsIn(node, 120), 61);
     return text.length > 60 ? "" : text.replace(/\s*[:*]+$/, "");
   };
   let node: Element | null = el;
@@ -482,9 +548,11 @@ function captionOf(el: Element, after: boolean): string {
     for (let beside = step(node), tried = 0; beside && tried < 2; beside = step(beside), tried++) {
       const text = wordsOf(beside);
       if (text) return text;
-      // Another field's box: the caption beyond it belongs to that field.
-      if (beside.querySelector("input, select, textarea")) break;
+      // Another field, or another field's box: the caption beyond it belongs to that field.
+      if (holdsTyping(beside) || beside.matches("select") || beside.querySelector("input, select, textarea")) break;
     }
+    // Inside an editor the words beside a control are the visitor's own.
+    if ((node.parentElement as HTMLElement | null)?.isContentEditable) break;
     // Bare words sitting next to the field inside the same box.
     const loose = Array.from(node.parentElement?.childNodes ?? [])
       .filter((child) => child.nodeType === Node.TEXT_NODE)
@@ -521,22 +589,27 @@ export function isField(el: Element): boolean {
  * Neither must decoration hidden from screen readers, like the star on a required field.
  */
 function labelWords(label: Element): string {
-  let text = "";
-  for (const node of label.childNodes) {
-    if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
-    else if (node instanceof Element && !node.matches('select, textarea, input, button, datalist, output, [aria-hidden="true"]')) text += labelWords(node);
-  }
-  return text;
+  return wordsIn(label, 200, "button, datalist, output");
 }
 
 function labelOf(el: Element, role: string): string {
   const root = el.getRootNode() as Document | ShadowRoot;
-  const byIds = (ids: string) => ids.split(/\s+/).map((id) => root.getElementById?.(id)?.textContent ?? "").join(" ").trim();
+  const byIds = (ids: string) =>
+    ids
+      .split(/\s+/)
+      .map((id) => {
+        const named = id ? root.getElementById?.(id) : null;
+        return named ? wordsIn(named) : "";
+      })
+      .join(" ")
+      .trim();
+  // An editor's own words are the visitor's. It is named by what its page calls it, or by nothing.
+  const typedIn = holdsTyping(el);
   let raw = el.getAttribute("data-haptic-label") || byIds(el.getAttribute("aria-labelledby") ?? "") || el.getAttribute("aria-label")?.trim() || "";
   const ticks = role === "checkbox" || role === "radio" || role === "switch";
   if (!raw && (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
     // A label can carry its words as an aria-label of its own.
-    raw = Array.from(el.labels ?? []).map((label) => labelWords(label).trim() || label.getAttribute("aria-label") || "").join(" ").trim();
+    raw = Array.from(el.labels ?? []).map((label) => labelWords(label) || label.getAttribute("aria-label") || "").join(" ").trim();
     // A button's value is its caption, not user data.
     if (!raw && el instanceof HTMLInputElement && role === "button") raw = el.value || el.type;
     if (!raw && ticks) raw = captionOf(el, true) || captionOf(el, false);
@@ -546,8 +619,11 @@ function labelOf(el: Element, role: string): string {
     raw ||= wordsOfName(el.getAttribute("name") ?? "");
   }
   // Never use a field's contents as its label.
-  if (!raw && role !== "textbox" && role !== "select") raw = visibleText(el).trim();
-  raw ||= el.getAttribute("title") || (el instanceof HTMLImageElement ? el.alt : el.querySelector("img[alt]")?.getAttribute("alt")) || el.querySelector("svg title")?.textContent || "";
+  if (!raw && role !== "textbox" && role !== "select" && !typedIn) raw = visibleText(el);
+  // What the page shows in an empty field is the page's own words for it.
+  if (!raw && typedIn) raw = el.getAttribute("placeholder") || el.getAttribute("aria-placeholder") || el.getAttribute("data-placeholder") || "";
+  raw ||= el.getAttribute("title") || "";
+  if (!raw && !typedIn) raw = (el instanceof HTMLImageElement ? el.alt : el.querySelector("img[alt]")?.getAttribute("alt")) || el.querySelector("svg title")?.textContent || "";
   // A custom field or tick box, built from boxes with no words of its own.
   if (!raw.trim() && (role === "textbox" || role === "combobox" || role === "searchbox" || role === "spinbutton" || role === "slider" || ticks)) raw = captionOf(el, ticks) || captionOf(el, !ticks);
   // Some pages hand over text that has been escaped twice.
@@ -555,22 +631,15 @@ function labelOf(el: Element, role: string): string {
   return cleanText(raw, 80);
 }
 
+/** The words a control shows. */
 function visibleText(el: Element): string {
-  let text = "";
-  const walk = (node: Node) => {
-    if (text.length > 160) return;
-    if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
-    if (!(node instanceof Element)) return;
-    if (node.getAttribute("aria-hidden") === "true" || ["SCRIPT", "STYLE", "svg", "INPUT", "TEXTAREA", "SELECT"].includes(node.tagName)) return;
-    for (const child of node.childNodes) walk(child);
-    text += " ";
-  };
-  for (const child of el.childNodes) walk(child);
-  return text;
+  return wordsIn(el, 160);
 }
 
 /** Icon-only buttons are common in dashboards. The icon's class name is often the only clue. */
 function iconOf(el: Element): string | undefined {
+  // Nothing inside an editor is the page's own, its pictures included.
+  if ((el as HTMLElement).isContentEditable) return undefined;
   for (const candidate of [el, ...Array.from(el.querySelectorAll("svg, i, [class*='icon']")).slice(0, 4)]) {
     const dataIcon = candidate.getAttribute("data-icon");
     if (dataIcon) return dataIcon;
@@ -674,10 +743,8 @@ function coversThePage(dialog: Element, ignore: Element): boolean {
 
 function dialogLabel(el: Element): string {
   const labelledBy = el.getAttribute("aria-labelledby");
-  const raw =
-    el.getAttribute("aria-label") ||
-    (labelledBy && document.getElementById(labelledBy)?.textContent) ||
-    el.querySelector("h1, h2, h3, [role='heading']")?.textContent ||
-    "";
+  const named = labelledBy ? document.getElementById(labelledBy) : null;
+  const heading = el.querySelector("h1, h2, h3, [role='heading']");
+  const raw = el.getAttribute("aria-label") || (named && wordsIn(named)) || (heading && wordsIn(heading)) || "";
   return cleanText(raw, 60);
 }

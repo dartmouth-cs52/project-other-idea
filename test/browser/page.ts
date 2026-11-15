@@ -1,7 +1,8 @@
 import { build } from "esbuild";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import type { Snapshot } from "../../src/shared/types.ts";
+import { DEFAULT_APPEARANCE, STREAM_TYPE, type Snapshot, type TurnReply, type TurnRequest } from "../../src/shared/types.ts";
+import { bundleWidget } from "../../src/widget/build.ts";
 
 // What the browser tests share: a real browser, and a way to read a small page
 // the way the widget reads it. The page is given as HTML and served to the
@@ -23,6 +24,19 @@ const SNAPSHOT_SOURCE = fileURLToPath(new URL("../../src/widget/snapshot.ts", im
 export interface Browser {
   /** The page as the widget would list it. */
   read: (html: string, options?: ReadOptions) => Promise<Snapshot>;
+  /** The page with the whole widget on it, as a customer's page would have it, and every step it asks for answered by `answer`. */
+  widget: (html: string, answer: (request: TurnRequest, index: number) => TurnReply) => Promise<WidgetPage>;
+  close: () => Promise<void>;
+}
+
+export interface WidgetPage {
+  page: Loose;
+  /** Every request for a step the widget has sent so far, exactly as it was sent. */
+  sent: string[];
+  /** Types a question into the widget and waits for it to be sent. */
+  ask: (question: string) => Promise<void>;
+  /** Waits until the widget has sent this many requests. */
+  waitFor: (count: number) => Promise<void>;
   close: () => Promise<void>;
 }
 
@@ -75,9 +89,54 @@ export async function startBrowser(): Promise<Browser | string> {
         await context.close();
       }
     },
+    widget: async (html, answer) => {
+      const context = await browser.newContext({ viewport: { width: 1000, height: 700 } });
+      const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, Accept" };
+      const sent: string[] = [];
+      widgetScript ??= bundleWidget();
+      const source = await widgetScript;
+      await context.route(`${ORIGIN}/**`, (route: Loose) => {
+        const request = route.request();
+        const path = new URL(request.url()).pathname;
+        if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+        if (path === "/widget.js") return route.fulfill({ status: 200, contentType: "text/javascript", headers: cors, body: source });
+        if (path.startsWith("/v1/sites/")) return route.fulfill({ status: 200, contentType: "application/json", headers: cors, body: JSON.stringify({ name: "", appearance: DEFAULT_APPEARANCE }) });
+        if (path === "/v1/turn") {
+          const body = request.postData() ?? "";
+          sent.push(body);
+          const reply = answer(JSON.parse(body) as TurnRequest, sent.length - 1);
+          return route.fulfill({ status: 200, contentType: STREAM_TYPE, headers: cors, body: JSON.stringify(reply) + "\n" });
+        }
+        return route.fulfill({ status: 200, contentType: "text/html", body: `<!doctype html><meta charset="utf-8"><title>Test page</title>${html}<script src="${ORIGIN}/widget.js" data-site="site_test"></script>` });
+      });
+      const page = await context.newPage();
+      await page.goto(`${ORIGIN}/page`);
+      await page.waitForSelector("haptic-root", { state: "attached" });
+      const waitFor = async (count: number) => {
+        for (const until = Date.now() + 10_000; sent.length < count; ) {
+          if (Date.now() > until) throw new Error(`The widget sent ${sent.length} requests, and ${count} were expected.`);
+          await page.waitForTimeout(50);
+        }
+      };
+      return {
+        page,
+        sent,
+        waitFor,
+        ask: async (question) => {
+          const before = sent.length;
+          await page.locator("haptic-root .launcher").click();
+          await page.locator("haptic-root .panel input").fill(question);
+          await page.locator("haptic-root .panel input").press("Enter");
+          await waitFor(before + 1);
+        },
+        close: () => context.close(),
+      };
+    },
     close: () => browser.close(),
   };
 }
+
+let widgetScript: Promise<string> | undefined;
 
 /** One listed control written the way the server writes it for the model, without its id. */
 export function line(element: Snapshot["elements"][number]): string {

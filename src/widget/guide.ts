@@ -1,5 +1,5 @@
 import { describeElement, normalizePath, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
-import { currentPath, describeChange, elementKey, isField, NOTHING_CHANGED, takeSnapshot } from "./snapshot.ts";
+import { currentPath, describeChange, elementKey, isField, NOTHING_CHANGED, shownWords, takeSnapshot } from "./snapshot.ts";
 import type { Ui } from "./ui.ts";
 
 // Runs one guide: ask the model for a step, point at it, wait for the visitor
@@ -391,7 +391,8 @@ function waitForAction(
     done({ event, onTarget });
   };
   const filled = () => finish(`The user filled in ${name}. You can't see what they entered.`, true);
-  const labelOfClicked = (el: Element) => (el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
+  // Never the element's own text as it stands: in an editor that is what the visitor wrote.
+  const labelOfClicked = (el: Element) => (el.getAttribute("aria-label") || shownWords(el)).replace(/\s+/g, " ").trim().slice(0, 60);
   /** Whether a click that landed on `path` was a click on the target, counting the label that stands in for it. */
   const onTarget = (path: EventTarget[]) =>
     path.includes(target) || path.some((node) => node instanceof HTMLLabelElement && (node.control === target || node.contains(target)));
