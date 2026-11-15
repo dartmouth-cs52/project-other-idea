@@ -104,8 +104,21 @@ export interface HistoryTurn {
   text: string;
 }
 
+/**
+ * Which shape of turn request a widget sends. A widget from before the number
+ * existed sends none, and counts as version 1. Version 2 is the first that
+ * asks a closing question (`closing`) and sends the visitor's date (`today`).
+ * Raise it whenever a server would have to know what the widget in front of it
+ * can do.
+ */
+export const TURN_VERSION = 2;
+
 export interface TurnRequest {
   site: string;
+  /** The widget's `TURN_VERSION`. Absent from a widget older than version 2. */
+  version?: number;
+  /** The date where the visitor is, as their own device has it, like "2026-11-15". The model is told it, so it need not guess the year. */
+  today?: string;
   goal: string;
   /** Steps already given in this guide. 0 for the first question. */
   step: number;
@@ -114,6 +127,8 @@ export interface TurnRequest {
   event?: string;
   /** What changed on the page since the last step, in words. */
   change?: string;
+  /** Set when the visitor has done what was called the last step, and this question is the look at what came of it. */
+  closing?: true;
   snapshot: Snapshot;
 }
 
@@ -160,6 +175,14 @@ function safeDecode(segment: string): string {
   } catch {
     return segment;
   }
+}
+
+// Dates ---------------------------------------------------------------------
+
+/** The date on this device's own clock and in its own time zone, as "2026-11-15". */
+export function localDate(now: Date = new Date()): string {
+  const two = (part: number) => String(part).padStart(2, "0");
+  return `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`;
 }
 
 // Text ----------------------------------------------------------------------

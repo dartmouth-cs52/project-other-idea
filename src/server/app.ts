@@ -143,7 +143,18 @@ const text = (value: unknown, max: number): string => (typeof value === "string"
 const texts = (value: unknown, count: number, max: number): string[] =>
   Array.isArray(value) ? value.slice(0, count).map((item) => text(item, max)).filter(Boolean) : [];
 
-export function parseTurn(body: unknown): TurnRequest | undefined {
+/**
+ * The visitor's date, if it is one and could be today somewhere. By time zone
+ * alone their date is the server's, the day before or the day after. Anything
+ * further off is a clock set wrong, and the server's own date is the better guess.
+ */
+function plausibleToday(value: unknown, now: Date): string | undefined {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const days = (Date.parse(`${value}T00:00:00Z`) - Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00Z`)) / 86_400_000;
+  return Math.abs(days) <= 1 ? value : undefined;
+}
+
+export function parseTurn(body: unknown, now: Date = new Date()): TurnRequest | undefined {
   if (!body || typeof body !== "object") return undefined;
   const raw = body as Record<string, unknown>;
   const snap = raw.snapshot as Record<string, unknown> | undefined;
@@ -157,7 +168,8 @@ export function parseTurn(body: unknown): TurnRequest | undefined {
     if (item.icon) element.icon = text(item.icon, 40);
     if (item.href) element.href = text(item.href, 200);
     if (item.context) element.context = text(item.context, 120);
-    const state = texts(item.state, 6, 16);
+    // Long enough for a state that takes a few words, like one that says a control opens a menu.
+    const state = texts(item.state, 8, 40);
     if (state.length) element.state = state;
     if (item.offscreen === "above" || item.offscreen === "below") element.offscreen = item.offscreen;
     const options = texts(item.options, 12, 30);
@@ -181,5 +193,10 @@ export function parseTurn(body: unknown): TurnRequest | undefined {
   const request: TurnRequest = { site: raw.site, goal, step: Math.min(Math.max(Number(raw.step) || 0, 0), 100), history, snapshot };
   if (raw.event) request.event = text(raw.event, 600);
   if (raw.change) request.change = text(raw.change, 2000);
+  if (raw.closing === true) request.closing = true;
+  // A widget from before the version number sends none. That is version 1, and is left unset.
+  if (Number.isInteger(raw.version) && (raw.version as number) >= 1 && (raw.version as number) <= 9999) request.version = raw.version as number;
+  const today = plausibleToday(raw.today, now);
+  if (today) request.today = today;
   return request;
 }
