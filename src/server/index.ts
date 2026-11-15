@@ -44,6 +44,7 @@ const app = createApp({
     void store?.recordStep(request, measure, origin);
   },
   onSeen: (site, origin, allowed) => void store?.seenAt(site, origin, allowed),
+  onAsk: (request, _site, origin) => void store?.startGuide(request, origin),
   onReport: (site, guide, report) => void store?.report(site, guide, report),
 });
 

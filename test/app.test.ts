@@ -148,3 +148,28 @@ test("how a guide ended is passed on, from allowed origins only, and nonsense is
     { guide: GUIDE, site: site.id, helped: false },
   ]);
 });
+
+test("a guide's first question is passed on before the model answers, and later steps are not", async () => {
+  const order: string[] = [];
+  const hurried: (boolean | undefined)[] = [];
+  const app = createApp({
+    loadSite: async (id, hurry) => {
+      hurried.push(hurry);
+      return id === site.id ? site : undefined;
+    },
+    widget: async () => "",
+    widgetMaxAge: 0,
+    overLimit: () => false,
+    onAsk: (request) => void order.push(`asked ${request.step}`),
+    onTurn: (request) => void order.push(`answered ${request.step}`),
+  });
+  const send = (extra: Record<string, unknown>) =>
+    app(new Request("https://widget.test/v1/turn", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://app.test" }, body: JSON.stringify({ ...JSON.parse(turnBody), ...extra }) }), "1.1.1.1");
+  await send({ guide: GUIDE, step: 0 });
+  await send({ guide: GUIDE, step: 1 });
+  await send({ step: 0 });
+  assert.deepEqual(order, ["asked 0", "answered 0", "answered 1", "answered 0"]);
+  // A step is answered from the copy of the site already held. The widget loading on a page waits for a fresh one.
+  await app(new Request(`https://widget.test/v1/sites/${site.id}`, { headers: { Origin: "https://app.test" } }), "1.1.1.1");
+  assert.deepEqual(hurried, [true, true, true, undefined]);
+});

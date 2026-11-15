@@ -1,6 +1,7 @@
 import { createApp } from "../src/server/app.ts";
 import { Store } from "../src/server/db.ts";
 import { configure } from "../src/server/model.ts";
+import { createSiteCache } from "../src/server/site-cache.ts";
 import type { SiteContext } from "../src/shared/types.ts";
 import widget from "../dist/widget.txt";
 
@@ -30,9 +31,13 @@ export interface Env {
 }
 
 const SITE_ID = /^site_[a-z0-9_]{3,40}$/;
-/** A site is kept in memory this long, so a step does not wait on the store. A republished site shows up within it. */
-const KEEP_MS = 60_000;
-const kept = new Map<string, { at: number; site: SiteContext | undefined }>();
+/**
+ * Sites are kept in memory for a minute, so a change made in the dashboard
+ * shows up within that the next time the widget loads on a page. A step of a
+ * guide never waits on the database while a copy up to ten minutes old is
+ * held: it uses that copy and the fresh one is fetched after the response.
+ */
+const sites = createSiteCache({ keepMs: 60_000, maxStaleMs: 10 * 60_000 });
 
 /** One per isolate, so its note of which origins were seen lately is shared by every request. */
 let store: { url: string; store: Store } | undefined;
@@ -42,21 +47,17 @@ function storeFor(env: Env): Store | undefined {
   return store.store;
 }
 
-async function loadSite(env: Env, id: string): Promise<SiteContext | undefined> {
-  if (!SITE_ID.test(id)) return undefined;
-  const held = kept.get(id);
-  if (held && Date.now() - held.at < KEEP_MS) return held.site;
+/** Reads a site from Neon, or from the KV store for a site not yet moved. Throws when Neon failed and the KV store has no copy, so "no such site" is never concluded from a failure. */
+async function readSite(env: Env, id: string): Promise<SiteContext | undefined> {
   let site: SiteContext | undefined;
+  let failure: unknown;
   try {
     site = await storeFor(env)?.loadSite(id);
   } catch (error) {
-    // Neon unreachable. A site held from before is better than none.
-    console.error(`Couldn't read ${id} from Neon:`, error instanceof Error ? error.message : error);
-    if (held) return held.site;
+    failure = error;
   }
   site ??= ((await env.SITES.get(id, "json")) as SiteContext | null) ?? undefined;
-  if (kept.size > 1000) kept.clear();
-  kept.set(id, { at: Date.now(), site });
+  if (!site && failure) throw failure;
   return site;
 }
 
@@ -74,11 +75,12 @@ export default {
     const db = storeFor(env);
     const later = (work: Promise<void> | undefined) => work && ctx.waitUntil(work);
     const app = createApp({
-      loadSite: (id) => loadSite(env, id),
+      loadSite: async (id, hurry) => (SITE_ID.test(id) ? sites(id, () => readSite(env, id), hurry ? (work) => ctx.waitUntil(work) : undefined) : undefined),
       widget: async () => widget,
       widgetMaxAge: 300,
       overLimit: async (key) => (env.TURN_LIMIT ? !(await env.TURN_LIMIT.limit({ key })).success : false),
       onSeen: (site, origin, allowed) => later(db?.seenAt(site, origin, allowed)),
+      onAsk: (turn, _site, origin) => later(db?.startGuide(turn, origin)),
       onTurn: (turn, measure, _site, origin) => later(db?.recordStep(turn, measure, origin)),
       onReport: (site, guide, report) => later(db?.report(site, guide, report)),
     });

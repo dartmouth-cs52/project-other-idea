@@ -20,13 +20,24 @@ import { measureTurn, TurnError, type TurnMeasure } from "./model.ts";
 // the widget file comes from, and how callers are slowed down.
 
 export interface AppParts {
-  loadSite(id: string): Promise<SiteContext | undefined>;
+  /**
+   * The site with this id. `hurry` is true when a visitor is waiting on a
+   * step, so a host that keeps sites in memory should answer from what it
+   * holds and bring it up to date afterwards.
+   */
+  loadSite(id: string, hurry?: boolean): Promise<SiteContext | undefined>;
   /** The widget bundle, as the text of one script. */
   widget(): Promise<string>;
   /** How long browsers may keep the widget before asking again, in seconds. 0 for never. */
   widgetMaxAge: number;
   /** True when this caller has asked for too many steps lately. */
   overLimit(key: string): boolean | Promise<boolean>;
+  /**
+   * Told when a guide's first question arrives, before the model is asked.
+   * Recording it here means a guide whose first step fails, or whose visitor
+   * leaves before the answer, is still on record. Must not throw.
+   */
+  onAsk?(request: TurnRequest, site: SiteContext, origin: string | undefined): void;
   /** Told about each finished step, for logging. Must not throw. */
   onTurn?(request: TurnRequest, measure: TurnMeasure, site: SiteContext, origin: string | undefined): void;
   /**
@@ -76,10 +87,11 @@ export function createApp(parts: AppParts) {
     if (request.method === "POST" && url.pathname === "/v1/turn") {
       const turn = parseTurn(await readJson(request));
       if (!turn) return json(400, { error: "That isn't a valid turn request." });
-      const site = await parts.loadSite(turn.site);
+      const site = await parts.loadSite(turn.site, true);
       if (!site) return json(404, { error: "No site with that id." });
       if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
       if (await parts.overLimit(`${site.id} ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
+      if (turn.step === 0 && turn.guide) parts.onAsk?.(turn, site, origin);
 
       // A widget that asks for it gets the step as it forms: the control to point at first, then the whole reply.
       if ((request.headers.get("Accept") ?? "").includes(STREAM_TYPE)) return streamTurn(parts, site, turn, cors, origin);
@@ -103,7 +115,7 @@ export function createApp(parts: AppParts) {
       const guide = reportMatch[1] ?? "";
       const report = parseReport(await readJson(request));
       if (!GUIDE_ID.test(guide) || !report) return json(400, { error: "That isn't a valid report." });
-      const site = await parts.loadSite(report.site);
+      const site = await parts.loadSite(report.site, true);
       if (!site) return json(404, { error: "No site with that id." });
       if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
       if (await parts.overLimit(`${site.id} ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
