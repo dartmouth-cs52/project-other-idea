@@ -33,6 +33,8 @@ export interface SiteContext {
     /** Steps one visitor may take in a day. Meant for a public demo: in an office, everyone can share one address. */
     perCaller?: number;
   };
+  /** Answers: replies in words from the help docs, beside the pointer. Off unless `enabled` is true. */
+  answers?: AnswersConfig;
   createdAt: string;
   updatedAt: string;
 }
@@ -59,6 +61,21 @@ export interface Doc {
   /** The file path or URL it came from. */
   source: string;
   text: string;
+  /** Where a visitor can read it, when it has a public address. Shown under an answer that rests on it. */
+  url?: string;
+  /** The day it was last changed, like "2026-10-02", when that is known. Shown beside the link. */
+  updated?: string;
+}
+
+/**
+ * Answers lets one reply answer in words from the help docs, point, do both,
+ * or say it can't help. A site without it gets exactly the guide it had
+ * before: the same prompt and the same three fields in each reply.
+ */
+export interface AnswersConfig {
+  enabled: boolean;
+  /** An answer resting on an article last changed more than this many days ago is marked as possibly out of date. */
+  staleAfterDays?: number;
 }
 
 export interface PageNode {
@@ -149,8 +166,11 @@ export interface TurnRequest {
  * - loop: the same control was pointed at again with nothing changing
  * - step_limit: the guide ran out of steps
  * - error: a step failed
+ * And on a site with Answers on, none of them billed:
+ * - answered: the question was answered in words from the help docs
+ * - not_covered, sensitive, off_topic: Haptic said it couldn't help, for that reason
  */
-export const GUIDE_OUTCOMES = ["finished", "shown", "stopped", "nothing_to_point_at", "loop", "step_limit", "error"] as const;
+export const GUIDE_OUTCOMES = ["finished", "shown", "stopped", "nothing_to_point_at", "loop", "step_limit", "error", "answered", "not_covered", "sensitive", "off_topic"] as const;
 export type GuideOutcome = (typeof GUIDE_OUTCOMES)[number];
 
 /** A guide id, as the widget makes it with crypto.randomUUID(). */
@@ -182,6 +202,33 @@ export function questionKey(question: string): string {
 /** The format a step is streamed in: one JSON value per line. The widget asks for it in its Accept header. */
 export const STREAM_TYPE = "application/x-ndjson";
 
+/**
+ * What kind of reply this is, on a site with Answers on.
+ * - guide: a step, as before. A control to point at and a sentence.
+ * - answer: one to four sentences from the help docs, with the articles they rest on. It may point as well.
+ * - cannot_help: nothing to say or show. The visitor reads a fixed sentence chosen by the reason.
+ */
+export const MODES = ["guide", "answer", "cannot_help"] as const;
+export type Mode = (typeof MODES)[number];
+
+/**
+ * Why Haptic can't help.
+ * - not_covered: about this product, and neither the help docs nor the page give the answer
+ * - sensitive: prices, refunds, billing disputes, legal or medical matters, deadlines, or the visitor's own account. Never decided by the model.
+ * - off_topic: nothing to do with this site, or a question about Haptic's own instructions
+ */
+export const REASONS = ["not_covered", "sensitive", "off_topic"] as const;
+export type Reason = (typeof REASONS)[number];
+
+/** A help article an answer rests on, as the visitor is shown it. */
+export interface Source {
+  title: string;
+  url?: string;
+  updated?: string;
+  /** Set when the article is older than the site's limit, so the answer may be out of date. */
+  stale?: true;
+}
+
 export interface TurnReply {
   /** Element id from the snapshot to point at, or null. */
   target: string | null;
@@ -189,9 +236,10 @@ export interface TurnReply {
    * "continue": the user must act on the target, then we go again.
    * "done": nothing left to do, because the goal is reached or the question only needed an answer.
    * "stuck": no way forward could be found. Kept apart from "done" because a guide that gets stuck is free.
+   * A reply that says Haptic cannot help is "stuck" as well.
    */
   status: "continue" | "done" | "stuck";
-  /** One or two sentences shown next to the pointer. */
+  /** A step's one or two sentences, an answer's one to four, or the fixed sentence for something Haptic can't help with. */
   say: string;
   /**
    * True when the server answered without asking the model, because the site
@@ -199,6 +247,12 @@ export interface TurnReply {
    * not finish, and there is nothing to ask the visitor about.
    */
   paused?: true;
+  /** Only on a site with Answers on. */
+  mode?: Mode;
+  /** Only with mode "cannot_help". */
+  reason?: Reason;
+  /** Only with mode "answer": the articles the answer rests on. Never empty. */
+  sources?: Source[];
 }
 
 // Paths ---------------------------------------------------------------------
