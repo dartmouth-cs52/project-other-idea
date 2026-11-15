@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { AnimatePresence, motion, useAnimationControls, useInView, useReducedMotion } from "motion/react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from "motion/react";
 import { ArrowUpIcon, Check, FileTextIcon, SquareIcon } from "lucide-react";
 import { Pointer, POINTER_TIP } from "@/components/pointer";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
@@ -14,6 +14,13 @@ import { cn } from "@/lib/utils";
 // Haptic's pointer, target mark and caption over a mock app, and the mock
 // controls themselves.
 
+/**
+ * Where the sample app in the demos lives. It has no brand name on purpose: Haptic runs inside
+ * the visitor's own product, so the address says "your app" and the app's header carries a plain
+ * mark with no name beside it. Change it here and every demo follows.
+ */
+export const APP_DOMAIN = "yourapp.com";
+
 /** The pointer's one signature movement: quick to leave, slow to land, so the eye arrives with it. */
 export const GLIDE_EASE = [0.2, 0.8, 0.2, 1] as const;
 
@@ -25,11 +32,56 @@ function glideSeconds(distance: number): number {
 /** How long a script should wait for the pointer to land before the mark and caption appear. */
 export const LANDING_MS = 750;
 
-/** A demo plays only while it is on screen, and holds a still frame if motion is reduced. */
-export function usePlayback(frame: RefObject<HTMLElement | null>): boolean {
-  const reduce = useReducedMotion() ?? false;
-  const inView = useInView(frame, { amount: 0.35 });
-  return inView && !reduce;
+/** What a demo is doing: running its script, waiting on its first frame, or holding its still frame. */
+export type Playback = "playing" | "waiting" | "still";
+
+/** How much of a demo has to be on screen before it starts. */
+const START_AT = 0.35;
+
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+
+function watchReducedMotion(notify: () => void): () => void {
+  const query = window.matchMedia(REDUCED_MOTION);
+  query.addEventListener("change", notify);
+  return () => query.removeEventListener("change", notify);
+}
+
+/**
+ * Whether the visitor has asked for reduced motion. The server cannot know, so the page is first
+ * drawn as if they have not, and switches once it is running in the browser. Reading the setting
+ * during that first draw would make the page disagree with what the server sent.
+ */
+function useWantsStill(): boolean {
+  return useSyncExternalStore(
+    watchReducedMotion,
+    () => window.matchMedia(REDUCED_MOTION).matches,
+    () => false,
+  );
+}
+
+/**
+ * A demo starts once enough of it is on screen, then keeps going until it has left the screen
+ * completely. It never changes state while any of it can be seen, so scrolling past a demo never
+ * makes it jump. If motion is reduced it holds a still frame instead.
+ */
+export function usePlayback(frame: RefObject<HTMLElement | null>): Playback {
+  const reduce = useWantsStill();
+  const [running, setRunning] = useState(false);
+  useEffect(() => {
+    const element = frame.current;
+    if (!element) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry) return;
+        // Enough on screen starts it. Partly on screen changes nothing. Gone stops it.
+        setRunning((was) => (entry.intersectionRatio >= START_AT ? true : entry.isIntersecting ? was : false));
+      },
+      { threshold: [0, START_AT] },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [frame]);
+  return reduce ? "still" : running ? "playing" : "waiting";
 }
 
 export interface ScriptIO<S> {
@@ -40,11 +92,13 @@ export interface ScriptIO<S> {
 }
 
 /**
- * Runs `run` on a loop while `playing`, and returns the current scene. When
- * not playing it returns `rest`, a still frame that explains the demo by itself.
+ * Runs `run` on a loop while the demo is playing, and returns the current scene. While it waits
+ * to come on screen it shows `start`, the frame the script begins from, so starting is not a
+ * jump. `rest` is the still frame for reduced motion, which explains the demo by itself.
  */
-export function useScript<S>(playing: boolean, start: S, rest: S, run: (io: ScriptIO<S>) => Promise<void>): S {
+export function useScript<S>(playback: Playback, start: S, rest: S, run: (io: ScriptIO<S>) => Promise<void>): S {
   const [live, setLive] = useState<S>(start);
+  const playing = playback === "playing";
   useEffect(() => {
     if (!playing) return;
     let alive = true;
@@ -68,9 +122,11 @@ export function useScript<S>(playing: boolean, start: S, rest: S, run: (io: Scri
     return () => {
       alive = false;
       timers.forEach(clearTimeout);
+      // It only stops once it is off screen, so going back to the first frame is never seen.
+      setLive(start);
     };
   }, [playing, start, run]);
-  return playing ? live : rest;
+  return playback === "still" ? rest : live;
 }
 
 /** What Haptic is pointing at, at one moment of a script. */
@@ -327,10 +383,7 @@ export function MockWindow({
 export function AppHeader({ active, compact, children }: { active?: "Projects" | "Team" | "Reports"; compact?: boolean; children?: ReactNode }) {
   return (
     <div className={cn("flex items-center gap-6 border-b", compact ? "h-12 px-4" : "h-14 px-6")}>
-      <div className="flex items-center gap-2 font-medium">
-        <span className="size-5 rounded-md bg-foreground" />
-        Acme
-      </div>
+      <span className="size-5 shrink-0 rounded-md bg-foreground" />
       <div className="hidden items-center gap-5 text-muted-foreground sm:flex">
         {(["Projects", "Team", "Reports"] as const).map((item) => (
           <span key={item} className={cn(item === active && "text-foreground")}>
