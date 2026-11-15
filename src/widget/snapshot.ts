@@ -519,7 +519,7 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
   if (root) visit(root, { region: "page", heading: "" }, false, false);
 
   // With a dialog open, the rest of the page counts only where it is drawn over the dialog.
-  let usable = mergeCells(modal ? candidates.filter((c) => !c.outside || onTop(c.el)) : candidates);
+  let usable = mergeCells(modal ? candidates.filter((c) => !c.outside || onTop(c.el, ignore)) : candidates);
   nameRows(usable);
   tellTwinsApart(usable);
   for (const c of usable) {
@@ -739,13 +739,18 @@ function scrolls(el: Element): boolean {
   return (overflow === "auto" || overflow === "scroll") && el.scrollHeight > el.clientHeight + 4;
 }
 
-/** Whether the element is what a click at its middle would reach, which is not so for anything behind a dialog's backdrop. */
-function onTop(el: Element): boolean {
+/**
+ * Whether the element is what a click at its middle would reach, which is not
+ * so for anything behind a dialog's backdrop. Haptic's own pointer and caption
+ * are looked through: they sit over the very control they point at, and
+ * exactly where a list opens under it.
+ */
+function onTop(el: Element, ignore: Element): boolean {
   const rect = el.getBoundingClientRect();
   const x = rect.left + rect.width / 2;
   const y = rect.top + rect.height / 2;
   if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return false;
-  const hit = document.elementFromPoint(x, y);
+  const hit = document.elementsFromPoint(x, y).find((over) => over !== ignore && !ignore.contains(over));
   return !!hit && (el.contains(hit) || hit.contains(el));
 }
 

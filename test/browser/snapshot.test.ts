@@ -322,3 +322,19 @@ test("the rule that shows it can be in a linked stylesheet, and a stylesheet tha
   });
   assert.deepEqual(lines(snapshot), HOVER_LINES);
 });
+
+// What is on top ---------------------------------------------------------------
+
+test("a list opened from a dialog is still listed when Haptic's own caption sits over it", { skip }, async () => {
+  const snapshot = await read(`<button>Behind the dialog</button>
+    <div style="position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:5"></div>
+    <div role="dialog" aria-modal="true" aria-label="New rule" style="position:fixed;left:100px;top:100px;width:400px;height:300px;background:#fff;z-index:10">
+      <div role="combobox" tabindex="0" aria-label="Type">Pick one</div><button>OK</button>
+    </div>
+    <div style="position:fixed;left:120px;top:160px;width:200px;z-index:20;background:#eee">
+      <div role="option" style="height:30px">Daily</div><div role="option" style="height:30px">Weekly</div>
+    </div>
+    <haptic-root style="position:fixed;left:110px;top:150px;width:260px;height:50px;z-index:2147483647"></haptic-root>`);
+  assert.equal(snapshot.dialog, "New rule");
+  assert.deepEqual(lines(snapshot), ['combobox "Type" [dialog]', 'button "OK" [dialog]', 'option "Daily"', 'option "Weekly"']);
+});
