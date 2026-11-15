@@ -459,6 +459,8 @@ function chooseHeadings(all: Heading[]): string[] {
  * read. The same email or long number on the page is left readable.
  */
 let own: ReadonlySet<string> = new Set();
+/** Whether the page being read has a <label> tied to no field, looked up once a reading. Without one, no caption is looked for in labels. */
+let untiedLabels = false;
 const cleanText = (text: string, max = 80): string => maskAndTrim(text, max, own);
 
 /**
@@ -472,6 +474,7 @@ const cleanText = (text: string, max = 80): string => maskAndTrim(text, max, own
  */
 export function takeSnapshot(ignore: Element, question: string, near = (ignore as Element & { pointedAt?: Element }).pointedAt): PageSnapshot {
   own = namedIn(question);
+  untiedLabels = Array.from(document.querySelectorAll("label")).some((label) => !label.hasAttribute("for") && !(label as HTMLLabelElement).control);
   const candidates: Candidate[] = [];
   const headings: Heading[] = [];
   const texts: TextBlock[] = [];
@@ -1371,7 +1374,7 @@ function labelOf(el: Element, role: string): string {
     // <label> beside the field, tied to nothing. Then the caption is the name and the hint follows it, so
     // two date fields are not both called "yyyy-dd-mm".
     const hint = el.getAttribute("placeholder");
-    if (!raw && hint) {
+    if (!raw && hint && untiedLabels) {
       const caption = captionNode(el, false);
       if (caption.text && untiedLabel(caption.from) && caption.text !== hint) raw = `${caption.text} (${hint})`;
     }
@@ -1384,7 +1387,7 @@ function labelOf(el: Element, role: string): string {
   if (!raw && !typedIn && opensAList(el, role)) raw = nameAround(el) || captionOf(el, false);
   // A box the keyboard can reach, standing where a field stands under a <label> tied to nothing, is that
   // field: a custom select that shows "-- Select --" is "Job Title".
-  if (!raw && role === "clickable" && isFocusable(el)) {
+  if (!raw && untiedLabels && role === "clickable" && isFocusable(el)) {
     const caption = captionNode(el, false);
     if (untiedLabel(caption.from)) raw = caption.text;
   }
@@ -1478,7 +1481,7 @@ function isRequired(el: Element, role: string): boolean {
   if (!CAN_BE_REQUIRED.has(role)) return false;
   if ((el as HTMLInputElement).required === true || el.getAttribute("aria-required") === "true") return true;
   const names = namesOf(el);
-  if (!names.length && role !== "radio" && role !== "checkbox" && role !== "switch") {
+  if (!names.length && untiedLabels && role !== "radio" && role !== "checkbox" && role !== "switch") {
     const label = untiedLabel(captionNode(el, false).from);
     if (label) names.push(label);
   }
