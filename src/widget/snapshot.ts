@@ -278,10 +278,63 @@ interface Candidate extends SnapElement {
   outside: boolean;
 }
 
-/** A piece of page text, and whether it is on screen. */
+/** A piece of page text, whether it is on screen, and its place in the page. */
 interface TextBlock {
   text: string;
   visible: boolean;
+  order: number;
+}
+
+/** How many pieces of page text are gathered before the budget is shared out. Enough for a long article. */
+const MAX_TEXT_BLOCKS = 3000;
+/** How far into a block of text its words are looked for. */
+const MAX_NODES_FOR_SENTENCE = 400;
+const ROW_CELLS = "td, th, [role='cell'], [role='gridcell'], [role='columnheader'], [role='rowheader']";
+
+/**
+ * The words of a block of text, with the words styled within it: a link, a
+ * bold name, a footnote. Those are what the browser lays out in the line, and
+ * leaving them out leaves holes in the sentence. Each element read this way is
+ * put in `taken`, so that its words are not sent a second time on their own.
+ * A block that says nothing but what its links say gives nothing: those are
+ * listed as controls. Nothing inside a field, an editor or a part hidden from
+ * screen readers is read.
+ */
+function sentenceOf(el: Element, taken: WeakSet<Element>): string {
+  let text = "";
+  let own = false;
+  let visited = 0;
+  const walk = (node: Element, inControl: boolean) => {
+    for (const child of node.childNodes) {
+      if (visited++ > MAX_NODES_FOR_SENTENCE) return;
+      if (child.nodeType === Node.TEXT_NODE) {
+        const words = child.textContent ?? "";
+        text += words;
+        if (!inControl && /[\p{L}\p{N}]/u.test(words)) own = true;
+      } else if (child instanceof Element) {
+        if (NOT_WORDS.has(child.tagName) || holdsTyping(child) || child.getAttribute("aria-hidden") === "true" || getComputedStyle(child).display !== "inline") {
+          text += " ";
+          continue;
+        }
+        taken.add(child);
+        walk(child, inControl || child.matches(CONTROLS));
+      }
+    }
+  };
+  walk(el, false);
+  return own ? text.replace(/\s+/g, " ").trim() : "";
+}
+
+/**
+ * A table row as one line, its cells kept apart: "Hammer | 2 | $14.50". A cell
+ * of one or two characters, or one that says what the cell above it said, is
+ * what the row is about as much as any other.
+ */
+function rowTextOf(row: Element): string {
+  const cells = Array.from(row.children).filter((cell) => cell.matches(ROW_CELLS));
+  if (cells.length < 2) return "";
+  const words = cells.map((cell) => wordsIn(cell, 80, CONTROLS.replace("a[href], ", "")));
+  return words.some((piece) => /[\p{L}\p{N}]/u.test(piece)) ? words.join(" | ") : "";
 }
 
 /** The server keeps this much of a control's surroundings, so the parts are fitted to it here. */
@@ -379,11 +432,15 @@ let own: ReadonlySet<string> = new Set();
 const cleanText = (text: string, max = 80): string => maskAndTrim(text, max, own);
 
 /**
- * Reads the page. `question` is what the visitor asked: an email or a long
- * number in it is the only one left unmasked. Every reading within one guide
- * has to be given the same question, or one control would be named two ways.
+ * Reads the page. `ignore` is Haptic's own element. `question` is what the
+ * visitor asked: an email or a long number in it is the only one left
+ * unmasked. Every reading within one guide has to be given the same question,
+ * or one control would be named two ways. `near` is the control last used,
+ * whose surroundings are the page text that matters most after the screen:
+ * by default the one Haptic's pointer last pointed at, which the pointer
+ * keeps on Haptic's element.
  */
-export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
+export function takeSnapshot(ignore: Element, question: string, near = (ignore as Element & { pointedAt?: Element }).pointedAt): PageSnapshot {
   own = namedIn(question);
   const candidates: Candidate[] = [];
   const headings: Heading[] = [];
@@ -391,6 +448,11 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
   const viewportHeight = window.innerHeight;
   let visited = 0;
   let hiddenChecked = 0;
+  /** Elements whose words were read as part of a sentence around them. */
+  const taken = new WeakSet<Element>();
+  let order = 0;
+  /** Where in the page's text the control last used sits, if it was given. */
+  let nearAt = -1;
 
   // With a modal open only the modal is usable, so only the modal is listed,
   // along with anything drawn on top of it: many apps put the list that a
@@ -407,6 +469,7 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
   // is what shows it. A menu that opens somewhere else stays unlisted until it is open.
   const visit = (el: Element, scope: Scope, parentPointer: boolean, insideControl: boolean, inSvg = false, outside = !!modal, held?: TextBlock[], hoverBox?: DOMRect) => {
     if (visited++ > MAX_VISITED || el === ignore || SKIP_TAGS.has(el.tagName)) return;
+    if (el === near) nearAt = order;
     if (el.hasAttribute("inert") || el.hasAttribute("data-haptic-ignore") || el.getAttribute("aria-hidden") === "true") {
       // An app hides the page behind its dialog this way, and the dialog itself is inside what it hid only by mistake.
       if (!modal || !el.contains(modal) || el === modal) return;
@@ -456,6 +519,9 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
       ? ""
       : roleOf(el, explicitRole, pointerHere && !parentPointer && !insideControl);
 
+    /** A table row is read as one line, so its cells are not read again on their own. */
+    const isRow = !role && (el.tagName === "TR" || explicitRole === "row");
+    let rowRead = false;
     let added: Candidate | undefined;
     if (role) {
       const rect = el.getBoundingClientRect();
@@ -476,11 +542,12 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
         else if (rect.top >= viewportHeight) added.offscreen = "below";
         candidates.push(added);
       }
-    } else if ((!insideControl || held) && !svg && !outside && !hoverBox && TEXT_TAGS.has(el.tagName) && (held ?? texts).length < 300) {
-      const own = ownText(el);
-      if (own.length >= 3) {
+    } else if ((!insideControl || held) && !svg && !outside && !hoverBox && (TEXT_TAGS.has(el.tagName) || isRow) && !taken.has(el) && (held ?? texts).length < MAX_TEXT_BLOCKS) {
+      const words = isRow ? rowTextOf(el) : sentenceOf(el, taken);
+      rowRead = isRow && !!words;
+      if (words) {
         const rect = el.getBoundingClientRect();
-        (held ?? texts).push({ text: cleanText(own, 160), visible: rect.bottom > 0 && rect.top < viewportHeight });
+        (held ?? texts).push({ text: cleanText(words, isRow ? 200 : 160), visible: rect.bottom > 0 && rect.top < viewportHeight, order: order++ });
       }
     }
 
@@ -491,7 +558,8 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
     const inside = insideControl || role !== "";
     // Only a box that is not a control in its own right can turn out to be a wrapper.
     const mayBeWrapper = !!added && (role === "clickable" || (!isNative(el) && !isFocusable(el)));
-    const mine: TextBlock[] | undefined = mayBeWrapper ? [] : role ? undefined : held;
+    // The words inside a row that was read as one line have been sent already, so what its cells give is set aside.
+    const mine: TextBlock[] | undefined = mayBeWrapper || rowRead ? [] : role ? undefined : held;
     for (const child of el.children) visit(child, childScope, pointerHere, inside, svg, outside, mine, hoverBox);
     if (el.shadowRoot) for (const child of el.shadowRoot.children) visit(child, childScope, pointerHere, inside, svg, outside, mine, hoverBox);
 
@@ -559,7 +627,7 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
     path: currentPath(),
     title: cleanText(document.title, 80),
     headings: chooseHeadings(headings),
-    text: chooseText(texts),
+    text: chooseText(texts, nearAt),
     elements: listed,
     truncated: chosen.length < candidates.filter((c) => !c.outside).length && chosen.length >= MAX_ELEMENTS,
   };
@@ -653,27 +721,27 @@ function stateChanges(before: SnapElement[], after: SnapElement[]): string[] {
   return changes;
 }
 
-function chooseText(blocks: { text: string; visible: boolean }[]): string[] {
+/**
+ * Which of the page's text is sent. On-screen text gets the budget first, then
+ * the text nearest the control last used (`nearAt`, a place in page order),
+ * then the rest from the top. The result stays in page order.
+ */
+function chooseText(blocks: TextBlock[], nearAt = -1): string[] {
+  const ranked = [...blocks].sort((a, b) => {
+    if (a.visible !== b.visible) return a.visible ? -1 : 1;
+    if (!a.visible && nearAt >= 0) return Math.abs(a.order - nearAt) - Math.abs(b.order - nearAt) || a.order - b.order;
+    return a.order - b.order;
+  });
   const seen = new Set<string>();
-  const keep = new Set<number>();
+  const keep: TextBlock[] = [];
   let total = 0;
-  // On-screen text gets the budget first, and the result stays in page order.
-  for (const wantVisible of [true, false]) {
-    blocks.forEach((block, index) => {
-      if (block.visible !== wantVisible || seen.has(block.text) || total + block.text.length > MAX_TEXT_CHARS) return;
-      seen.add(block.text);
-      keep.add(index);
-      total += block.text.length;
-    });
+  for (const block of ranked) {
+    if (seen.has(block.text) || total + block.text.length > MAX_TEXT_CHARS) continue;
+    seen.add(block.text);
+    keep.push(block);
+    total += block.text.length;
   }
-  return blocks.filter((_, index) => keep.has(index)).map((block) => block.text);
-}
-
-/** Text directly inside an element, not in its child elements. */
-function ownText(el: Element): string {
-  let text = "";
-  for (const node of el.childNodes) if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
-  return text.replace(/\s+/g, " ").trim();
+  return keep.sort((a, b) => a.order - b.order).map((block) => block.text);
 }
 
 /** Whether an element takes up room on the page, shown or not: it is not left out of the layout altogether. */

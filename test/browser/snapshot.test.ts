@@ -408,3 +408,43 @@ test("a field the page requires says so, however the page marks it", { skip }, a
     'textbox "Typed in a field inside its label" [form]',
   ]);
 });
+
+// Page text ------------------------------------------------------------------------
+
+test("a sentence is sent whole, with the words styled or linked within it", { skip }, async () => {
+  const snapshot = await read(`<main>
+    <p><b>Haptic technology</b> (also <i>kinaesthetic communication</i> or <a href="/3d">3D touch</a>) is technology that can create an experience of <a href="/touch">touch</a>.<sup><a href="#n1"><span>[</span>1<span>]</span></a></sup></p>
+    <p><a href="/only">A paragraph that is only a link</a></p>
+    <p>Fill in <input value="Typed: Sam Smith"> and <span contenteditable="true">Typed: a note</span> before you go.</p>
+    <div><span class="count">+1</span></div>
+  </main>`);
+  assert.deepEqual(snapshot.text, [
+    "Haptic technology (also kinaesthetic communication or 3D touch) is technology that can create an experience of touch.[1]",
+    "Fill in and before you go.",
+    "+1",
+  ]);
+});
+
+test("a table row is one line, with its short cells and its repeats", { skip }, async () => {
+  const snapshot = await read(`<table>
+    <tr><th>Product</th><th>Qty</th><th>Price</th></tr>
+    <tr><td>Hammer</td><td>2</td><td>$14.50</td></tr>
+    <tr><td>Saw</td><td>2</td><td>$14.50</td></tr>
+    <tr><td>Drill <button>Remove</button></td><td>1</td><td><input value="Typed: 99"></td></tr>
+  </table>`);
+  assert.deepEqual(snapshot.text, ["Product | Qty | Price", "Hammer | 2 | $14.50", "Saw | 2 | $14.50", "Drill | 1 |"]);
+});
+
+test("on a long page, the text sent is what is on screen, then what is near the control last used", { skip }, async () => {
+  const paragraphs = Array.from({ length: 120 }, (_, i) => `<p style="height:120px">Paragraph ${i + 1} ${"of the article goes on for a while. ".repeat(3)}</p>`).join("");
+  const snapshot = await read(`<main>${paragraphs}<button id="used">Used</button><p>Right after the control that was used, ${"and it goes on for a while too. ".repeat(3)}</p></main>`, {
+    before: (page) => page.evaluate(() => {
+      const host = document.createElement("haptic-root");
+      (host as Element & { pointedAt?: Element }).pointedAt = document.getElementById("used")!;
+      document.body.append(host);
+    }),
+  });
+  assert.ok(snapshot.text[0]?.startsWith("Paragraph 1 "), JSON.stringify(snapshot.text.map((t) => t.slice(0, 14))));
+  assert.ok(snapshot.text.some((text) => text.startsWith("Right after the control")), JSON.stringify(snapshot.text.map((text) => text.slice(0, 14))));
+  assert.ok(!snapshot.text.some((text) => text.startsWith("Paragraph 60 ")));
+});
