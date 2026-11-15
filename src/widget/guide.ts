@@ -107,6 +107,15 @@ export class Guide {
     private readonly report: Reporter = () => {},
   ) {}
 
+  /**
+   * The question as it leaves the browser: with anything that looks like an
+   * email address, a phone number or a long number masked, as it is in
+   * everything Haptic reads from the page.
+   */
+  private get asked(): string {
+    return cleanText(this.goal, 300);
+  }
+
   start(goal: string) {
     // Asking something new while a guide is under way ends that one.
     this.end(this.unconfirmed ?? "stopped");
@@ -201,7 +210,7 @@ export class Guide {
       reply = await this.sendTurn(
         {
           ...(this.id ? { guide: this.id } : {}),
-          goal: this.goal,
+          goal: this.asked,
           step: this.step,
           history: this.history.slice(-MAX_HISTORY),
           snapshot: page.snapshot,
@@ -246,7 +255,7 @@ export class Guide {
       return this.turn(run, `${event} ${nudge}`, true);
     }
 
-    this.history.push({ role: "user", text: this.step === 0 ? this.goal : (event ?? "The page changed.") }, { role: "assistant", text: reply.say });
+    this.history.push({ role: "user", text: this.step === 0 ? this.asked : (event ?? "The page changed.") }, { role: "assistant", text: reply.say });
     this.step++;
     this.previous = page.snapshot;
     this.last = listed ? { key: elementKey(listed), used: false } : undefined;
