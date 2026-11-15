@@ -1,4 +1,4 @@
-import { describeElement, normalizePath, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { cleanText, describeElement, normalizePath, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { describeChange, elementKey, isField, NOTHING_CHANGED, takeSnapshot } from "./snapshot.ts";
 import type { Ui } from "./ui.ts";
 
@@ -15,6 +15,26 @@ const OFF_TRACK = "Finding the way from here…";
 /** A saved guide older than this isn't picked back up after a page load. */
 const RESUME_WINDOW_MS = 3 * 60 * 1000;
 const CLICKABLE = "a[href], button, summary, select, input, textarea, label, [role], [onclick]";
+
+/** Controls whose own caption says what they are. Anything else that can be clicked may be a region of the page. */
+const NAMED_BY_ITS_TEXT =
+  'a[href], button, summary, label, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"], [role="treeitem"]';
+
+/**
+ * A name for something the visitor clicked that was not the step they were
+ * shown. It goes to the server, so it follows the same rules as the rest of
+ * the page: emails and long numbers are masked, and nothing a person may have
+ * written is read. A field, an editor, anything inside an editor, and a
+ * region of the page all come back with no name.
+ */
+export function nameOfClicked(clicked: Element): string {
+  const given = clicked.getAttribute("aria-label");
+  if (given) return cleanText(given, 60);
+  if (!clicked.matches(NAMED_BY_ITS_TEXT)) return "";
+  if ((clicked as HTMLElement).isContentEditable) return "";
+  if (clicked.querySelector("input, textarea, select, [contenteditable]")) return "";
+  return cleanText(clicked.textContent || "", 60);
+}
 
 /** What the visitor did, in words for the model, and whether it was the step they were shown. */
 interface Acted {
@@ -310,7 +330,7 @@ function waitForAction(
     const other = path.find((node): node is Element => node instanceof Element && node.matches(CLICKABLE));
     // A click on blank space or plain text isn't worth a new step.
     if (!other || other.contains(target)) return;
-    const label = (other.getAttribute("aria-label") || other.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
+    const label = nameOfClicked(other);
     finish(`The user clicked ${label ? `"${label}"` : "something else"} instead of ${name}.`, false);
   };
   const onInput = (event: Event) => {
