@@ -117,3 +117,17 @@ test("a clock that ticks while the model answers does not get a question asked a
     await session.close();
   }
 });
+
+test("the first reading waits while the page shows its spinner, though its frame already has controls", async () => {
+  // OrangeHRM's dashboard: the menu is drawn at once, the rest only after its spinner goes.
+  const page = `<nav><a href="#a">Admin</a> <a href="#b">Leave</a></nav><main id="main"><div class="oxd-loading-spinner" style="width:40px;height:40px;border:4px solid #ccc"></div></main>
+    <script>setTimeout(() => document.getElementById('main').innerHTML = '<h1>Dashboard</h1>' + ['Assign Leave', 'Leave List', 'Timesheets', 'Apply Leave', 'My Leave'].map((name) => '<button type="button">' + name + '</button>').join(''), 4500)</script>`;
+  const session = await start(page, () => words("Use Apply Leave on the dashboard."));
+  try {
+    await session.ask("how do I ask for leave");
+    const first = await session.untilAsked(1, 10_000);
+    assert.ok(first.snapshot.elements.some((element) => element.label === "Apply Leave"), `the page was read while its spinner was up: ${first.snapshot.elements.map((element) => element.label).join(", ")}`);
+  } finally {
+    await session.close();
+  }
+});
