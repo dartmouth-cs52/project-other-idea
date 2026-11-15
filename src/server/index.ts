@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { buildWidget, WIDGET_FILE } from "../widget/build.ts";
 import { createApp } from "./app.ts";
+import { Store } from "./db.ts";
 import { SETTINGS } from "./model.ts";
 import { recordTurn } from "./record.ts";
 import { loadSite } from "./sites.ts";
@@ -29,12 +30,21 @@ function overLimit(key: string): boolean {
   return recent.length > TURNS_PER_MINUTE;
 }
 
+// With DATABASE_URL set, sites come from Neon as they do online (falling back
+// to data/sites), and guides and steps are recorded there for the dashboard.
+const store = process.env.DATABASE_URL ? new Store(process.env.DATABASE_URL) : undefined;
+
 const app = createApp({
-  loadSite,
+  loadSite: async (id) => (await store?.loadSite(id)) ?? loadSite(id),
   widget: () => readFile(WIDGET_FILE, "utf8"),
   widgetMaxAge: process.env.NODE_ENV === "production" ? 300 : 0,
   overLimit,
-  onTurn: (request, measure) => void recordTurn(request, measure),
+  onTurn: (request, measure, _site, origin) => {
+    void recordTurn(request, measure);
+    void store?.recordStep(request, measure, origin);
+  },
+  onSeen: (site, origin, allowed) => void store?.seenAt(site, origin, allowed),
+  onReport: (site, guide, report) => void store?.report(site, guide, report),
 });
 
 const server = createServer((req, res) => {

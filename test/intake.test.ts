@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { extractPage } from "../src/intake/crawl.ts";
 import { buildSystemPrompt, buildUserMessage, renderSiteMap } from "../src/server/prompt.ts";
-import { DEFAULT_APPEARANCE, normalizePath, cleanText, type PageNode, type SiteContext } from "../src/shared/types.ts";
+import { DEFAULT_APPEARANCE, normalizePath, cleanText, questionKey, type PageNode, type SiteContext } from "../src/shared/types.ts";
 
 test("paths collapse ids and drop the query string", () => {
   assert.equal(normalizePath("https://a.com/orders/8812?tab=1#x"), "/orders/:id");
@@ -61,4 +61,9 @@ test("the first turn carries the question, later turns carry what happened", () 
   const later = buildUserMessage({ site: "s", goal: "change my card", step: 2, history: [], snapshot, event: 'The user clicked button "A".', change: "Nothing visible on the page changed." });
   assert.match(later, /What the visitor did: The user clicked button "A"\./);
   assert.match(later, /Nothing visible on the page changed/);
+});
+
+test("the same question asked two ways groups together, with emails and numbers masked first", () => {
+  assert.equal(questionKey("How do I change my billing info?"), questionKey("how do i change my  billing info"));
+  assert.equal(questionKey("Email sam@acme.com my invoice 4421987!"), "email [email] my invoice [number]");
 });

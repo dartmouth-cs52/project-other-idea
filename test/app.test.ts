@@ -99,3 +99,52 @@ test("the browser's check before a cross-site request is answered", async () => 
   assert.equal(response?.status, 204);
   assert.match(response?.headers.get("Access-Control-Allow-Headers") ?? "", /Content-Type/);
 });
+
+const GUIDE = "0b6f2c1e-6a1d-4c3e-9f2a-3d4c5b6a7e8f";
+
+test("each call from a page is noted, and a refused origin is noted as refused", async () => {
+  const seen: string[] = [];
+  const app = createApp({
+    loadSite: async (id) => (id === site.id ? site : undefined),
+    widget: async () => "",
+    widgetMaxAge: 0,
+    overLimit: () => false,
+    onSeen: (_site, origin, allowed) => void seen.push(`${origin} ${allowed}`),
+  });
+  const ask = (origin?: string) => app(new Request(`https://widget.test/v1/sites/${site.id}`, { headers: origin ? { Origin: origin } : {} }), "1.1.1.1");
+  await ask("https://app.test");
+  await ask("https://elsewhere.test");
+  await ask();
+  assert.deepEqual(seen, ["https://app.test true", "https://elsewhere.test false"]);
+});
+
+test("a step carries its guide and whether the visitor strayed, and a bad guide id is dropped", () => {
+  const body = JSON.parse(turnBody);
+  assert.equal(parseTurn({ ...body, guide: GUIDE, offTrack: true })?.guide, GUIDE);
+  assert.equal(parseTurn({ ...body, guide: GUIDE, offTrack: true })?.offTrack, true);
+  assert.equal(parseTurn({ ...body, guide: "not-a-uuid" })?.guide, undefined);
+  assert.equal(parseTurn({ ...body, offTrack: "yes" })?.offTrack, undefined);
+});
+
+test("how a guide ended is passed on, from allowed origins only, and nonsense is refused", async () => {
+  const reports: unknown[] = [];
+  const app = createApp({
+    loadSite: async (id) => (id === site.id ? site : undefined),
+    widget: async () => "",
+    widgetMaxAge: 0,
+    overLimit: () => false,
+    onReport: (_site, guide, report) => void reports.push({ guide, ...report }),
+  });
+  const send = (guide: string, body: unknown, origin = "https://app.test") =>
+    app(new Request(`https://widget.test/v1/guides/${guide}/report`, { method: "POST", headers: { "Content-Type": "text/plain", Origin: origin }, body: JSON.stringify(body) }), "1.1.1.1");
+  assert.equal((await send(GUIDE, { site: site.id, outcome: "finished" }))?.status, 200);
+  assert.equal((await send(GUIDE, { site: site.id, helped: false }))?.status, 200);
+  assert.equal((await send(GUIDE, { site: site.id, outcome: "exploded" }))?.status, 400);
+  assert.equal((await send("nope", { site: site.id, outcome: "finished" }))?.status, 400);
+  assert.equal((await send(GUIDE, { site: site.id, outcome: "finished" }, "https://elsewhere.test"))?.status, 403);
+  assert.equal((await send(GUIDE, { site: "site_none", outcome: "finished" }))?.status, 404);
+  assert.deepEqual(reports, [
+    { guide: GUIDE, site: site.id, outcome: "finished" },
+    { guide: GUIDE, site: site.id, helped: false },
+  ]);
+});

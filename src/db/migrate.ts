@@ -45,8 +45,8 @@ const done = new Set((await sql`select name from schema_migrations`).map((row) =
 const files = (await readdir(DIR)).filter((name) => name.endsWith(".sql")).sort();
 
 if (!done.size) {
-  const [{ exists }] = await sql`select to_regclass('public.sites') is not null as exists`;
-  if (exists && files[0]?.startsWith("0001")) {
+  const [found] = await sql`select to_regclass('public.sites') is not null as exists`;
+  if (found?.exists && files[0]?.startsWith("0001")) {
     if (!check) await sql`insert into schema_migrations (name) values (${files[0]})`;
     done.add(files[0]);
     console.log(`${files[0]}: its tables already exist, so it is recorded as applied.`);
