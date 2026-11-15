@@ -11,8 +11,9 @@ import {
   type TurnReply,
   type TurnRequest,
 } from "../shared/types.ts";
-import type { Alert, Budget } from "./budget.ts";
-import { measureTurn, TurnError, type TurnMeasure } from "./model.ts";
+import type { Alert, Budget, Gate } from "./budget.ts";
+import { ceilingFor, measureTurn, TurnError } from "./model.ts";
+import type { TurnMeasure } from "./model.ts";
 
 // What the Haptic server answers: the widget file, each site's public
 // settings, and the one endpoint the widget calls for every step of a guide.
@@ -128,21 +129,22 @@ export function createApp(parts: AppParts) {
         return streamed ? lines(cors, async (line) => line(reply)) : json(200, reply);
       }
 
-      const gate = await askBudget(parts, site, caller);
-      if (!gate.open) {
-        const reply = fixedReply(gate.why === "caller" ? FIXED_SAY.visitorLimit : FIXED_SAY.resting);
+      const admitted = await askBudget(parts, site, caller, turn);
+      if (!admitted.gate.open) {
+        const reply = fixedReply(admitted.gate.why === "caller" ? FIXED_SAY.visitorLimit : FIXED_SAY.resting);
         return streamed ? lines(cors, async (line) => line(reply)) : json(200, reply);
       }
 
       // A widget that asks for it gets the step as it forms: the control to point at first, then the whole reply.
-      if (streamed) return streamTurn(parts, site, turn, caller, cors, origin);
+      if (streamed) return streamTurn(parts, site, turn, caller, admitted, cors, origin);
 
       try {
         const measure = await measureTurn(site, turn);
+        charge(parts, site, caller, admitted, measure.usd, 1);
         parts.onTurn?.(turn, measure, site, origin);
-        charge(parts, site, caller, measure);
         return json(200, measure.reply);
       } catch (error) {
+        charge(parts, site, caller, admitted, paidFor(error), 0);
         if (!(error instanceof TurnError)) throw error;
         console.error(`turn ${site.id}: ${error.message}`);
         return json(error.status, { error: error.message });
@@ -184,14 +186,23 @@ function parseReport(body: unknown): GuideReport | undefined {
  * named the control, and the full reply follows as the last line. The status
  * line is already sent by then, so a failure arrives as `{"error":…,"code":…}`.
  */
-function streamTurn(parts: AppParts, site: SiteContext, turn: TurnRequest, caller: string, cors: Record<string, string>, origin: string | undefined): Response {
+function streamTurn(
+  parts: AppParts,
+  site: SiteContext,
+  turn: TurnRequest,
+  caller: string,
+  admitted: Admitted,
+  cors: Record<string, string>,
+  origin: string | undefined,
+): Response {
   return lines(cors, async (line) => {
     try {
       const measure = await measureTurn(site, turn, undefined, (id) => line({ target: id }));
+      charge(parts, site, caller, admitted, measure.usd, 1);
       parts.onTurn?.(turn, measure, site, origin);
-      charge(parts, site, caller, measure);
       line(measure.reply);
     } catch (error) {
+      charge(parts, site, caller, admitted, paidFor(error), 0);
       const known = error instanceof TurnError;
       console.error(`turn ${site.id}:`, known ? error.message : error);
       line({ error: known ? error.message : "Something went wrong.", code: known ? error.status : 500 });
@@ -211,32 +222,61 @@ function lines(cors: Record<string, string>, write: (line: (value: unknown) => v
   return new Response(body, { headers: { ...cors, "Content-Type": STREAM_TYPE, "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
 }
 
-/**
- * Whether the site may make another model call. If the budget cannot be
- * reached the step goes ahead: the spend limit at the model provider is what
- * holds when this fails, and a visitor should not lose their guide to it.
- */
-async function askBudget(parts: AppParts, site: SiteContext, caller: string) {
-  if (!parts.budget) return { open: true as const };
-  try {
-    return (await parts.budget.spend(site, caller, 0, 0)).gate;
-  } catch (error) {
-    console.error(`budget ${site.id}: couldn't be read, so the step went ahead.`, error);
-    return { open: true as const };
-  }
+/** How long a step waits to hear whether it may go ahead. A budget that is slow is treated like one that cannot be reached. */
+const BUDGET_WAIT_MS = 400;
+
+/** What the budget said about a step, and what it set aside for it. */
+interface Admitted {
+  gate: Gate;
+  /** Names what was set aside. It can come after the step has gone ahead, when the budget was slow to answer. */
+  hold: Promise<number | undefined>;
 }
 
-/** Adds a finished step to the site's budget, after the reply has gone, and passes on any alert it sets off. */
-function charge(parts: AppParts, site: SiteContext, caller: string, measure: TurnMeasure) {
-  if (!parts.budget) return;
-  const work = parts.budget
-    .spend(site, caller, measure.usd, 1)
+/**
+ * Whether the site may make another model call. When it may, the most the
+ * step could cost is set aside until `charge` settles it. If the budget cannot
+ * be reached, or takes too long, the step goes ahead: the spend limit at the
+ * model provider is what holds when this fails, and a visitor should not lose
+ * their guide to it.
+ */
+async function askBudget(parts: AppParts, site: SiteContext, caller: string, turn: TurnRequest): Promise<Admitted> {
+  const budget = parts.budget;
+  if (!budget) return { gate: { open: true }, hold: Promise.resolve(undefined) };
+  const asked = Promise.resolve()
+    .then(() => budget.admit(site, caller, ceilingFor(site, turn)))
+    .catch((error) => {
+      console.error(`budget ${site.id}: couldn't be reached, so the step went ahead.`, error);
+      return undefined;
+    });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<"late">((resolve) => {
+    timer = setTimeout(() => resolve("late"), BUDGET_WAIT_MS);
+  });
+  const first = await Promise.race([asked, late]);
+  clearTimeout(timer);
+  if (first === "late") console.error(`budget ${site.id}: no answer in ${BUDGET_WAIT_MS} ms, so the step went ahead.`);
+  return { gate: first === "late" || !first ? { open: true } : first.gate, hold: asked.then((admission) => admission?.hold) };
+}
+
+/**
+ * Settles a step with the site's budget, after the reply has gone: adds what
+ * it cost, gives back what was set aside for it, and passes on any alert that
+ * sets off. A step that failed is settled as well, with `steps` 0.
+ */
+function charge(parts: AppParts, site: SiteContext, caller: string, admitted: Admitted, usd: number, steps: number) {
+  const budget = parts.budget;
+  if (!budget) return;
+  const work = admitted.hold
+    .then((hold) => budget.settle(site, caller, hold, usd, steps))
     .then((report) => {
       for (const alert of report.alerts) parts.onAlert?.(site, alert);
     })
     .catch((error) => console.error(`budget ${site.id}: a step's cost couldn't be added.`, error));
   parts.background?.(work);
 }
+
+/** What a model call that failed still cost. The provider counts a reply that was cut short or could not be read. */
+const paidFor = (error: unknown): number => (error instanceof TurnError ? error.usd : 0);
 
 /** Off for this site, by the site's own setting or by the host's switch. */
 async function switchedOff(parts: AppParts, site: SiteContext): Promise<boolean> {

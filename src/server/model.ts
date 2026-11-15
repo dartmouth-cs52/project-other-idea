@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import type { SiteContext, TurnReply, TurnRequest } from "../shared/types.ts";
+import type { Ceiling } from "./budget.ts";
 import { costOf } from "./prices.ts";
 import { buildSystemPrompt, buildUserMessage } from "./prompt.ts";
 
@@ -108,9 +109,36 @@ export class TurnError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** What the failed call cost all the same, in US dollars. */
+    readonly usd = 0,
   ) {
     super(message);
   }
+}
+
+/** The most output a step may have. A reply is a few dozen tokens: this is room for a model that thinks first. */
+const MAX_TOKENS = 4000;
+/**
+ * How many bytes of text are taken to make one token, to guess a prompt's size
+ * before the provider has counted it. English runs nearer three and a half,
+ * so the guess comes out high, which is the side to be wrong on.
+ */
+const BYTES_PER_TOKEN = 2.5;
+const promptTokens = new WeakMap<SiteContext, number>();
+
+/**
+ * The most a step could cost on the model it asks for, worked out before the
+ * call so it can be set aside from the site's budget: the whole prompt written
+ * to the cache or read back from it, and as much output as a step may have.
+ */
+export function ceilingFor(site: SiteContext, request: TurnRequest, settings: TurnSettings = SETTINGS): Ceiling {
+  if (settings.model === "mock") return { cold: mockUsd, warm: mockUsd };
+  const size = (text: string) => Math.ceil(new TextEncoder().encode(text).length / BYTES_PER_TOKEN);
+  let prompt = promptTokens.get(site);
+  if (prompt === undefined) promptTokens.set(site, (prompt = size(buildSystemPrompt(site))));
+  const input = size(buildUserMessage(request)) + request.history.reduce((sum, turn) => sum + size(turn.text), 0);
+  const cost = (cacheWrite: number, cacheRead: number) => costOf(settings.model, { input, cacheRead, cacheWrite, output: MAX_TOKENS }, settings.cache);
+  return { cold: cost(prompt, 0), warm: cost(0, prompt) };
 }
 
 export async function runTurn(site: SiteContext, request: TurnRequest): Promise<TurnReply> {
@@ -137,22 +165,21 @@ export async function measureTurn(
     if (onPage(id)) onTarget?.(id);
   };
 
-  let answer: Omit<TurnMeasure, "ms" | "msToTarget" | "wrote" | "usd">;
+  let answer: Omit<TurnMeasure, "ms" | "msToTarget" | "wrote">;
   if (settings.model === "mock") {
     const reply = mockTurn(request);
     if (mockPauseMs > 0) {
       targetKnown(reply.target);
       await new Promise((resolve) => setTimeout(resolve, mockPauseMs));
     }
-    answer = { reply, model: "mock" };
+    answer = { reply, model: "mock", usd: mockUsd };
   } else answer = await claudeTurn(site, request, settings, targetKnown);
   // The model can only point at what's on the page it was shown.
   if (!onPage(answer.reply.target)) answer.reply.target = null;
   targetKnown(answer.reply.target);
   const wrote = answer.reply.say;
   answer.reply.say = tidySay(wrote);
-  const usd = answer.model === "mock" ? mockUsd : costOf(answer.model, answer.tokens, settings.cache);
-  return { ...answer, ms: Date.now() - started, msToTarget: msToTarget ?? Date.now() - started, wrote, usd };
+  return { ...answer, ms: Date.now() - started, msToTarget: msToTarget ?? Date.now() - started, wrote };
 }
 
 /**
@@ -170,7 +197,7 @@ async function claudeTurn(
   request: TurnRequest,
   settings: TurnSettings,
   targetKnown: (id: string | null) => void,
-): Promise<Omit<TurnMeasure, "ms" | "msToTarget" | "wrote" | "usd">> {
+): Promise<Omit<TurnMeasure, "ms" | "msToTarget" | "wrote">> {
   client ??= new Anthropic(apiKey ? { apiKey } : {});
   const messages: Anthropic.Beta.BetaMessageParam[] = request.history.map((turn) => ({ role: turn.role, content: turn.text }));
   // The conversation has to start with a user message.
@@ -183,10 +210,14 @@ async function claudeTurn(
 
   const started = Date.now();
   let response;
+  // What the provider has counted so far. It is kept apart from the reply
+  // because a call can be paid for and still fail: cut off at its length
+  // limit, or ending in text that is not the JSON asked for.
+  let counted: { usage: Anthropic.Beta.BetaUsage; model: string; stop: string | null } | undefined;
   try {
     const stream = client.beta.messages.stream({
       model: settings.model,
-      max_tokens: 4000,
+      max_tokens: MAX_TOKENS,
       ...fallback,
       ...(settings.thinking === "off" ? withoutThinking(settings.model) : {}),
       output_config: { effort: settings.effort, format: betaZodOutputFormat(Reply) },
@@ -199,15 +230,22 @@ async function claudeTurn(
       const found = TARGET_SO_FAR.exec(soFar);
       if (found) targetKnown(found[1] ?? null);
     });
+    stream.on("streamEvent", (_event, soFar) => {
+      counted = { usage: soFar.usage, model: soFar.model, stop: soFar.stop_reason };
+    });
     response = await stream.finalMessage();
   } catch (error) {
-    if (error instanceof Anthropic.AuthenticationError) throw new TurnError(500, "The server's Anthropic credentials are missing or invalid.");
-    if (error instanceof Anthropic.RateLimitError) throw new TurnError(503, "The model is rate limited. Try again shortly.");
-    if (error instanceof Anthropic.APIError) throw new TurnError(502, `The model call failed (${error.status ?? "no status"}): ${error.message}`);
+    const paid = counted ? usdOf(counted.usage, counted.model, settings.cache) : 0;
+    if (error instanceof Anthropic.AuthenticationError) throw new TurnError(500, "The server's Anthropic credentials are missing or invalid.", paid);
+    if (error instanceof Anthropic.RateLimitError) throw new TurnError(503, "The model is rate limited. Try again shortly.", paid);
+    if (error instanceof Anthropic.APIError) throw new TurnError(502, `The model call failed (${error.status ?? "no status"}): ${error.message}`, paid);
+    // The stream ended and its text could not be read as a reply.
+    if (counted) throw new TurnError(502, `The model's reply couldn't be read (stop reason: ${counted.stop ?? "none"}).`, paid);
     throw error;
   }
 
   const { usage } = response;
+  const usd = usdOf(usage, response.model, settings.cache);
   console.log(
     `turn ${site.id} step ${request.step}: ${Date.now() - started} ms, ${response.model}, ` +
       `input ${usage.input_tokens}, cache read ${usage.cache_read_input_tokens ?? 0}, cache write ${usage.cache_creation_input_tokens ?? 0}, output ${usage.output_tokens}`,
@@ -219,9 +257,22 @@ async function claudeTurn(
     cacheWrite: usage.cache_creation_input_tokens ?? 0,
     output: usage.output_tokens,
   };
-  if (response.stop_reason === "refusal") return { reply: { target: null, status: "stuck", say: "I can't help with that one." }, model: response.model, tokens };
-  if (!response.parsed_output) throw new TurnError(502, `The model's reply couldn't be read (stop reason: ${response.stop_reason}).`);
-  return { reply: response.parsed_output, model: response.model, tokens };
+  if (response.stop_reason === "refusal") return { reply: { target: null, status: "stuck", say: "I can't help with that one." }, model: response.model, tokens, usd };
+  if (!response.parsed_output) throw new TurnError(502, `The model's reply couldn't be read (stop reason: ${response.stop_reason}).`, usd);
+  return { reply: response.parsed_output, model: response.model, tokens, usd };
+}
+
+/**
+ * What a call cost. When the provider retried a declined request on another
+ * model, it lists each attempt, and the declined one is paid for as well: the
+ * top-level count covers only the attempt that answered.
+ */
+function usdOf(usage: Anthropic.Beta.BetaUsage, model: string, cache: CacheLife): number {
+  type Counted = { input_tokens: number | null; cache_read_input_tokens: number | null; cache_creation_input_tokens: number | null; output_tokens: number | null };
+  const cost = (part: Counted, by: string) =>
+    costOf(by, { input: part.input_tokens ?? 0, cacheRead: part.cache_read_input_tokens ?? 0, cacheWrite: part.cache_creation_input_tokens ?? 0, output: part.output_tokens ?? 0 }, cache);
+  if (!usage.iterations?.length) return cost(usage, model);
+  return usage.iterations.reduce((sum, attempt) => sum + cost(attempt, ("model" in attempt && attempt.model) || model), 0);
 }
 
 /**

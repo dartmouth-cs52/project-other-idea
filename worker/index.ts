@@ -1,5 +1,5 @@
 import { createApp, type AppParts } from "../src/server/app.ts";
-import { describeAlert, limitsFor, type Gate, type Limits, type Report } from "../src/server/budget.ts";
+import { describeAlert, limitsFor, type Admission, type Ceiling, type Gate, type Limits, type Report } from "../src/server/budget.ts";
 import { Store } from "../src/server/db.ts";
 import { configure } from "../src/server/model.ts";
 import { createSiteCache } from "../src/server/site-cache.ts";
@@ -32,7 +32,10 @@ export interface Env {
   /** What each site has spent on the model this hour and today. One object per site, in worker/budget.ts. */
   BUDGET?: {
     idFromName(name: string): unknown;
-    get(id: unknown): { spend(limits: Limits, caller: string, usd: number, steps: number): Promise<Report> };
+    get(id: unknown): {
+      admit(limits: Limits, caller: string, ceiling: Ceiling): Promise<Admission>;
+      settle(limits: Limits, caller: string, hold: number | undefined, usd: number, steps: number): Promise<Report>;
+    };
   };
   /** US dollars a site may spend in an hour and in a day, unless the site sets its own. */
   HAPTIC_BUDGET_HOUR?: string;
@@ -110,28 +113,41 @@ async function isOff(env: Env, id: string): Promise<boolean> {
 }
 
 /**
- * Asking whether a site may go on means a trip to its budget, which can be on
- * another continent. So the last answer is trusted for a few seconds, and a
- * step only waits on that trip when nothing recent is known. Every step's
- * cost is added after its reply has gone, and brings a fresh answer back.
+ * Every step asks its site's budget before the model is called, because that
+ * is where what the step could cost is set aside. Only a "no" is remembered,
+ * and only for a few seconds: a site that has stopped does not need asking on
+ * every step, and it starts again that soon after the hour or the day turns.
  */
-const GATE_KEEP_MS = 15_000;
-const gates = new Map<string, { at: number; gate: Gate }>();
+const CLOSED_KEEP_MS = 5_000;
+const closed = new Map<string, { at: number; gate: Gate }>();
 
 function budgetFor(env: Env): AppParts["budget"] {
   const store = env.BUDGET;
   if (!store) return undefined;
+  const reach = async (site: SiteContext, caller: string) => {
+    const limits = limitsFor(site, { HAPTIC_BUDGET_HOUR: env.HAPTIC_BUDGET_HOUR, HAPTIC_BUDGET_DAY: env.HAPTIC_BUDGET_DAY });
+    // Callers are only told apart when the site limits each one. Their addresses are scrambled before they are kept.
+    const who = limits.perCaller ? await scramble(caller) : "";
+    return { limits, who, key: `${site.id} ${who}`, meter: store.get(store.idFromName(site.id)) };
+  };
+  const remember = (key: string, gate: Gate) => {
+    if (gate.open) return closed.delete(key);
+    if (closed.size > 5000) closed.clear();
+    closed.set(key, { at: Date.now(), gate });
+  };
   return {
-    async spend(site, caller, usd, steps) {
-      const limits = limitsFor(site, { HAPTIC_BUDGET_HOUR: env.HAPTIC_BUDGET_HOUR, HAPTIC_BUDGET_DAY: env.HAPTIC_BUDGET_DAY });
-      // Callers are only told apart when the site limits each one. Their addresses are scrambled before they are kept.
-      const who = limits.perCaller ? await scramble(caller) : "";
-      const key = `${site.id} ${who}`;
-      const held = gates.get(key);
-      if (usd === 0 && steps === 0 && held && Date.now() - held.at < GATE_KEEP_MS) return { gate: held.gate, alerts: [] };
-      const report = await store.get(store.idFromName(site.id)).spend(limits, who, usd, steps);
-      if (gates.size > 5000) gates.clear();
-      gates.set(key, { at: Date.now(), gate: report.gate });
+    async admit(site, caller, ceiling) {
+      const { limits, who, key, meter } = await reach(site, caller);
+      const held = closed.get(key);
+      if (held && Date.now() - held.at < CLOSED_KEEP_MS) return { gate: held.gate };
+      const admission = await meter.admit(limits, who, ceiling);
+      remember(key, admission.gate);
+      return admission;
+    },
+    async settle(site, caller, hold, usd, steps) {
+      const { limits, who, key, meter } = await reach(site, caller);
+      const report = await meter.settle(limits, who, hold, usd, steps);
+      remember(key, report.gate);
       return report;
     },
   };
