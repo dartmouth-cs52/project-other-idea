@@ -45,7 +45,9 @@ async function fromPath(path: string): Promise<Doc[]> {
 
 function fromHtml(html: string, source: string): Doc {
   const $ = cheerio.load(html);
-  const titleFrom = (scope: ReturnType<typeof $>) => scope.find("h1").first().text().trim();
+  // A help page's <title> starts with the page's own name and ends with the site's: "Basic searching | Jira Software".
+  // Its first h1 is often the site's name, or the first section's.
+  const titled = $("title").first().text().split(/\s+[|–—]\s+|\s+-\s+/)[0]?.trim() ?? "";
   $("script, style, noscript, nav, header, footer, aside, svg").remove();
   // Block elements end a line, so headings and list items don't run together.
   $("p, li, h1, h2, h3, h4, tr, br, div").each((_, el) => void $(el).append("\n"));
@@ -54,8 +56,7 @@ function fromHtml(html: string, source: string): Doc {
   const candidates = $("main, article, [role='main']").toArray();
   const main = candidates.sort((a, b) => $(b).text().length - $(a).text().length)[0];
   const body = main ? $(main) : $("body");
-  // The heading of the page itself, before a site-wide one like "Product Support" above it.
-  const title = titleFrom(body) || $("h1").first().text().trim() || $("title").first().text().trim() || source;
+  const title = titled || $("h1").first().text().trim() || source;
   const text = body.text();
   return { title, source, text: text.replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim() };
 }

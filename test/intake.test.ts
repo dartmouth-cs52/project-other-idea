@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { compact, pageNode, tidy } from "../src/intake/browse.ts";
 import { extractPage } from "../src/intake/crawl.ts";
+import { loadDocs } from "../src/intake/docs.ts";
 import { pageKey, parentKey, reasonNotToFollow } from "../src/intake/paths.ts";
 import type { PageReading, ReadControl } from "../src/intake/reader.ts";
 import { buildSystemPrompt, buildUserMessage, renderSiteMap } from "../src/server/prompt.ts";
@@ -189,4 +193,19 @@ test("a group of links that some pages repeat is kept on the first of them, and 
   assert.deepEqual(map.map((item) => item.buttons.length), [0, 0, 0, 0, 0, 1, 0, 0]);
   assert.equal(renderSiteMap(map).split("Contact → ").length - 1, 1);
   assert.equal(pages[6]!.links.length, 3, "the pages given are left as they were");
+});
+
+test("a help page is read from its largest main block and named by its page title", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "haptic-docs-"));
+  const file = join(dir, "page.html");
+  await writeFile(
+    file,
+    `<title>Basic searching | Jira Software | Atlassian</title><header><h1>Jira Software Support</h1></header>
+     <article>Try the assistant</article>
+     <main><h1>Define a period</h1><p>Open Issues, then Search for issues.</p><p>Pick a project and a status, then press Search.</p></main>`,
+  );
+  const [doc] = await loadDocs([file]);
+  assert.equal(doc?.title, "Basic searching");
+  assert.match(doc?.text ?? "", /Pick a project/);
+  assert.doesNotMatch(doc?.text ?? "", /Try the assistant/);
 });
