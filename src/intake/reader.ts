@@ -65,7 +65,7 @@ function headings(ignore: Element): string[] {
 
 /** Only the number of controls listed, to tell when a page has finished drawing. */
 export function count(): number {
-  return takeSnapshot(document.createElement("div")).snapshot.elements.length;
+  return takeSnapshot(document.createElement("div"), "").snapshot.elements.length;
 }
 
 export function read(): PageReading {
@@ -74,7 +74,8 @@ export function read(): PageReading {
   let ignore: Element = document.createElement("div");
   const modal = findOpenModal(ignore);
   if (modal) ignore = modal;
-  const { snapshot, elements } = takeSnapshot(ignore);
+  // No visitor and no question: every long number and email is masked.
+  const { snapshot, elements } = takeSnapshot(ignore, "");
 
   const controls: ReadControl[] = snapshot.elements.map((element) => {
     const el = elements.get(element.id);
