@@ -591,7 +591,7 @@ async function main() {
             if (options.trace) traces.push({ site: item.name, guide: guide.id, round: round + 1, answers: traced });
             const notes = [run.overran ? "then pointed at more" : "", run.answered ? "by the answer in words" : "", run.repeated ? `asked ${run.repeated} time${run.repeated === 1 ? "" : "s"} for something already done` : ""].filter(Boolean);
             console.log(
-              `${run.end === "reached" ? "ok  " : run.end === "error" || run.end === "cut short" ? "--  " : "FAIL"} ${item.name}/${guide.id}: ${run.end}${notes.length ? ` (${notes.join("; ")})` : ""} in ${run.steps} steps (script: ${run.scripted})${run.why ? `. ${run.why}` : ""}`,
+              `${run.end === "reached" ? "ok  " : run.end === "error" ? "--  " : "FAIL"} ${item.name}/${guide.id}: ${run.end}${notes.length ? ` (${notes.join("; ")})` : ""} in ${run.steps} steps (script: ${run.scripted})${run.why ? `. ${run.why}` : ""}`,
             );
           }
         }
@@ -602,9 +602,14 @@ async function main() {
     await browser.close();
   }
 
-  // Only a run that reached the goal or failed to says anything about Haptic. "cut short" and "error" say
-  // nothing either way: the benchmark could not tell. They are left out of the rate and counted beside it.
-  const judgedOf = (mine: GuideRun[]) => mine.filter((run) => run.end !== "cut short" && run.end !== "error");
+  // An "error" says nothing about Haptic: the site was down or refused the run before Haptic was asked, so it
+  // is left out of the rate and counted beside it. A run "cut short" is counted as not reached. It ends when
+  // Haptic points a visitor of a site other people use at something the script never presses there (a
+  // password field, a button that saves or signs in, a request that writes), so Haptic has left the way the
+  // script knows. Sometimes that is another good way, more often it is not (Jira sent a signed-out visitor to
+  // sign in for something that needs no account), and the benchmark cannot tell which. Leaving these out of
+  // the rate would hide Haptic's failures, so each is listed for reading by hand instead.
+  const judgedOf = (mine: GuideRun[]) => mine.filter((run) => run.end !== "error");
   const rate = (mine: GuideRun[]) => {
     const judged = judgedOf(mine);
     const reached = judged.filter((run) => run.end === "reached").length;
@@ -638,7 +643,7 @@ async function main() {
         "in circles": count("went in circles"),
         "ran long": count("ran long"),
         stalled: count("stalled"),
-        "not judged: cut short": count("cut short"),
+        "cut short (not reached)": count("cut short"),
         "not judged: error": count("error"),
       };
     }),

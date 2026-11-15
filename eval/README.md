@@ -196,7 +196,7 @@ Each run ends one of these ways:
 | cut short | On a site other people use, it pointed at a control that could send, buy, save or delete, and the run stopped before pressing it, or a step set off a request that would have written to the site, which was stopped. |
 | error | The benchmark could not tell: the site was down, sign-in was refused, the model or the server failed. |
 
-"cut short" and "error" say nothing about Haptic either way, so they are left out of the rate and counted beside it. However a run ends short of the goal, the line says what the widget was showing.
+An "error" says nothing about Haptic (the site was down or refused the run), so it is left out of the rate and counted beside it. A run "cut short" counts as not reached: Haptic led the visitor somewhere the script never goes on that site, which is sometimes another good way but more often a wrong one, and the benchmark cannot tell which. Each is listed so it can be read by hand. However a run ends short of the goal, the line says what the widget was showing.
 
 A guide is reached in one of these ways, and the guide file says which (`eval/guide.ts` has the types):
 
@@ -228,7 +228,7 @@ On every guide set that is not marked `sandbox: true`, each request a page makes
 - Anything else goes through only when it is known to read: a GraphQL request whose every operation is a query, a request the guide set lists in `reads` (a search or a chart's query that the site sends as a POST), or what the set's own `before` sends to sign in.
 - Everything else is stopped inside the browser and never reaches a server.
 
-Most of what is stopped is the page talking to itself: usage counts and error reports, sent to another site, sent as a beacon, or listed in the set's `chatter`. A stopped request to the site itself that nobody has vouched for is different. After something the visitor did, it is taken for the step trying to write, and the guide ends "cut short" with the request named. Before the visitor did anything, the page may be missing something it needs, so the guide ends as an error that says what to add to the guide set. Neither is counted in the rate.
+Most of what is stopped is the page talking to itself: usage counts and error reports, sent to another site, sent as a beacon, or listed in the set's `chatter`. A stopped request to the site itself that nobody has vouched for is different. After something the visitor did, it is taken for the step trying to write, and the guide ends "cut short" with the request named. Before the visitor did anything, the page may be missing something it needs, so the guide ends as an error that says what to add to the guide set. The first counts as not reached; the second is left out of the rate.
 
 Every request let through or stopped is in the results file (method, host and path, never the query or the body), the table has three columns for them, and under the table each site's unvouched-for requests are listed. "sent: tried to write" should be 0. When it is not, read the line under the table the same day.
 
