@@ -27,7 +27,7 @@ const NAMED_BY_ITS_TEXT =
  * written is read. A field, an editor, anything inside an editor, and a
  * region of the page all come back with no name.
  */
-function nameOfClicked(clicked: Element): string {
+export function nameOfClicked(clicked: Element): string {
   const given = clicked.getAttribute("aria-label");
   if (given) return cleanText(given, 60);
   if (!clicked.matches(NAMED_BY_ITS_TEXT)) return "";
