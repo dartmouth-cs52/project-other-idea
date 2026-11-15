@@ -402,7 +402,13 @@ export async function use(page: Loose, element: Loose, shown: Shown): Promise<Us
     const named = namedChoice(shown.say, open.choices);
     if (named >= 0) {
       const choice = (await page.evaluateHandle(inPage(choiceAt), named)).asElement();
-      if (choice && (await press(page, choice)).pressed) return { did: `picked "${open.choices[named]!.text}" from the list already open, which the sentence names` };
+      if (choice) {
+        const picked = await press(page, choice);
+        const text = open.choices[named]!.text;
+        if (picked.pressed) return { did: `picked "${text}" from the list already open, which the sentence names`, ...(picked.covered ? { covered: true } : {}) };
+        // Pressing the box again would only close the list. A person who cannot reach the choice is stuck, and that is the result.
+        return { did: `nothing: "${text}" is in the open list, but ${picked.by} is on top of it`, failed: `the choice "${text}" cannot be pressed: ${picked.by} is on top of it`, covered: true };
+      }
     }
   }
 

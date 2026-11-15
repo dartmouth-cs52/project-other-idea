@@ -220,3 +220,22 @@ test("a list drawn in a layer of its own, with no roles, is picked from as a per
   assert.deepEqual(await log(page), ["picked Template two"]);
   await page.close();
 });
+
+test("a named choice in the open list that something covers is a result, and the box is not pressed again", { skip }, async () => {
+  const page = await fresh();
+  const box = await page.$("#plain");
+  await use(page, box, shown("Template", "Open the Template list."));
+  // Something unrelated, like a caption, comes to sit over the open list.
+  await page.evaluate(`(() => {
+    const box = document.getElementById("layer").getBoundingClientRect();
+    const cover = document.createElement("div");
+    cover.style.cssText = "position:fixed;left:" + box.left + "px;top:" + box.top + "px;width:" + box.width + "px;height:" + box.height + "px;background:rgba(0,0,0,.5)";
+    document.body.append(cover);
+  })()`);
+  const again = await use(page, box, shown("Template", "The list is open: choose Template two."));
+  assert.equal(again.covered, true);
+  assert.match(again.failed ?? "", /the choice "Template two" cannot be pressed: <div> is on top of it/);
+  assert.deepEqual(await log(page), [], "nothing was picked, and the list was not closed by pressing the box");
+  assert.ok(await page.$("#layer"));
+  await page.close();
+});
