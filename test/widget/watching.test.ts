@@ -76,10 +76,10 @@ test("with a sentence up and no pointer, a page that changes by itself is not a 
   try {
     await session.ask("leave out the east region");
     await session.untilState("watching");
-    // If the page moved while the model was answering, the model is asked again, but twice at most. After that the clock is not heard.
+    // A clock that ticks is not the page moving on, so nothing is asked again, and while the sentence waits the clock is not heard.
     await session.page.waitForTimeout(6000);
     const before = session.requests.length;
-    assert.ok(before <= 3, `${before} questions were asked of a page that only ticked`);
+    assert.equal(before, 1, `${before} questions were asked of a page that only ticked`);
     assert.equal(await session.state(), "watching");
     assert.equal(await session.caption(), "Open the Region menu and untick East.");
     await session.page.locator("#region").click();

@@ -33,8 +33,10 @@ const MAX_CLOSINGS = 3;
 const WATCH_MS = 90_000;
 /** A sentence with no pointer is asked about again this many times when the page changed under it, and no more. */
 const MAX_WATCH_RETRIES = 2;
-/** A page that fetches its data has usually drawn it this long after a click. Reading sooner shows the page from before. */
+/** How long a site's data requests take, until it has made a few that say otherwise. */
 const DATA_FLOOR_MS = 700;
+/** However slow a site's requests, a click is not waited on longer than this for one to come back. */
+const MAX_PACE_MS = 2500;
 
 /**
  * Whether this page has begun to load another one. A click on an ordinary link
@@ -369,6 +371,8 @@ export class Guide {
     const strict = this.fieldLeft;
     this.fieldLeft = false;
     if (!reread && !acted && movedOn(page.snapshot, fresh.snapshot, listed, strict)) {
+      // This site is slower than it looked. The rest of the guide waits longer for it.
+      requests.slow = true;
       dropEarly();
       await settle(ui.host);
       if (run !== this.run) return;
@@ -449,7 +453,7 @@ export class Guide {
       const refused = what.how === "clicked" ? hearInvalid() : undefined;
       // A form that checks a field when it is left has not yet shown what comes next.
       if (what.how === "filled" && isTyped(on) && holdsFocus(on)) this.watchField(run, on, name);
-      void settle(ui.host, { since }).then(() =>
+      void settle(ui.host, { since, used: on }).then(() =>
         // If that click is loading a new page, this one has nothing more to ask.
         onceStaying(() => {
           const invalid = refused?.();
@@ -504,7 +508,7 @@ export class Guide {
     ui.say(say);
     ui.setState("watching");
     this.save();
-    const changed = () => describeChange(page.snapshot, takeSnapshot(ui.host).snapshot) !== NOTHING_CHANGED || currentPath() !== page.snapshot.path;
+    const changed = () => currentPath() !== page.snapshot.path || pageMoved(page.snapshot, takeSnapshot(ui.host).snapshot);
     const onHeard = (event: string | undefined) => {
       this.stopWaiting = undefined;
       if (event === undefined) {
@@ -1177,8 +1181,8 @@ function loaded(maxMs = 4000): Promise<void> {
   });
 }
 
-/** How many controls one list has that the other does not, counting controls that are listed alike. */
-function listDifference(asked: Snapshot, now: Snapshot): { added: number; removed: number; after: Map<string, number> } {
+/** How many controls one list has that the other does not, counting controls that are listed alike. `main` is how many of those added are outside the page's furniture. */
+function listDifference(asked: Snapshot, now: Snapshot): { added: number; removed: number; main: number; after: Map<string, number> } {
   const count = (elements: SnapElement[]) => {
     const counts = new Map<string, number>();
     for (const element of elements) counts.set(elementKey(element), (counts.get(elementKey(element)) ?? 0) + 1);
@@ -1190,16 +1194,52 @@ function listDifference(asked: Snapshot, now: Snapshot): { added: number; remove
   let removed = 0;
   for (const [key, n] of after) added += Math.max(0, n - (before.get(key) ?? 0));
   for (const [key, n] of before) removed += Math.max(0, n - (after.get(key) ?? 0));
-  return { added, removed, after };
+  // The added controls that are not in the header, the navigation, a sidebar, a footer, a menu, tabs or a toolbar.
+  const furniture = /^(?:header|nav|aside|footer|menu|tabs|toolbar)\b/;
+  const unmatched = new Map(before);
+  let main = 0;
+  for (const element of now.elements) {
+    const key = elementKey(element);
+    const n = unmatched.get(key) ?? 0;
+    if (n) unmatched.set(key, n - 1);
+    else if (!furniture.test(element.context ?? "")) main++;
+  }
+  return { added, removed, main, after };
 }
+
+/** Text with its numbers taken out, so that a clock, a counter or a "5 seconds ago" that ticks reads the same from one moment to the next. */
+const withoutNumbers = (text: string) => text.replace(/\d+/g, "#");
 
 /** Whether the page says something now that it did not say before: a new heading, or new text of more than a few words. A clock that ticks is not that. */
 function saysMore(asked: Snapshot, now: Snapshot): boolean {
-  if (now.headings.join("|") !== asked.headings.join("|")) return true;
-  const had = new Set(asked.text);
+  if (now.headings.map(withoutNumbers).join("|") !== asked.headings.map(withoutNumbers).join("|")) return true;
+  const had = new Set(asked.text.map(withoutNumbers));
   let fresh = 0;
-  for (const text of now.text) if (!had.has(text)) fresh += text.length;
+  for (const text of now.text) if (!had.has(withoutNumbers(text))) fresh += text.length;
   return fresh >= 20;
+}
+
+/** The items of `list` that `other` also has, as many times as it has them, in the order of `list`. */
+function sharedInOrder(list: string[], other: string[]): string[] {
+  const left = new Map<string, number>();
+  for (const item of other) left.set(item, (left.get(item) ?? 0) + 1);
+  return list.filter((item) => {
+    const n = left.get(item) ?? 0;
+    if (!n) return false;
+    left.set(item, n - 1);
+    return true;
+  });
+}
+
+/** Whether what both readings show is in a different order: a sort, or a filter, that landed. Controls and text both count. */
+function reordered(asked: Snapshot, now: Snapshot): boolean {
+  const differ = (a: string[], b: string[]) => sharedInOrder(a, b).join("\n") !== sharedInOrder(b, a).join("\n");
+  return differ(asked.elements.map(elementKey), now.elements.map(elementKey)) || differ(asked.text.map(withoutNumbers), now.text.map(withoutNumbers));
+}
+
+/** Whether the page is different in a way that matters: its controls, their order or their states, its dialog, or what it says. Numbers that tick do not count. */
+function pageMoved(asked: Snapshot, now: Snapshot): boolean {
+  return pageState(asked) !== pageState(now) || saysMore(asked, now) || reordered(asked, now);
 }
 
 /**
@@ -1210,15 +1250,17 @@ function saysMore(asked: Snapshot, now: Snapshot): boolean {
  * change to the list matters.
  */
 function movedOn(asked: Snapshot, now: Snapshot, listed: SnapElement | undefined, strict: boolean): boolean {
-  const { added, removed, after } = listDifference(asked, now);
-  // Found nothing to point at, and the page has since gained or lost controls, or says something new: what was wanted may be there now.
-  if (!listed) return added > 0 || removed > 0 || saysMore(asked, now);
-  if (!added && !removed) return false;
+  const { added, removed, main, after } = listDifference(asked, now);
+  // Found nothing to point at, and the page has since gained or lost controls, put them in a new order, or says something new: what was wanted may be there now.
+  if (!listed) return added > 0 || removed > 0 || saysMore(asked, now) || reordered(asked, now);
   // Pointed at something that has since gone or been renamed: the pointer would land on nothing, or on something else.
   if (!after.has(elementKey(listed))) return true;
+  // The same things in a new order: a sort or a filter landed, and the answer was about the page before it.
+  if (reordered(asked, now)) return true;
+  if (!added && !removed) return false;
   if (strict) return true;
-  // Pointed at something that is still there. Only a page that has largely been redrawn makes that doubtful.
-  return added + removed > Math.max(4, asked.elements.length * 0.3);
+  // Pointed at something that is still there. Results arriving in the main part of the page may be what was wanted. Elsewhere only a page that has largely been redrawn makes the answer doubtful.
+  return main >= 2 || added + removed > Math.max(4, asked.elements.length * 0.3);
 }
 
 /**
@@ -1246,20 +1288,27 @@ const OWN_ORIGIN = (() => {
 })();
 
 /**
- * When the page's own data requests finished, for as long as a guide runs.
- * Nothing of the page's is wrapped or replaced: the browser reports each
- * finished request by itself, and only its address and its times are looked at.
+ * The page's own data requests, for as long as a guide runs: when each
+ * finished and how long each took. Nothing of the page's is wrapped or
+ * replaced: the browser reports each finished request by itself, and only
+ * its address and its times are looked at.
  */
 const requests = {
   observer: undefined as PerformanceObserver | undefined,
   /** When each of the last few data requests began and ended. */
   ended: [] as { start: number; end: number }[],
+  /** How long this page's data requests have taken, newest last. */
+  took: [] as number[],
   /** The page has fetched data at least once, so a click may set off another fetch. */
   fetches: false,
+  /** An answer in this guide was set aside because the page was still changing, so the page is given longer from now on. */
+  slow: false,
   watch(on: boolean) {
     this.observer?.disconnect();
     this.observer = undefined;
     this.ended = [];
+    this.took = [];
+    this.slow = false;
     if (!on || typeof PerformanceObserver !== "function") return;
     const isData = (entry: PerformanceEntry) => {
       const kind = (entry as PerformanceResourceTiming).initiatorType;
@@ -1267,14 +1316,19 @@ const requests = {
       return (kind === "fetch" || kind === "xmlhttprequest") && !(OWN_ORIGIN && entry.name.startsWith(OWN_ORIGIN + "/")) && !entry.name.endsWith("/v1/turn");
     };
     try {
-      this.fetches = performance.getEntriesByType("resource").some(isData);
+      // What the page fetched before the guide began says how quick it is too.
+      const earlier = performance.getEntriesByType("resource").filter(isData);
+      this.fetches = earlier.length > 0;
+      this.took = earlier.slice(-20).map((entry) => entry.duration);
       this.observer = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
           if (!isData(entry)) continue;
           this.fetches = true;
           this.ended.push({ start: entry.startTime, end: entry.startTime + entry.duration });
+          this.took.push(entry.duration);
         }
         this.ended = this.ended.slice(-20);
+        this.took = this.took.slice(-20);
       });
       this.observer.observe({ type: "resource", buffered: false });
     } catch {
@@ -1282,16 +1336,30 @@ const requests = {
     }
   },
   /**
+   * How long this site's data requests usually take: the time by which
+   * three in four of them were back. Longer once an answer has been set
+   * aside, and never more than a firm limit.
+   */
+  pace(): number {
+    const sorted = [...this.took].sort((a, b) => a - b);
+    const usual = sorted.length ? (sorted[Math.floor((sorted.length - 1) * 0.75)] ?? DATA_FLOOR_MS) + 200 : DATA_FLOOR_MS;
+    return Math.min(MAX_PACE_MS, Math.max(400, usual) * (this.slow ? 1.5 : 1));
+  },
+  /**
    * How much longer to wait before reading the page, given when the visitor
    * acted. Data that has only just arrived has not been drawn yet. And on a
-   * page that fetches data, no request having finished since the click most
-   * likely means one is still on its way.
+   * page that fetches data, no request having come back since the click most
+   * likely means one is still on its way. If nothing on the page has changed
+   * yet either, it is waited for about as long as this site's requests
+   * take; if the page has already answered the click, a little while, and
+   * as long as the requests take once the guide has had an answer set aside.
    */
-  stillComing(since: number | undefined, now: number, fetches: boolean): number {
+  stillComing(since: number | undefined, now: number, fetches: boolean, changed: boolean): number {
     if (since === undefined) return 0;
     const after = this.ended.filter((request) => request.start >= since - 20);
     if (after.some((request) => now - request.end < 250)) return 300;
-    if (!after.length && (fetches || this.fetches) && now - since < DATA_FLOOR_MS) return DATA_FLOOR_MS - (now - since);
+    const wait = changed && !this.slow ? Math.min(this.pace(), DATA_FLOOR_MS) : this.pace();
+    if (!after.length && (fetches || this.fetches) && now - since < wait) return wait - (now - since);
     return 0;
   },
 };
@@ -1321,6 +1389,8 @@ interface Settling {
   maxMs?: number;
   /** When the visitor did what the page is settling from, on the clock of `performance.now()`. */
   since?: number;
+  /** The control they used. Its own changes, a tick or a class on it or around it, are not the page answering. */
+  used?: Element;
   /** The page is taken to fetch its data though no request has been seen yet: a page that has only just loaded. */
   fetches?: boolean;
   /** Wait past `maxMs`, up to the longer limit, for as long as the page says it is loading. */
@@ -1333,11 +1403,15 @@ interface Settling {
  * keeps changing, up to `maxMs`: longer only while the page itself says it is
  * loading, and a little longer when data the click asked for has not come.
  */
-export function settle(ignore: Element, { quietMs = 300, maxMs = 3000, since, fetches = false, patient = true }: Settling = {}): Promise<void> {
+export function settle(ignore: Element, { quietMs = 300, maxMs = 3000, since, used, fetches = false, patient = true }: Settling = {}): Promise<void> {
   return new Promise((resolve) => {
     let quiet: ReturnType<typeof setTimeout>;
     let late: ReturnType<typeof setTimeout>;
     let mark: Element | undefined;
+    /** Something on the page other than the used control has changed since this began. */
+    let answered = false;
+    const isUsed = (record: MutationRecord) =>
+      !!used && (used.contains(record.target) || (record.type === "attributes" && record.target instanceof Element && record.target.contains(used)));
     const finish = () => {
       observer.disconnect();
       clearTimeout(quiet);
@@ -1349,7 +1423,7 @@ export function settle(ignore: Element, { quietMs = 300, maxMs = 3000, since, fe
     const check = () => {
       mark = loadingMark(ignore);
       if (mark) return restart();
-      const more = requests.stillComing(since, performance.now(), fetches);
+      const more = requests.stillComing(since, performance.now(), fetches, answered);
       if (more > 0) return restart(more);
       finish();
     };
@@ -1358,7 +1432,11 @@ export function settle(ignore: Element, { quietMs = 300, maxMs = 3000, since, fe
       quiet = setTimeout(check, ms);
     };
     const observer = new MutationObserver((records) => {
-      if (records.some((record) => record.target !== ignore && !ignore.contains(record.target))) restart();
+      const page = records.filter((record) => record.target !== ignore && !ignore.contains(record.target));
+      if (!page.length) return;
+      // A data- attribute is the page's own bookkeeping, which a visitor never sees: it is not an answer.
+      if (page.some((record) => !isUsed(record) && !(record.type === "attributes" && record.attributeName?.startsWith("data-")))) answered = true;
+      restart();
     });
     observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
     // Past the usual limit the page is read as soon as nothing on it says it is loading.

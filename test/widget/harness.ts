@@ -38,7 +38,7 @@ export interface Session {
   /** The id attribute, or the tag, of what the pointer is on. Null when it is on nothing. */
   pointed(): Promise<string | null>;
   /** Waits until `check` holds, and fails with `what` if it never does. */
-  until(check: () => unknown | Promise<unknown>, what: string, ms?: number): Promise<void>;
+  until(check: () => unknown | Promise<unknown>, what: string | (() => string), ms?: number): Promise<void>;
   untilAsked(count: number, ms?: number): Promise<Asked>;
   untilState(state: GuideState, ms?: number): Promise<void>;
   ask(goal: string): Promise<void>;
@@ -65,7 +65,14 @@ const page = (body: string) => `<!doctype html><html><head><meta charset="utf-8"
 export async function start(pages: string | Record<string, string>, script: Script, path = "/"): Promise<Session> {
   const served = typeof pages === "string" ? { "/": pages } : pages;
   const server: Server = createServer((request, response) => {
-    const html = served[(request.url ?? "/").split(/[?#]/)[0] ?? "/"];
+    const asked = (request.url ?? "/").split(/[?#]/)[0] ?? "/";
+    // "/data/<ms>" answers after that many milliseconds, for pages that fetch what they show.
+    const slow = /^\/data\/(\d+)$/.exec(asked);
+    if (slow) {
+      setTimeout(() => response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ rows: ["Alpha", "Beta", "Gamma"] })), Number(slow[1]));
+      return;
+    }
+    const html = served[asked];
     if (html === undefined) {
       response.writeHead(404).end("Not found");
       return;
@@ -84,7 +91,7 @@ export async function start(pages: string | Record<string, string>, script: Scri
       if (await check()) return;
       await opened.page.waitForTimeout(40);
     }
-    throw new Error(`Waited ${ms} ms for ${what}.`);
+    throw new Error(`Waited ${ms} ms for ${typeof what === "function" ? what() : what}.`);
   };
   const session: Session = {
     page: opened.page,
@@ -103,7 +110,7 @@ export async function start(pages: string | Record<string, string>, script: Scri
       }),
     until,
     untilAsked: async (count, ms) => {
-      await until(() => requests.length >= count, `question ${count} (${requests.length} asked so far)`, ms);
+      await until(() => requests.length >= count, () => `question ${count} (${requests.length} asked so far)`, ms);
       return requests[count - 1]!;
     },
     untilState: async (state, ms) => {
