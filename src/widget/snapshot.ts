@@ -503,8 +503,9 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
     let wrapper = false;
     if (added && !isNative(el) && !isFocusable(el) && within.some((c) => c.role !== "clickable" && isNative(c.el))) {
       wrapper = true;
-    } else if (added?.role === "clickable" && within.some((c) => c.role === "clickable" && c.label.length >= added!.label.length * 0.6)) {
+    } else if (added?.role === "clickable" && within.some((c) => c.role === "clickable" && saysMostOf(c.label, added!.label))) {
       // A clickable box around a clickable box that says the same thing: the inner one is the control.
+      // A panel named "Simple graph" around its legend, "A-series B-series", says something else and stays.
       wrapper = true;
     }
     if (added && wrapper) {
@@ -711,6 +712,19 @@ function roleOf(el: Element, explicitRole: string, pointerStartsHere: boolean): 
 function isNative(el: Element): boolean {
   const tag = el.tagName;
   return (tag === "A" && el.hasAttribute("href")) || tag === "BUTTON" || tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "SUMMARY";
+}
+
+/** The words of a name, for comparing two names by what they say. */
+function wordsOfLabel(label: string): string[] {
+  return label.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+/** Whether `inner` says most of what `outer` says: at least three in five of its words. An outer box that says nothing says nothing more. */
+function saysMostOf(inner: string, outer: string): boolean {
+  const wanted = wordsOfLabel(outer);
+  if (!wanted.length) return true;
+  const said = new Set(wordsOfLabel(inner));
+  return wanted.filter((word) => said.has(word)).length >= wanted.length * 0.6;
 }
 
 /** Lists, grids and menus whose entries take turns at being the one the Tab key lands on. */
@@ -982,7 +996,7 @@ const SHOWS_A_VALUE = new Set(["textbox", "searchbox", "combobox", "spinbutton",
 function withShownWords(name: string, el: Element): string {
   const shown = wordsIn(el, 120, "button, a[href], select, [role='button']");
   if (!shown) return name;
-  const words = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  const words = wordsOfLabel;
   const inName = new Set(words(name));
   const inShown = new Set(words(shown));
   if (words(shown).every((word) => inName.has(word))) return name;

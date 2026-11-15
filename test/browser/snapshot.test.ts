@@ -338,3 +338,19 @@ test("a list opened from a dialog is still listed when Haptic's own caption sits
   assert.equal(snapshot.dialog, "New rule");
   assert.deepEqual(lines(snapshot), ['combobox "Type" [dialog]', 'button "OK" [dialog]', 'option "Daily"', 'option "Weekly"']);
 });
+
+// Boxes around boxes -------------------------------------------------------------
+
+test("a clickable panel stays listed when the clickable inside it says something else", { skip }, async () => {
+  const snapshot = await read(`<main>
+    <section tabindex="0" aria-labelledby="t2"><h2 id="t2">Simple graph</h2><div tabindex="0" style="width:300px;height:80px"></div><div tabindex="0">A-series B-series</div></section>
+    <div tabindex="0" style="cursor:pointer"><span tabindex="0">Open the weekly report</span></div>
+  </main>`);
+  assert.deepEqual(lines(snapshot), [
+    'clickable "Simple graph" [main]',
+    'clickable [main › Simple graph]',
+    'clickable "A-series B-series" [main › Simple graph]',
+    // A box that says what the box inside it says is only its wrapper.
+    'clickable "Open the weekly report" [main]',
+  ]);
+});
