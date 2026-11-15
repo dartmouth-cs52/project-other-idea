@@ -75,7 +75,9 @@ test("the model is told it sees the page after the last click too (jira 13 of 13
   assert.match(rules, /"done" is wrong while you point at a control the visitor still has to use: a field or a dropdown is never the last step\./);
   assert.match(rules, /It is wrong too whenever "say" tells them to do something after the target\./);
   // toolshop pay-in-instalments: "done" on the instalments dropdown in 5 of 7 runs, Confirm never pointed at.
-  assert.match(rules, /A question like "Can I…\?" or "How do I…\?" asks to be taken through it, when there is a way, until it is done on the page, not to be answered in words\./);
+  assert.match(rules, /When the visitor asks how to do something, take them through it until it is done on the page\./);
+  // The owner decided on 15 November that a correct answer in words is a finished guide.
+  assert.match(rules, /A question about what the site has or shows, like whether something can be done or which items match, can be answered in one sentence from the page\./);
   assert.match(rules, /point at the last button too when it pays, orders, sends or deletes, and say plainly what it will do\./);
   assert.match(rules, /Never describe as done what a click has not yet done\./);
 });
