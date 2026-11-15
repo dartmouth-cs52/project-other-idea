@@ -72,8 +72,11 @@ const rules = buildSystemPrompt(site);
 test("the model is told it sees the page after the last click too (jira 13 of 13: 'done' while pointing at a control nobody had used yet)", () => {
   assert.match(rules, /You see the page again after every click, including the last\./);
   // OrangeHRM, 5 of 15 early endings: "done", pointing at the Mobile field, saying "Update your number in the Mobile field, then click Save".
-  assert.match(rules, /"done" is wrong while you point at a control the visitor still has to use, such as a field still to be filled in/);
-  assert.match(rules, /and wrong whenever "say" tells them to do something after the target\./);
+  assert.match(rules, /"done" is wrong while you point at a control the visitor still has to use: a field or a dropdown is never the last step\./);
+  assert.match(rules, /It is wrong too whenever "say" tells them to do something after the target\./);
+  // toolshop pay-in-instalments: "done" on the instalments dropdown in 5 of 7 runs, Confirm never pointed at.
+  assert.match(rules, /A question like "Can I…\?" or "How do I…\?" asks to be taken through it, when there is a way, until it is done on the page, not to be answered in words\./);
+  assert.match(rules, /point at the last button too when it pays, orders, sends or deletes, and say plainly what it will do\./);
   assert.match(rules, /Never describe as done what a click has not yet done\./);
 });
 
@@ -82,7 +85,7 @@ test("the model is told the pointer and the sentence must be about the same cont
 });
 
 test("the model is told to point at nothing more once the goal is reached (10 single steps, and 28 of 177 finished guides, pointed at an extra)", () => {
-  assert.match(rules, /the goal is complete: reply "done" with target null, and never point at an optional extra/);
+  assert.match(rules, /the goal is complete: reply "done" with target null\. What they might want next but did not ask for is not a step: never point at an optional extra\./);
 });
 
 test("the model is told to say what to type and stop (jira and ui5: 'type it, then press Enter', which on Jira sends a signed-out visitor to sign in)", () => {
@@ -133,7 +136,7 @@ test("the model is told to go where an action's options are when the visitor wan
 
 test("the model is told to state only what it was shown (grafana: 'the link will keep showing the last hour', and 'the list is now filtered' after the page reported the filter gone)", () => {
   assert.match(rules, /State as fact only what the page or the site's own notes and docs show\./);
-  assert.match(rules, /Don't say what a control will do beyond what its name says\./);
+  assert.match(rules, /Don't promise what a control will do unless its name or the page says so\./);
   assert.match(rules, /When what changed doesn't show that the goal was reached, say what to check, not that it worked\./);
   // It is about the sentence, so it sits with the rules for writing it.
   assert.ok(rules.indexOf("State as fact only") > rules.indexOf('Writing "say"'));
@@ -178,8 +181,8 @@ test("the question asked after the last step is worded as a closing one", () => 
   assert.match(wording, /^The visitor has done what you called the last step\./);
   assert.match(wording, /If what they asked for now shows, reply "done" with target null and say in one sentence what shows\./);
   assert.match(wording, /If the answer is a place on this page, you may point at it with "done"\./);
-  assert.match(wording, /If the goal still needs a control, point at it with "continue"\./);
-  assert.match(wording, /Never point at an optional extra\.$/);
+  assert.match(wording, /If the goal still needs a control, point at it with "continue": filling in a field or choosing in a dropdown is never the end by itself\./);
+  assert.match(wording, /Never point at an optional extra, something they did not ask for\.$/);
   // No button is named as an example: the model would take it for the thing to look for.
   assert.doesNotMatch(wording, /save|submit|apply/i);
   // Everything before the wording is the same question.
