@@ -1,5 +1,5 @@
-import { DEFAULT_APPEARANCE, STREAM_TYPE, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
-import { Guide, type Reporter } from "./guide.ts";
+import { DEFAULT_APPEARANCE, MODES, STREAM_TYPE, type Mode, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { Guide, type Reporter, type Watch } from "./guide.ts";
 import { Ui } from "./ui.ts";
 
 // Entry point of the script customers paste into their site:
@@ -26,9 +26,10 @@ async function boot() {
   // Switched off for this site. Nothing is drawn, and nothing is said about it on the customer's page.
   if (config.off) return;
 
-  // The reply comes as lines of JSON. The first names the control to point at,
-  // as soon as the model has decided. The last is the whole reply.
-  const sendTurn = async (request: Omit<TurnRequest, "site">, onTarget?: (id: string) => void): Promise<TurnReply> => {
+  // The reply comes as lines of JSON. The first lines say what kind of reply
+  // it is (on a site with Answers on) and name the control to point at, each as
+  // soon as the model has decided. The last is the whole reply.
+  const sendTurn = async (request: Omit<TurnRequest, "site">, watch: Watch = {}): Promise<TurnReply> => {
     const response = await fetch(`${api}/v1/turn`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: STREAM_TYPE },
@@ -51,7 +52,8 @@ async function boot() {
         const message = JSON.parse(line) as Partial<TurnReply> & { error?: string; code?: number };
         if (message.error) throw new Error(`Turn failed with ${message.code}: ${message.error}`);
         if (typeof message.say === "string") reply = message as TurnReply;
-        else if (typeof message.target === "string") onTarget?.(message.target);
+        else if (typeof message.target === "string") watch.onTarget?.(message.target);
+        else if (MODES.includes(message.mode as Mode)) watch.onMode?.(message.mode as Mode);
       }
       if (done) break;
     }

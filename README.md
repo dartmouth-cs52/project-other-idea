@@ -55,6 +55,8 @@ What matters most is decided by the server after the model has replied, in `src/
 - Prices, refunds, billing disputes, legal and medical matters, deadlines and anything about the visitor's own account are never answered in words, whatever the docs say. Pointing at the page where the visitor can see their own plan is still allowed.
 - An answer is held to the same rules as any sentence: plain text, with no web address, email address or number to call.
 
+In the widget, an answer is read in the panel: the question, the answer, and under it each article's title, link and date. If the answer is about a control on the page, the pointer goes to it as well. A step's sentence stays beside the pointer. Questions answered in words are remembered until the visitor presses Stop, so "and who can remove them?" is read with what came before.
+
 It is off unless a site switches it on, and a site without it is asked exactly as before: the same prompt, and the same three fields in each reply. A test holds the old prompt to a fingerprint, so it cannot change by accident.
 
 ```bash
