@@ -22,14 +22,16 @@ interface Play {
   usage: Counted;
   model?: string;
   /** Each attempt the provider made, when a declined request was retried on another model. */
-  attempts?: (Counted & { type: string; model: string })[];
+  attempts?: (Counted & { type: string; model: string | null })[];
+  /** Break the connection after the text, before the provider has said how much was written. */
+  breaks?: boolean;
 }
 let play: Play;
 
 globalThis.fetch = (async (input: RequestInfo | URL) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   assert.ok(url.includes("/v1/messages"), `an unexpected call to ${url}`);
-  const { text, stop, usage, model = "claude-sonnet-5-5", attempts } = play;
+  const { text, stop, usage, model = "claude-sonnet-5-5", attempts, breaks } = play;
   const encoder = new TextEncoder();
   const event = (name: string, data: unknown) => encoder.encode(`event: ${name}\ndata: ${JSON.stringify({ type: name, ...(data as object) })}\n\n`);
   const body = new ReadableStream<Uint8Array>({
@@ -37,6 +39,8 @@ globalThis.fetch = (async (input: RequestInfo | URL) => {
       controller.enqueue(event("message_start", { message: { id: "msg_played", type: "message", role: "assistant", model, content: [], stop_reason: null, stop_sequence: null, usage: { ...usage, output_tokens: 1 } } }));
       controller.enqueue(event("content_block_start", { index: 0, content_block: { type: "text", text: "" } }));
       controller.enqueue(event("content_block_delta", { index: 0, delta: { type: "text_delta", text } }));
+      // An error drops whatever has not been read yet, so the break comes once the reader has had the rest.
+      if (breaks) return void setTimeout(() => controller.error(new TypeError("terminated")), 20);
       controller.enqueue(event("content_block_stop", { index: 0 }));
       controller.enqueue(event("message_delta", { delta: { stop_reason: stop, stop_sequence: null }, usage: { output_tokens: usage.output_tokens, ...(attempts ? { iterations: attempts } : {}) } }));
       controller.enqueue(event("message_stop", {}));
@@ -135,6 +139,37 @@ test("a reply cut off at its length limit is paid for, so it is added to the bud
     // It is not counted as a step the visitor took.
     assert.equal(one.steps, 0);
   }
+});
+
+test("a reply that breaks off part-way is counted for what it had written", async () => {
+  const { app, settled, done } = appWithBudget();
+  // 2,500 characters of a reply arrive, then the connection drops. The provider had only counted one token of output.
+  const text = '{"target":"e1","status":"continue","say":"' + "x".repeat(2500);
+  play = { text, stop: "end_turn", breaks: true, usage: { input_tokens: 600, cache_creation_input_tokens: 0, cache_read_input_tokens: 24_000, output_tokens: 1 } };
+  await quietly(async () => app(turn(), "1.1.1.1"));
+  await done();
+  assert.equal(settled.length, 1);
+  assert.equal(settled[0]?.steps, 0);
+  // At least a token for every two and a half characters, the same cautious count the ceiling uses.
+  const output = Math.ceil(text.length / 2.5);
+  near(settled[0]?.usd, (600 * 2 + 24_000 * 0.1 + output * 10) / 1e6);
+});
+
+test("an attempt that does not name its model is priced as the model asked for", async () => {
+  const { app, settled, done } = appWithBudget();
+  const declined = { type: "message", model: null, input_tokens: 600, cache_creation_input_tokens: 0, cache_read_input_tokens: 24_000, output_tokens: 0 };
+  const served = { type: "fallback_message", model: "claude-opus-4-8", input_tokens: 600, cache_creation_input_tokens: 24_000, cache_read_input_tokens: 0, output_tokens: 150 };
+  play = {
+    text: '{"target":"e1","status":"continue","say":"Click Billing."}',
+    stop: "end_turn",
+    model: "claude-opus-4-8",
+    usage: { input_tokens: 600, cache_creation_input_tokens: 24_000, cache_read_input_tokens: 0, output_tokens: 150 },
+    attempts: [declined, served],
+  };
+  await quietly(async () => (await app(turn(), "1.1.1.1"))?.json());
+  await done();
+  // The declined attempt is Sonnet 5.5's, the model the server asked for, and not Opus 4.8's.
+  near(settled[0]?.usd, (600 * 2 + 24_000 * 0.1) / 1e6 + (600 * 5 + 24_000 * 10 + 150 * 25) / 1e6);
 });
 
 test("when a declined request is retried on another model, both attempts are added", async () => {

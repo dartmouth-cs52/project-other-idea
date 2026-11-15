@@ -214,6 +214,11 @@ async function claudeTurn(
   // because a call can be paid for and still fail: cut off at its length
   // limit, or ending in text that is not the JSON asked for.
   let counted: { usage: Anthropic.Beta.BetaUsage; model: string; stop: string | null } | undefined;
+  // The provider only says how many tokens were written once the reply ends. A reply that breaks off
+  // part-way has been paid for as far as it got, so what has arrived is counted as it comes, the same
+  // cautious way the ceiling is: text, thinking and anything else the reply streams. Thinking the
+  // provider does not stream is not seen, so a call cut short while thinking is still counted low.
+  let streamed = 0;
   try {
     const stream = client.beta.messages.stream({
       model: settings.model,
@@ -230,12 +235,17 @@ async function claudeTurn(
       const found = TARGET_SO_FAR.exec(soFar);
       if (found) targetKnown(found[1] ?? null);
     });
-    stream.on("streamEvent", (_event, soFar) => {
+    stream.on("streamEvent", (event, soFar) => {
       counted = { usage: soFar.usage, model: soFar.model, stop: soFar.stop_reason };
+      if (event.type === "content_block_delta") {
+        const delta = event.delta as { text?: string; thinking?: string; partial_json?: string };
+        streamed += (delta.text?.length ?? 0) + (delta.thinking?.length ?? 0) + (delta.partial_json?.length ?? 0);
+      }
     });
     response = await stream.finalMessage();
   } catch (error) {
-    const paid = counted ? usdOf(counted.usage, counted.model, settings.cache) : 0;
+    const soFar = counted && { ...counted.usage, output_tokens: Math.max(counted.usage.output_tokens ?? 0, Math.ceil(streamed / BYTES_PER_TOKEN)) };
+    const paid = counted && soFar ? usdOf(soFar, counted.model, settings.cache, settings.model) : 0;
     if (error instanceof Anthropic.AuthenticationError) throw new TurnError(500, "The server's Anthropic credentials are missing or invalid.", paid);
     if (error instanceof Anthropic.RateLimitError) throw new TurnError(503, "The model is rate limited. Try again shortly.", paid);
     if (error instanceof Anthropic.APIError) throw new TurnError(502, `The model call failed (${error.status ?? "no status"}): ${error.message}`, paid);
@@ -245,7 +255,7 @@ async function claudeTurn(
   }
 
   const { usage } = response;
-  const usd = usdOf(usage, response.model, settings.cache);
+  const usd = usdOf(usage, response.model, settings.cache, settings.model);
   console.log(
     `turn ${site.id} step ${request.step}: ${Date.now() - started} ms, ${response.model}, ` +
       `input ${usage.input_tokens}, cache read ${usage.cache_read_input_tokens ?? 0}, cache write ${usage.cache_creation_input_tokens ?? 0}, output ${usage.output_tokens}`,
@@ -267,12 +277,16 @@ async function claudeTurn(
  * model, it lists each attempt, and the declined one is paid for as well: the
  * top-level count covers only the attempt that answered.
  */
-function usdOf(usage: Anthropic.Beta.BetaUsage, model: string, cache: CacheLife): number {
+function usdOf(usage: Anthropic.Beta.BetaUsage, model: string, cache: CacheLife, asked: string): number {
   type Counted = { input_tokens: number | null; cache_read_input_tokens: number | null; cache_creation_input_tokens: number | null; output_tokens: number | null };
   const cost = (part: Counted, by: string) =>
     costOf(by, { input: part.input_tokens ?? 0, cacheRead: part.cache_read_input_tokens ?? 0, cacheWrite: part.cache_creation_input_tokens ?? 0, output: part.output_tokens ?? 0 }, cache);
   if (!usage.iterations?.length) return cost(usage, model);
-  return usage.iterations.reduce((sum, attempt) => sum + cost(attempt, ("model" in attempt && attempt.model) || model), 0);
+  // An attempt that does not say which model made it was the one asked for, unless it is the one that answered.
+  return usage.iterations.reduce(
+    (sum, attempt) => sum + cost(attempt, ("model" in attempt && attempt.model) || (attempt.type === "fallback_message" ? model : asked)),
+    0,
+  );
 }
 
 /**
