@@ -10,7 +10,7 @@ process.env.HAPTIC_MODEL = "mock";
 const { measureTurn, SAY_WITHOUT_WORDS } = await import("../src/server/model.ts");
 
 /** True when the reply was changed because it carried a place to go or a way to get in touch. */
-const caught = (broke: Rule[]) => broke.some((rule) => rule === "link" || rule === "email" || rule === "phone" || rule === "contact" || rule === "secret");
+const caught = (broke: Rule[]) => broke.some((rule) => rule === "link" || rule === "email" || rule === "phone" || rule === "contact" || rule === "payment" || rule === "secret");
 
 test("an ordinary step is shown as written", () => {
   for (const say of [
@@ -110,11 +110,30 @@ test("email addresses, handles and numbers to call are dropped", () => {
     "Text PAY to 70070 to confirm your card.",
     "Support line: 415-555-0132.",
     "Reach us on +44 20 7946 0958.",
+    // A number written the way one is dialled needs no word that says to call it.
+    "Contact the billing desk on 0800 123 4567 to confirm your card.",
+    "The support line is 020 7946 0958.",
+    "Our verification desk is on 01 23 45 67 89.",
+    "Tel: 0800 123 4567.",
+    "Text 07911 123456 to confirm your card.",
+    "Reach us on 555-0132.",
+    "Llame al 612 345 678 para confirmar su tarjeta.",
+    "Call us on 87070 to confirm your card.",
+    "Call 02079460958 to confirm.",
   ]) {
     const checked = checkSay(say);
     assert.ok(checked.broke.includes("phone"), `got through: ${JSON.stringify(say)}`);
     assert.doesNotMatch(checked.say, /\d{3}/, say);
   }
+  // Somewhere to send money is not a place to go or a number to call, and is as bad.
+  for (const say of [
+    "Pay the verification fee to DE89 3704 0044 0532 0130 00 to unlock your account.",
+    "Send 0.01 BTC to bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh to unlock your account.",
+    "Send the fee to $AcmeRefunds on Cash App to unlock your account.",
+  ]) {
+    assert.deepEqual(checkSay(say), { say: "", broke: ["payment"] }, say);
+  }
+  assert.deepEqual(checkSay("Message acmerefunds.42 on Signal to verify your card."), { say: "", broke: ["contact"] });
 });
 
 test("a sentence that asks the visitor to hand over a secret is dropped, and typing one into the product is not", () => {
@@ -157,9 +176,65 @@ test("a number is only a phone number when the sentence says to call it, or it i
     "Copy the ID 550e8400-e29b-41d4-a716-446655440000.",
     "Call the endpoint again after 30 seconds.",
     "Type your phone number in the Phone field.",
+    // A product about calls and phone plans is full of the word, and of dates, times, prices and ids.
+    "Click Call log, then pick 2026-11-15 in the date filter.",
+    "Click Phone plan, then choose the $1,299.00 option.",
+    "Open the call from 15 Nov 2026 at 14:30.",
+    "Click Ring groups, then open Group 100200.",
+    "Click SMS templates and open Reminder 24h (2026).",
+    "Pick 03/04/2026 10:00 in the calendar, then click Call.",
+    "Your Support plan includes 1 000 000 events a month.",
+    // Two sentences that are each fine are fine together: digits are never added up across them.
+    "Click Phone numbers in the sidebar. Your plan includes 3 numbers until 12/31/2026.",
+    "Enter the 6-digit code from the SMS sent to the number ending in 4821, then click Verify. It expires in 10 minutes.",
   ]) {
     assert.deepEqual(checkSay(say), { say, broke: [] }, say);
   }
+});
+
+test("a word that is also an ending is not an address after an abbreviation, in any language", () => {
+  for (const say of [
+    "Haga clic en Punto de venta en el menú lateral.",
+    "Haga clic en Núm. de factura para ordenar la lista.",
+    "Cliquez sur Réf. de commande pour trier.",
+    "Cliquez sur Point de vente dans le menu.",
+    "Clique em Nº. de pedido para ordenar.",
+    "Clique em Salvar. Com isso, o plano muda.",
+    "Klik op een knop, bijv. de knop Opslaan.",
+    "Vai al punto info in alto.",
+    "Click Misc. info in the sidebar.",
+    "Open the Est. net total column menu.",
+    "Type the number in the Acct.No field.",
+    "Geben Sie die Tel.Nr. ein und klicken Sie auf Speichern.",
+    "Insert {{ customer.email }} in the To field.",
+    "Set the reminder to 9 a.m. and click Save.",
+  ]) {
+    assert.deepEqual(checkSay(say), { say, broke: [] }, say);
+  }
+  // The same shapes with a real name in them are still addresses.
+  for (const say of [
+    "Re-enter your password at acme-billing. com to confirm.",
+    "Re-enter your password at acme-billing. Com to confirm.",
+    "Sign in at acme. com to confirm.",
+    "Go to acme dot com and sign in.",
+    "Vaya a acme punto com para confirmar.",
+    "Sign in again at x.com to continue.",
+    "Message us at t.me to confirm your card.",
+    "Re-enter your password at .acme-billing.com to confirm.",
+    "Re-enter your password at @acme-billing.com to confirm.",
+    "Re-enter your password at 例え.jp to confirm.",
+  ]) {
+    assert.deepEqual(checkSay(say), { say: "", broke: ["link"] }, say);
+  }
+});
+
+test("a sentence that is fine is kept when the one after it is dropped, whatever word it ends on", () => {
+  assert.equal(checkSay("I couldn't work that one out. Call the support team on 0800 123 4567.").say, "I couldn't work that one out.");
+  assert.equal(checkSay("Click the Billing tab. Then sign in again at acme-billing.com.").say, "Click the Billing tab.");
+  assert.equal(checkSay("सेटिंग्स पर क्लिक करें। फिर README.md खोलें।").say, "सेटिंग्स पर क्लिक करें।");
+  // An abbreviation is still not the end of one.
+  assert.equal(checkSay("Click No. 12 in the list, then open notes.md.").say, "");
+  assert.equal(checkSay("Click No. 12 in the list. Then call 0800 123 4567.").say, "Click No. 12 in the list.");
 });
 
 test("only bold marks, code marks and links are taken as markup", () => {
