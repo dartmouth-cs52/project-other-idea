@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import type { SiteContext, TurnReply, TurnRequest } from "../shared/types.ts";
+import { costOf } from "./prices.ts";
 import { buildSystemPrompt, buildUserMessage } from "./prompt.ts";
 
 // One model call per step. HAPTIC_MODEL picks the model, or "mock" for a
@@ -53,12 +54,15 @@ const startEnv: ModelEnv = typeof process === "undefined" ? {} : process.env;
 export let SETTINGS: TurnSettings = settingsFrom(startEnv);
 /** For trying the early pointer with no API key: the stand-in names its control, then waits this long before finishing. */
 let mockPauseMs = Number(startEnv.HAPTIC_MOCK_PAUSE_MS) || 0;
+/** For trying the budget with no API key: what the stand-in pretends each step cost, in US dollars. */
+let mockUsd = Number(startEnv.HAPTIC_MOCK_USD) || 0;
 let apiKey: string | undefined;
 let client: Anthropic | undefined;
 
 export function configure(env: ModelEnv) {
   SETTINGS = settingsFrom(env);
   mockPauseMs = Number(env.HAPTIC_MOCK_PAUSE_MS) || 0;
+  mockUsd = Number(env.HAPTIC_MOCK_USD) || 0;
   if (env.ANTHROPIC_API_KEY !== apiKey) {
     apiKey = env.ANTHROPIC_API_KEY;
     client = undefined;
@@ -77,6 +81,8 @@ export interface TurnMeasure {
   /** The sentence exactly as the model wrote it, before tidySay. The benchmark compares the two. */
   wrote: string;
   tokens?: { input: number; cacheRead: number; cacheWrite: number; output: number };
+  /** What the step cost, in US dollars, worked out from the tokens. */
+  usd: number;
 }
 
 const Reply = z.object({
@@ -131,7 +137,7 @@ export async function measureTurn(
     if (onPage(id)) onTarget?.(id);
   };
 
-  let answer: Omit<TurnMeasure, "ms" | "msToTarget" | "wrote">;
+  let answer: Omit<TurnMeasure, "ms" | "msToTarget" | "wrote" | "usd">;
   if (settings.model === "mock") {
     const reply = mockTurn(request);
     if (mockPauseMs > 0) {
@@ -145,7 +151,8 @@ export async function measureTurn(
   targetKnown(answer.reply.target);
   const wrote = answer.reply.say;
   answer.reply.say = tidySay(wrote);
-  return { ...answer, ms: Date.now() - started, msToTarget: msToTarget ?? Date.now() - started, wrote };
+  const usd = answer.model === "mock" ? mockUsd : costOf(answer.model, answer.tokens, settings.cache);
+  return { ...answer, ms: Date.now() - started, msToTarget: msToTarget ?? Date.now() - started, wrote, usd };
 }
 
 /**
@@ -163,7 +170,7 @@ async function claudeTurn(
   request: TurnRequest,
   settings: TurnSettings,
   targetKnown: (id: string | null) => void,
-): Promise<Omit<TurnMeasure, "ms" | "msToTarget" | "wrote">> {
+): Promise<Omit<TurnMeasure, "ms" | "msToTarget" | "wrote" | "usd">> {
   client ??= new Anthropic(apiKey ? { apiKey } : {});
   const messages: Anthropic.Beta.BetaMessageParam[] = request.history.map((turn) => ({ role: turn.role, content: turn.text }));
   // The conversation has to start with a user message.

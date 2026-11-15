@@ -1,9 +1,12 @@
-import { createApp } from "../src/server/app.ts";
+import { createApp, type AppParts } from "../src/server/app.ts";
+import { describeAlert, limitsFor, type Gate, type Limits, type Report } from "../src/server/budget.ts";
 import { Store } from "../src/server/db.ts";
 import { configure } from "../src/server/model.ts";
 import { createSiteCache } from "../src/server/site-cache.ts";
 import type { SiteContext } from "../src/shared/types.ts";
 import widget from "../dist/widget.txt";
+
+export { BudgetMeter } from "./budget.ts";
 
 // The Haptic server as customers' browsers reach it: a Cloudflare Worker at
 // widget.joinhaptic.com. It gives the same answers as the Node server in
@@ -26,11 +29,22 @@ export interface Env {
   DATABASE_URL?: string;
   /** Slows down anyone asking for steps too fast. */
   TURN_LIMIT?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+  /** What each site has spent on the model this hour and today. One object per site, in worker/budget.ts. */
+  BUDGET?: {
+    idFromName(name: string): unknown;
+    get(id: unknown): { spend(limits: Limits, caller: string, usd: number, steps: number): Promise<Report> };
+  };
+  /** US dollars a site may spend in an hour and in a day, unless the site sets its own. */
+  HAPTIC_BUDGET_HOUR?: string;
+  HAPTIC_BUDGET_DAY?: string;
+  /** A secret. When set, budget alerts are posted here as {"text": …}, the shape Slack's incoming webhooks take. */
+  HAPTIC_ALERT_WEBHOOK?: string;
   HAPTIC_MODEL?: string;
   HAPTIC_EFFORT?: string;
   HAPTIC_THINKING?: string;
   HAPTIC_CACHE?: string;
   HAPTIC_MOCK_PAUSE_MS?: string;
+  HAPTIC_MOCK_USD?: string;
   /** "1" switches every site off. It takes a deploy to change, so the keys in SITES are the quicker switch. */
   HAPTIC_OFF?: string;
   /** A secret, set with `wrangler secret put`. Not needed while HAPTIC_MODEL is "mock". */
@@ -89,6 +103,50 @@ async function isOff(env: Env, id: string): Promise<boolean> {
   return off;
 }
 
+/**
+ * Asking whether a site may go on means a trip to its budget, which can be on
+ * another continent. So the last answer is trusted for a few seconds, and a
+ * step only waits on that trip when nothing recent is known. Every step's
+ * cost is added after its reply has gone, and brings a fresh answer back.
+ */
+const GATE_KEEP_MS = 15_000;
+const gates = new Map<string, { at: number; gate: Gate }>();
+
+function budgetFor(env: Env): AppParts["budget"] {
+  const store = env.BUDGET;
+  if (!store) return undefined;
+  return {
+    async spend(site, caller, usd, steps) {
+      const limits = limitsFor(site, { HAPTIC_BUDGET_HOUR: env.HAPTIC_BUDGET_HOUR, HAPTIC_BUDGET_DAY: env.HAPTIC_BUDGET_DAY });
+      // Callers are only told apart when the site limits each one. Their addresses are scrambled before they are kept.
+      const who = limits.perCaller ? await scramble(caller) : "";
+      const key = `${site.id} ${who}`;
+      const held = gates.get(key);
+      if (usd === 0 && steps === 0 && held && Date.now() - held.at < GATE_KEEP_MS) return { gate: held.gate, alerts: [] };
+      const report = await store.get(store.idFromName(site.id)).spend(limits, who, usd, steps);
+      if (gates.size > 5000) gates.clear();
+      gates.set(key, { at: Date.now(), gate: report.gate });
+      return report;
+    },
+  };
+}
+
+async function scramble(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest).slice(0, 8), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function sendAlert(env: Env, text: string): Promise<void> {
+  console.warn(text);
+  if (!env.HAPTIC_ALERT_WEBHOOK) return;
+  try {
+    // "text" is what Slack reads and "content" is what Discord reads.
+    await fetch(env.HAPTIC_ALERT_WEBHOOK, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, content: text }) });
+  } catch (error) {
+    console.error("Couldn't send an alert:", error);
+  }
+}
+
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
 export default {
@@ -99,6 +157,7 @@ export default {
       HAPTIC_THINKING: env.HAPTIC_THINKING,
       HAPTIC_CACHE: env.HAPTIC_CACHE,
       HAPTIC_MOCK_PAUSE_MS: env.HAPTIC_MOCK_PAUSE_MS,
+      HAPTIC_MOCK_USD: env.HAPTIC_MOCK_USD,
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
     });
     const db = storeFor(env);
@@ -109,6 +168,9 @@ export default {
       widgetMaxAge: 300,
       overLimit: async (key) => (env.TURN_LIMIT ? !(await env.TURN_LIMIT.limit({ key })).success : false),
       isOff: (site) => isOff(env, site.id),
+      budget: budgetFor(env),
+      onAlert: (site, alert) => ctx.waitUntil(sendAlert(env, describeAlert(site, alert))),
+      background: (work) => ctx.waitUntil(work),
       onSeen: (site, origin, allowed) => later(db?.seenAt(site, origin, allowed)),
       onAsk: (turn, _site, origin) => later(db?.startGuide(turn, origin)),
       onTurn: (turn, measure, _site, origin) => later(db?.recordStep(turn, measure, origin)),

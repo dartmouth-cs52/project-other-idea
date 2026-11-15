@@ -22,6 +22,17 @@ export interface SiteContext {
   source: SiteSource;
   /** True switches Haptic off on this site: no launcher is drawn and the model is never called. */
   off?: boolean;
+  /**
+   * The most this site may spend on the model, in US dollars. Past it visitors
+   * get a fixed sentence until the hour or the day turns. The server's own
+   * limits apply to whatever is left out (see src/server/budget.ts).
+   */
+  budget?: {
+    hour?: number;
+    day?: number;
+    /** Steps one visitor may take in a day. Meant for a public demo: in an office, everyone can share one address. */
+    perCaller?: number;
+  };
   createdAt: string;
   updatedAt: string;
 }

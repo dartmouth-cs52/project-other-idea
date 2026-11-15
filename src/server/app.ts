@@ -11,6 +11,7 @@ import {
   type TurnReply,
   type TurnRequest,
 } from "../shared/types.ts";
+import type { Alert, Budget } from "./budget.ts";
 import { measureTurn, TurnError, type TurnMeasure } from "./model.ts";
 
 // What the Haptic server answers: the widget file, each site's public
@@ -41,6 +42,12 @@ export interface AppParts {
   onAsk?(request: TurnRequest, site: SiteContext, origin: string | undefined): void;
   /** The off switch, as this host keeps it: true stops every model call for the site. A site's own `off` is checked as well. */
   isOff?(site: SiteContext): boolean | Promise<boolean>;
+  /** Keeps what each site has spent on the model, so a site can be stopped at its limit. Without one, nothing is capped. */
+  budget?: Budget;
+  /** Told when a site passes half, four fifths or all of a limit. Must not throw. */
+  onAlert?(site: SiteContext, alert: Alert): void;
+  /** Work to finish after the reply has gone, like adding a step's cost to the budget. A Worker has to be told about it, or it is cut short. */
+  background?(work: Promise<unknown>): void;
   /** Told about each finished step, for logging. Must not throw. */
   onTurn?(request: TurnRequest, measure: TurnMeasure, site: SiteContext, origin: string | undefined): void;
   /**
@@ -63,6 +70,10 @@ const MAX_BODY_BYTES = 512 * 1024;
  */
 export const FIXED_SAY = {
   off: "The guide is switched off for now.",
+  /** The site has spent its budget for the hour or the day. */
+  resting: "The guide is resting for now. Try again in a little while.",
+  /** One visitor has used their steps for the day. */
+  visitorLimit: "That's as much as the guide can do for you today. Try again tomorrow.",
 } as const;
 
 const fixedReply = (say: string): TurnReply => ({ target: null, status: "done", say });
@@ -116,12 +127,19 @@ export function createApp(parts: AppParts) {
         return streamed ? lines(cors, async (line) => line(reply)) : json(200, reply);
       }
 
+      const gate = await askBudget(parts, site, caller);
+      if (!gate.open) {
+        const reply = fixedReply(gate.why === "caller" ? FIXED_SAY.visitorLimit : FIXED_SAY.resting);
+        return streamed ? lines(cors, async (line) => line(reply)) : json(200, reply);
+      }
+
       // A widget that asks for it gets the step as it forms: the control to point at first, then the whole reply.
-      if (streamed) return streamTurn(parts, site, turn, cors, origin);
+      if (streamed) return streamTurn(parts, site, turn, caller, cors, origin);
 
       try {
         const measure = await measureTurn(site, turn);
         parts.onTurn?.(turn, measure, site, origin);
+        charge(parts, site, caller, measure);
         return json(200, measure.reply);
       } catch (error) {
         if (!(error instanceof TurnError)) throw error;
@@ -165,11 +183,12 @@ function parseReport(body: unknown): GuideReport | undefined {
  * named the control, and the full reply follows as the last line. The status
  * line is already sent by then, so a failure arrives as `{"error":…,"code":…}`.
  */
-function streamTurn(parts: AppParts, site: SiteContext, turn: TurnRequest, cors: Record<string, string>, origin: string | undefined): Response {
+function streamTurn(parts: AppParts, site: SiteContext, turn: TurnRequest, caller: string, cors: Record<string, string>, origin: string | undefined): Response {
   return lines(cors, async (line) => {
     try {
       const measure = await measureTurn(site, turn, undefined, (id) => line({ target: id }));
       parts.onTurn?.(turn, measure, site, origin);
+      charge(parts, site, caller, measure);
       line(measure.reply);
     } catch (error) {
       const known = error instanceof TurnError;
@@ -189,6 +208,33 @@ function lines(cors: Record<string, string>, write: (line: (value: unknown) => v
     },
   });
   return new Response(body, { headers: { ...cors, "Content-Type": STREAM_TYPE, "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
+}
+
+/**
+ * Whether the site may make another model call. If the budget cannot be
+ * reached the step goes ahead: the spend limit at the model provider is what
+ * holds when this fails, and a visitor should not lose their guide to it.
+ */
+async function askBudget(parts: AppParts, site: SiteContext, caller: string) {
+  if (!parts.budget) return { open: true as const };
+  try {
+    return (await parts.budget.spend(site, caller, 0, 0)).gate;
+  } catch (error) {
+    console.error(`budget ${site.id}: couldn't be read, so the step went ahead.`, error);
+    return { open: true as const };
+  }
+}
+
+/** Adds a finished step to the site's budget, after the reply has gone, and passes on any alert it sets off. */
+function charge(parts: AppParts, site: SiteContext, caller: string, measure: TurnMeasure) {
+  if (!parts.budget) return;
+  const work = parts.budget
+    .spend(site, caller, measure.usd, 1)
+    .then((report) => {
+      for (const alert of report.alerts) parts.onAlert?.(site, alert);
+    })
+    .catch((error) => console.error(`budget ${site.id}: a step's cost couldn't be added.`, error));
+  parts.background?.(work);
 }
 
 /** Off for this site, by the site's own setting or by the host's switch. */

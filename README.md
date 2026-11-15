@@ -113,6 +113,23 @@ npm run site:on -- site_ab12cd34ef      # and back
 
 The switch is kept in the Worker's KV store, apart from Neon, so it still works when the database cannot be reached. On your own machine, `HAPTIC_OFF=1` does the same. A site whose context has `"off": true` is off wherever it runs.
 
+**What a site can spend.** The limit of 30 steps a minute slows one caller down. It does not bound the bill, because every new address gets its own allowance. Two limits do:
+
+1. **At the model provider.** Give the server its own workspace and API key, and set a monthly spend limit on that workspace in the provider's console. This is the one limit that holds even if the server has a bug, and it has to be set by hand.
+2. **In the server.** Each site may spend $2 an hour and $10 a day on the model (`HAPTIC_BUDGET_HOUR` and `HAPTIC_BUDGET_DAY` in `wrangler.jsonc`). Past either, its visitors read "The guide is resting for now" and the model is not called until the hour or the day turns. The cost of a step is worked out from its tokens and the prices in `src/server/prices.ts`, which need updating when the provider's prices change.
+
+A site can have its own limits, and a public demo can also limit each visitor:
+
+```bash
+npm run tag -- --id site_ab12cd34ef --budget-hour 5 --budget-day 40 --visitor-steps 60
+```
+
+When a site passes 50%, 80% and 100% of a limit, a line goes to the server's log. To have it sent to a chat channel as well, give the server a webhook address (Slack's and Discord's incoming webhooks both work):
+
+```bash
+npx wrangler secret put HAPTIC_ALERT_WEBHOOK
+```
+
 The online server calls the model named by `HAPTIC_MODEL` in `wrangler.jsonc`, which the benchmark chose (see [`eval/README.md`](eval/README.md), "Results"). Its key is the repository's `ANTHROPIC_API_KEY` secret, which the deploy workflow copies onto the Worker. Set `HAPTIC_MODEL` to `mock` to run it on the keyword stand-in, which needs no key.
 
 ## Authors

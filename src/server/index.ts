@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { buildWidget, WIDGET_FILE } from "../widget/build.ts";
 import { createApp } from "./app.ts";
+import { describeAlert, MemoryBudget } from "./budget.ts";
 import { Store } from "./db.ts";
 import { SETTINGS } from "./model.ts";
 import { recordTurn } from "./record.ts";
@@ -40,6 +41,8 @@ const app = createApp({
   widgetMaxAge: process.env.NODE_ENV === "production" ? 300 : 0,
   overLimit,
   isOff: () => process.env.HAPTIC_OFF === "1",
+  budget: new MemoryBudget(process.env),
+  onAlert: (site, alert) => console.warn(describeAlert(site, alert)),
   onTurn: (request, measure, _site, origin) => {
     void recordTurn(request, measure);
     void store?.recordStep(request, measure, origin);
