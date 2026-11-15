@@ -78,11 +78,22 @@ The website deploys to Cloudflare from `web/`. See [`web/README.md`](web/README.
 The widget server runs as a Cloudflare Worker at `https://widget.joinhaptic.com`, the address in every customer's script tag. `worker/index.ts` is its entry point, and it gives the same answers as the Node server because both run `src/server/app.ts`. The settings are in `wrangler.jsonc`.
 
 ```bash
-npm run deploy                              # builds the widget, then publishes the Worker
-npm run site:publish -- site_ab12cd34ef     # copies a site built with `npm run tag` to the online server
+npm run deploy                                        # builds the widget, then publishes the Worker
+npm run site:publish -- site_ab12cd34ef               # copies a site built with `npm run tag` to Neon
+npm run site:publish -- --from-kv site_joinhaptic     # moves a site from the old KV store to Neon
 ```
 
-Build a site for the online server with `HAPTIC_PUBLIC_URL=https://widget.joinhaptic.com npm run tag -- --url …`, so the tag it prints points there. A published site is picked up within a minute.
+Build a site for the online server with `HAPTIC_PUBLIC_URL=https://widget.joinhaptic.com npm run tag -- --url …`, so the tag it prints points there. A published site is picked up within a minute. Companies that sign up add their own sites from the dashboard on joinhaptic.com (see [`web/README.md`](web/README.md#sign-in-approval-and-the-dashboard)).
+
+**The database.** Sites, and every guide and step, are kept in Neon, in the project called haptic. The tables are in `db/migrations`, and `npm run db:migrate` applies the ones a database is missing, to the database in `DATABASE_URL`. It talks to Neon over HTTPS. The Worker reads the connection string from a secret:
+
+```bash
+npx wrangler secret put DATABASE_URL
+```
+
+Without it the Worker still answers, from the KV store sites were kept in before Neon, and records nothing. With it, a site missing from Neon is still looked for in the KV store, until every site has moved.
+
+What is kept from visitors follows one rule: the question, each control pointed at, wrong clicks, how the guide ended, whether they said it helped, and timings. Emails and long numbers are masked. Page contents are not kept, and what people type is never read. A guide that never reports an ending was abandoned. The first time the script calls from an allowed origin is how the dashboard knows a site is connected, and a call from an origin that is not allowed is kept too, so the dashboard can say why an install looks dead.
 
 The online server answers with the keyword stand-in until it has a model to call: `HAPTIC_MODEL` in `wrangler.jsonc` is `mock`. To switch it on, put the key on the Worker with `npx wrangler secret put ANTHROPIC_API_KEY`, set `HAPTIC_MODEL` to a Claude model ID, and deploy.
 

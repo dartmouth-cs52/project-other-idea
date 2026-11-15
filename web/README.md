@@ -36,6 +36,38 @@ Replying to one of those emails answers the person who sent the request. If the 
 
 `npm run dev` runs the pages only, so the form shows its fallback message there. To try the form locally, use `npm run preview`.
 
+## Sign-in, approval and the dashboard
+
+Companies sign up by invitation. The pages are `app/sign-in/`, `app/dashboard/`, `app/approve/` and `app/install/`. They are static and fetch everything from the Worker, whose code is in `worker/`:
+
+- `worker/auth.ts` passes `/api/auth/*` through to Neon Auth, so the session cookie is joinhaptic.com's own and Safari keeps it. Sign-in is an emailed link or Google. Both come back to `/dashboard/` with a one-time verifier that the browser client in `lib/auth-client.ts` exchanges through this proxy.
+- `worker/app-api.ts` answers `/api/app/*`: who is signed in, their company's sites, install health, the dashboard and each guide's steps. Every site is looked up with the caller's organization.
+- `worker/reader.ts` reads a new site's public pages a few at a time, in a real browser through Cloudflare Browser Rendering, or as plain HTML when that is not available. It follows links, tabs, menus and accordions only, and in the browser every request other than GET is refused, so it cannot change anything on the customer's site.
+- `worker/insights.ts` is the dashboard's queries.
+
+**Approving a company.** Each access request email now ends with an Approve link. It opens a page that shows the request and changes nothing until a button is pressed, so a mail scanner following the link approves no one. The team approves the one address, or everyone at the company's domain (never a free mailbox domain such as gmail.com). Approving has Neon email the person a sign-in link. Their first sign-in creates the company's organization, and later sign-ins from an approved domain join it. Anyone else who signs in is told they are not approved yet. The list is the `approvals` table, from `../db/migrations`.
+
+**Setting it up.** The Worker needs three secrets, and Neon Auth needs to trust the site's address:
+
+```bash
+npx wrangler secret put DATABASE_URL              # Neon's connection string for the haptic project's main branch
+npx wrangler secret put NEON_AUTH_COOKIE_SECRET   # 32 or more random characters: openssl rand -base64 32
+npx wrangler secret put APPROVE_SECRET            # 32 or more random characters, a different one
+```
+
+`NEON_AUTH_URL` and `WIDGET_URL` are plain settings in `wrangler.jsonc`. In Neon Auth for the main branch, add `https://joinhaptic.com` as a trusted domain, turn on Magic Link with a 1440 minute expiry, and turn off email and password. Until the secrets are set, the sign-in pages load but say sign-in is not set up.
+
+**Trying it locally.** Copy the values above into `.dev.vars`, pointing at a Neon branch for testing, with `NEON_AUTH_URL` set to that branch's auth address and `WIDGET_URL=http://localhost:4000`. Add `http://localhost:8787` to that branch's trusted domains. Then:
+
+```bash
+NEXT_PUBLIC_WIDGET_URL=http://localhost:4000 npx next build
+npx wrangler dev --port 8787 --local-upstream localhost:8787
+```
+
+`--local-upstream` matters: without it, the site's address looks like joinhaptic.com over plain http and every page redirects to https. Run the widget server next to it with `npm run dev` at the top of the repository and `DATABASE_URL` in its `.env`.
+
+**The sign-in email** is Neon's own template. Only its app name can be set, and it is set to Haptic. Replacing it means subscribing to Neon Auth's `send.magic_link` webhook and sending our own email through a sending service such as Resend.
+
 ## Deploying
 
 The site runs on Cloudflare as one Worker: the static pages from `out/`, plus the form handler. The settings are in `wrangler.jsonc`.
