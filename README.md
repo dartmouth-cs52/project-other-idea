@@ -103,6 +103,16 @@ What is kept from visitors follows one rule: the question, each control pointed 
 
 The first time the script calls from an allowed origin is how the dashboard knows a site is connected, and a call from an origin that is not allowed is kept too, so the dashboard can say why an install looks dead.
 
+**Switching it off.** One command takes Haptic off a site, or off every site, without a deploy. The launcher goes, and the model is no longer called. It takes effect within a minute or two.
+
+```bash
+npm run site:off -- site_ab12cd34ef     # one site
+npm run site:off -- --all               # every site
+npm run site:on -- site_ab12cd34ef      # and back
+```
+
+The switch is kept in the Worker's KV store, apart from Neon, so it still works when the database cannot be reached. On your own machine, `HAPTIC_OFF=1` does the same. A site whose context has `"off": true` is off wherever it runs.
+
 The online server calls the model named by `HAPTIC_MODEL` in `wrangler.jsonc`, which the benchmark chose (see [`eval/README.md`](eval/README.md), "Results"). Its key is the repository's `ANTHROPIC_API_KEY` secret, which the deploy workflow copies onto the Worker. Set `HAPTIC_MODEL` to `mock` to run it on the keyword stand-in, which needs no key.
 
 ## Authors

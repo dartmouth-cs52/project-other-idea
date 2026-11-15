@@ -39,6 +39,7 @@ const app = createApp({
   widget: () => readFile(WIDGET_FILE, "utf8"),
   widgetMaxAge: process.env.NODE_ENV === "production" ? 300 : 0,
   overLimit,
+  isOff: () => process.env.HAPTIC_OFF === "1",
   onTurn: (request, measure, _site, origin) => {
     void recordTurn(request, measure);
     void store?.recordStep(request, measure, origin);

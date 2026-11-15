@@ -20,6 +20,8 @@ export interface SiteContext {
   pages: PageNode[];
   /** The inputs this was built from, so `refresh` can rebuild it unattended. */
   source: SiteSource;
+  /** True switches Haptic off on this site: no launcher is drawn and the model is never called. */
+  off?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -65,6 +67,8 @@ export interface PageNode {
 export interface PublicSiteConfig {
   name: string;
   appearance: Appearance;
+  /** Set when Haptic is switched off here. The widget then draws nothing. */
+  off?: true;
 }
 
 export interface SnapElement {

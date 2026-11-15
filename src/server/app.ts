@@ -8,6 +8,7 @@ import {
   type SiteContext,
   type SnapElement,
   type Snapshot,
+  type TurnReply,
   type TurnRequest,
 } from "../shared/types.ts";
 import { measureTurn, TurnError, type TurnMeasure } from "./model.ts";
@@ -38,6 +39,8 @@ export interface AppParts {
    * leaves before the answer, is still on record. Must not throw.
    */
   onAsk?(request: TurnRequest, site: SiteContext, origin: string | undefined): void;
+  /** The off switch, as this host keeps it: true stops every model call for the site. A site's own `off` is checked as well. */
+  isOff?(site: SiteContext): boolean | Promise<boolean>;
   /** Told about each finished step, for logging. Must not throw. */
   onTurn?(request: TurnRequest, measure: TurnMeasure, site: SiteContext, origin: string | undefined): void;
   /**
@@ -51,6 +54,18 @@ export interface AppParts {
 }
 
 const MAX_BODY_BYTES = 512 * 1024;
+
+/**
+ * What a visitor reads when the server answers without asking the model. The
+ * words are fixed, so nothing typed into the ask box or planted on a page can
+ * change them. They go out as an ordinary reply, which every copy of the
+ * widget already knows how to show.
+ */
+export const FIXED_SAY = {
+  off: "The guide is switched off for now.",
+} as const;
+
+const fixedReply = (say: string): TurnReply => ({ target: null, status: "done", say });
 
 /** Returns the handler. It answers `undefined` for addresses that are not its own, so a host can serve other things. */
 export function createApp(parts: AppParts) {
@@ -81,6 +96,7 @@ export function createApp(parts: AppParts) {
       if (origin) parts.onSeen?.(site, origin, allowed);
       if (!allowed) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
       const config: PublicSiteConfig = { name: site.name, appearance: site.appearance };
+      if (await switchedOff(parts, site)) config.off = true;
       return json(200, config);
     }
 
@@ -93,8 +109,15 @@ export function createApp(parts: AppParts) {
       if (await parts.overLimit(`${site.id} ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
       if (turn.step === 0 && turn.guide) parts.onAsk?.(turn, site, origin);
 
+      const streamed = (request.headers.get("Accept") ?? "").includes(STREAM_TYPE);
+      // A page that was open before the switch was thrown still has its launcher, so a step can arrive.
+      if (await switchedOff(parts, site)) {
+        const reply = fixedReply(FIXED_SAY.off);
+        return streamed ? lines(cors, async (line) => line(reply)) : json(200, reply);
+      }
+
       // A widget that asks for it gets the step as it forms: the control to point at first, then the whole reply.
-      if ((request.headers.get("Accept") ?? "").includes(STREAM_TYPE)) return streamTurn(parts, site, turn, cors, origin);
+      if (streamed) return streamTurn(parts, site, turn, cors, origin);
 
       try {
         const measure = await measureTurn(site, turn);
@@ -143,23 +166,34 @@ function parseReport(body: unknown): GuideReport | undefined {
  * line is already sent by then, so a failure arrives as `{"error":…,"code":…}`.
  */
 function streamTurn(parts: AppParts, site: SiteContext, turn: TurnRequest, cors: Record<string, string>, origin: string | undefined): Response {
+  return lines(cors, async (line) => {
+    try {
+      const measure = await measureTurn(site, turn, undefined, (id) => line({ target: id }));
+      parts.onTurn?.(turn, measure, site, origin);
+      line(measure.reply);
+    } catch (error) {
+      const known = error instanceof TurnError;
+      console.error(`turn ${site.id}:`, known ? error.message : error);
+      line({ error: known ? error.message : "Something went wrong.", code: known ? error.status : 500 });
+    }
+  });
+}
+
+/** A response in the streamed format. `write` is handed the function that sends one line. */
+function lines(cors: Record<string, string>, write: (line: (value: unknown) => void) => Promise<void>): Response {
   const encoder = new TextEncoder();
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const line = (value: unknown) => controller.enqueue(encoder.encode(JSON.stringify(value) + "\n"));
-      try {
-        const measure = await measureTurn(site, turn, undefined, (id) => line({ target: id }));
-        parts.onTurn?.(turn, measure, site, origin);
-        line(measure.reply);
-      } catch (error) {
-        const known = error instanceof TurnError;
-        console.error(`turn ${site.id}:`, known ? error.message : error);
-        line({ error: known ? error.message : "Something went wrong.", code: known ? error.status : 500 });
-      }
+      await write((value) => controller.enqueue(encoder.encode(JSON.stringify(value) + "\n")));
       controller.close();
     },
   });
   return new Response(body, { headers: { ...cors, "Content-Type": STREAM_TYPE, "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
+}
+
+/** Off for this site, by the site's own setting or by the host's switch. */
+async function switchedOff(parts: AppParts, site: SiteContext): Promise<boolean> {
+  return site.off === true || (await parts.isOff?.(site)) === true;
 }
 
 /** The widget only works on origins the site lists. Requests with no Origin header (same-origin GETs, curl) pass. */
