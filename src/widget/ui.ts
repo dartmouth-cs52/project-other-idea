@@ -53,6 +53,17 @@ button { font: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .cursor { transition: none; } }
 `;
 
+/**
+ * Where a guide is, for anything outside that needs to know: tests, the
+ * benchmark, a customer's own script.
+ * - "idle": no guide has run on this page yet.
+ * - "asking": a question has been sent and the answer is not yet on show.
+ * - "pointing": a pointer is on show and the widget is waiting for the visitor to use it.
+ * - "watching": a sentence is on show with no pointer, and the widget is waiting for the visitor to do what it says.
+ * - "finished": the guide is over. Its last sentence may still be on show. It stays this way until the next question.
+ */
+export type GuideState = "idle" | "asking" | "pointing" | "watching" | "finished";
+
 export interface UiHandlers {
   onAsk: (question: string) => void;
   onStop: () => void;
@@ -124,6 +135,7 @@ export class Ui {
       });
     }
     this.host.setAttribute("popover", "manual");
+    this.setState("idle");
     this.place();
     setInterval(this.place, 500);
   }
@@ -197,6 +209,15 @@ export class Ui {
   clear() {
     this.clearPointer();
     this.caption.hidden = true;
+  }
+
+  /** Where the guide is. Kept as a property of our own element, beside `pointedAt`, and nowhere on the customer's page. */
+  get state(): GuideState {
+    return (this.host as HTMLElement & { guideState?: GuideState }).guideState ?? "idle";
+  }
+
+  setState(state: GuideState) {
+    (this.host as HTMLElement & { guideState?: GuideState }).guideState = state;
   }
 
   /**

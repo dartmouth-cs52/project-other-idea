@@ -459,6 +459,8 @@ function rowName(row: Element, control: Element): string {
  */
 function captionOf(el: Element, after: boolean): string {
   const wordsOf = (node: Element): string => {
+    // What a visitor wrote is never a caption: an editor or a text area beside a field holds their words, not the page's.
+    if ((node as HTMLElement).isContentEditable || node.matches("textarea, input, select")) return "";
     if (node.querySelector("input, select, textarea, button, a[href], [role='button'], [role='combobox'], [contenteditable='true']")) return "";
     const text = cleanText(node.textContent ?? "", 61);
     return text.length > 60 ? "" : text.replace(/\s*[:*]+$/, "");

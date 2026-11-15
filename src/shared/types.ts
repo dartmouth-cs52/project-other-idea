@@ -114,6 +114,8 @@ export interface TurnRequest {
   event?: string;
   /** What changed on the page since the last step, in words. */
   change?: string;
+  /** Set when the visitor has done what was called the last step, and this question is the look at what came of it. */
+  closing?: true;
   snapshot: Snapshot;
 }
 

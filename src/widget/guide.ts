@@ -21,6 +21,12 @@ const EMPTY_PAGE_WAIT_MS = 12_000;
 const PRESS_WITHOUT_CLICK_MS = 450;
 /** A page load that has not happened this long after it began was a download, or was called off. */
 const LEAVING_WAIT_MS = 8000;
+/**
+ * How many times one guide may look again after what the model called the
+ * last step. Each look is a question, and a model that keeps finding one more
+ * thing to show has to stop somewhere.
+ */
+const MAX_CLOSINGS = 3;
 
 /**
  * Whether this page has begun to load another one. A click on an ordinary link
@@ -50,6 +56,12 @@ interface Acted {
   onTarget: boolean;
 }
 
+/** How a pointer is listened to. It can be changed while the listening goes on, since a pointer is shown before its reply is whole. */
+interface Hearing {
+  /** Any click off the control ends the wait, blank space included. For a pointer that may be the last word. */
+  anyClick: boolean;
+}
+
 /** A pointer shown before the rest of the reply was in, and what the visitor did with it, if anything yet. */
 interface EarlyPointer {
   el: Element;
@@ -66,7 +78,23 @@ interface SavedGuide {
   event?: string;
   /** Set when that was something other than the step they were shown. */
   strayed?: boolean;
+  /** The pointer on show came with what the model called the last step, so the next question is a closing one. */
+  closing?: boolean;
+  /** How many closing questions the guide has asked. */
+  closings?: number;
   savedAt: number;
+}
+
+/** What a question carries besides the page. */
+interface Asking {
+  /** What the visitor did since the last step. */
+  event?: string;
+  /** The model has already been told once that it is repeating itself. */
+  nudged?: boolean;
+  /** The page was read again because it changed while the model was answering. */
+  reread?: boolean;
+  /** The visitor has done what the model called the last step, and this question is the look at what came of it. */
+  closing?: boolean;
 }
 
 export class Guide {
@@ -85,6 +113,10 @@ export class Guide {
   /** Bumped whenever the guide is stopped or restarted, so stale async work can tell and bail. */
   private run = 0;
   private stopWaiting?: () => void;
+  /** The pointer on show came with "done": the model called it the last step. */
+  private showingLast = false;
+  /** How many closing questions this guide has asked. */
+  private closings = 0;
 
   constructor(
     private readonly ui: Ui,
@@ -95,6 +127,7 @@ export class Guide {
     this.reset();
     this.goal = goal;
     this.watchLeaving(true);
+    this.ui.setState("asking");
     void this.turn(this.run);
   }
 
@@ -105,10 +138,12 @@ export class Guide {
     if (on) window.addEventListener("beforeunload", noteLeaving);
   }
 
+  /** The visitor called the guide off. */
   stop() {
     this.reset();
     this.ui.clear();
     this.ui.setBusy("");
+    if (this.ui.state !== "idle") this.ui.setState("finished");
   }
 
   /** Pick up a guide that a full page load interrupted. */
@@ -120,15 +155,20 @@ export class Guide {
     this.history = saved.history;
     this.step = saved.step;
     this.strayed = saved.strayed === true;
+    this.closings = saved.closings ?? 0;
+    // A page that loaded after the last step was used is what that step led to: look at it.
+    const closing = saved.closing === true && !this.strayed;
+    if (closing) this.closings++;
     const here = currentPath();
     const moved = saved.path === here ? "The page reloaded." : `A new page loaded: the user went from ${saved.path} to ${here}.`;
     const run = this.run;
     this.watchLeaving(true);
+    this.ui.setState("asking");
     this.ui.setBusy(this.strayed ? OFF_TRACK : "Looking at this page…");
     // The script tag can run before the page has finished arriving, let alone drawn itself.
     void loaded()
       .then(() => settle(this.ui.host))
-      .then(() => this.turn(run, [saved.event, moved].filter(Boolean).join(" ")));
+      .then(() => this.turn(run, { event: [saved.event, moved].filter(Boolean).join(" "), closing }));
   }
 
   private reset() {
@@ -141,13 +181,17 @@ export class Guide {
     this.previous = undefined;
     this.last = undefined;
     this.strayed = false;
+    this.showingLast = false;
+    this.closings = 0;
     forget();
   }
 
-  private async turn(run: number, event?: string, nudged = false, reread = false): Promise<void> {
+  private async turn(run: number, asking: Asking = {}): Promise<void> {
     const { ui } = this;
+    const { event, nudged = false, reread = false, closing = false } = asking;
     if (this.step >= MAX_STEPS) return this.finish("That's as far as I can take this one. Ask again to keep going.");
-    ui.setBusy(this.step === 0 ? "Finding it…" : this.strayed ? OFF_TRACK : "Next step…");
+    ui.setState("asking");
+    ui.setBusy(this.step === 0 ? "Finding it…" : this.strayed ? OFF_TRACK : closing ? "Checking…" : "Next step…");
 
     ui.place();
     let page = takeSnapshot(ui.host);
@@ -165,6 +209,7 @@ export class Guide {
     // the rest of the reply arrives.
     let early: EarlyPointer | undefined;
     let whenActed: ((what: Acted) => void) | undefined;
+    const how: Hearing = { anyClick: false };
     /** Every control that was on the page when it was read, with how the list named it. Anything else a visitor clicks appeared since. */
     const known = new Map<Element, SnapElement>();
     for (const element of page.snapshot.elements) {
@@ -179,7 +224,7 @@ export class Guide {
       ui.pointAt(el, "");
       const waiting: EarlyPointer = {
         el,
-        stop: waitForAction(el, listed, ui.host, known, (what) => {
+        stop: waitForAction(el, listed, ui.host, known, how, (what) => {
           waiting.acted = what;
           // If this click loads a new page before the reply is in, the next page still needs to know about it.
           this.strayed = !what.onTarget;
@@ -209,17 +254,20 @@ export class Guide {
           snapshot: page.snapshot,
           ...(event ? { event } : {}),
           ...(change ? { change } : {}),
+          ...(closing ? { closing: true as const } : {}),
         },
         pointEarly,
       );
     } catch (error) {
+      if (run !== this.run) return;
       // The page is on its way out and took the request with it. The next page picks the guide up.
-      if (run !== this.run || isLeaving()) return;
+      if (isLeaving()) return this.askAgainIfStaying(run, asking, dropEarly);
       dropEarly();
       console.warn("[Haptic]", error);
       return this.finish("Something went wrong on our side. Try asking again.");
     }
-    if (run !== this.run || isLeaving()) return;
+    if (run !== this.run) return;
+    if (isLeaving()) return this.askAgainIfStaying(run, asking, dropEarly);
 
     // The answer is about a page the visitor has already left. Start over from where they are now.
     const here = currentPath();
@@ -227,7 +275,7 @@ export class Guide {
       dropEarly();
       await settle(ui.host);
       if (run !== this.run) return;
-      return this.turn(run, `${event ?? ""} The user went from ${page.snapshot.path} to ${here}.`.trim());
+      return this.turn(run, { event: `${event ?? ""} The user went from ${page.snapshot.path} to ${here}.`.trim(), closing });
     }
 
     const el = reply.target ? page.elements.get(reply.target) : undefined;
@@ -243,7 +291,7 @@ export class Guide {
       dropEarly();
       await settle(ui.host);
       if (run !== this.run) return;
-      return this.turn(run, event, nudged, true);
+      return this.turn(run, { ...asking, reread: true });
     }
 
     // Pointing again at what the visitor just used, with the page unchanged,
@@ -254,7 +302,7 @@ export class Guide {
       dropEarly();
       if (nudged) return this.finish("That step didn't change anything I can see, so I've stopped here. Ask again if there's more to do.");
       const nudge = `You pointed at ${describeElement(listed)} again, but the user already used it and nothing changed. Don't point at it again: move on, or say it's done.`;
-      return this.turn(run, `${event} ${nudge}`, true);
+      return this.turn(run, { event: `${event} ${nudge}`, nudged: true, closing });
     }
 
     this.history.push({ role: "user", text: this.step === 0 ? this.goal : (event ?? "The page changed.") }, { role: "assistant", text: reply.say });
@@ -274,49 +322,93 @@ export class Guide {
     // If they have already used it, the caption would only flash.
     if (!early?.acted) ui.pointAt(el, reply.say);
 
-    if (reply.status === "done") {
-      // An explanation that points at something. Leave it up until they click anywhere.
+    ui.closePanel();
+    // "done" with a pointer is the model calling this the last step. It has
+    // not seen what the step does: the click may open a menu, or a field that
+    // still needs typing. So it is listened for like any other step, and when
+    // the visitor has used it the page is read and the model asked once more.
+    const last = reply.status === "done";
+    if (last && this.closings >= MAX_CLOSINGS) {
+      // It has had its looks. This one is shown and the guide is over. A click anywhere puts it away.
       early?.stop();
-      ui.setBusy("");
-      ui.closePanel();
-      forget();
-      const dismiss = () => run === this.run && ui.clear();
+      this.endRun();
+      ui.setState("finished");
+      const ended = this.run;
+      const dismiss = () => ended === this.run && ui.clear();
       document.addEventListener("click", dismiss, { capture: true, once: true });
       this.stopWaiting = () => document.removeEventListener("click", dismiss, true);
       return;
     }
-
-    ui.closePanel();
+    this.showingLast = last;
+    how.anyClick = last;
     this.save();
+    ui.setState("pointing");
     const acted = (what: Acted) => {
       this.stopWaiting = undefined;
       if (this.last && what.onTarget) this.last.used = true;
+      // The last step was there to be used or left. Doing something else puts it away, with no more questions.
+      if (last && !what.onTarget) return this.end();
       this.strayed = !what.onTarget;
       // Saved straight away: if this click loads a new page, the next page needs to know about it.
       this.save(what.event);
       ui.clearPointer();
-      ui.setBusy(this.strayed ? OFF_TRACK : "Next step…");
+      ui.setState("asking");
+      ui.setBusy(this.strayed ? OFF_TRACK : last ? "Checking…" : "Next step…");
       void settle(ui.host).then(() =>
         // If that click is loading a new page, this one has nothing more to ask.
         onceStaying(() => {
-          if (run === this.run) void this.turn(run, what.event);
+          if (run !== this.run) return;
+          // A pointer that came back from a closing question shows where the answer is. Using it earns another look only if it did something.
+          if (last && closing && describeChange(page.snapshot, takeSnapshot(ui.host).snapshot) === NOTHING_CHANGED && currentPath() === page.snapshot.path) return this.end();
+          if (last) this.closings++;
+          void this.turn(run, { event: what.event, closing: last });
         }),
       );
     };
     // The early pointer is already listening. Hand its result over, now or when it comes.
     if (early?.acted) acted(early.acted);
     else if (early) whenActed = acted;
-    else this.stopWaiting = waitForAction(el, listed, ui.host, known, acted);
+    else this.stopWaiting = waitForAction(el, listed, ui.host, known, how, acted);
   }
 
-  private finish(text: string) {
+  /**
+   * A reply, or a failure, that came while the page was on its way out. If the
+   * page really goes, the next one picks the guide up. If it stays after all,
+   * because the click was a download or the leaving was called off, the
+   * question is asked again so the guide is not left waiting for ever.
+   */
+  private askAgainIfStaying(run: number, asking: Asking, dropEarly: () => void) {
+    onceStaying(() => {
+      if (run !== this.run) return;
+      dropEarly();
+      void this.turn(run, asking);
+    });
+  }
+
+  /** Stops everything a running guide keeps going. Whatever is on show stays. */
+  private endRun() {
+    this.run++;
     this.stopWaiting?.();
     this.stopWaiting = undefined;
+    this.showingLast = false;
     this.watchLeaving(false);
     forget();
     this.ui.setBusy("");
     this.ui.closePanel();
+  }
+
+  /** Ends the guide with nothing more to say. */
+  private end() {
+    this.endRun();
+    this.ui.clear();
+    this.ui.setState("finished");
+  }
+
+  /** Ends the guide on a sentence, which stays up until the visitor puts it away or asks again. */
+  private finish(text: string) {
+    this.endRun();
     this.ui.say(text);
+    this.ui.setState("finished");
   }
 
   private save(event?: string) {
@@ -328,6 +420,8 @@ export class Guide {
       savedAt: Date.now(),
       ...(event ? { event } : {}),
       ...(this.strayed ? { strayed: true } : {}),
+      ...(this.showingLast ? { closing: true } : {}),
+      ...(this.closings ? { closings: this.closings } : {}),
     };
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
@@ -375,6 +469,7 @@ function waitForAction(
   listed: SnapElement | undefined,
   host: Element,
   listing: Map<Element, SnapElement>,
+  how: Hearing,
   done: (what: Acted) => void,
 ): () => void {
   const known = listing;
@@ -396,7 +491,7 @@ function waitForAction(
     done({ event, onTarget });
   };
   const filled = () => finish(`The user filled in ${name}. You can't see what they entered.`, true);
-  const labelOfClicked = (el: Element) => wordsOn(el, listing);
+  const labelOfClicked = (el: Element) => nameOfClicked(el, listing);
   /** Whether a click that landed on `path` was a click on the target, counting the label that stands in for it. */
   const onTarget = (path: EventTarget[]) =>
     path.includes(target) || path.some((node) => node instanceof HTMLLabelElement && (node.control === target || node.contains(target)));
@@ -414,8 +509,11 @@ function waitForAction(
       return;
     }
     const other = path.find((node): node is Element => node instanceof Element && node.matches(CLICKABLE));
-    // A click on blank space or plain text isn't worth a new step.
-    if (!other || other.contains(target)) return;
+    // A click on blank space or plain text isn't worth a new step. It does put away a pointer that was the last word.
+    if (!other || other.contains(target)) {
+      if (how.anyClick) finish("The user clicked somewhere else on the page.", false);
+      return;
+    }
     const label = labelOfClicked(other);
     // Something that was not on the page before the visitor went into the field is the list the field opened.
     if (opened && !known.has(other)) return finish(`The user chose ${label ? `"${label}"` : "an entry"} from the list that ${name} opened.`, true);
@@ -486,23 +584,29 @@ function waitForAction(
   return stop;
 }
 
+/** Controls whose own words are their name. A region of the page that happens to take clicks is not one. */
+const NAMED_BY_ITS_TEXT =
+  'a[href], button, summary, label, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"], [role="treeitem"]';
+
 /**
- * What to call something the visitor clicked, in an event. A control the page
- * was read with keeps the name the list gave it. Anything else is named by
- * its own few words, masked like all page text. Nothing is ever read from a
- * field, from anything a visitor can write in, or from a box that holds one:
- * that text is theirs. A box that holds other controls, or a long run of
- * text, is a container, and a container's text is not a name.
+ * A name for something the visitor clicked, for the sentence that tells the
+ * model what happened. It goes to the server, so it follows the same rules as
+ * the rest of the page: emails and long numbers are masked, and nothing a
+ * person may have written is read. A control the page was read with keeps the
+ * name the list gave it. Otherwise an aria-label is used, and failing that
+ * the control's own words, when it is a real control, cannot be written in
+ * and holds no field. A field, an editor, anything inside an editor and a
+ * region of the page all come back with no name.
  */
-function wordsOn(el: Element, listing: Map<Element, SnapElement>): string {
-  const listed = listing.get(el);
-  if (listed) return cleanText(listed.label, 60);
-  if (isField(el) || el.querySelector("input, textarea, select, [contenteditable]")) return "";
-  const said = el.getAttribute("aria-label") || el.getAttribute("title");
-  if (said) return cleanText(said, 60);
-  const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
-  if (text.length > 60 || el.querySelectorAll(CLICKABLE).length > 1) return "";
-  return cleanText(text, 60);
+function nameOfClicked(clicked: Element, listing: Map<Element, SnapElement>): string {
+  const listed = listing.get(clicked);
+  if (listed?.label) return cleanText(listed.label, 60);
+  const given = clicked.getAttribute("aria-label");
+  if (given) return cleanText(given, 60);
+  if (!clicked.matches(NAMED_BY_ITS_TEXT)) return "";
+  if ((clicked as HTMLElement).isContentEditable) return "";
+  if (clicked.querySelector("input, textarea, select, [contenteditable]")) return "";
+  return cleanText(clicked.textContent || "", 60);
 }
 
 /** Resolves once the page itself has finished arriving, or after a few seconds if it never says so. */
