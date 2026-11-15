@@ -104,6 +104,14 @@ const guides: Guide[] = [
       DONE,
     ],
     reached: { text: "Filtered by Availability" },
+    // The question asks for a fact, and the laptop list it is asked from marks each laptop In Stock or Out of Stock.
+    // A sentence that names every laptop marked out of stock and none that is not gives the visitor what they asked
+    // for, whether or not they ever open the filter, which is only one way to find out. Both lists are read from that
+    // page when the guide starts, so the answer is never written here.
+    says: {
+      shown: { selector: '[id$="category--productList"] li:has-text("Out of Stock") .sapMObjLTitle', when: "start" },
+      notShown: { selector: '[id$="category--productList"] li:not(:has-text("Out of Stock")) .sapMObjLTitle', when: "start" },
+    },
   },
   // The same link on every row of the laptop list, and nothing in the widget's list or text says which row is which.
   {
@@ -182,6 +190,17 @@ const guides: Guide[] = [
       },
     ],
     reached: { selector: 'button:has-text("Step 4")' },
+    // "Can I give the money to the driver?" is answered by yes and the name of the option: Cash on Delivery is one of
+    // the app's payment types, which is part of the app and not of its data, so it is written here. A sentence that
+    // names it while saying it is not offered, or that only hedges, is the wrong answer.
+    says: {
+      all: ["\\bcash.on.delivery\\b"],
+      not: [
+        "\\b(isn't|is not|aren't|are not|not|no longer)( be)? (offered|available|possible|supported|accepted|an option)\\b",
+        "\\b(can't|cannot|can not|don't|doesn't|do not|does not) (offer|support|accept|pay (the driver|on delivery|in cash))\\b",
+        "^\\W*no\\b",
+      ],
+    },
   },
   // The shop has one currency and nowhere to change it.
   {

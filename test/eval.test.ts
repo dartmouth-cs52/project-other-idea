@@ -245,6 +245,13 @@ test("a guide that no run could ever score as reached is refused, and says which
   assert.match(faults(one({ ...pressedLast, reached: { url: "(" } }))[0] ?? "", /reached\.url is not a pattern/);
 });
 
+test("every guide set this project tunes against can be run", async () => {
+  for (const name of TUNED) {
+    const set = (await import(`../eval/guides/${name}.ts`)).default as GuideSet;
+    assert.deepEqual(faults(set), [], `eval/guides/${name}.ts`);
+  }
+});
+
 test("an answer in words passes only when it says the true answer, and nothing wrong", () => {
   const stock = { shown: { selector: ".out" }, notShown: { selector: ".in" } };
   const read = { shown: ["Notebook Professional 17"], notShown: ["Notebook Basic 17", "Notebook Professional 15"] };

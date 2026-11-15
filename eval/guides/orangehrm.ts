@@ -162,6 +162,12 @@ const guides: Guide[] = [
   },
   // A multi-select filter. The status that is on by default can only be taken
   // off with the cross on its chip, which the widget does not list.
+  //
+  // It ends on Search, unpressed, with the filter set. Nothing on the page can
+  // show that Search was pressed: the demo has no leave requests this year, so
+  // the table says "No Records Found" before the search and after it, and the
+  // same notice pops up on both. Testing the filter alone passed the guide a
+  // step early, before the visitor had been shown Search.
   {
     id: "rejected-leave",
     start: DASHBOARD,
@@ -176,10 +182,11 @@ const guides: Guide[] = [
         act: { click: '.oxd-chip:has-text("Pending Approval") i' },
         say: "Click the cross on Pending Approval to take it off.",
       },
-      SEARCH,
-      DONE,
+      {
+        expect: SEARCH.expect,
+        given: { url: "/leave/viewLeaveList$", selector: '.oxd-multiselect-chips-area:not(:has-text("Pending Approval")) .oxd-chip:has-text("Rejected")' },
+      },
     ],
-    reached: { url: "/leave/viewLeaveList$", selector: '.oxd-multiselect-chips-area:not(:has-text("Pending Approval")) .oxd-chip:has-text("Rejected")' },
   },
   // Tabs, and a form whose fields the widget lists with no labels at all.
   {
@@ -200,13 +207,9 @@ const guides: Guide[] = [
   // the widget does not notice (role="dialog" without aria-modal), so its
   // fields are listed after everything on the page behind it.
   //
-  // The script stops at the dialog's first field, because the widget cannot be
-  // taken further. Unit Id and Name are both listed as a textbox with no label,
-  // and the widget tells two controls apart by role, label, icon and link. So
-  // when it is pointed at Name after the visitor has typed in Unit Id, it takes
-  // that for the same control again, refuses to show it, and tells the model
-  // "You pointed at textbox again ... Don't point at it again". Name is required,
-  // so there is no right answer to that, and Save cannot be reached.
+  // The widget now lists the dialog's fields by their captions, Unit Id and
+  // Name, so the guide goes on to Save and stops there: Save would add the unit
+  // to a structure other people use.
   {
     id: "new-department",
     start: "/web/index.php/admin/viewCompanyStructure",
@@ -216,7 +219,8 @@ const guides: Guide[] = [
       { expect: [{ label: "Edit", role: "checkbox" }, { label: "", role: "clickable", nth: 1 }], act: { click: ".oxd-switch-input" }, say: "Turn on Edit." },
       { expect: [{ label: "Add", role: "button", icon: "plus" }], act: { click: 'button:has-text("Add")' } },
       // Unit Id comes first and is optional. Name is required. Either is a fair place to start.
-      { expect: [unnamedField(1), unnamedField(2)], say: "Type an id for the unit." },
+      { expect: [any("Name"), any("Unit Id")], act: { fill: ['.oxd-dialog-sheet .oxd-input-group:has(label:text-is("Name")) input', "Test department"] }, say: "Type the unit's name." },
+      { expect: [button("Save")] },
     ],
   },
   // A setting two levels down, then the same icon-only button on every row.
@@ -251,7 +255,10 @@ const guides: Guide[] = [
       SEARCH,
       DONE,
     ],
-    reached: { url: "/recruitment/viewCandidates$", selector: '.oxd-select-text-input:text-is("Shortlisted")' },
+    // The list shows only shortlisted candidates: every row says so, and there is at least one. Before Search the
+    // list still shows every status, so the filter set and not yet run does not pass, as it did when this tested
+    // only the dropdown.
+    reached: { url: "/recruitment/viewCandidates$", selector: '.oxd-table-body:has(.oxd-table-card):not(:has(.oxd-table-card:not(:has-text("Shortlisted"))))' },
   },
   // Asked with typos. A tab that opens a menu. Stops before the button that
   // records the punch. That button reads In or Out depending on whether the
