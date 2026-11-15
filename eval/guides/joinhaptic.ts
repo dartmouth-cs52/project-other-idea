@@ -25,6 +25,7 @@ const guides: Guide[] = [
     start: "/",
     goal: "How much does it cost?",
     steps: [{ expect: [any("How much does it cost?")], act: { click: 'button:has-text("How much does it cost?")' } }, DONE],
+    reached: { selector: 'button[aria-expanded="true"]:has-text("How much does it cost?")' },
   },
   {
     id: "what-it-reads",
@@ -35,21 +36,30 @@ const guides: Guide[] = [
       { expect: [any("What does Haptic see on the page?")], act: { click: 'button:has-text("What does Haptic see on the page?")' } },
       DONE,
     ],
+    reached: { selector: 'button[aria-expanded="true"]:has-text("What does Haptic see on the page?")' },
   },
   {
     id: "privacy",
     start: "/",
     goal: "Where is your privacy policy?",
     steps: [{ expect: [any("Privacy")], act: { click: 'footer a[href="/privacy/"]' } }, DONE],
+    reached: { url: "/privacy/?$" },
   },
   {
     id: "terms",
     start: "/privacy/",
     goal: "terms of service",
     steps: [{ expect: [any("Terms")], act: { click: 'footer a[href="/terms/"]' } }, DONE],
+    reached: { url: "/terms/?$" },
   },
   // The site has no sign-in, so the right answer points at nothing.
   { id: "no-such-feature", start: "/", goal: "How do I log in to my account?", steps: [DONE] },
 ];
 
-export default { siteId: "site_joinhaptic", origin: "https://joinhaptic.com", hasTag: false, guides } satisfies GuideSet;
+export default {
+  siteId: "site_joinhaptic",
+  origin: "https://joinhaptic.com",
+  hasTag: false,
+  about: "Haptic's own public site: a simple marketing page with an accordion and a two-step form.",
+  guides,
+} satisfies GuideSet;

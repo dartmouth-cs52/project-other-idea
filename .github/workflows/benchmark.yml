@@ -24,10 +24,19 @@ on:
     inputs:
       models:
         description: "Models to compare, comma-separated. After @: low, medium or high effort, and off for no thinking."
-        default: "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5,claude-haiku-5-5@off"
+        default: "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"
       repeat:
-        description: "Times to ask each case. More gives steadier timings and costs more."
+        description: "Times to ask each case. Three shows which cases a model gets right only sometimes, and costs three times as much."
         default: "1"
+      cases:
+        description: "Case files to run, comma-separated, like demo,hard,ui5. Empty runs all of them."
+        default: ""
+      guides:
+        description: "Guide sets to run start to finish in a browser, separated by spaces, like: demo hard ui5. Empty skips this."
+        default: ""
+      guides_model:
+        description: "The one model that runs the whole guides."
+        default: "claude-sonnet-5-5"
 
 # Lets the run ask GitHub for the token that proves which repository and branch it is.
 permissions:
@@ -38,10 +47,13 @@ jobs:
   benchmark:
     name: Run the benchmark
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 240
     env:
       MODELS: ${{ inputs.models }}
       REPEAT: ${{ inputs.repeat }}
+      CASES: ${{ inputs.cases }}
+      GUIDES: ${{ inputs.guides }}
+      GUIDES_MODEL: ${{ inputs.guides_model }}
     steps:
       # Each setting is passed on only when it has a value. An empty key would
       # still take the place of federation, and an empty workspace would be sent as one.
@@ -97,8 +109,23 @@ jobs:
 
       - name: Run the benchmark
         run: |
-          npm run -s eval -- --models "$MODELS" --repeat "$REPEAT" --yes | tee benchmark.txt
-          { echo '```'; cat benchmark.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          set -o pipefail
+          npm run -s eval -- --models "$MODELS" --repeat "$REPEAT" ${CASES:+--cases "$CASES"} --yes | tee benchmark.txt
+          # The summary gets the tables. The line printed for every call stays in the log.
+          { echo '```'; grep -v '^turn ' benchmark.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      # Whole guides need a browser, and the demo app's pages need this project's own server.
+      - name: Run whole guides in a browser
+        if: inputs.guides != ''
+        run: |
+          set -o pipefail
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+          HAPTIC_MODEL=mock npm run -s start > server.log 2>&1 &
+          for attempt in $(seq 1 30); do curl -sf http://localhost:4000/demo/ > /dev/null && break; sleep 1; done
+          # shellcheck disable=SC2086
+          npm run -s eval:guides -- $GUIDES --model "$GUIDES_MODEL" | tee guides.txt
+          { echo '```'; grep -v '^turn ' guides.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Keep every answer
         if: always()
