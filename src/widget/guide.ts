@@ -294,7 +294,8 @@ export class Guide {
     // A step's sentence stays beside the pointer, in the caption.
     const inPanel = reply.mode === "answer" || reply.mode === "cannot_help";
     if (inPanel) {
-      this.thread = [...this.thread, { role: "user" as const, text: this.goal }, { role: "assistant" as const, text: reply.say }].slice(-MAX_THREAD);
+      // Earlier questions go to the model with the next one, so they are masked like it.
+      this.thread = [...this.thread, { role: "user" as const, text: this.asked }, { role: "assistant" as const, text: reply.say }].slice(-MAX_THREAD);
       ui.showAnswer(this.goal, reply);
     } else ui.clearAnswer();
 
