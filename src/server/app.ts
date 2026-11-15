@@ -1,6 +1,7 @@
 import {
   GUIDE_ID,
   GUIDE_OUTCOMES,
+  MAX_ASKED,
   STREAM_TYPE,
   type GuideOutcome,
   type GuideReport,
@@ -330,7 +331,7 @@ export function parseTurn(body: unknown): TurnRequest | undefined {
   if (!body || typeof body !== "object") return undefined;
   const raw = body as Record<string, unknown>;
   const snap = raw.snapshot as Record<string, unknown> | undefined;
-  const goal = text(raw.goal, 300).trim();
+  const goal = text(raw.goal, MAX_ASKED).trim();
   if (!goal || typeof raw.site !== "string" || !snap || !Array.isArray(snap.elements)) return undefined;
 
   const elements: SnapElement[] = [];

@@ -1,5 +1,6 @@
 import {
   cleanText,
+  MAX_ASKED,
   describeElement,
   normalizePath,
   type GuideOutcome,
@@ -113,7 +114,8 @@ export class Guide {
    * everything Haptic reads from the page.
    */
   private get asked(): string {
-    return cleanText(this.goal, 300);
+    // Cut to the ask box's 300 characters first: a mask can be longer than what it hides, and the end of a question is usually what it asks.
+    return cleanText(this.goal.slice(0, 300), MAX_ASKED);
   }
 
   start(goal: string) {

@@ -163,6 +163,13 @@ export interface GuideReport {
   helped?: boolean;
 }
 
+/**
+ * The longest question the server takes. The ask box holds 300 characters, and
+ * the widget masks what it sends, which can make it longer: "12345" becomes
+ * "[number]". This leaves room for that.
+ */
+export const MAX_ASKED = 450;
+
 /** A question as typed, made comparable: masked, lower case, no punctuation, single spaces. */
 export function questionKey(question: string): string {
   return cleanText(question, 300)
