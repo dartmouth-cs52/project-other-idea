@@ -114,6 +114,10 @@ async function build(base: SiteContext): Promise<SiteContext> {
     const dated = docs.filter((doc) => doc.updated).length;
     console.log(`  Answers is on. ${linked} of ${docs.length} help docs have an address to link to, and ${dated} have a date.`);
     if (!docs.length) console.warn("  There are no help docs, so nothing can be answered in words. Haptic will still point, and say when it can't help.");
+    // "That needs an answer from a person" with no way to reach one is a dead end.
+    if (!site.handoff?.webhook && !site.handoff?.url && !site.handoff?.email) {
+      console.warn("  There is no way to a person set, so when Haptic can't help it will say so and offer nothing.\n  Set one with --handoff-webhook, --handoff-url or --handoff-email before this goes in front of visitors.");
+    }
   }
   console.log(`  The site knowledge sent with each question is about ${Math.round(buildSystemPrompt(site).length / 4).toLocaleString()} tokens.`);
   return site;
