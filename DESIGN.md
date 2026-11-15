@@ -313,8 +313,9 @@ the demo.
 The home page is, in order: a slim navigation bar, the hero with its demo
 window, three feature cards, the FAQ, and a footer with Privacy, Terms and the
 contact address. Each feature card makes one claim in a title of a few words,
-with the text on the left and a small live demo on the right in a Border grey
-panel. Below 1024px the card stacks, text above the demo, so a demo is never
+with the text on the left and a small live demo on the right. The demo's white
+window sits straight on the card's Muted fill, with no panel of its own behind
+it. Below 1024px the card stacks, text above the demo, so a demo is never
 squeezed. The
 FAQ is two columns on desktop, with the title on the left and the accordion in
 the right half. Each row is 20px padding around a 24px line with a 1px divider.
