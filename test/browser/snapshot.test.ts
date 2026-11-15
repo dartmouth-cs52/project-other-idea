@@ -448,3 +448,67 @@ test("on a long page, the text sent is what is on screen, then what is near the 
   assert.ok(snapshot.text.some((text) => text.startsWith("Right after the control")), JSON.stringify(snapshot.text.map((text) => text.slice(0, 14))));
   assert.ok(!snapshot.text.some((text) => text.startsWith("Paragraph 60 ")));
 });
+
+// Row names --------------------------------------------------------------------------
+
+test("a row is named by what it alone says: not by what every row says, a bare number or a neighbour's words", { skip }, async () => {
+  const snapshot = await read(`<main><ul>
+    <li>(<a href="/d?x=cur">cur</a> | <a href="/d?x=prev">prev</a>) <a href="/r/1">19:55, 20 September 2026</a> <a href="/u/Ann">Ann</a> (<a href="/t/Ann">talk</a>) <b>+875</b></li>
+    <li>(<a href="/d?x=cur">cur</a> | <a href="/d?x=prev">prev</a>) <a href="/r/2">10:02, 18 September 2026</a> <a href="/u/Bob">Bob</a> (<a href="/t/Bob">talk</a>) <b>-12</b></li>
+  </ul>
+  <table>
+    <tr><td>INV-2026000007</td><td>2026-11-15 17:14:15</td><td>Hallie Wall</td><td><a href="/invoice/7">Details</a></td></tr>
+    <tr><td>INV-2026000008</td><td>2026-11-16 09:01:00</td><td>Hallie Wall</td><td><a href="/invoice/8">Details</a></td></tr>
+  </table></main>`);
+  const named = (label: string) => lines(snapshot).filter((text) => text.startsWith(`link "${label}"`));
+  assert.deepEqual(named("talk"), ['link "talk" [main › row: 19:55, 20 September 2026] → /t/Ann', 'link "talk" [main › row: 10:02, 18 September 2026] → /t/Bob']);
+  assert.deepEqual(named("cur"), ['link "cur" [main › row: 19:55, 20 September 2026] → /d?x=cur', 'link "cur" [main › row: 10:02, 18 September 2026] → /d?x=cur']);
+  assert.deepEqual(named("Details"), ['link "Details" [main › row: 2026-11-15 17:14:15] → /invoice/:id', 'link "Details" [main › row: 2026-11-16 09:01:00] → /invoice/:id']);
+});
+
+test("an entry of a numbered list is named with its number, and a box that does not repeat is no row", { skip }, async () => {
+  const snapshot = await read(`<main>
+    <ol><li>Mobile devices <a href="/edit?n=1">edit</a></li><li>Video games <a href="/edit?n=2">edit</a></li></ol>
+    <article><span class="subtitle">Personal</span>
+      <div><label>Owner</label><div><input role="combobox"><button aria-label="Open"></button></div></div>
+      <div><label>Lifecycle</label><div><input role="combobox"><button aria-label="Open"></button></div></div>
+    </article>
+    <table><tr><th><button>Name</button></th><th><button>System</button></th></tr><tr><td>Backstage API</td><td>backstage</td></tr><tr><th><button>Name</button></th><th><button>System</button></th></tr></table>
+  </main>`);
+  assert.deepEqual(lines(snapshot), [
+    'link "edit" [main › row: 1. Mobile devices] → /edit',
+    'link "edit" [main › row: 2. Video games] → /edit',
+    'combobox "Owner" [main]',
+    'button "Open" [main › row: Owner]',
+    'combobox "Lifecycle" [main]',
+    'button "Open" [main › row: Lifecycle]',
+    'button "Name" [main › 1 of 2]',
+    'button "System" [main › 1 of 2]',
+    'button "Name" [main › 2 of 2]',
+    'button "System" [main › 2 of 2]',
+  ]);
+});
+
+test("words out of sight, meant for screen readers, are left out of what a control and its row are called", { skip }, async () => {
+  const hidden = "position:absolute;clip:rect(1px,1px,1px,1px);font-size:0";
+  const snapshot = await read(`<main><ul>
+    <li><a href="/p/1">Astro Laptop <span style="${hidden}">Emphasized</span> 989,00 EUR</a> <span>Available</span> <button>Compare</button></li>
+    <li><a href="/p/2">Benda Laptop <span style="${hidden}">Emphasized</span> 976,00 EUR</a> <span>Out of stock</span> <button>Compare</button></li>
+  </ul>
+  <button><svg width="10" height="10"></svg><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Close</span></button>
+  <ul><li tabindex="0" aria-labelledby="say1"><span id="say1" style="${hidden}">Notebook Basic 15 Emphasized 956,00 EUR Object Status Out of stock</span>Notebook Basic 15 956,00 EUR Out of stock <button>Compare</button></li>
+    <li tabindex="0" aria-labelledby="say2"><span id="say2" style="${hidden}">Notebook Basic 17 Emphasized 1.249,00 EUR Object Status Available</span>Notebook Basic 17 1.249,00 EUR Available <button>Compare</button></li></ul></main>`);
+  assert.deepEqual(lines(snapshot), [
+    'link "Astro Laptop 989,00 EUR" [main] → /p/:id',
+    'button "Compare" [main › row: Astro Laptop]',
+    'link "Benda Laptop 976,00 EUR" [main] → /p/:id',
+    'button "Compare" [main › row: Benda Laptop]',
+    // A name that only screen readers get is still the control's name when it shows none.
+    'button "Close" [main]',
+    // A row's own name is for screen readers. The row is called by what it shows, cut at a word.
+    'clickable "Notebook Basic 15 Emphasized 956,00 EUR Object Status Out of stock" [main]',
+    'button "Compare" [main › row: Notebook Basic 15 956,00 EUR Out of…]',
+    'clickable "Notebook Basic 17 Emphasized 1.249,00 EUR Object Status Available" [main]',
+    'button "Compare" [main › row: Notebook Basic 17 1.249,00 EUR…]',
+  ]);
+});

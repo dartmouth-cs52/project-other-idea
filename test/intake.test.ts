@@ -14,6 +14,11 @@ test("emails and long numbers are masked", () => {
   assert.equal(cleanText("Mail  sam@acme.com about order 4421987"), "Mail [email] about order [number]");
 });
 
+test("a long text is cut at a word", () => {
+  assert.equal(cleanText("Status: Out of stock until further notice", 20), "Status: Out of…");
+  assert.equal(cleanText("Supercalifragilisticexpialidocious", 12), "Supercalifr…");
+});
+
 test("a phone number is masked, and a date, a price or a model number is not", () => {
   assert.equal(cleanText("Call +1 (603) 646-1110 today"), "Call [number] today");
   assert.equal(cleanText("card 4111 1111 1111 1111"), "card [number]");

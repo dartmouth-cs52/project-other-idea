@@ -66,13 +66,30 @@ function insideEditor(el: Element): boolean {
 const MAX_NODES_FOR_WORDS = 600;
 
 /**
+ * Whether an element's words are out of sight, though a screen reader may still
+ * read them: not shown at all, or squeezed into a box of a pixel or none and
+ * clipped, cut off or set at no size. That is how pages hide words meant only
+ * for screen readers, like "Emphasized" before a price. Only a box that small
+ * is looked at further, so this costs little.
+ */
+function unseen(el: Element): boolean {
+  const box = el.getBoundingClientRect();
+  if (box.width > 1 || box.height > 1) return false;
+  const style = getComputedStyle(el);
+  if (style.display === "contents") return false;
+  return style.display === "none" || style.overflow === "hidden" || style.overflow === "clip" || (style.clip !== "" && style.clip !== "auto") || style.clipPath !== "none" || parseFloat(style.fontSize) === 0;
+}
+
+/**
  * The words in an element as a person reads them, and never anything a
  * visitor typed. An input, a text area and an editor are passed over, and so
- * are a dropdown's choices and anything hidden from screen readers. `skip` is
- * a selector for more to pass over, and `except` one element to pass over. Reading
- * stops once `max` characters are in hand.
+ * are a dropdown's choices, anything hidden from screen readers and, unless
+ * `unseenToo` is set, words that are out of sight (see `unseen`). Set it to
+ * read a name meant for screen readers, such as a label or what
+ * aria-labelledby points to. `skip` is a selector for more to pass over, and
+ * `except` one element to pass over. Reading stops once `max` characters are in hand.
  */
-function wordsIn(el: Element, max = 200, skip = "", except?: Element): string {
+function wordsIn(el: Element, max = 200, skip = "", except?: Element, unseenToo = false): string {
   if (holdsTyping(el) || insideEditor(el)) return "";
   let text = "";
   let visited = 0;
@@ -85,6 +102,7 @@ function wordsIn(el: Element, max = 200, skip = "", except?: Element): string {
     }
     if (!(node instanceof Element) || node === except) return;
     if (NOT_WORDS.has(node.tagName) || holdsTyping(node) || node.getAttribute("aria-hidden") === "true" || (skip && node.matches(skip))) return;
+    if (!unseenToo && unseen(node)) return;
     for (const child of node.childNodes) walk(child);
     if (!WITHIN_A_SENTENCE.has(node.tagName)) text += " ";
   };
@@ -97,7 +115,7 @@ function wordsIn(el: Element, max = 200, skip = "", except?: Element): string {
  * is masked like everything else, and is empty for anything a visitor typed in.
  */
 export function shownWords(el: Element, max = 60): string {
-  return cleanText(wordsIn(el, max * 2), max);
+  return cleanText(wordsIn(el, max * 2) || wordsIn(el, max * 2, "", undefined, true), max);
 }
 
 // Controls that show only while the mouse is over the box around them --------
@@ -380,7 +398,7 @@ function nameOfBox(el: Element): string {
   if (ids) {
     const root = el.getRootNode() as Document | ShadowRoot;
     const named = ids.split(/\s+/).map((id) => (id ? root.getElementById?.(id) : null)).find(Boolean);
-    const words = named ? cleanText(wordsIn(named, 160), 80) : "";
+    const words = named ? cleanText(wordsIn(named, 160, "", undefined, true), 80) : "";
     if (words) return words;
   }
   return cleanText(el.getAttribute("aria-label") ?? "", 80);
@@ -884,19 +902,54 @@ function nameRows(candidates: Candidate[]) {
     else groups.set(key, [c]);
     if (c.label) named.set(c.el, c);
   }
+  const pieces = new Map<Element, Piece[]>();
+  const piecesOf = (row: Element) => pieces.get(row) ?? pieces.set(row, rowPieces(row)).get(row)!;
   for (const group of groups.values()) {
     if (group.length < 2) continue;
     for (const c of group) {
-      const row = c.el.parentElement?.closest(ROW);
-      if (!row) continue;
+      const row = rowOf(c.el);
+      if (!row || isHeaderRow(row)) continue;
       // A row that is itself listed, or holds a listed box around this control, has already said what it is.
-      // The outermost such box is the one that speaks for the row.
+      // The outermost such box is the one that speaks for the row, in the words a person sees on it.
       let around: Candidate | undefined;
       for (let box: Element | null = c.el.parentElement; box; box = box === row ? null : box.parentElement) around = named.get(box) ?? around;
-      const name = around ? cleanText(around.label, 40) : rowName(row, c.el);
-      if (name) c.row = name;
+      const name = around ? cleanText(wordsIn(around.el, 80) || around.label, 40) : rowName(row, c.el, piecesOf);
+      if (name) c.row = entryNumber(row) + name;
     }
   }
+}
+
+/**
+ * The row a control sits in: the nearest box around it that repeats, like a
+ * table row, a list entry or a card among cards. A box with nothing of its
+ * kind beside it is a part of the page, not a row, and the search goes on outward.
+ */
+function rowOf(control: Element): Element | null {
+  for (let row = control.parentElement?.closest(ROW) ?? null, tries = 0; row && tries < 4; row = row.parentElement?.closest(ROW) ?? null, tries++) {
+    if (sameKind(row, row.previousElementSibling) || sameKind(row, row.nextElementSibling)) return row;
+  }
+  return null;
+}
+
+function sameKind(row: Element, other: Element | null): other is Element {
+  return !!other && other.tagName === row.tagName && other.getAttribute("role") === row.getAttribute("role");
+}
+
+/** A row of column headings, which names the columns and not a row. */
+function isHeaderRow(row: Element): boolean {
+  if (row.tagName !== "TR" && row.getAttribute("role") !== "row") return false;
+  const cells = Array.from(row.children).filter((cell) => cell.matches(ROW_CELLS));
+  return cells.length > 0 && cells.every((cell) => cell.matches("th, [role='columnheader']"));
+}
+
+/** An entry of a numbered list starts with its number, which is how a visitor refers to it: "3. Mobile devices". */
+function entryNumber(row: Element): string {
+  const list = row.parentElement;
+  if (row.tagName !== "LI" || !(list instanceof HTMLOListElement)) return "";
+  const value = (row as HTMLLIElement).getAttribute("value");
+  if (value && /^\d+$/.test(value)) return `${value}. `;
+  const index = Array.from(list.children).filter((entry) => entry.tagName === "LI").indexOf(row);
+  return `${(list.start || 1) + index}. `;
 }
 
 /** How many boxes out from a control to look for words that stand beside it alone. */
@@ -960,30 +1013,54 @@ function tellTwinsApart(candidates: Candidate[]) {
   for (const group of twins(candidates)) group.forEach((c, index) => (c.place = `${index + 1} of ${group.length}`));
 }
 
-/** What a row is about: its heading, or else the first words in it that are not a control's. */
-function rowName(row: Element, control: Element): string {
-  const heading = row.querySelector("h1, h2, h3, h4, h5, h6, th, [role='rowheader'], [role='heading'], [class*='title' i], [class*='name' i], strong, b");
-  if (heading && !heading.contains(control)) {
-    const text = cleanText(wordsIn(heading, 100), 50);
-    if (text) return text;
-  }
-  // The first real words the row says, and failing that the first thing in
-  // it: a price, a currency, a date or a masked number says less than a name.
-  const pieces: string[] = [];
+/** A piece of a row's text, and the text node it came from. */
+interface Piece {
+  text: string;
+  node: Node;
+}
+
+const ROW_HEADING = "h1, h2, h3, h4, h5, h6, th, [role='rowheader'], [role='heading'], [class*='title' i], [class*='name' i], strong, b";
+
+/** The first pieces of text in a row, in page order, leaving out buttons, fields, and words out of sight or hidden from screen readers. */
+function rowPieces(row: Element): Piece[] {
+  const pieces: Piece[] = [];
+  let visited = 0;
   const walk = (node: Node) => {
-    if (pieces.length >= 6) return;
+    if (pieces.length >= 10 || visited++ > 400) return;
     if (node.nodeType === Node.TEXT_NODE) {
       const text = cleanText(node.textContent ?? "", 50);
-      if (text.length > 1) pieces.push(text);
+      if (text.length > 1) pieces.push({ text, node });
       return;
     }
-    if (!(node instanceof Element) || node === control || node.getAttribute("aria-hidden") === "true") return;
-    if (["BUTTON", "SELECT", "SCRIPT", "STYLE", "svg"].includes(node.tagName) || holdsTyping(node)) return;
+    if (!(node instanceof Element) || node.getAttribute("aria-hidden") === "true") return;
+    if (["BUTTON", "SELECT", "SCRIPT", "STYLE", "svg"].includes(node.tagName) || holdsTyping(node) || unseen(node)) return;
     for (const child of node.childNodes) walk(child);
   };
   walk(row);
+  return pieces;
+}
+
+/**
+ * What a row is about: its heading, or else the first words in it that are
+ * not a control's own and that the rows beside it do not also say. Words every
+ * row has ("prev", "Details", a customer's own name on each of their invoices)
+ * tell no row apart, nor does a heading that is only a number.
+ */
+function rowName(row: Element, control: Element, piecesOf: (row: Element) => Piece[]): string {
+  const shared = new Set<string>();
+  for (const other of [row.previousElementSibling, row.nextElementSibling]) if (sameKind(row, other)) for (const piece of piecesOf(other)) shared.add(piece.text);
+  const heading = row.querySelector(ROW_HEADING);
+  if (heading && !heading.contains(control)) {
+    const text = cleanText(wordsIn(heading, 100), 50);
+    if (/\p{L}/u.test(text) && !shared.has(text)) return text;
+  }
   const letters = (text: string) => (text.replace(/\[(?:number|email)\]/g, "").match(/\p{L}/gu) ?? []).length;
-  return pieces.find((text) => letters(text) >= 4) ?? pieces[0] ?? "";
+  const digits = (text: string) => /\d/.test(text.replace(/\[(?:number|email)\]/g, ""));
+  const mine = piecesOf(row).filter((piece) => !control.contains(piece.node));
+  const own = mine.filter((piece) => !shared.has(piece.text));
+  // Real words first, then a date or an amount of the row's own, and only then what the rows beside it say too.
+  const found = own.find((piece) => letters(piece.text) >= 4) ?? own.find((piece) => letters(piece.text) > 0 || digits(piece.text)) ?? mine.find((piece) => letters(piece.text) >= 4) ?? mine[0];
+  return found?.text ?? "";
 }
 
 /**
@@ -998,7 +1075,7 @@ function captionOf(el: Element, after: boolean): string {
   // A box that is a control, or holds one, is not a caption: its words are that control's, or what a visitor typed into it.
   const wordsOf = (node: Element): string => {
     if (holdsTyping(node) || node.matches(CONTROLS) || node.querySelector(CONTROLS)) return "";
-    const text = cleanText(wordsIn(node, 120), 61);
+    const text = cleanText(wordsIn(node, 120, "", undefined, true), 61);
     return text.length > 60 ? "" : text.replace(/\s*[:*]+$/, "");
   };
   const step = (from: Node) => (after ? from.nextSibling : from.previousSibling);
@@ -1054,7 +1131,7 @@ export function isField(el: Element): boolean {
  * Neither must decoration hidden from screen readers, like the star on a required field.
  */
 function labelWords(label: Element): string {
-  return wordsIn(label, 200, "button, datalist, output");
+  return wordsIn(label, 200, "button, datalist, output", undefined, true);
 }
 
 /** Roles whose own words are what is entered or chosen in them, not a name. */
@@ -1089,7 +1166,7 @@ function labelOf(el: Element, role: string): string {
       .map((id) => {
         const named = id ? root.getElementById?.(id) : null;
         if (named && el.contains(named)) namedByOwnWords = true;
-        return named ? wordsIn(named) : "";
+        return named ? wordsIn(named, 200, "", undefined, true) : "";
       })
       .join(" ")
       .trim();
@@ -1123,9 +1200,9 @@ function labelOf(el: Element, role: string): string {
   return cleanText(raw, 80);
 }
 
-/** The words a control shows. */
+/** The words a control shows, or failing those the words it has for screen readers only, like an icon button's name. */
 function visibleText(el: Element): string {
-  return wordsIn(el, 160);
+  return wordsIn(el, 160) || wordsIn(el, 160, "", undefined, true);
 }
 
 /** Icon-only buttons are common in dashboards. The icon's class name is often the only clue. */
@@ -1296,6 +1373,6 @@ function dialogLabel(el: Element): string {
   const labelledBy = el.getAttribute("aria-labelledby");
   const named = labelledBy ? document.getElementById(labelledBy) : null;
   const heading = el.querySelector("h1, h2, h3, [role='heading']");
-  const raw = el.getAttribute("aria-label") || (named && wordsIn(named)) || (heading && wordsIn(heading)) || "";
+  const raw = el.getAttribute("aria-label") || (named && wordsIn(named, 200, "", undefined, true)) || (heading && wordsIn(heading)) || "";
   return cleanText(raw, 60);
 }

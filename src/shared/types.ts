@@ -228,7 +228,11 @@ export function cleanText(text: string, max = 80, own?: ReadonlySet<string>): st
     from = email.index + email[0].length;
   }
   masked += maskNumbers(spaced.slice(from), own);
-  return masked.length > max ? masked.slice(0, max - 1).trimEnd() + "…" : masked;
+  if (masked.length <= max) return masked;
+  // Cut at a word, unless that would lose much: "Out of stock", not "Out o…".
+  const cut = masked.slice(0, max - 1);
+  const space = cut.lastIndexOf(" ");
+  return (space >= max * 0.6 ? cut.slice(0, space) : cut).trimEnd() + "…";
 }
 
 /** How an element is named in events, history and change summaries. */
