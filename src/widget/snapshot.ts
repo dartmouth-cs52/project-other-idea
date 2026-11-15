@@ -100,6 +100,163 @@ export function shownWords(el: Element, max = 60): string {
   return cleanText(wordsIn(el, max * 2), max);
 }
 
+// Controls that show only while the mouse is over the box around them --------
+
+/** A stylesheet rule that shows something while the mouse is over a box around it, or the keyboard is inside that box. */
+interface Reveal {
+  /** The rule's selector with the mouse and keyboard conditions taken out: what it shows. */
+  shown: string;
+  /** The part of the selector that picks the box the mouse has to be over. */
+  box: string;
+  visibility: boolean;
+  opacity: boolean;
+}
+
+/** What marks a rule as one of these. `:not(:hover)` and the like, where it sits inside brackets, mean something else and are passed over. */
+const OVER = /:(?:hover|focus-within)(?![\w-])/g;
+/** Stylesheets are read once and read again only when their rules have changed. A page can have thousands of rules. */
+const REVEALS = new WeakMap<Document | ShadowRoot, { stamp: string; rules: Reveal[] }>();
+const MAX_RULES_READ = 20_000;
+/** How many hidden boxes are checked against those rules while one page is read. */
+const MAX_HIDDEN_CHECKED = 200;
+/** The state such a control is listed with. */
+const SHOWS_ON_HOVER = "shows on hover";
+
+/** A selector list cut at its commas, leaving alone the commas inside brackets. */
+function selectorParts(list: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let from = 0;
+  for (let i = 0; i < list.length; i++) {
+    const ch = list[i];
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth--;
+    else if (ch === "," && depth === 0) {
+      parts.push(list.slice(from, i));
+      from = i + 1;
+    }
+  }
+  parts.push(list.slice(from));
+  return parts;
+}
+
+/**
+ * Reads one selector such as ".panel:hover .menu" as "the mouse over .panel
+ * shows .menu". Nothing is returned when the mouse would have to be over the
+ * hidden thing itself, or over something beside it and not around it.
+ */
+function readReveal(part: string): Pick<Reveal, "shown" | "box"> | undefined {
+  let end = -1;
+  for (const match of part.matchAll(OVER)) {
+    let depth = 0;
+    for (let i = 0; i < match.index; i++) depth += part[i] === "(" || part[i] === "[" ? 1 : part[i] === ")" || part[i] === "]" ? -1 : 0;
+    if (depth > 0) return undefined;
+    end = match.index + match[0].length;
+  }
+  if (end < 0) return undefined;
+  // The box is everything up to the end of the piece that carries the condition.
+  let depth = 0;
+  let cut = end;
+  for (; cut < part.length; cut++) {
+    const ch = part[cut] ?? "";
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth--;
+    else if (depth === 0 && /[\s>+~]/.test(ch)) break;
+  }
+  const rest = part.slice(cut);
+  if (!rest.trim()) return undefined;
+  depth = 0;
+  for (const ch of rest) {
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth--;
+    else if (depth === 0 && (ch === "+" || ch === "~")) return undefined;
+  }
+  const box = part.slice(0, cut).replace(OVER, "").trim();
+  return box ? { shown: part.replace(OVER, "").trim(), box } : undefined;
+}
+
+/** The rules, among the stylesheets of a document or a shadow root, that show something while the mouse is over a box. */
+function revealsIn(root: Document | ShadowRoot): Reveal[] {
+  const lists: CSSRuleList[] = [];
+  let stamp = "";
+  for (const sheet of [...Array.from(root.styleSheets ?? []), ...(root.adoptedStyleSheets ?? [])]) {
+    try {
+      const rules = sheet.cssRules;
+      lists.push(rules);
+      stamp += `${rules.length},`;
+    } catch {
+      // A stylesheet from another site cannot be read. What it hides stays unlisted.
+      stamp += "x,";
+    }
+  }
+  const known = REVEALS.get(root);
+  if (known?.stamp === stamp) return known.rules;
+
+  const found: Reveal[] = [];
+  let read = 0;
+  const walk = (rules: CSSRuleList, depth: number) => {
+    for (let i = 0; i < rules.length && read < MAX_RULES_READ; i++) {
+      const rule = rules[i] as CSSRule & { selectorText?: string; style?: CSSStyleDeclaration; cssRules?: CSSRuleList; media?: MediaList };
+      read++;
+      const selector = rule.selectorText;
+      if (typeof selector === "string") {
+        if (!rule.style || (selector.indexOf(":hover") < 0 && selector.indexOf(":focus-within") < 0)) continue;
+        const visibility = rule.style.visibility === "visible";
+        const opacity = rule.style.opacity !== "" && Number(rule.style.opacity) > 0;
+        if (!visibility && !opacity) continue;
+        for (const part of selectorParts(selector)) {
+          const reveal = readReveal(part);
+          if (reveal) found.push({ ...reveal, visibility, opacity });
+        }
+      } else if (depth < 3 && rule.cssRules) {
+        // Rules for another kind of screen do not apply here.
+        if (rule.media?.mediaText && !window.matchMedia(rule.media.mediaText).matches) continue;
+        walk(rule.cssRules, depth + 1);
+      }
+    }
+  };
+  try {
+    for (const rules of lists) walk(rules, 0);
+  } catch {
+    // A rule this browser cannot be asked about. What was found so far stands.
+  }
+  REVEALS.set(root, { stamp, rules: found });
+  return found;
+}
+
+/**
+ * The box a hidden element shows in when the mouse is over it, if a
+ * stylesheet says so: a menu button that a panel shows only while the mouse
+ * is over the panel. `seeThrough` is whether the element is also fully
+ * transparent, which the same rules then have to undo.
+ */
+function shownWhenOver(el: Element, hiddenByVisibility: boolean, seeThrough: boolean): DOMRect | undefined {
+  const root = el.getRootNode();
+  if (!(root instanceof Document) && !(root instanceof ShadowRoot)) return undefined;
+  let box: Element | undefined;
+  let visibility = false;
+  let opacity = false;
+  for (const rule of revealsIn(root)) {
+    try {
+      if (!el.matches(rule.shown)) continue;
+      const over = el.parentElement?.closest(rule.box);
+      if (!over) continue;
+      box ??= over;
+      visibility ||= rule.visibility;
+      opacity ||= rule.opacity;
+    } catch {
+      // A selector that cannot be read once the condition is taken out of it.
+    }
+  }
+  if (!box || (hiddenByVisibility && !visibility) || (seeThrough && !opacity)) return undefined;
+  return box.getBoundingClientRect();
+}
+
+/** Whether one box lies inside another, give or take a pixel. */
+function liesInside(inner: DOMRect, outer: DOMRect): boolean {
+  return inner.left >= outer.left - 1 && inner.right <= outer.right + 1 && inner.top >= outer.top - 1 && inner.bottom <= outer.bottom + 1;
+}
+
 export interface PageSnapshot {
   snapshot: Snapshot;
   /** Live element for each id in the snapshot. */
@@ -233,6 +390,7 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
   const texts: TextBlock[] = [];
   const viewportHeight = window.innerHeight;
   let visited = 0;
+  let hiddenChecked = 0;
 
   // With a modal open only the modal is usable, so only the modal is listed,
   // along with anything drawn on top of it: many apps put the list that a
@@ -242,7 +400,12 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
 
   // `held` collects the page text inside a box that was taken for a control but
   // may yet turn out to be only a wrapper. If it does, its words are page text after all.
-  const visit = (el: Element, scope: Scope, parentPointer: boolean, insideControl: boolean, inSvg = false, outside = !!modal, held?: TextBlock[]) => {
+  //
+  // `hoverBox` is set inside something that shows only while the mouse is over
+  // the box around it, and is that box. A control in there is listed if it
+  // lies inside the box, so that the visitor's mouse arriving at the pointer
+  // is what shows it. A menu that opens somewhere else stays unlisted until it is open.
+  const visit = (el: Element, scope: Scope, parentPointer: boolean, insideControl: boolean, inSvg = false, outside = !!modal, held?: TextBlock[], hoverBox?: DOMRect) => {
     if (visited++ > MAX_VISITED || el === ignore || SKIP_TAGS.has(el.tagName)) return;
     if (el.hasAttribute("inert") || el.hasAttribute("data-haptic-ignore") || el.getAttribute("aria-hidden") === "true") {
       // An app hides the page behind its dialog this way, and the dialog itself is inside what it hid only by mistake.
@@ -251,10 +414,17 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
     if (el === modal) outside = false;
     // A drawing is not read, but controls and ordinary page content placed inside one are.
     const svg = el.tagName === "svg" || (inSvg && el.tagName !== "foreignObject");
-    if (!isRendered(el)) {
-      // display:contents has no box of its own, but its children do.
-      if (getComputedStyle(el).display === "contents" && !holdsTyping(el)) for (const child of el.children) visit(child, scope, parentPointer, insideControl);
-      return;
+    if (hoverBox ? !hasBox(el) : !isRendered(el)) {
+      // Hidden, but with a box: a stylesheet may show it while the mouse is over the box around it.
+      if (!hoverBox && hiddenChecked < MAX_HIDDEN_CHECKED && hasBox(el)) {
+        hiddenChecked++;
+        hoverBox = shownWhenOver(el, true, getComputedStyle(el).opacity === "0");
+      }
+      if (!hoverBox) {
+        // display:contents has no box of its own, but its children do.
+        if (getComputedStyle(el).display === "contents" && !holdsTyping(el)) for (const child of el.children) visit(child, scope, parentPointer, insideControl);
+        return;
+      }
     }
 
     // An element can name more than one role. The one that says how it is used is the one that matters.
@@ -270,7 +440,7 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
       : scope;
 
     const headingTag = /^H([1-6])$/.exec(el.tagName);
-    if (headingTag || explicitRole === "heading") {
+    if ((headingTag || explicitRole === "heading") && !hoverBox) {
       const text = cleanText(wordsIn(el, 160), 80);
       if (text) {
         scope.heading = text;
@@ -289,13 +459,16 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
     let added: Candidate | undefined;
     if (role) {
       const rect = el.getBoundingClientRect();
-      if (rect.width > 0 || rect.height > 0) {
+      if ((rect.width > 0 || rect.height > 0) && (!hoverBox || liesInside(rect, hoverBox))) {
         added = { el, id: "", role, label: labelOf(el, role), nav: ["nav", "header", "aside", "menu", "tabs", "footer"].includes(scope.region), region: scope.region, heading: scope.heading, outside };
         const options = optionsOf(el);
         if (options.length) added.options = options;
         const icon = iconOf(el);
         if (icon) added.icon = icon;
         const state = stateOf(el, role);
+        // Fully transparent controls have always been listed: row actions that fade in. One that a stylesheet shows on hover says so.
+        const fades = !hoverBox && hiddenChecked < MAX_HIDDEN_CHECKED && getComputedStyle(el).opacity === "0" && ++hiddenChecked > 0 && shownWhenOver(el, false, true);
+        if (hoverBox || (fades && liesInside(rect, fades))) state.push(SHOWS_ON_HOVER);
         if (state.length) added.state = state;
         const href = hrefOf(el);
         if (href) added.href = href;
@@ -303,7 +476,7 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
         else if (rect.top >= viewportHeight) added.offscreen = "below";
         candidates.push(added);
       }
-    } else if ((!insideControl || held) && !svg && !outside && TEXT_TAGS.has(el.tagName) && (held ?? texts).length < 300) {
+    } else if ((!insideControl || held) && !svg && !outside && !hoverBox && TEXT_TAGS.has(el.tagName) && (held ?? texts).length < 300) {
       const own = ownText(el);
       if (own.length >= 3) {
         const rect = el.getBoundingClientRect();
@@ -319,8 +492,8 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
     // Only a box that is not a control in its own right can turn out to be a wrapper.
     const mayBeWrapper = !!added && (role === "clickable" || (!isNative(el) && !isFocusable(el)));
     const mine: TextBlock[] | undefined = mayBeWrapper ? [] : role ? undefined : held;
-    for (const child of el.children) visit(child, childScope, pointerHere, inside, svg, outside, mine);
-    if (el.shadowRoot) for (const child of el.shadowRoot.children) visit(child, childScope, pointerHere, inside, svg, outside, mine);
+    for (const child of el.children) visit(child, childScope, pointerHere, inside, svg, outside, mine, hoverBox);
+    if (el.shadowRoot) for (const child of el.shadowRoot.children) visit(child, childScope, pointerHere, inside, svg, outside, mine, hoverBox);
 
     // A wrapper around real buttons or links is just a container, whether it
     // looked clickable or was given a role, like a menu entry around its link.
@@ -500,6 +673,12 @@ function ownText(el: Element): string {
   let text = "";
   for (const node of el.childNodes) if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
   return text.replace(/\s+/g, " ").trim();
+}
+
+/** Whether an element takes up room on the page, shown or not: it is not left out of the layout altogether. */
+function hasBox(el: Element): boolean {
+  if (typeof el.checkVisibility === "function") return el.checkVisibility();
+  return el.getClientRects().length > 0;
 }
 
 function isRendered(el: Element): boolean {

@@ -276,3 +276,49 @@ test("a control inside a box that has its own heading is listed under that headi
     'link "Home" [nav › Breadcrumb] → /home',
   ]);
 });
+
+// Shown only while the mouse is over a box ---------------------------------------
+
+const HOVER_STYLES = `
+  .panel { position: relative; width: 400px; height: 120px; border: 1px solid #ccc; }
+  .panel .menu, .panel .tools { visibility: hidden; opacity: 0; }
+  .panel:focus-visible .menu, .panel:hover .menu { visibility: visible; opacity: 1; }
+  .panel:focus-within:not(:focus) .tools { visibility: visible; opacity: 1; }
+  .nav li { position: relative; display: inline-block; }
+  .nav li ul { visibility: hidden; position: absolute; top: 40px; left: 0; }
+  .nav li:hover ul { visibility: visible; }
+  .gone { visibility: hidden; }
+  .trigger:hover + .tip button { visibility: visible; }
+  .tip button { visibility: hidden; }
+  .card { width: 300px; height: 60px; }
+  .card .fade { opacity: 0; }
+  .card:hover .fade { opacity: 1; }
+  .card .half { visibility: hidden; opacity: 0; }
+  .card:hover .half { visibility: visible; }`;
+const HOVER_PAGE = `<main>
+    <section class="panel"><h2>Simple graph</h2><button class="menu" aria-label="Menu for panel Simple graph">⋮</button>
+      <div class="tools"><button>Zoom</button><p>Words in a hidden box are not page text.</p></div></section>
+    <ul class="nav"><li><a href="/products">Products</a><ul><li><a href="/products/secret">Entry of a closed menu</a></li></ul></li></ul>
+    <button class="gone">Never shown</button>
+    <span class="trigger">What is this?</span><span class="tip"><button>Shown beside, not inside</button></span>
+    <div class="card"><button class="fade">Pin</button><button class="half">Still see-through when shown</button></div>
+  </main>`;
+const HOVER_LINES = [
+  'button "Menu for panel Simple graph" (shows on hover) [main › Simple graph]',
+  'button "Zoom" (shows on hover) [main › Simple graph]',
+  'link "Products" [main] → /products',
+  'button "Pin" (shows on hover) [main]',
+];
+
+test("a control hidden until the mouse is over the box around it is listed, and says so", { skip }, async () => {
+  const snapshot = await read(`<style>${HOVER_STYLES}</style>${HOVER_PAGE}`);
+  assert.deepEqual(lines(snapshot), HOVER_LINES);
+  assert.ok(!snapshot.text.some((text) => text.includes("hidden box")), JSON.stringify(snapshot.text));
+});
+
+test("the rule that shows it can be in a linked stylesheet, and a stylesheet that cannot be read is passed over", { skip }, async () => {
+  const snapshot = await read(`<link rel="stylesheet" href="https://elsewhere.test/theirs.css"><link rel="stylesheet" href="/ours.css">${HOVER_PAGE}`, {
+    styles: { "/ours.css": HOVER_STYLES, "https://elsewhere.test/theirs.css": ".panel:hover .gone { visibility: visible; }" },
+  });
+  assert.deepEqual(lines(snapshot), HOVER_LINES);
+});

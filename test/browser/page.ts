@@ -47,7 +47,7 @@ export interface ReadOptions {
   path?: string;
   /** Something to do on the page before it is read, like opening a list. */
   before?: (page: Loose) => Promise<void>;
-  /** Stylesheets the page links to, by path. */
+  /** Stylesheets the page links to: by path when on the page's own site, by whole address when on another. */
   styles?: Record<string, string>;
 }
 
@@ -67,9 +67,12 @@ export async function startBrowser(): Promise<Browser | string> {
     read: async (html, options = {}) => {
       const context = await browser.newContext({ viewport: { width: 1000, height: 700 } });
       try {
-        await context.route(`${ORIGIN}/**`, (route: Loose) => {
-          const style = options.styles?.[new URL(route.request().url()).pathname];
+        await context.route("**/*", (route: Loose) => {
+          const url = new URL(route.request().url());
+          // A stylesheet is given by its path on this site, or by its whole address when it is on another.
+          const style = options.styles?.[url.origin === ORIGIN ? url.pathname : url.href];
           if (style !== undefined) return route.fulfill({ status: 200, contentType: "text/css", body: style });
+          if (url.origin !== ORIGIN) return route.fulfill({ status: 404, body: "" });
           return route.fulfill({ status: 200, contentType: "text/html", body: `<!doctype html><meta charset="utf-8"><title>Test page</title>${html}` });
         });
         const page = await context.newPage();
