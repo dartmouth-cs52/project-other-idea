@@ -11,6 +11,9 @@ export function SiteNav() {
         {site.name}
       </Link>
       <nav className="flex items-center gap-6 text-sm font-medium">
+        <Link href="/#pricing" className="hidden text-muted-foreground transition-colors hover:text-foreground sm:block">
+          Pricing
+        </Link>
         <Link href="/#faq" className="hidden text-muted-foreground transition-colors hover:text-foreground sm:block">
           FAQ
         </Link>

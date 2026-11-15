@@ -11,12 +11,12 @@ npm run lint
 
 ## What's here
 
-- `app/page.tsx`: the landing page (hero, demo, FAQ).
+- `app/page.tsx`: the landing page (hero, demo, feature cards, pricing, FAQ).
 - `app/request-access/`: the request access page, the one call to action on the site.
 - `app/privacy/`, `app/terms/`: plain text pages.
 - `components/demo.tsx`: the scripted demo. One task on a loop, driven by a list of steps at the top of the file.
 - `components/pointer.tsx`: the Haptic pointer. Same path as `../assets/pointer.svg` and the widget in `../src/widget/ui.ts`.
-- `lib/site.ts`: the name, contact address, links and FAQ copy.
+- `lib/site.ts`: the name, contact address, links, FAQ copy and the pricing plans. A price is changed there and nowhere else. Nothing is charged yet: there is no checkout and no billing.
 - `public/sitemap.xml` and `public/robots.txt`: the list of pages for search engines. Add a line to the sitemap when a page is added.
 - `app/globals.css`: the colour, radius and motion tokens from `../DESIGN.md`.
 
