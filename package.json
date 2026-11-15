@@ -16,7 +16,8 @@
     "test": "tsx --test test/*.test.ts",
     "eval": "tsx --env-file-if-exists=.env eval/run.ts",
     "eval:record": "tsx eval/record.ts",
-    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts"
+    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts",
+    "routes:report": "tsx --env-file-if-exists=.env src/db/routes-report.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

@@ -11,6 +11,7 @@ import {
   type TurnRequest,
 } from "../shared/types.ts";
 import { measureTurn, TurnError, type TurnMeasure } from "./model.ts";
+import { compareRoute, routeLookup, servedReply, type RouteLookup, type RouteResult, type StoredRoute } from "./routes.ts";
 
 // What the Haptic server answers: the widget file, each site's public
 // settings, and the one endpoint the widget calls for every step of a guide.
@@ -38,8 +39,10 @@ export interface AppParts {
    * leaves before the answer, is still on record. Must not throw.
    */
   onAsk?(request: TurnRequest, site: SiteContext, origin: string | undefined): void;
-  /** Told about each finished step, for logging. Must not throw. */
-  onTurn?(request: TurnRequest, measure: TurnMeasure, site: SiteContext, origin: string | undefined): void;
+  /** Told about each finished step, for logging, with what the route lookup found if one was made. Must not throw. */
+  onTurn?(request: TurnRequest, measure: TurnMeasure, site: SiteContext, origin: string | undefined, route?: RouteResult): void;
+  /** The verified route stored for a question on a screen. Without it, every step goes to the model. See routes.ts. */
+  findRoute?(site: SiteContext, lookup: RouteLookup): Promise<StoredRoute | undefined>;
   /**
    * Told each time the script calls from a page, allowed or not. This is how
    * an install is seen to be live, and why it looks dead when the origin is not
@@ -97,8 +100,8 @@ export function createApp(parts: AppParts) {
       if ((request.headers.get("Accept") ?? "").includes(STREAM_TYPE)) return streamTurn(parts, site, turn, cors, origin);
 
       try {
-        const measure = await measureTurn(site, turn);
-        parts.onTurn?.(turn, measure, site, origin);
+        const { measure, route } = await answerTurn(parts, site, turn);
+        parts.onTurn?.(turn, measure, site, origin, route);
         return json(200, measure.reply);
       } catch (error) {
         if (!(error instanceof TurnError)) throw error;
@@ -148,8 +151,8 @@ function streamTurn(parts: AppParts, site: SiteContext, turn: TurnRequest, cors:
     async start(controller) {
       const line = (value: unknown) => controller.enqueue(encoder.encode(JSON.stringify(value) + "\n"));
       try {
-        const measure = await measureTurn(site, turn, undefined, (id) => line({ target: id }));
-        parts.onTurn?.(turn, measure, site, origin);
+        const { measure, route } = await answerTurn(parts, site, turn, (id) => line({ target: id }));
+        parts.onTurn?.(turn, measure, site, origin, route);
         line(measure.reply);
       } catch (error) {
         const known = error instanceof TurnError;
@@ -160,6 +163,60 @@ function streamTurn(parts: AppParts, site: SiteContext, turn: TurnRequest, cors:
     },
   });
   return new Response(body, { headers: { ...cors, "Content-Type": STREAM_TYPE, "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
+}
+
+/**
+ * How long a lookup may take. Serving waits for it before deciding whether to
+ * ask the model, so it is kept short: a slow database means asking the model,
+ * as if nothing were stored. In shadow mode the lookup runs beside the model
+ * call and is only read once the model has answered.
+ */
+const ROUTE_WAIT_MS = { serve: 250, shadow: 3000 };
+
+/**
+ * Answers one step: from a verified route when the site serves them and a
+ * trusted one matches exactly one control on this page, from the model
+ * otherwise. In shadow mode the model always answers, and the route is only
+ * compared with it.
+ */
+export async function answerTurn(
+  parts: Pick<AppParts, "findRoute">,
+  site: SiteContext,
+  turn: TurnRequest,
+  onTarget?: (id: string) => void,
+): Promise<{ measure: TurnMeasure; route?: RouteResult }> {
+  const started = Date.now();
+  const mode = site.routes ?? "shadow";
+  const lookup = parts.findRoute && mode !== "off" ? routeLookup(turn) : undefined;
+  const found = lookup && parts.findRoute ? within(parts.findRoute(site, lookup), ROUTE_WAIT_MS[mode === "serve" ? "serve" : "shadow"]) : undefined;
+
+  if (mode === "serve" && lookup && found) {
+    const route = await found;
+    const reply = route === TIMED_OUT ? undefined : servedReply(route, turn.snapshot, lookup);
+    if (reply) {
+      if (reply.target) onTarget?.(reply.target);
+      const ms = Date.now() - started;
+      // A stored sentence was tidied when the model first wrote it, so it is its own original.
+      return { measure: { reply, model: "route", ms, msToTarget: ms, wrote: reply.say }, route: { lookup, outcome: "served" } };
+    }
+  }
+
+  const measure = await measureTurn(site, turn, undefined, onTarget);
+  if (!lookup || !found) return { measure };
+  const route = await found;
+  // A lookup that did not answer in time says nothing about the route, so it is not counted at all.
+  if (route === TIMED_OUT) return { measure };
+  return { measure, route: { lookup, outcome: compareRoute(route, measure.reply, turn.snapshot) } };
+}
+
+const TIMED_OUT = Symbol("timed out");
+
+/** The promise's value, or TIMED_OUT if it takes longer than `ms` or fails. Never rejects. */
+function within<T>(promise: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<typeof TIMED_OUT>((resolve) => (timer = setTimeout(() => resolve(TIMED_OUT), ms)));
+  const settled = promise.catch((): typeof TIMED_OUT => TIMED_OUT);
+  return Promise.race<T | typeof TIMED_OUT>([settled, late]).finally(() => clearTimeout(timer));
 }
 
 /** The widget only works on origins the site lists. Requests with no Origin header (same-origin GETs, curl) pass. */
@@ -240,5 +297,6 @@ export function parseTurn(body: unknown): TurnRequest | undefined {
   if (raw.event) request.event = text(raw.event, 600);
   if (raw.change) request.change = text(raw.change, 2000);
   if (raw.offTrack === true) request.offTrack = true;
+  if (typeof raw.after === "string" && raw.after) request.after = text(raw.after, 300);
   return request;
 }

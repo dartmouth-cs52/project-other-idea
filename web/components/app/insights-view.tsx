@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { cn } from "cn";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { api, OUTCOME_LABEL, type FinishedList, type GuideDetail, type Insights } from "@/lib/app-api";
+import { api, OUTCOME_LABEL, type FinishedList, type GuideDetail, type Insights, type RouteMetrics, type Site } from "@/lib/app-api";
 import { Card, CardTitle, DoneMark, seconds, when } from "./parts";
 
 const RANGES = [7, 30, 90];
@@ -13,7 +13,17 @@ const RANGES = [7, 30, 90];
  * questions that keep going unanswered, because those are what the company
  * can fix.
  */
-export function InsightsView({ siteId, refreshKey }: { siteId: string; refreshKey: number }) {
+export function InsightsView({
+  siteId,
+  refreshKey,
+  routesMode,
+  onRoutesMode,
+}: {
+  siteId: string;
+  refreshKey: number;
+  routesMode: Site["routesMode"];
+  onRoutesMode: (mode: Site["routesMode"]) => Promise<void>;
+}) {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<Insights | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +101,8 @@ export function InsightsView({ siteId, refreshKey }: { siteId: string; refreshKe
         <Stat label="Said it helped" value={summary.helped_yes + summary.helped_no ? `${summary.helped_yes} of ${summary.helped_yes + summary.helped_no}` : "No answers yet"} />
         <Stat label="Time until the pointer moved" value={seconds(summary.median_ms_to_pointer)} note="Median, first step" />
       </div>
+
+      <RoutesCard metrics={data.routes} mode={routesMode} onMode={onRoutesMode} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
@@ -174,6 +186,103 @@ export function InsightsView({ siteId, refreshKey }: { siteId: string; refreshKe
 
       {open && <GuideDrawer siteId={siteId} guideId={open} onClose={() => setOpen(null)} />}
     </div>
+  );
+}
+
+const ROUTE_MODES: { mode: Site["routesMode"]; label: string; says: string }[] = [
+  { mode: "off", label: "Off", says: "Haptic asks the model at every step and keeps no routes." },
+  {
+    mode: "shadow",
+    label: "Watch only",
+    says: "Haptic keeps routes and checks each one against the model, but the model always answers. The numbers above come from this.",
+  },
+  {
+    mode: "serve",
+    label: "Answer from routes",
+    says: "A route that finished guides confirmed answers on its own, when exactly one control on the page matches it. Anything else goes to the model, and a No to Did this help sends that route back to it too.",
+  },
+];
+
+/**
+ * How often the same question comes up on the same screen, and whether
+ * answering it from a verified route would be right. Leads to the switch that
+ * turns serving on, which is worth it only when both numbers are high.
+ */
+function RoutesCard({ metrics, mode, onMode }: { metrics: RouteMetrics; mode: Site["routesMode"]; onMode: (mode: Site["routesMode"]) => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const share = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 100)}%` : "No data yet");
+  const compared = metrics.agreed + metrics.disagreed;
+  const current = ROUTE_MODES.find((item) => item.mode === mode) ?? ROUTE_MODES[1]!;
+
+  async function choose(next: Site["routesMode"]) {
+    if (next === mode) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onMode(next);
+    } catch (failure) {
+      setError((failure as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardTitle>Questions asked again</CardTitle>
+      <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
+        When the same question comes up on the same screen, Haptic can point from the route a finished guide confirmed, without asking the model. The
+        pointer moves sooner and the step costs nothing.
+      </p>
+      <dl className="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: "Asked before on the same page", value: share(metrics.repeated_guides, metrics.guides) },
+          { label: "Steps with a saved route", value: share(metrics.repeats, metrics.looked_up) },
+          { label: "Steps that could skip the model", value: share(metrics.servable, metrics.looked_up) },
+          { label: "Model agreed with the route", value: share(metrics.agreed, compared) },
+        ].map((item) => (
+          <div key={item.label} className="flex flex-col gap-1 bg-card p-4">
+            <dt className="text-sm text-muted-foreground">{item.label}</dt>
+            <dd className="text-2xl font-medium tracking-[-0.02em] tabular-nums">{item.value}</dd>
+          </div>
+        ))}
+      </dl>
+      {metrics.served > 0 && (
+        <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
+          {metrics.served.toLocaleString()} {metrics.served === 1 ? "step was" : "steps were"} answered from saved routes. The pointer moved after{" "}
+          {seconds(metrics.served_ms)}, against {seconds(metrics.model_ms)} when the model answered. People used the control {share(metrics.served_used, metrics.served)} of
+          the time.
+        </p>
+      )}
+      <div className="flex flex-col gap-3">
+        <div role="radiogroup" aria-label="Saved routes" className="flex flex-wrap gap-2">
+          {ROUTE_MODES.map((item) => (
+            <button
+              key={item.mode}
+              type="button"
+              role="radio"
+              aria-checked={item.mode === mode}
+              disabled={busy}
+              onClick={() => choose(item.mode)}
+              className={cn(
+                "inline-flex h-8 items-center rounded-full px-3.5 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
+                item.mode === mode ? "bg-primary text-primary-foreground" : "bg-card text-foreground hover:bg-secondary",
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">{current.says}</p>
+        {mode !== "serve" && (
+          <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
+            Turn on Answer from routes once a fair share of steps could skip the model and it agrees with its routes nearly every time.
+          </p>
+        )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
+      </div>
+    </Card>
   );
 }
 

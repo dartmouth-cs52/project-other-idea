@@ -8,6 +8,8 @@ import { createApp } from "./app.ts";
 import { Store } from "./db.ts";
 import { SETTINGS } from "./model.ts";
 import { recordTurn } from "./record.ts";
+import type { RouteLookup } from "./routes.ts";
+import type { SiteContext } from "../shared/types.ts";
 import { loadSite } from "./sites.ts";
 
 // The Haptic server on Node, for running on your own machine: the answers in
@@ -39,10 +41,11 @@ const app = createApp({
   widget: () => readFile(WIDGET_FILE, "utf8"),
   widgetMaxAge: process.env.NODE_ENV === "production" ? 300 : 0,
   overLimit,
-  onTurn: (request, measure, _site, origin) => {
+  onTurn: (request, measure, _site, origin, route) => {
     void recordTurn(request, measure);
-    void store?.recordStep(request, measure, origin);
+    void store?.recordStep(request, measure, origin, route);
   },
+  ...(store ? { findRoute: (site: SiteContext, lookup: RouteLookup) => store.findRoute(site.id, lookup) } : {}),
   onSeen: (site, origin, allowed) => void store?.seenAt(site, origin, allowed),
   onAsk: (request, _site, origin) => void store?.startGuide(request, origin),
   onReport: (site, guide, report) => void store?.report(site, guide, report),

@@ -55,6 +55,7 @@ export interface Site {
   name: string;
   origin: string;
   allowedOrigins: string[];
+  routesMode: "off" | "shadow" | "serve";
   scriptUrl: string;
   connected: boolean;
   origins: SeenOrigin[];
@@ -82,6 +83,24 @@ export interface Insights {
   }[];
   abandonedAt: { path: string; step: number; target_label: string | null; count: number }[];
   wrongClicks: { path: string; target_label: string; shown: number; wrong: number }[];
+  routes: RouteMetrics;
+}
+
+/** How often questions repeat, and how verified routes are doing. The same shape src/shared/route-metrics.ts describes. */
+export interface RouteMetrics {
+  guides: number;
+  repeated_guides: number;
+  looked_up: number;
+  repeats: number;
+  servable: number;
+  agreed: number;
+  disagreed: number;
+  served: number;
+  served_used: number;
+  served_ms: number | null;
+  model_ms: number | null;
+  routes: number;
+  trusted_routes: number;
 }
 
 export interface FinishedList {

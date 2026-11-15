@@ -97,6 +97,21 @@ Without it the Worker still answers, from the KV store sites were kept in before
 
 What is kept from visitors follows one rule: the question, each control pointed at, wrong clicks, how the guide ended, whether they said it helped, and timings. Emails and long numbers are masked. Page contents are not kept, and what people type is never read. The question is recorded when it arrives, before the model answers, so a guide whose first step fails is still on record. A guide that never reports an ending was abandoned.
 
+**Verified routes** (issue 13, `src/server/routes.ts`). For a question on a screen, the control that was right last time, so the same question on the same screen can be answered without the model. A route is keyed on the question (masked and normalized), the page, any open dialog and the control the previous step used. It is learned from the model's answer, trusted once a guide that used it finishes, and loses that trust when someone answers No to Did this help or the model answers differently. Each site has a mode, set from its dashboard:
+
+- **shadow**, the default: every step is looked up beside the model call, and the step records whether the model chose the same control. The visitor always gets the model's answer, so this costs nothing and adds no wait.
+- **serve**: a trusted route is answered without the model, but only when exactly one control on the live page matches it and it does not point again at the control just used. Anything else goes to the model. The lookup gets 250 ms before the model is asked anyway.
+- **off**: no lookups.
+
+How often questions repeat, and whether serving would be right, is on each site's dashboard and in a report across every site:
+
+```bash
+npm run routes:report                     # the last 7 days
+npm run routes:report -- --days 30 --site site_ab12cd34ef
+```
+
+"Had a route" is the repeat rate issue 13 asks for: the same question on the same screen at the same point. "Could be served" is the share of steps that would skip the model, and "model agreed" says whether doing so would have been right. Turn serving on for a site once both are high.
+
 **Which guides are finished.** Pricing on joinhaptic.com bills only finished guides, so the widget records "finished" exactly as pricing defines it: the visitor followed the steps and is now where they asked to be, or used the control the last answer pointed at. A first answer the visitor did not act on, or one that only needed words, ends as "shown". When the model finds no way forward it answers with the status "stuck", kept apart from "done", and the guide ends as "nothing to point at". Neither is billed. The dashboard lists every finished guide by month, with a download, so a bill can be checked. See `GUIDE_OUTCOMES` in `src/shared/types.ts`.
 
 The first time the script calls from an allowed origin is how the dashboard knows a site is connected, and a call from an origin that is not allowed is kept too, so the dashboard can say why an install looks dead.

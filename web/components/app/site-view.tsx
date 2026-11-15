@@ -59,7 +59,12 @@ export function SiteView({ siteId }: { siteId: string }) {
 
       {site.connected ? (
         <>
-          <InsightsView siteId={site.id} refreshKey={refreshKey} />
+          <InsightsView
+            siteId={site.id}
+            refreshKey={refreshKey}
+            routesMode={site.routesMode}
+            onRoutesMode={async (routesMode) => setSite(await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { routesMode } }))}
+          />
           <InstallHealth site={site} reading={pages.reading} onChange={setSite} />
         </>
       ) : (

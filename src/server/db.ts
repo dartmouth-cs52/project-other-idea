@@ -1,6 +1,7 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import { cleanText, normalizePath, questionKey, type GuideReport, type SiteContext, type TurnRequest } from "../shared/types.ts";
+import { cleanText, normalizePath, questionKey, routeKey, ROUTES_MODES, type GuideReport, type RoutesMode, type SiteContext, type TurnRequest } from "../shared/types.ts";
 import type { TurnMeasure } from "./model.ts";
+import { contextOf, storable, type RouteLookup, type RouteResult, type StoredRoute } from "./routes.ts";
 
 // What the widget server keeps in Neon: each site, which origins the script has
 // called from, and every guide with its steps. The tables are in db/migrations.
@@ -19,11 +20,14 @@ export interface SiteRow {
   origin: string;
   allowed_origins: string[];
   context: SiteContext;
+  routes_mode?: string;
 }
 
 /** A site as the server answers with it. The columns win over the copy inside `context`, because the dashboard edits them. */
 export function siteFromRow(row: SiteRow): SiteContext {
-  return { ...row.context, id: row.id, name: row.name, origin: row.origin, allowedOrigins: row.allowed_origins };
+  const site: SiteContext = { ...row.context, id: row.id, name: row.name, origin: row.origin, allowedOrigins: row.allowed_origins };
+  if (ROUTES_MODES.includes(row.routes_mode as RoutesMode)) site.routes = row.routes_mode as RoutesMode;
+  return site;
 }
 
 /** The script calls from the same page many times a minute. One write a minute per origin is plenty to know it is live. */
@@ -50,7 +54,7 @@ export class Store {
   }
 
   async loadSite(id: string): Promise<SiteContext | undefined> {
-    const rows = (await this.sql`select id, name, origin, allowed_origins, context from sites where id = ${id}`) as SiteRow[];
+    const rows = (await this.sql`select id, name, origin, allowed_origins, context, routes_mode from sites where id = ${id}`) as SiteRow[];
     return rows[0] ? siteFromRow(rows[0]) : undefined;
   }
 
@@ -111,13 +115,32 @@ export class Store {
   }
 
   /** Records one step, and the guide it belongs to if this is its first. A step asked again (after a loop or a page change) replaces the earlier try. */
-  recordStep(request: TurnRequest, measure: TurnMeasure, origin: string | undefined): Promise<void> | undefined {
+  recordStep(request: TurnRequest, measure: TurnMeasure, origin: string | undefined, route?: RouteResult): Promise<void> | undefined {
     const guide = request.guide;
     if (!guide) return undefined;
     const { reply } = measure;
     const target = reply.target ? request.snapshot.elements.find((element) => element.id === reply.target) : undefined;
     const path = normalizePath(request.snapshot.path || "/");
+    const targetKey = target ? routeKey(target) : null;
     const write = this.quietly("record a step", async () => {
+      // The model's answer becomes the stored route for this question on this screen. A different answer
+      // replaces the route and takes its trust away, until a finished guide confirms the new one.
+      const learn =
+        route && route.outcome !== "served" && target && targetKey && reply.status !== "stuck" && storable(route.lookup, targetKey)
+          ? [
+              this.sql`
+                insert into routes (site_id, goal_key, path, dialog, after_key, target_key, target_context, target_role, target_label, say, status)
+                values (${request.site}, ${route.lookup.goalKey}, ${route.lookup.path}, ${route.lookup.dialog}, ${route.lookup.afterKey},
+                  ${targetKey}, ${contextOf(target)}, ${target.role}, ${cleanText(target.label, 80)}, ${cleanText(reply.say, 600)}, ${reply.status})
+                on conflict (site_id, goal_key, path, dialog, after_key) do update set
+                  repairs = routes.repairs + (case when routes.target_key = excluded.target_key and routes.target_context = excluded.target_context then 0 else 1 end),
+                  confirmed = routes.confirmed and routes.target_key = excluded.target_key and routes.target_context = excluded.target_context,
+                  confirmed_at = case when routes.target_key = excluded.target_key and routes.target_context = excluded.target_context then routes.confirmed_at end,
+                  say = case when routes.confirmed and routes.target_key = excluded.target_key and routes.target_context = excluded.target_context then routes.say else excluded.say end,
+                  target_key = excluded.target_key, target_context = excluded.target_context, target_role = excluded.target_role,
+                  target_label = excluded.target_label, status = excluded.status, updated_at = now()`,
+            ]
+          : [];
       await this.sql.transaction([
         this.sql`
           insert into guides (id, site_id, question, question_key, started_path, origin, last_step_at, step_count)
@@ -125,14 +148,18 @@ export class Store {
           on conflict (id) do update set last_step_at = now(), step_count = greatest(guides.step_count, excluded.step_count)
           where guides.site_id = excluded.site_id`,
         this.sql`
-          insert into steps (guide_id, n, path, target_role, target_label, target_context, said, status, event, strayed, ms, ms_to_target, model)
+          insert into steps (guide_id, n, path, target_role, target_label, target_context, said, status, event, strayed, ms, ms_to_target, model,
+            target_key, after_key, dialog, route)
           select ${guide}, ${request.step}, ${path}, ${target?.role ?? null}, ${target ? cleanText(target.label, 80) : null},
             ${target?.context ? cleanText(target.context, 120) : null}, ${cleanText(reply.say, 600)}, ${reply.status},
-            ${request.event ? cleanText(request.event, 600) : null}, ${request.offTrack === true}, ${measure.ms}, ${measure.msToTarget}, ${measure.model}
+            ${request.event ? cleanText(request.event, 600) : null}, ${request.offTrack === true}, ${measure.ms}, ${measure.msToTarget}, ${measure.model},
+            ${targetKey}, ${route?.lookup.afterKey ?? null}, ${route?.lookup.dialog ?? null}, ${route?.outcome ?? null}
           where exists (select 1 from guides where id = ${guide} and site_id = ${request.site})
           on conflict (guide_id, n) do update set path = excluded.path, target_role = excluded.target_role, target_label = excluded.target_label,
             target_context = excluded.target_context, said = excluded.said, status = excluded.status, event = excluded.event,
-            strayed = steps.strayed or excluded.strayed, ms = excluded.ms, ms_to_target = excluded.ms_to_target, model = excluded.model, created_at = now()`,
+            strayed = steps.strayed or excluded.strayed, ms = excluded.ms, ms_to_target = excluded.ms_to_target, model = excluded.model,
+            target_key = excluded.target_key, after_key = excluded.after_key, dialog = excluded.dialog, route = excluded.route, created_at = now()`,
+        ...learn,
       ]);
     });
     this.track(guide, write);
@@ -164,14 +191,58 @@ export class Store {
         if (!found) continue;
         if (report.outcome && found.open) {
           await this.sql`update guides set outcome = ${report.outcome}, ended_at = now() where id = ${guide} and site_id = ${site.id} and outcome is null`;
+          if (report.outcome === "finished") await this.trustRoutes(site.id, guide);
         }
         if (report.helped !== undefined) {
           await this.sql`update guides set helped = ${report.helped} where id = ${guide} and site_id = ${site.id}`;
+          // A person saying it did not help is doubt enough: none of this guide's routes is served again until another guide confirms it.
+          if (report.helped === false) await this.distrustRoutes(site.id, guide);
         }
         return;
       }
       console.error(`A report for guide ${guide} on ${site.id} came for a guide that was never recorded.`);
     });
+  }
+
+  /** The route stored for a question on a screen, if any. */
+  async findRoute(siteId: string, lookup: RouteLookup): Promise<StoredRoute | undefined> {
+    const rows = (await this.sql`
+      select target_key, target_context, say, status, confirmed from routes
+      where site_id = ${siteId} and goal_key = ${lookup.goalKey} and path = ${lookup.path} and dialog = ${lookup.dialog} and after_key = ${lookup.afterKey}`) as {
+      target_key: string;
+      target_context: string;
+      say: string;
+      status: "continue" | "done";
+      confirmed: boolean;
+    }[];
+    const row = rows[0];
+    return row ? { targetKey: row.target_key, targetContext: row.target_context, say: row.say, status: row.status, confirmed: row.confirmed } : undefined;
+  }
+
+  /**
+   * A finished guide confirms the route behind each of its steps that the
+   * visitor followed: every step whose next step was not a wrong click, and
+   * its last step. Only steps that were looked up count.
+   */
+  private async trustRoutes(siteId: string, guide: string): Promise<void> {
+    await this.sql`
+      update routes r set confirmed = true, confirmed_at = coalesce(r.confirmed_at, now()), uses = r.uses + 1, updated_at = now()
+      from steps s
+      join guides g on g.id = s.guide_id
+      left join steps next on next.guide_id = s.guide_id and next.n = s.n + 1
+      where g.id = ${guide} and g.site_id = ${siteId} and s.route is not null and s.target_key is not null and s.status <> 'stuck'
+        and (next.n is null or not next.strayed)
+        and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
+        and r.after_key = coalesce(s.after_key, '') and r.target_key = s.target_key and r.target_context = coalesce(s.target_context, '')`;
+  }
+
+  private async distrustRoutes(siteId: string, guide: string): Promise<void> {
+    await this.sql`
+      update routes r set confirmed = false, confirmed_at = null, updated_at = now()
+      from steps s join guides g on g.id = s.guide_id
+      where g.id = ${guide} and g.site_id = ${siteId} and s.route is not null and s.target_key is not null
+        and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
+        and r.after_key = coalesce(s.after_key, '') and r.target_key = s.target_key`;
   }
 
   private async quietly(what: string, work: () => Promise<void>): Promise<void> {

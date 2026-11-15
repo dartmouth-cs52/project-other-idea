@@ -2,6 +2,7 @@ import {
   cleanText,
   describeElement,
   normalizePath,
+  routeKey,
   type GuideOutcome,
   type GuideReport,
   type HistoryTurn,
@@ -71,6 +72,8 @@ interface SavedGuide {
   event?: string;
   /** Set when that was something other than the step they were shown. */
   strayed?: boolean;
+  /** The route key of the control the visitor just used, so the next page's step can be matched to a verified route. */
+  after?: string;
   savedAt: number;
 }
 
@@ -94,9 +97,15 @@ export class Guide {
   private step = 0;
   private previous?: Snapshot;
   /** The element the last step pointed at, and whether the visitor used it. */
-  private last?: { key: string; used: boolean };
+  private last?: { key: string; route: string; used: boolean };
   /** The visitor's last action was not the step they were shown. Cleared once the next step is given. */
   private strayed = false;
+  /**
+   * Set when the visitor used the early pointer before the reply was in. Until
+   * the reply is handled, `last` still describes the step before, so this is
+   * what the next page must be told was used.
+   */
+  private usedEarly?: string;
   /** Bumped whenever the guide is stopped or restarted, so stale async work can tell and bail. */
   private run = 0;
   private stopWaiting?: () => void;
@@ -133,6 +142,8 @@ export class Guide {
     this.history = saved.history;
     this.step = saved.step;
     this.strayed = saved.strayed === true;
+    // Which control was used on the page before. Not the loop check's key: that only compares within one page.
+    if (saved.after) this.last = { key: "", route: saved.after, used: true };
     const here = normalizePath(location.pathname);
     const moved = saved.path === here ? "The page reloaded." : `A new page loaded: the user went from ${saved.path} to ${here}.`;
     const run = this.run;
@@ -148,6 +159,7 @@ export class Guide {
     this.step = 0;
     this.previous = undefined;
     this.last = undefined;
+    this.usedEarly = undefined;
     this.strayed = false;
     this.unconfirmed = undefined;
     forget();
@@ -180,7 +192,13 @@ export class Guide {
           waiting.acted = what;
           // If this click loads a new page before the reply is in, the next page still needs to know about it.
           this.strayed = !what.onTarget;
-          this.save(what.event);
+          this.usedEarly = what.onTarget && listed ? routeKey(listed) : undefined;
+          // The step was shown and acted on, though its sentence is not in yet. Saved as done, so a page this
+          // click loads asks the next step and does not ask this one again over the top of it.
+          this.save(what.event, {
+            user: this.step === 0 ? this.goal : (event ?? "The page changed."),
+            assistant: listed ? `Pointed at ${describeElement(listed)}.` : "Pointed at a control.",
+          });
           whenActed?.(what);
         }),
       };
@@ -208,6 +226,7 @@ export class Guide {
           ...(event ? { event } : {}),
           ...(change ? { change } : {}),
           ...(this.strayed ? { offTrack: true } : {}),
+          ...(!this.strayed && this.last?.used ? { after: this.last.route } : {}),
         },
         pointEarly,
       );
@@ -243,7 +262,8 @@ export class Guide {
     this.history.push({ role: "user", text: this.step === 0 ? this.goal : (event ?? "The page changed.") }, { role: "assistant", text: reply.say });
     this.step++;
     this.previous = page.snapshot;
-    this.last = listed ? { key: elementKey(listed), used: false } : undefined;
+    this.last = listed ? { key: elementKey(listed), route: routeKey(listed), used: false } : undefined;
+    this.usedEarly = undefined;
     this.strayed = false;
 
     // Only a finished guide is billed. It is finished when the visitor followed the steps and is now
@@ -354,16 +374,21 @@ export class Guide {
     if (ASK_IF_HELPED.includes(outcome)) this.ui.askIfHelped((helped) => this.report(id, { helped }));
   }
 
-  private save(event?: string) {
+  /** Saves the guide for the next page. `shown` is a step pointed at whose reply is still coming, counted as done. */
+  private save(event?: string, shown?: { user: string; assistant: string }) {
+    const history: HistoryTurn[] = shown
+      ? [...this.history, { role: "user", text: shown.user }, { role: "assistant", text: shown.assistant }]
+      : this.history;
     const saved: SavedGuide = {
       ...(this.id ? { id: this.id } : {}),
       goal: this.goal,
-      history: this.history.slice(-MAX_HISTORY),
-      step: this.step,
+      history: history.slice(-MAX_HISTORY),
+      step: shown ? this.step + 1 : this.step,
       path: normalizePath(location.pathname),
       savedAt: Date.now(),
       ...(event ? { event } : {}),
       ...(this.strayed ? { strayed: true } : {}),
+      ...(this.strayed ? {} : this.usedEarly ? { after: this.usedEarly } : this.last?.used ? { after: this.last.route } : {}),
     };
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(saved));

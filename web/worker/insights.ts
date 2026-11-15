@@ -6,6 +6,7 @@
 // help. A visitor saying it helped always takes a guide off that list. Whether
 // an answer was right cannot be known directly; this is the nearest honest proxy.
 
+import { ROUTE_METRICS_SQL, type RouteMetrics } from "../../src/shared/route-metrics";
 import type { Sql } from "./db";
 
 /** A guide with no ending reported, and nothing new for this long, was abandoned. */
@@ -22,7 +23,7 @@ const UNANSWERED = `(g.helped is distinct from true and (g.helped = false or (${
 export async function insights(sql: Sql, site: string, days: number) {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
 
-  const [summary, outcomes, unanswered, recent, abandonedAt, wrongClicks] = await Promise.all([
+  const [summary, outcomes, unanswered, recent, abandonedAt, wrongClicks, routes] = await Promise.all([
     sql.query(
       `select count(*)::int as guides,
         count(*) filter (where ${UNANSWERED})::int as unanswered,
@@ -73,9 +74,11 @@ export async function insights(sql: Sql, site: string, days: number) {
       order by wrong desc, shown desc limit 8`,
       [site, since],
     ),
+    // How often questions repeat, and how verified routes are doing. See src/server/routes.ts.
+    sql.query(ROUTE_METRICS_SQL, [site, since]),
   ]);
 
-  return { days, summary: summary[0], outcomes, unanswered, recent, abandonedAt, wrongClicks };
+  return { days, summary: summary[0], outcomes, unanswered, recent, abandonedAt, wrongClicks, routes: routes[0] as RouteMetrics };
 }
 
 /** "2026-11" for the month a date falls in, in UTC. Bills are counted by UTC month. */

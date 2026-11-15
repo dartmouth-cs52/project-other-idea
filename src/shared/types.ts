@@ -20,9 +20,20 @@ export interface SiteContext {
   pages: PageNode[];
   /** The inputs this was built from, so `refresh` can rebuild it unattended. */
   source: SiteSource;
+  /** Verified routes: "shadow" when not set. See src/server/routes.ts. */
+  routes?: RoutesMode;
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * Whether steps are answered from verified routes (issue 13).
+ * - off: no lookups
+ * - shadow: each step is looked up and compared with the model's answer, which is what the visitor gets
+ * - serve: a trusted route that matches exactly one control on the live page is answered without the model
+ */
+export const ROUTES_MODES = ["off", "shadow", "serve"] as const;
+export type RoutesMode = (typeof ROUTES_MODES)[number];
 
 export interface SiteSource {
   url: string;
@@ -116,6 +127,8 @@ export interface TurnRequest {
   change?: string;
   /** True when what the user just did was something other than the step they were shown. */
   offTrack?: boolean;
+  /** The route key of the control the previous step pointed at, when the visitor used it. Part of a verified route's key. */
+  after?: string;
   snapshot: Snapshot;
 }
 
@@ -216,6 +229,16 @@ const LONG_DIGITS = /\d{5,}/g;
 export function cleanText(text: string, max = 80): string {
   const masked = text.replace(/\s+/g, " ").trim().replace(EMAIL, "[email]").replace(PHONE, "[number]").replace(LONG_DIGITS, "[number]");
   return masked.length > max ? masked.slice(0, max - 1).trimEnd() + "…" : masked;
+}
+
+/** Identifies a control across snapshots: role, label, icon and link target. Not unique when two controls share a label. */
+export function elementKey(element: Pick<SnapElement, "role" | "label" | "icon" | "href">): string {
+  return `${element.role}|${element.label}|${element.icon ?? ""}|${element.href ?? ""}`;
+}
+
+/** The same key with the label masked, as verified routes store it, so a route never holds an email or a long number. */
+export function routeKey(element: Pick<SnapElement, "role" | "label" | "icon" | "href">): string {
+  return elementKey({ ...element, label: cleanText(element.label, 80) });
 }
 
 /** How an element is named in events, history and change summaries. */

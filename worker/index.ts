@@ -1,6 +1,7 @@
 import { createApp } from "../src/server/app.ts";
 import { Store } from "../src/server/db.ts";
 import { configure } from "../src/server/model.ts";
+import type { RouteLookup } from "../src/server/routes.ts";
 import { createSiteCache } from "../src/server/site-cache.ts";
 import type { SiteContext } from "../src/shared/types.ts";
 import widget from "../dist/widget.txt";
@@ -81,7 +82,8 @@ export default {
       overLimit: async (key) => (env.TURN_LIMIT ? !(await env.TURN_LIMIT.limit({ key })).success : false),
       onSeen: (site, origin, allowed) => later(db?.seenAt(site, origin, allowed)),
       onAsk: (turn, _site, origin) => later(db?.startGuide(turn, origin)),
-      onTurn: (turn, measure, _site, origin) => later(db?.recordStep(turn, measure, origin)),
+      onTurn: (turn, measure, _site, origin, route) => later(db?.recordStep(turn, measure, origin, route)),
+      ...(db ? { findRoute: (site: SiteContext, lookup: RouteLookup) => db.findRoute(site.id, lookup) } : {}),
       onReport: (site, guide, report) => later(db?.report(site, guide, report)),
     });
     try {

@@ -1,4 +1,4 @@
-import { cleanText, describeElement, normalizePath, type SnapElement, type Snapshot } from "../shared/types.ts";
+import { elementKey, cleanText, describeElement, normalizePath, type SnapElement, type Snapshot } from "../shared/types.ts";
 
 // Turns the live page into the list of elements the model sees. One read-only
 // pass over the DOM. Input values are never read: labels only.
@@ -143,9 +143,8 @@ export function takeSnapshot(ignore: Element): PageSnapshot {
 }
 
 /** Identifies the same control across two snapshots, where ids differ. */
-export function elementKey(element: Pick<SnapElement, "role" | "label" | "icon" | "href">): string {
-  return `${element.role}|${element.label}|${element.icon ?? ""}|${element.href ?? ""}`;
-}
+// Moved to src/shared/types.ts, where the server's verified routes use it too.
+export { elementKey };
 
 /**
  * What changed between the page before the user acted and the page now, in
