@@ -207,7 +207,7 @@ The rule: look at failures, and change the prompt or the widget because of them,
 ## Adding a site
 
 1. Look at it the way the widget does: `npm run eval:look -- https://app.example.com/some/page`. This prints every control the widget would list, with the role, label, icon, link and surroundings it gives each. Add `--do "click:<selector>"` to open a menu or a dialog first.
-2. Build its context: `npm run tag -- --url https://app.example.com --id site_bench_example --name Example --max-pages 8`.
+2. Build its context: `npm run tag -- --url https://app.example.com --id site_bench_example --name Example`. It reads the site in a browser when Playwright is installed; see "A map of the site" below, including how to read pages behind a sign-in.
 3. Write `eval/guides/example.ts`: for each guide, the question, the controls that are right at each step, and what a visitor does next. `eval/guide.ts` has the types. A guide that ends with `DONE` says how to tell the visitor got there (`reached`). A guide that must not press its last button leaves that step without an `act`.
 4. Record it: `npm run eval:record -- example`. The recorder walks the site in a browser with the real widget, answers each step from the script, checks the guide really ends where `reached` says, and saves what the widget sent as `eval/cases/example.json`. No model is called and nothing is sent to a server. Record again whenever the widget changes what it sends.
 
@@ -218,6 +218,76 @@ Three rules keep it honest:
 - **Ask the way a visitor would**, mostly without the words on the control.
 
 On a site other people use, a guide never saves, sends or deletes: it stops before that control. A site whose data is made up and seen by no one else is marked `sandbox: true`, and guides there may finish what they start.
+
+## A map of the site
+
+Besides the live page, the model is given at every step what Haptic knows about the rest of the site: a map of its pages and what is on each, and any notes and help pages the owner supplied. `npm run tag` builds it.
+
+**How the map is read.** With Playwright installed, `npm run tag` loads each page in a browser, waits until the list of controls stops growing, and reads the page with the widget's own reading, so the map names controls the way the model sees them live. It loads pages and follows links, and nothing else: it never clicks, types, submits or focuses anything. It does not load a link that signs in or out, whose address names an action (delete, reset, share, export and the like), sends a form (`/cart/add/12`, `?add-to-cart=12`) or carries a token, nor anything off the site. A page reached through the page's navigation is always read; pages of records (a table row, a card, an address with an id) are read two of a kind, and a page's body gives at most eight links to follow. The map leaves out the page's data: controls inside rows and cards, and the title and headings of a record's own page. It is held under 8,000 characters by dropping the farthest and costliest pages. Without Playwright, or with `--reader text`, it reads the HTML the server sends, which is all there is for apps that draw themselves in the browser.
+
+**Pages behind a sign-in.** `--session <file>` hands the reader a signed-in browser session, in Playwright's storage-state format. For the benchmark's demo accounts, `npx tsx eval/signin.ts <guide set>` signs in the way the guides do and saves one in `data/sessions/`, which is never committed. Sessions lapse: Toolshop's and OrangeHRM's lapsed within about half an hour, so sign in just before reading. `--hide` keeps the signed-in account's name out of the map. For a real customer there is no way yet to be given a session: the customer would have to sign a test account in and send the file, which is a credential, and nothing stores it safely or renews it when it lapses.
+
+**What it cannot reach.** Pages that are only reached by a click (UI5's lists, menus that draw their entries only when opened, as Ant Design Pro's does) are not found, because the reader never clicks. `--also` names more pages to start from.
+
+**The maps of the nine apps** are in `eval/sites/<app>.map.json`, and for Grafana, Jira and OrangeHRM a second version with help pages, `<app>.docs.json`. Each is the site file that was live with only its pages (and help pages) replaced. OrangeHRM, Toolshop and ParaBank were read signed in as the guides sign in; ParaBank's Admin Page and web-service pages were left alone (`--skip`). Wikipedia was read one link deep from one article, without the random-article link: a map of all of Wikipedia means nothing, and the tools around an article and the site's own pages are what its guides need. The case files keep the site file the single-step benchmark has always used.
+
+| app | as it was: pages, characters of map | map: pages, characters | system prompt (rules and site) in characters: as it was, with map, with help pages |
+|---|---|---|---|
+| ui5 | 2, 114 | 2, 648 | 3,186, 3,720 |
+| antdpro | 1, 19 | 5, 1,363 | 3,092, 4,436 |
+| orangehrm | 1, 43 | 21, 4,737 | 3,111, 7,805, 21,177 |
+| toolshop | 3, 577 | 15, 4,226 | 3,672, 7,321 |
+| parabank | 3, 1,633 | 14, 2,368 | 4,700, 5,435 |
+| grafana | 1, 12 | 22, 7,721 | 3,083, 10,792, 56,243 |
+| backstage | 1, 82 | 30, 7,168 | 3,150, 10,236 |
+| jira | 8, 1,613 | 15, 7,719 | 4,680, 10,786, 52,056 |
+| wikipedia | 8, 17,864 | 7, 7,187 | 20,932, 10,255 |
+
+UI5 and Ant Design Pro stay small: their pages are reached by clicks the reader does not make.
+
+To put a version live:
+
+```bash
+cp eval/sites/grafana.map.json data/sites/site_bench_grafana.json
+npm run site:publish -- site_bench_grafana
+```
+
+### Does a map help? Measured on 15 November 2026
+
+Each guide below was run three times against the live server (Claude Sonnet 5.5) with each version of its app's site file: as it was ("now"), with the map ("map"), and, for the three apps with public help pages, with the map and help pages ("docs"). The first five are the guides where the model had been seen to choose a wrong route; the rest are two guides per app that were passing, as a guard. OrangeHRM's three guides were run three times more both as it was and with the map, because 7 of the 9 OrangeHRM runs with the map were lost at the first click, when the page reloaded under the runner; both rounds are counted below.
+
+| app | guide | now | map | docs |
+|---|---|---|---|---|
+| grafana | firing-alerts | 3/3 | 2/3 | 3/3 |
+| grafana | share-link | 2/3 | 3/3 | 3/3 |
+| jira | backlog-chart | 3/3 | 3/3 | 3/3 |
+| orangehrm | rejection-emails | 3/6 | 3/6 (3 lost by the runner) | 3/3 |
+| toolshop | rent-excavator | 0/3 | 2/3 | |
+| antdpro | new-rule, operation-log | 5/6 | 6/6 | |
+| backstage | docs-page, star-and-filter | 6/6 | 6/6 | |
+| grafana | explore-promql, legend-then-fullscreen | 6/6 | 6/6 | 6/6 |
+| jira | only-one-project, table-view-and-sort | 6/6 | 5/6 (1 server error) | 6/6 |
+| orangehrm | new-hire, rejected-leave | 10/12 | 8/12 (4 lost by the runner) | 6/6 |
+| parabank | open-savings, update-phone | 2/6 | 3/6 | |
+| toolshop | filter-hammers, latest-order | 6/6 | 6/6 | |
+| ui5 | group-orders, search-product | 6/6 | 6/6 | |
+| wikipedia | appearance, recent-changes | 5/6 | 6/6 | |
+| **all** | | **63/78** | **65/78** | **30/30** |
+
+Leaving out runs the runner lost (a server error, or a control it could not click): now 63/75, map 65/70, docs 30/30.
+
+What the map changed, guide by guide:
+
+- **toolshop rent-excavator**, 0/3 to 2/3. Without a map the model looked at the home page, found no rentals and told the visitor the shop has none, three times out of three. With a map that lists a Rentals page, it went looking (first in the account menu, then under Categories) and found it.
+- **orangehrm rejection-emails**: the first click went to Admin, the right section, 4 times in 6 as it was and 5 in 6 with the map. With the help pages it went to Leave first 3 times in 3: the pages given were about leave, and pulled it there. It recovered every time.
+- Grafana's and Jira's route-choice guides already chose the right route as they were (8 of 9), so there was nothing for a map to fix there.
+- No guard guide got worse that can be put on the map.
+
+Time to the pointer, every step: middle 1,696 ms as it was, 1,568 ms with the map, 1,624 ms with help pages; nine in ten under 2,455, 2,212 and 2,245 ms. The map runs came later in the evening, so read this as no measured cost, not as a gain. The server marks the rules and site knowledge for caching. The rules alone are about 800 tokens, which may be under the smallest prompt the service caches, so a map may even make the cache start working. That was not measured here: the live server does not report tokens.
+
+Read this with care: three runs per guide tells apart only large effects, the sites are live, and the help pages were chosen with the guides in view, which makes the docs column a best case.
+
+The judgement. A map built this way did no measurable harm and adds up to about two thousand tokens a step (650 to 7,800 characters), which the server marks for caching. It helped clearly on one kind of question, where the visitor asks for something that is not on the page they are on, and without a map the model concludes the site does not have it. That kind of failure is cheap to fix this way, so the map should be on by default, built in a browser. Help pages, given whole, added 13,000 to 45,000 characters (three to eleven thousand tokens) a step, showed no gain the map did not already give, and steered OrangeHRM's first step wrong. They should wait until they are looked up by question.
 
 ## Cases from real sessions
 
