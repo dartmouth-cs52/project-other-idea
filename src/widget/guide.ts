@@ -472,7 +472,9 @@ export class Guide {
     if (!id) return;
     this.id = "";
     this.report(id, { outcome });
-    if (outcome !== "stopped") this.misses++;
+    // A finished guide is one the visitor followed to the end, which says as much as a "Yes".
+    if (outcome === "finished") this.misses = 0;
+    else if (outcome !== "stopped") this.misses++;
     if (ASK_IF_HELPED.includes(outcome)) {
       this.ui.askIfHelped((helped) => {
         this.report(id, { helped });
