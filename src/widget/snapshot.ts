@@ -148,6 +148,72 @@ interface Scope {
   heading: string;
 }
 
+/** A heading on the page, with what decides whether it is among the few that are sent. */
+interface Heading {
+  text: string;
+  /** 1 for the page's title down to 6. */
+  level: number;
+  visible: boolean;
+}
+
+/** The server keeps this many headings. */
+const MAX_HEADINGS = 12;
+
+/** Boxes that set a part of the page apart, so that a heading inside one is the heading of that part and of nothing after it. */
+const SECTION_TAGS = new Set(["SECTION", "ARTICLE", "FIELDSET"]);
+const SECTION_ROLES = new Set(["region", "group", "radiogroup", "article", "tabpanel"]);
+const HEADINGS = "h1, h2, h3, h4, h5, h6, [role='heading']";
+
+/** The name a box is given by its page: the element it says names it, or its aria-label. */
+function nameOfBox(el: Element): string {
+  const ids = el.getAttribute("aria-labelledby");
+  if (ids) {
+    const root = el.getRootNode() as Document | ShadowRoot;
+    const named = ids.split(/\s+/).map((id) => (id ? root.getElementById?.(id) : null)).find(Boolean);
+    const words = named ? cleanText(wordsIn(named, 160), 80) : "";
+    if (words) return words;
+  }
+  return cleanText(el.getAttribute("aria-label") ?? "", 80);
+}
+
+/**
+ * The heading of a box that sets a part of the page apart: its name, its
+ * legend, or a heading in the first few boxes inside it, where a panel keeps
+ * its title beside its menu. Looked up when the box is entered, so that what
+ * comes before the heading inside the box is listed under it too.
+ */
+function headingOfBox(el: Element): string {
+  const name = nameOfBox(el);
+  if (name) return name;
+  let found: Element | null = null;
+  let looked = 0;
+  const look = (box: Element, depth: number) => {
+    for (const child of box.children) {
+      if (found || looked++ > 24) return;
+      if (child.matches(depth === 0 ? `legend, ${HEADINGS}` : HEADINGS)) found = child;
+      else if (depth < 2 && !SECTION_TAGS.has(child.tagName)) look(child, depth + 1);
+    }
+  };
+  look(el, 0);
+  return found ? cleanText(wordsIn(found, 160), 80) : "";
+}
+
+/** Which of a long page's headings are sent: the ones on screen first, then the higher levels, kept in page order. */
+function chooseHeadings(all: Heading[]): string[] {
+  const seen = new Set<string>();
+  const unique = all.filter((heading) => !seen.has(heading.text) && seen.add(heading.text));
+  if (unique.length <= MAX_HEADINGS) return unique.map((heading) => heading.text);
+  const rank = (heading: Heading) => (heading.visible ? 0 : heading.level);
+  const keep = new Set(
+    unique
+      .map((heading, index) => ({ heading, index }))
+      .sort((a, b) => rank(a.heading) - rank(b.heading) || a.index - b.index)
+      .slice(0, MAX_HEADINGS)
+      .map((entry) => entry.heading),
+  );
+  return unique.filter((heading) => keep.has(heading)).map((heading) => heading.text);
+}
+
 /**
  * What the visitor named in their question, for as long as one page is being
  * read. The same email or long number on the page is left readable.
@@ -163,7 +229,7 @@ const cleanText = (text: string, max = 80): string => maskAndTrim(text, max, own
 export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
   own = namedIn(question);
   const candidates: Candidate[] = [];
-  const headings: string[] = [];
+  const headings: Heading[] = [];
   const texts: TextBlock[] = [];
   const viewportHeight = window.innerHeight;
   let visited = 0;
@@ -195,13 +261,22 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
     const roles = (el.getAttribute("role") ?? "").split(/\s+/).filter(Boolean);
     const explicitRole = roles.find((name) => INTERACTIVE_ROLES.has(name)) ?? roles[0] ?? "";
     const landmark = LANDMARKS[explicitRole] ?? LANDMARKS[el.tagName];
-    const childScope = el === modal ? { region: "dialog", heading: "" } : landmark && el !== root ? { region: landmark, heading: "" } : scope;
+    // A part of the page that is set apart keeps its heading to itself: a panel's title is not the heading of what comes after the panel.
+    const section = !landmark && el !== root && el !== modal && (SECTION_TAGS.has(el.tagName) || SECTION_ROLES.has(explicitRole));
+    const childScope: Scope =
+      el === modal ? { region: "dialog", heading: "" }
+      : landmark && el !== root ? { region: landmark, heading: nameOfBox(el) }
+      : section ? { region: scope.region, heading: headingOfBox(el) || scope.heading }
+      : scope;
 
-    if (/^H[1-3]$/.test(el.tagName) || explicitRole === "heading") {
+    const headingTag = /^H([1-6])$/.exec(el.tagName);
+    if (headingTag || explicitRole === "heading") {
       const text = cleanText(wordsIn(el, 160), 80);
       if (text) {
         scope.heading = text;
-        if (headings.length < 12) headings.push(text);
+        const level = Number(el.getAttribute("aria-level")) || Number(headingTag?.[1]) || 2;
+        const rect = el.getBoundingClientRect();
+        if (headings.length < 200) headings.push({ text, level, visible: rect.bottom > 0 && rect.top < viewportHeight });
       }
     }
 
@@ -264,6 +339,8 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
       // Its words were held back as a control's own. It is no control, so they are the page's.
       if (mine?.length) (held ?? texts).push(...mine);
     }
+    // A section that is only words, like a title and a line under it, introduces what comes after it.
+    if (section && !added && candidates.length === before) scope.heading = childScope.heading;
   };
 
   if (root) visit(root, { region: "page", heading: "" }, false, false);
@@ -307,7 +384,7 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
   const snapshot: Snapshot = {
     path: currentPath(),
     title: cleanText(document.title, 80),
-    headings,
+    headings: chooseHeadings(headings),
     text: chooseText(texts),
     elements: listed,
     truncated: chosen.length < candidates.filter((c) => !c.outside).length && chosen.length >= MAX_ELEMENTS,
@@ -558,6 +635,7 @@ function nameRows(candidates: Candidate[]) {
 
 /** How many boxes out from a control to look for words that stand beside it alone. */
 const BESIDE_DEPTH = 6;
+const BESIDE_CHARS = 40;
 
 /**
  * The words beside a control in the nearest box around it that says anything:
@@ -570,8 +648,10 @@ function wordsBeside(control: Element, holds: Map<Element, number>, not = ""): s
   for (let box = control.parentElement, depth = 0; box && box !== document.body && depth < BESIDE_DEPTH; box = box.parentElement, depth++) {
     if ((holds.get(box) ?? 0) > 1) return "";
     // Marks left standing alone once the control is taken out, like the brackets around a link, are not words.
-    const words = cleanText(wordsIn(box, 60, CONTROLS, control).split(" ").filter((piece) => /[\p{L}\p{N}]/u.test(piece)).join(" "), 40);
-    if (words && words !== not) return words;
+    const words = wordsIn(box, 60, CONTROLS, control).split(" ").filter((piece) => /[\p{L}\p{N}]/u.test(piece)).join(" ");
+    // A box that says this much is a paragraph or a whole part of the page, not a name beside a control.
+    if (words.length > BESIDE_CHARS) return "";
+    if (words && words !== not) return cleanText(words, BESIDE_CHARS);
   }
   return "";
 }
@@ -722,17 +802,21 @@ function withShownWords(name: string, el: Element): string {
   const inName = new Set(words(name));
   const inShown = new Set(words(shown));
   if (words(shown).every((word) => inName.has(word))) return name;
-  if (words(name).every((word) => inShown.has(word))) return shown;
+  // The name is some of the words shown. On a button those are a fuller name. On a box of text the name is the page's own summary.
+  if (words(name).every((word) => inShown.has(word))) return shown.length <= 48 ? shown : name;
   return `${shown.length > 48 ? `${shown.slice(0, 47).trimEnd()}…` : shown} (${name})`;
 }
 
 function labelOf(el: Element, role: string): string {
   const root = el.getRootNode() as Document | ShadowRoot;
+  /** Named by a part of itself, which is then a name the visitor can see. */
+  let namedByOwnWords = false;
   const byIds = (ids: string) =>
     ids
       .split(/\s+/)
       .map((id) => {
         const named = id ? root.getElementById?.(id) : null;
+        if (named && el.contains(named)) namedByOwnWords = true;
         return named ? wordsIn(named) : "";
       })
       .join(" ")
@@ -741,7 +825,7 @@ function labelOf(el: Element, role: string): string {
   const typedIn = holdsTyping(el);
   /** The name the page gives for screen readers. */
   const given = byIds(el.getAttribute("aria-labelledby") ?? "") || el.getAttribute("aria-label")?.trim() || "";
-  let raw = el.getAttribute("data-haptic-label") || (given && !typedIn && !SHOWS_A_VALUE.has(role) ? withShownWords(given, el) : given);
+  let raw = el.getAttribute("data-haptic-label") || (given && !typedIn && !namedByOwnWords && !SHOWS_A_VALUE.has(role) ? withShownWords(given, el) : given);
   const ticks = role === "checkbox" || role === "radio" || role === "switch";
   if (!raw && (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
     // A label can carry its words as an aria-label of its own.

@@ -158,6 +158,8 @@ test("a name for screen readers that leaves out the words on the control is give
     <button aria-label="Next page">›</button>
     <button aria-label="Edit">Edit profile</button>
     <div role="combobox" tabindex="0" aria-label="Type">Component</div>
+    <div role="button" tabindex="0" aria-labelledby="card-title"><b id="card-title">Sales</b><p>Up four percent on the week before.</p></div>
+    <div role="button" tabindex="0" aria-label="Open report"><p>Open the report for the week, which is up four percent on the week before.</p></div>
   </main>`);
   assert.deepEqual(lines(snapshot), [
     'button "alertstate = firing (Edit filter with key alertstate)" [main]',
@@ -169,6 +171,9 @@ test("a name for screen readers that leaves out the words on the control is give
     'button "Next page" [main]',
     'button "Edit profile" [main]',
     'combobox "Type" [main]',
+    // Named by a part of itself, or by a short form of a long text: the name is the page's own summary.
+    'button "Sales" [main]',
+    'button "Open report" [main]',
   ]);
 });
 
@@ -219,5 +224,55 @@ test("controls that are still listed the same are numbered, and the number is no
     'button "Remove" [row: $100.00 › 1 of 2]',
     'button "Remove" [row: $100.00 › 2 of 2]',
     'button "Remove" [row: $250.00]',
+  ]);
+});
+
+// Headings ---------------------------------------------------------------------
+
+test("a heading of any level is a control's surroundings", { skip }, async () => {
+  const snapshot = await read(`<main><h2>Applications</h2><h3>Electronic devices</h3><a href="/a">Consoles</a>
+    <h4>Mobile devices</h4><a href="/b">Vibration</a>
+    <div role="heading" aria-level="5">Tablets</div><a href="/c">Screens</a>
+    <h6>Watches</h6><a href="/d">Taps</a></main>`);
+  assert.deepEqual(lines(snapshot), [
+    'link "Consoles" [main › Electronic devices] → /a',
+    'link "Vibration" [main › Mobile devices] → /b',
+    'link "Screens" [main › Tablets] → /c',
+    'link "Taps" [main › Watches] → /d',
+  ]);
+  assert.deepEqual(snapshot.headings, ["Applications", "Electronic devices", "Mobile devices", "Tablets", "Watches"]);
+});
+
+test("on a long page the headings sent are the ones on screen and the page's main ones, in page order", { skip }, async () => {
+  const sections = Array.from({ length: 8 }, (_, s) => `<h2>Part ${s + 1}</h2>` + Array.from({ length: 4 }, (_, d) => `<h3>Detail ${s + 1}.${d + 1}</h3><p style="height:300px">Words.</p>`).join("")).join("");
+  const snapshot = await read(`<main><h1>Long page</h1>${sections}</main>`, { before: (page) => page.evaluate(() => document.querySelector("h2:nth-of-type(5)")?.scrollIntoView()) });
+  assert.equal(snapshot.headings.length, 12);
+  // Part 5 and two details under it are on screen. The title and the other parts are the page's outline, and one place is left over.
+  assert.deepEqual(snapshot.headings, ["Long page", "Part 1", "Detail 1.1", "Part 2", "Part 3", "Part 4", "Part 5", "Detail 5.1", "Detail 5.2", "Part 6", "Part 7", "Part 8"]);
+});
+
+test("a control inside a box that has its own heading is listed under that heading, and the heading stays with its box", { skip }, async () => {
+  const snapshot = await read(`<main><h1>Dashboard</h1>
+    <section aria-labelledby="t1" tabindex="0"><div><button aria-label="Menu"></button><div><h2 id="t1">The Basics</h2></div></div><p>Words.</p><button>Explore</button></section>
+    <section tabindex="0"><div><button aria-label="Menu"></button><div><h2>Description</h2></div></div><button>Explore</button></section>
+    <fieldset><legend>Delivery</legend><label><input type="radio" name="d"> Post</label></fieldset>
+    <div role="group" aria-label="Zoom"><button>In</button></div>
+    <div><button>Delete</button></div>
+    <section><h2>Other things</h2><p>A section that is only words introduces what comes after it.</p></section>
+    <button>More</button>
+  </main>
+  <nav aria-label="Breadcrumb"><a href="/home">Home</a></nav>`);
+  assert.deepEqual(lines(snapshot), [
+    'clickable "The Basics" [main › Dashboard]',
+    'button "Menu" [main › The Basics]',
+    'button "Explore" [main › The Basics]',
+    'clickable "Description Explore" [main › Dashboard]',
+    'button "Menu" [main › Description]',
+    'button "Explore" [main › Description]',
+    'radio "Post" [main › Delivery]',
+    'button "In" [main › Zoom]',
+    'button "Delete" [main › Dashboard]',
+    'button "More" [main › Other things]',
+    'link "Home" [nav › Breadcrumb] → /home',
   ]);
 });
