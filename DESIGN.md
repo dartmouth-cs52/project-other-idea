@@ -311,14 +311,26 @@ window and the demo starts there, so it must never be cut off. Screens under
 the demo.
 
 The home page is, in order: a slim navigation bar, the hero with its demo
-window, three feature cards, the FAQ, and a footer with Privacy, Terms and the
-contact address. Each feature card makes one claim in a title of a few words,
+window, three feature cards, pricing, the FAQ, and a footer with Privacy, Terms
+and the contact address. Each feature card makes one claim in a title of a few words,
 with the text on the left and a small live demo on the right. The demo's white
 window sits straight on the card's Muted fill, with no panel of its own behind
 it. Below 1024px the card stacks, text above the demo, so a demo is never
 squeezed. The
 FAQ is two columns on desktop, with the title on the left and the accordion in
 the right half. Each row is 20px padding around a 24px line with a 1px divider.
+
+Pricing opens the way the FAQ does, with the title on the left and one
+sentence of Muted sub-copy in the right half, saying what is charged for. Under
+it sit the plans, one card each on the same Muted surface as a feature card,
+four across on desktop, two across from 640px and one below that. A card holds
+the plan's name, its price at the 24px headline size, what the price includes,
+and who it is for in Muted text. The price is the largest thing in the card and
+no larger than a feature card's title. No plan is marked as the popular one,
+and a card has no button, because the site has one call to action. Three short
+lines of 14px Muted text under the cards say when a guide counts as finished,
+that billing has not started, and that prices may change. The plans and that
+copy live in `web/lib/site.ts`.
 
 The request access page is two columns. The pitch sits on the left, as a
 headline over a card. The form sits on the right in a second card, with its
@@ -334,9 +346,10 @@ title over Muted text, and no icon.
 There is one call to action on the whole site, "Request access". It sits in
 the navigation, top right on every page and every screen size, and leads to
 that page. The hero carries no second copy of it, so the demo follows the
-sub-copy directly. There is no
-"Contact sales", because Haptic is in early access and has no sales team or
-price list to point to.
+sub-copy directly, and the plan cards under Pricing carry no buttons of their
+own. There is no "Contact sales", because Haptic is in early access and has no
+sales team. The Enterprise plan says Custom and leaves the way in to Request
+access.
 
 Surfaces nest the same way on every page. The page is Paper. A card on the
 page is Muted with a 1px border. Anything inside a card that needs to stand out

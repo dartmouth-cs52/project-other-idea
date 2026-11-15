@@ -19,6 +19,58 @@ export const accessHref = "/request-access/";
 /** Where the request access form posts. The handler is added when the site is deployed. */
 export const accessEndpoint = process.env.NEXT_PUBLIC_ACCESS_ENDPOINT ?? "/api/request-access";
 
+/**
+ * What Haptic costs. The pricing section is drawn from this, so a price is
+ * changed here and nowhere else. Billing is not built yet: these are the
+ * plans it will have to match.
+ *
+ * The unit is a finished guide. `includedGuides` is how many a month the plan
+ * covers and `overageUsd` is the price of each one after that. A plan with no
+ * monthly price is agreed case by case.
+ */
+export const pricing = {
+  lead: "You pay for guides that finish. If someone stops, gets lost, or Haptic cannot find the way, that guide is free.",
+  plans: [
+    {
+      id: "early-access",
+      name: "Early access",
+      monthlyUsd: 0,
+      includedGuides: 1000,
+      overageUsd: null,
+      detail: "For the first companies in, while we set Haptic up with you.",
+    },
+    {
+      id: "team",
+      name: "Team",
+      monthlyUsd: 149,
+      includedGuides: 1000,
+      overageUsd: 0.12,
+      detail: "For one product.",
+    },
+    {
+      id: "scale",
+      name: "Scale",
+      monthlyUsd: 499,
+      includedGuides: 5000,
+      overageUsd: 0.08,
+      detail: "For several products, with staging sites.",
+    },
+    {
+      id: "enterprise",
+      name: "Enterprise",
+      monthlyUsd: null,
+      includedGuides: null,
+      overageUsd: null,
+      detail: "For larger rollouts. Tell us what your security and compliance teams need, and we will say plainly what we support today.",
+    },
+  ],
+  notes: [
+    "A guide is finished when the visitor uses the last control Haptic pointed at, or reaches the screen they asked for.",
+    "Haptic is free during early access, and billing starts after it. Every guide we count will be listed in your dashboard, so you can check the bill.",
+    "Prices are in US dollars and may change before general release.",
+  ],
+} as const;
+
 export const faqs = [
   {
     q: "How is Haptic different from a chatbot or a product tour?",
@@ -42,7 +94,7 @@ export const faqs = [
   },
   {
     q: "How much does it cost?",
-    a: "Haptic is in early access and pricing is not set yet. Request access and we will talk through what fits your product.",
+    a: "Haptic is free during early access. After that, plans start at $149 a month, and you pay only for guides that finish. The pricing section above has the details.",
   },
   {
     q: "Is Haptic ready for enterprise?",

@@ -3,6 +3,7 @@ import { HeroDemo } from "@/components/demo/hero-demo";
 import { Faq } from "@/components/faq";
 import { Features } from "@/components/features";
 import { Pointer } from "@/components/pointer";
+import { Pricing } from "@/components/pricing";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 import { site } from "@/lib/site";
@@ -31,6 +32,7 @@ export default function Home() {
         </section>
         <HeroDemo />
         <Features />
+        <Pricing />
         <Faq />
       </main>
       <SiteFooter />
