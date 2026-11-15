@@ -651,6 +651,8 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
   // Over the cap, keep what's on screen first, then the page's furniture, then
   // the rest in page order. A region that is one long run of links, like a box
   // of related pages, does not get to crowd out everything after it.
+  // Kept beside the reading, and never sent, so that what changed is told from the whole page and not from what was cut.
+  const everything = { elements: usable.map((c) => ({ ...c })), text: texts.map((block) => block.text) };
   let chosen = usable;
   if (usable.length > MAX_ELEMENTS) {
     const perRegion = new Map<string, number>();
@@ -669,9 +671,11 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
   usable = [];
 
   const elements = new Map<string, Element>();
-  const listed = chosen.map(({ el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, ...element }, index) => {
+  const strip = ({ el: _el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, ...element }: Candidate): SnapElement => element;
+  const listed = chosen.map((c, index) => {
+    const element = strip(c);
     element.id = `e${index + 1}`;
-    elements.set(element.id, el);
+    elements.set(element.id, c.el);
     return element;
   });
 
@@ -684,8 +688,17 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
     truncated: chosen.length < candidates.filter((c) => !c.outside).length && chosen.length >= MAX_ELEMENTS,
   };
   if (modal) snapshot.dialog = dialogLabel(modal);
+  uncut.set(snapshot, { elements: everything.elements.map(strip), text: everything.text });
   return { snapshot, elements };
 }
+
+/**
+ * Every control and piece of text a reading found, before the list was cut to
+ * its limit. A long page lists the controls on screen first, so scrolling
+ * alone moves controls in and out of the list without anything on the page
+ * changing.
+ */
+const uncut = new WeakMap<Snapshot, { elements: SnapElement[]; text: string[] }>();
 
 /** Identifies the same control across two snapshots, where ids differ. */
 export function elementKey(element: Pick<SnapElement, "role" | "label" | "icon" | "href" | "context">): string {
@@ -718,15 +731,19 @@ export function describeChange(before: Snapshot, after: Snapshot): string {
   }
   // A new page or dialog swaps most of the list, and the model reads the new
   // list anyway. Element-level changes only matter within one view.
+  // A listed control is new only if the page had no such control before, listed or not, and gone only if the page has none now.
+  const was = uncut.get(before);
+  const now = uncut.get(after);
+  const whole = !!was && !!now;
   if (!lines.length) {
-    const added = without(after.elements, before.elements, elementKey).map(describeElement);
-    const removed = without(before.elements, after.elements, elementKey).map(describeElement);
+    const added = without(after.elements, whole ? was.elements : before.elements, elementKey).map(describeElement);
+    const removed = without(before.elements, whole ? now.elements : after.elements, elementKey).map(describeElement);
     if (added.length) lines.push(`New: ${listSome(added)}.`);
     if (removed.length) lines.push(`Gone: ${listSome(removed)}.`);
-    lines.push(...stateChanges(before.elements, after.elements).slice(0, 8));
+    lines.push(...stateChanges(whole ? was.elements : before.elements, whole ? now.elements : after.elements).slice(0, 8));
   }
-  const beforeText = [...before.headings, ...before.text];
-  const afterText = [...after.headings, ...after.text];
+  const beforeText = [...before.headings, ...(whole ? was.text : before.text)];
+  const afterText = [...after.headings, ...(whole ? now.text : after.text)];
   const newText = without(afterText, beforeText, (text) => text);
   if (newText.length) lines.push(`New text: ${newText.slice(0, 5).map((text) => `"${text.slice(0, 100)}"`).join(", ")}.`);
   else if (!lines.length && without(beforeText, afterText, (text) => text).length) lines.push("Some text on the page went away.");

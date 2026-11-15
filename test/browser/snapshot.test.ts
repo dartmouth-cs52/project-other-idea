@@ -561,3 +561,13 @@ test("a dialog is not named by a button in its title bar, and a select is named 
     'clickable "part of Sales chart" [dialog › Sales chart]',
   ]);
 });
+
+// What changed ---------------------------------------------------------------------------
+
+test("scrolling a long page alone changes no control, though it changes which are listed", { skip }, async () => {
+  const links = Array.from({ length: 450 }, (_, i) => `<p><a href="/page/${i}">Link number ${i + 1}</a></p>`).join("");
+  const change = async (between: (page: { evaluate: (script: string) => Promise<unknown> }) => Promise<unknown>) =>
+    browser!.change(`<main>${links}<button id="more" onclick="this.insertAdjacentHTML('afterend', '<button>Added</button>')">More</button></main>`, async (page) => void (await between(page)));
+  assert.equal(await change((page) => page.evaluate("window.scrollTo(0, document.body.scrollHeight)")), "Nothing visible on the page changed.");
+  assert.match(await change((page) => page.evaluate("window.scrollTo(0, document.body.scrollHeight); document.getElementById('more').click()")), /^New: button "Added"\.$/m);
+});

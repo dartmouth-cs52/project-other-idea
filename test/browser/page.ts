@@ -24,6 +24,8 @@ const SNAPSHOT_SOURCE = fileURLToPath(new URL("../../src/widget/snapshot.ts", im
 export interface Browser {
   /** The page as the widget would list it. */
   read: (html: string, options?: ReadOptions) => Promise<Snapshot>;
+  /** What the widget would tell the model changed between two readings of the page, with `between` done in the middle. */
+  change: (html: string, between: (page: Loose) => Promise<void>) => Promise<string>;
   /** The page with the whole widget on it, as a customer's page would have it, and every step it asks for answered by `answer`. */
   widget: (html: string, answer: (request: TurnRequest, index: number) => TurnReply) => Promise<WidgetPage>;
   close: () => Promise<void>;
@@ -88,6 +90,23 @@ export async function startBrowser(): Promise<Browser | string> {
         }, options.goal ?? "")) as Snapshot;
         if (errors.length) throw new Error(`The page reported an error: ${errors.join("; ")}`);
         return snapshot;
+      } finally {
+        await context.close();
+      }
+    },
+    change: async (html, between) => {
+      const context = await browser.newContext({ viewport: { width: 1000, height: 700 } });
+      try {
+        await context.route("**/*", (route: Loose) =>
+          route.fulfill({ status: 200, contentType: "text/html", body: `<!doctype html><meta charset="utf-8"><title>Test page</title>${html}` }),
+        );
+        const page = await context.newPage();
+        await page.goto(`${ORIGIN}/page`);
+        await page.addScriptTag({ content: script });
+        const readPage = () => (globalThis as Loose).HapticSnapshot.takeSnapshot(document.createElement("haptic-root"), "").snapshot;
+        await page.evaluate(`window.firstReading = (${readPage.toString()})()`);
+        await between(page);
+        return (await page.evaluate(`HapticSnapshot.describeChange(window.firstReading, (${readPage.toString()})())`)) as string;
       } finally {
         await context.close();
       }
