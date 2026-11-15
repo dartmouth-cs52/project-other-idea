@@ -26,7 +26,7 @@ const site: SiteContext = {
 const limits: Limits = { hour: 1, day: 3 };
 const at = (time: string) => new Date(`2026-11-15T${time}Z`);
 
-test("a step is priced from its tokens, and an unknown model is priced as the dearest", () => {
+test("a step is priced from its tokens, and an unknown model is priced at the top of the table", () => {
   const tokens = { input: 600, cacheRead: 24_000, cacheWrite: 0, output: 150 };
   // The research report's warm answer on Sonnet: about half a cent.
   assert.ok(Math.abs(costOf("claude-sonnet-5-5", tokens, "1h") - 0.0051) < 0.0001);
@@ -35,10 +35,23 @@ test("a step is priced from its tokens, and an unknown model is priced as the de
   assert.ok(Math.abs(costOf("claude-sonnet-5-5", cold, "1h") - 0.0987) < 0.0001);
   assert.ok(Math.abs(costOf("claude-sonnet-5-5", cold, "5m") - 0.0627) < 0.0001);
   assert.equal(costOf("mock", tokens, "1h"), 0);
-  assert.equal(costOf("claude-something-new", tokens, "1h"), costOf("claude-fable-5-2", tokens, "1h"));
   // Haiku's price steps up once the prompt passes 100,000 tokens.
   const long = { input: 1000, cacheRead: 100_000, cacheWrite: 0, output: 0 };
   assert.ok(costOf("claude-haiku-5-5", long, "1h") > 5 * costOf("claude-haiku-5-5", { ...long, cacheRead: 98_000 }, "1h") * 0.9);
+
+  // A million tokens in and a million out, at list price.
+  const million = { input: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 1_000_000 };
+  assert.equal(costOf("claude-fable-5-2", million, "1h"), 48);
+  assert.equal(costOf("claude-fable-5-1", million, "1h"), 60);
+  assert.equal(costOf("claude-fable-5", million, "1h"), 60);
+  assert.equal(costOf("claude-mythos-5-1", million, "1h"), 60);
+  // A model the table does not know is never priced below one it does, whatever the mix of tokens.
+  const known = ["claude-fable-5-2", "claude-fable-5-1", "claude-fable-5", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-haiku-5-5"];
+  for (const mix of [tokens, cold, million, { input: 0, cacheRead: 1_000_000, cacheWrite: 0, output: 0 }]) {
+    for (const cache of ["5m", "1h"] as const) {
+      for (const model of known) assert.ok(costOf("claude-something-new", mix, cache) >= costOf(model, mix, cache), `${model} ${cache}`);
+    }
+  }
 });
 
 test("a site is stopped at its hourly limit, and starts again when the hour turns", () => {

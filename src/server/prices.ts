@@ -13,9 +13,19 @@ interface Price {
 }
 
 // From platform.claude.com/docs/en/about-claude/pricing, read on 15 November 2026.
-// The older models are here because a declined request is retried on one of them.
+// The older models are here because a declined request is retried on one of
+// them, and the dearest ones because the price for a model that is missing is
+// taken from the top of this table.
+const FABLE_52: Price = { input: 8, output: 40, write5m: 10, write1h: 16, read: 0.2 };
+const FABLE_51: Price = { input: 10, output: 50, write5m: 12.5, write1h: 20, read: 0.25 };
+const FABLE_5: Price = { ...FABLE_51, read: 1 };
 const PRICES: Record<string, Price> = {
-  "claude-fable-5-2": { input: 8, output: 40, write5m: 10, write1h: 16, read: 0.2 },
+  "claude-fable-5-2": FABLE_52,
+  "claude-mythos-5-2": FABLE_52,
+  "claude-fable-5-1": FABLE_51,
+  "claude-mythos-5-1": FABLE_51,
+  "claude-fable-5": FABLE_5,
+  "claude-mythos-5": FABLE_5,
   "claude-opus-5-5": { input: 4, output: 20, write5m: 5, write1h: 8, read: 0.2 },
   "claude-opus-5": { input: 5, output: 25, write5m: 6.25, write1h: 10, read: 0.5 },
   "claude-opus-4-8": { input: 5, output: 25, write5m: 6.25, write1h: 10, read: 0.5 },
@@ -26,8 +36,12 @@ const PRICES: Record<string, Price> = {
 /** Haiku costs more once a prompt passes 100,000 tokens. */
 const HAIKU_LONG: Price = { input: 0.5, output: 2.5, write5m: 0.625, write1h: 1, read: 0.05 };
 const HAIKU_LONG_FROM = 100_000;
-/** A model that is not in the table is priced as the dearest one, so a mistake here stops a site early and never late. */
-const DEAREST: Price = PRICES["claude-fable-5-2"]!;
+/**
+ * A model that is not in the table is priced at the highest price in it for
+ * each kind of token, so a mistake here stops a site early and never late.
+ */
+const top = (field: keyof Price) => Math.max(...Object.values(PRICES).map((price) => price[field]));
+const DEAREST: Price = { input: top("input"), output: top("output"), write5m: top("write5m"), write1h: top("write1h"), read: top("read") };
 
 export interface StepTokens {
   input: number;
