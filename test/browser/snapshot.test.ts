@@ -512,3 +512,30 @@ test("words out of sight, meant for screen readers, are left out of what a contr
     'button "Compare" [main › row: Notebook Basic 17 1.249,00 EUR…]',
   ]);
 });
+
+// What counts as a control with a box ---------------------------------------------------
+
+test("a control hidden from screen readers but there for the mouse is listed, and a box of no size is not", { skip }, async () => {
+  const snapshot = await read(`<form>
+    <input aria-label="Search"><div aria-hidden="true" style="display:inline-block;cursor:pointer;width:32px;height:26px;background:#ccc"></div>
+    <button><span aria-hidden="true" style="cursor:pointer;display:inline-block;width:16px;height:16px"></span>Go</button>
+    <span style="cursor:pointer"><span aria-hidden="true" style="display:inline-block;width:16px;height:16px"></span></span>
+    <div style="position:relative;width:40px;height:40px"><div aria-hidden="true" style="cursor:pointer;width:30px;height:30px"></div><div style="position:absolute;inset:0;background:#fff"></div></div>
+    <div tabindex="0" style="height:0;overflow:hidden">Nothing to see</div>
+    <button style="position:absolute;width:1px;height:1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0)">For screen readers</button>
+    <label><input type="checkbox" style="position:absolute;opacity:0;width:1px;height:1px"> Remember me</label>
+  </form>`);
+  // The glass, then the box whose own pointer cursor the hidden icon inside it shows. The icon itself, and the one under a cover, are not listed.
+  assert.deepEqual(lines(snapshot), ['textbox "Search" [form]', "clickable [form › 1 of 2]", 'button "Go" [form]', "clickable [form › 2 of 2]", 'checkbox "Remember me" [form]']);
+});
+
+test("with a list open over a layer that covers the window, what lies under the layer is not listed", { skip }, async () => {
+  const snapshot = await read(`<button>Under the layer</button><input id="field" aria-label="Pick a letter">
+    <div><div style="position:fixed;inset:0;z-index:5"></div>
+      <div role="listbox" style="position:relative;z-index:6;width:200px;height:64px;overflow:auto;background:#fff">
+        <div role="option" style="height:30px">A</div><div role="option" style="height:30px">B</div><div role="option" style="height:30px">C, scrolled out of the list</div>
+      </div>
+    </div>`, { before: (page) => page.focus("#field") });
+  // The field the list belongs to has the keyboard, and is typed in to narrow the list.
+  assert.deepEqual(lines(snapshot), ['textbox "Pick a letter"', 'option "A" [list]', 'option "B" [list]', 'option "C, scrolled out of the list" [list]']);
+});

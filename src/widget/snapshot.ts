@@ -488,9 +488,15 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
   const visit = (el: Element, scope: Scope, parentPointer: boolean, insideControl: boolean, inSvg = false, outside = !!modal, held?: TextBlock[], hoverBox?: DOMRect) => {
     if (visited++ > MAX_VISITED || el === ignore || SKIP_TAGS.has(el.tagName)) return;
     if (el === near) nearAt = order;
+    /** Hidden from screen readers, but there for the mouse: a search box's magnifying glass. */
+    let pressableOnly = false;
     if (el.hasAttribute("inert") || el.hasAttribute("data-haptic-ignore") || el.getAttribute("aria-hidden") === "true") {
       // An app hides the page behind its dialog this way, and the dialog itself is inside what it hid only by mistake.
-      if (!modal || !el.contains(modal) || el === modal) return;
+      if (!modal || !el.contains(modal) || el === modal) {
+        const forMouse = !el.hasAttribute("inert") && !el.hasAttribute("data-haptic-ignore") && !insideControl && !parentPointer && !outside && !hoverBox;
+        if (!forMouse || !pressableThoughHidden(el, ignore)) return;
+        pressableOnly = true;
+      }
     }
     if (el === modal) outside = false;
     // A drawing is not read, but controls and ordinary page content placed inside one are.
@@ -533,8 +539,8 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
 
     // cursor:pointer is inherited, so only the element where it starts counts.
     const pointerHere = !INTERACTIVE_ROLES.has(explicitRole) && !svg && MAYBE_CLICKABLE.has(el.tagName) ? getComputedStyle(el).cursor === "pointer" : parentPointer;
-    const role = svg && !INTERACTIVE_ROLES.has(explicitRole) && !(el.tagName.toLowerCase() === "a" && (el.hasAttribute("href") || el.hasAttribute("xlink:href")))
-      ? ""
+    const role = pressableOnly ? "clickable"
+      : svg && !INTERACTIVE_ROLES.has(explicitRole) && !(el.tagName.toLowerCase() === "a" && (el.hasAttribute("href") || el.hasAttribute("xlink:href"))) ? ""
       : roleOf(el, explicitRole, pointerHere && !parentPointer && !insideControl);
 
     /** A table row is read as one line, so its cells are not read again on their own. */
@@ -543,7 +549,7 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
     let added: Candidate | undefined;
     if (role) {
       const rect = el.getBoundingClientRect();
-      if ((rect.width > 0 || rect.height > 0) && (!hoverBox || liesInside(rect, hoverBox))) {
+      if (hasRealBox(el, rect) && (!hoverBox || liesInside(rect, hoverBox))) {
         added = { el, id: "", role, label: labelOf(el, role), nav: ["nav", "header", "aside", "menu", "tabs", "footer"].includes(scope.region), region: scope.region, heading: scope.heading, outside };
         const options = optionsOf(el);
         if (options.length) added.options = options;
@@ -570,7 +576,8 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
     }
 
     // What is inside an editor is what the visitor wrote, links and all. The editor is one control, and that is the end of it.
-    if (holdsTyping(el)) return;
+    // What is inside a part hidden from screen readers is not looked into either.
+    if (holdsTyping(el) || pressableOnly) return;
 
     const before = candidates.length;
     const inside = insideControl || role !== "";
@@ -605,8 +612,16 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
 
   if (root) visit(root, { region: "page", heading: "" }, false, false);
 
-  // With a dialog open, the rest of the page counts only where it is drawn over the dialog.
-  let usable = mergeCells(modal ? candidates.filter((c) => !c.outside || onTop(c.el, ignore)) : candidates);
+  // With a dialog open, the rest of the page counts only where it is drawn over the dialog. With a list
+  // open over a layer that covers the window, only what is in the list's layer, or on top of it, can be
+  // used, and the field the list belongs to, which has the keyboard and is typed in to narrow the list.
+  const cover = modal ? undefined : coverOf(ignore, candidates);
+  const inCover = (el: Element) => !!cover?.layer?.contains(el) || el === document.activeElement;
+  let usable = mergeCells(
+    modal ? candidates.filter((c) => !c.outside || onTop(c.el, ignore))
+    : cover ? candidates.filter((c) => inCover(c.el) || onTop(c.el, ignore))
+    : candidates,
+  );
   nameRows(usable);
   tellTwinsApart(usable);
   for (const c of usable) {
@@ -852,6 +867,52 @@ function onTop(el: Element, ignore: Element): boolean {
   if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return false;
   const hit = document.elementsFromPoint(x, y).find((over) => over !== ignore && !ignore.contains(over));
   return !!hit && (el.contains(hit) || hit.contains(el));
+}
+
+/**
+ * A box of at least two pixels each way, which a visitor can see and press.
+ * A zero-height box, or a screen reader's one-pixel copy of a control, is not
+ * one. A tick box hidden under its label is pressed through the label, so the
+ * label's box counts for it.
+ */
+function hasRealBox(el: Element, rect: DOMRect): boolean {
+  if (rect.width >= 2 && rect.height >= 2) return true;
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) return false;
+  return Array.from(el.labels ?? []).some((label) => {
+    const box = label.getBoundingClientRect();
+    return box.width >= 2 && box.height >= 2;
+  });
+}
+
+/**
+ * Whether something hidden from screen readers is there for the mouse all the
+ * same: it shows the pointer cursor itself, rather than taking it from the box
+ * around it, has a real box, and is what a click at its middle reaches.
+ */
+function pressableThoughHidden(el: Element, ignore: Element): boolean {
+  if (!MAYBE_CLICKABLE.has(el.tagName) || !isRendered(el) || getComputedStyle(el).cursor !== "pointer") return false;
+  if (el.parentElement && getComputedStyle(el.parentElement).cursor === "pointer") return false;
+  const rect = el.getBoundingClientRect();
+  return rect.width >= 2 && rect.height >= 2 && onTop(el, ignore);
+}
+
+/**
+ * A layer drawn over the whole window with no control in it, which an open
+ * list puts behind itself so that a click anywhere else only closes the list.
+ * `layer` is the box that holds it and the list, when that is not the whole page.
+ */
+function coverOf(ignore: Element, candidates: Candidate[]): { el: Element; layer?: Element } | undefined {
+  for (const [x, y] of [[0.5, 0.5], [0.1, 0.1], [0.9, 0.1], [0.1, 0.9], [0.9, 0.9]] as const) {
+    const top = document.elementsFromPoint(window.innerWidth * x, window.innerHeight * y).find((el) => el !== ignore && !ignore.contains(el));
+    if (!top || top === document.body || top === document.documentElement) continue;
+    const box = top.getBoundingClientRect();
+    if (box.width < window.innerWidth * 0.95 || box.height < window.innerHeight * 0.95) continue;
+    const position = getComputedStyle(top).position;
+    if ((position !== "fixed" && position !== "absolute") || candidates.some((c) => top.contains(c.el))) continue;
+    const parent = top.parentElement;
+    return { el: top, layer: parent && parent !== document.body && parent !== document.documentElement ? parent : undefined };
+  }
+  return undefined;
 }
 
 /** The choices of a real <select>. They are the page's own words, not the visitor's: which one is chosen is never read. */
