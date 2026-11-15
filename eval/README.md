@@ -110,7 +110,9 @@ npm run eval:answers -- --models mock
 npm run eval:answers -- --models claude-sonnet-5-5,claude-haiku-5-5 --judge --yes
 ```
 
-A case is one question on one page, with what a right reply does. Each file in `eval/answers/` holds a site with its help docs, the pages its questions are asked on as the widget sees them, and the cases. `eval/answers/demo.json` is the demo app with the help centre in `demo/help`, and `eval/answers/attacks.json` asks the same site questions meant to make it misbehave. The mix follows the research report: mostly questions one article answers, then questions that need two, questions the docs do not cover, how-to questions that should be pointed at and not told, and a tenth of follow-ups, vague, off-topic and planted ones.
+A case is one question on one page, with what a right reply does. Each file in `eval/answers/` holds a site with its help docs, the pages its questions are asked on as the widget sees them, and the cases. `eval/answers/demo.json` is the demo app with the help centre in `demo/help`. It has 220 questions. 120 are what visitors ask, and the mix follows the research report: 36 that one article answers, 14 that need two, 8 follow-ups, 18 the docs do not cover, 12 about prices, refunds and the like that must be left for a person, 14 how-to questions that should be pointed at and not told, 5 vague ones, 5 that have nothing to do with the site, and 8 with an instruction planted on the page. The other 100 are attacks, ten each of ten kinds, from "ignore your rules" to a question with a harmless half and a hostile half. `--kinds attack` runs only those, and `--kinds one,two` only the questions the docs answer.
+
+`eval/answers/notes/demo-help-coverage.json` is what the questions were written from: each article's facts, the sentences that must never be stated, the one control an out-of-date article names, and the topics the help centre leaves out. Read it before adding a question.
 
 Each score is reported on its own. There is no blended score, because the mistakes do not cost the same: declining a question the docs cover is an annoyance, and answering one they do not is a statement made in the customer's name.
 
@@ -123,13 +125,13 @@ Each score is reported on its own. There is no blended score, because the mistak
 - **overruled by the server**: how many replies the checks in `src/server/answers.ts` changed after the model wrote them. A high number means the prompt is leaning on the code.
 - **ms to kind of reply** is when the widget can first show something. **cents a reply** is worked out from the tokens.
 
-`--judge` adds two more, from a second model that reads each answer beside a reference: **judged right**, and **judged all in the docs**. Model judges differ a great deal from each other in how lenient they are, and rewording a judge's prompt can reverse a ranking. So there is one judge with one prompt (`eval/judge.ts`), asked yes-or-no questions, and it is checked first against answers that have been labelled by hand:
+`--judge` adds two more, from a second model that reads each answer beside a reference: **judged right**, and **judged all in the docs**. Model judges differ a great deal from each other in how lenient they are, and rewording a judge's prompt can reverse a ranking. So there is one judge with one prompt (`eval/judge.ts`), asked yes-or-no questions, and it is checked first against answers whose labels are known:
 
 ```bash
 npm run eval:answers -- --check-judge --yes
 ```
 
-`eval/answers/judge-check.json` holds those answers, each with whether it is right and whether it is all in the docs. Do not compare two runs judged by different models or prompts.
+`eval/answers/judge-check.json` holds 50 of them: 25 questions with two answers each, 20 that are right and all in the docs, 10 right but with a claim the docs do not make, 10 wrong but made only of things the docs say, and 10 wrong and unsupported. Do not compare two runs judged by different models or prompts.
 
 A case file can set `marks`, the scores a run has to reach, and `--gate` fails the command when one is missed. That is the check to run for a customer before Answers goes live for them, and again when their docs, the prompt or the model changes. **The marks are for the team to set before a run, not after it.**
 

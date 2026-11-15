@@ -182,15 +182,30 @@ async function runOne(name: string, settings: TurnSettings, fileName: string, fi
   }
 }
 
-/** An answer a person has read and labelled, for checking the judge against. */
-interface Labelled extends Judged {
+/** An answer whose two labels are known, for checking the judge against. */
+interface Labelled extends Omit<Judged, "articles"> {
   id: string;
+  /** The help docs the answer cited, by file name, from the demo app's help centre. */
+  sources: string[];
   correct: boolean;
   supported: boolean;
+  /** Why it is labelled the way it is. */
+  note?: string;
 }
 
 async function checkJudge(yes: boolean) {
-  const items = JSON.parse(await readFile(`${ANSWERS_DIR}judge-check.json`, "utf8")) as Labelled[];
+  const labelled = JSON.parse(await readFile(`${ANSWERS_DIR}judge-check.json`, "utf8")) as Labelled[];
+  // The articles are read from the demo case file, so the judge is shown what the model was shown.
+  const [demo] = await loadAnswerFiles(["demo"]);
+  const docs = demo?.file.site.docs ?? [];
+  const items = labelled.map((item) => ({
+    ...item,
+    articles: item.sources.map((name) => {
+      const doc = docs.find((one) => one.source.split(/[\\/]/).pop() === name);
+      if (!doc) throw new Error(`${item.id} cites ${name}, which is not one of the demo app's help docs.`);
+      return { title: doc.title, text: doc.text };
+    }),
+  }));
   console.log(`${items.length} labelled answers, ${items.length} billed calls to ${JUDGE_MODEL}.`);
   if (!yes) return console.log("Add --yes to run it.");
   const wrong: string[] = [];

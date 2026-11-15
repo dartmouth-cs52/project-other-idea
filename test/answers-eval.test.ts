@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { gate, KINDS, loadAnswerFiles, requestFor, scoreAnswer, type AnswerCase, type AnswerFile } from "../eval/answers.ts";
+import { readFile } from "node:fs/promises";
+import { ANSWERS_DIR, gate, KINDS, loadAnswerFiles, requestFor, scoreAnswer, type AnswerCase, type AnswerFile } from "../eval/answers.ts";
 import { matches } from "../eval/cases.ts";
 import { articlesOf } from "../src/server/prompt.ts";
 import { DEFAULT_APPEARANCE, MODES, REASONS, type TurnReply } from "../src/shared/types.ts";
@@ -139,5 +140,25 @@ test("every saved question can be passed: its page, its articles and its control
       // A case that can be answered has to say how, so the judge has something to compare with.
       if (one.expect.mode.includes("answer") && ["one", "two", "followup"].includes(one.kind)) assert.ok(one.expect.reference, `${name} ${one.id}: no reference answer`);
     }
+  }
+});
+
+test("every answer the judge is checked against cites help docs the demo app has", async () => {
+  const [demo] = await loadAnswerFiles(["demo"]);
+  const docs = (demo?.file.site.docs ?? []).map((doc) => doc.source.split("/").pop());
+  const labelled = JSON.parse(await readFile(`${ANSWERS_DIR}judge-check.json`, "utf8")) as { id: string; question: string; reference: string; answer: string; sources: string[]; correct: boolean; supported: boolean }[];
+  assert.ok(labelled.length >= 50);
+  const ids = new Set<string>();
+  for (const one of labelled) {
+    assert.ok(!ids.has(one.id), `two labelled answers are called ${one.id}`);
+    ids.add(one.id);
+    assert.ok(one.question && one.reference && one.answer, `${one.id}: something is empty`);
+    assert.ok(typeof one.correct === "boolean" && typeof one.supported === "boolean", `${one.id}: a label is missing`);
+    assert.ok(one.sources.length > 0, `${one.id}: cites nothing`);
+    for (const source of one.sources) assert.ok(docs.includes(source), `${one.id}: there is no help doc called ${source}`);
+  }
+  // Each of the four pairs of labels has to be there, or a judge that always says yes would pass.
+  for (const [correct, supported] of [[true, true], [true, false], [false, true], [false, false]]) {
+    assert.ok(labelled.filter((one) => one.correct === correct && one.supported === supported).length >= 10, `too few answers labelled right=${correct}, in the docs=${supported}`);
   }
 });
