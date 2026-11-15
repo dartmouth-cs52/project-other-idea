@@ -30,10 +30,14 @@ export function siteFromRow(row: SiteRow): SiteContext {
 const SEEN_EVERY_MS = 60_000;
 /** Anyone can send a request with a made-up Origin header, so origins that are not allowed are kept only up to this many per site. */
 const MAX_REFUSED_ORIGINS = 20;
+/** How long a report waits before each look for its guide's row. A Worker may keep working this long after it has answered. */
+const REPORT_RETRIES_MS = [0, 1000, 3000, 6000];
 
 export class Store {
   private readonly sql: NeonQueryFunction<false, false>;
   private readonly seen = new Map<string, number>();
+  /** Each guide's step write still under way in this process, so a report about it can wait for it. */
+  private readonly writing = new Map<string, Promise<void>>();
 
   constructor(url: string) {
     this.sql = neon(url);
@@ -76,7 +80,7 @@ export class Store {
     const { reply } = measure;
     const target = reply.target ? request.snapshot.elements.find((element) => element.id === reply.target) : undefined;
     const path = normalizePath(request.snapshot.path || "/");
-    return this.quietly("record a step", async () => {
+    const write = this.quietly("record a step", async () => {
       await this.sql.transaction([
         this.sql`
           insert into guides (id, site_id, question, question_key, started_path, origin, last_step_at, step_count)
@@ -94,17 +98,36 @@ export class Store {
             strayed = steps.strayed or excluded.strayed, ms = excluded.ms, ms_to_target = excluded.ms_to_target, model = excluded.model, created_at = now()`,
       ]);
     });
+    this.writing.set(guide, write);
+    void write.then(() => this.writing.get(guide) === write && this.writing.delete(guide));
+    return write;
   }
 
-  /** The first outcome reported is the one kept. Whether it helped can be said once the guide has ended. */
+  /**
+   * The first outcome reported is the one kept. Whether it helped can be said once the guide has ended.
+   *
+   * A guide's last step is written after its reply has gone out, and the
+   * widget reports the ending straight after that reply, so the report can
+   * arrive before the guide's row exists. It waits for this process's own
+   * write of that guide, then tries a few more times in case the step was
+   * answered by another process.
+   */
   report(site: SiteContext, guide: string, report: GuideReport): Promise<void> {
     return this.quietly("record how a guide ended", async () => {
-      if (report.outcome) {
-        await this.sql`update guides set outcome = ${report.outcome}, ended_at = now() where id = ${guide} and site_id = ${site.id} and outcome is null`;
+      await this.writing.get(guide);
+      for (const wait of REPORT_RETRIES_MS) {
+        if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+        const [found] = await this.sql`select outcome is null as open from guides where id = ${guide} and site_id = ${site.id}`;
+        if (!found) continue;
+        if (report.outcome && found.open) {
+          await this.sql`update guides set outcome = ${report.outcome}, ended_at = now() where id = ${guide} and site_id = ${site.id} and outcome is null`;
+        }
+        if (report.helped !== undefined) {
+          await this.sql`update guides set helped = ${report.helped} where id = ${guide} and site_id = ${site.id}`;
+        }
+        return;
       }
-      if (report.helped !== undefined) {
-        await this.sql`update guides set helped = ${report.helped} where id = ${guide} and site_id = ${site.id}`;
-      }
+      console.error(`A report for guide ${guide} on ${site.id} came for a guide that was never recorded.`);
     });
   }
 

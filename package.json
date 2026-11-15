@@ -11,7 +11,7 @@
     "tag": "tsx --env-file-if-exists=.env src/intake/cli.ts",
     "build": "tsx src/widget/build.ts",
     "deploy": "wrangler deploy",
-    "site:publish": "tsx src/intake/publish.ts",
+    "site:publish": "tsx --env-file-if-exists=.env src/intake/publish.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "eval": "tsx --env-file-if-exists=.env eval/run.ts",

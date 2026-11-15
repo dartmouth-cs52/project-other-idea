@@ -49,6 +49,12 @@ button { font: inherit; cursor: pointer; }
   border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; }
 .caption .close:hover { background: rgba(250,250,249,.25); }
 .caption .close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.caption { flex-wrap: wrap; }
+.caption > span { flex: 1 1 0; min-width: 0; }
+.helped { display: flex; align-items: center; gap: 6px; flex-basis: 100%; padding: 2px 0 2px; color: rgba(250,250,249,.7); font-size: 13px; }
+.helped span { margin-right: auto; }
+.helped button { height: 26px; border: 0; border-radius: 999px; padding: 0 12px; background: rgba(250,250,249,.15); color: #fafaf9; font-size: 13px; }
+.helped button:hover { background: rgba(250,250,249,.25); }
 @media (prefers-reduced-motion: reduce) { .cursor { transition: none; } }
 `;
 
@@ -68,6 +74,8 @@ export class Ui {
   private readonly cursor: HTMLElement;
   private readonly caption: HTMLElement;
   private readonly captionText: HTMLElement;
+  private readonly helped: HTMLElement;
+  private onHelped?: (helped: boolean) => void;
   private target?: Element;
   private frame = 0;
   /** Where the pointer last was, so each move starts from there. */
@@ -80,7 +88,7 @@ export class Ui {
     const side = appearance.position === "bottom-left" ? "left" : "right";
     root.innerHTML = `<style>${CSS}</style>
       <div class="ring" hidden></div>
-      <div class="caption" hidden><span></span><button class="close" aria-label="Stop guide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="caption" hidden><span></span><button class="close" aria-label="Stop guide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button><div class="helped" hidden></div></div>
       <div class="cursor" hidden><svg viewBox="0 0 24 24" width="24" height="24"><path d="${POINTER_PATH}"/></svg></div>
       <div class="dock ${side}">
         <div class="panel" hidden>
@@ -99,6 +107,16 @@ export class Ui {
     this.cursor = pick(".cursor");
     this.caption = pick(".caption");
     this.captionText = pick(".caption span");
+    this.helped = pick(".helped");
+    this.helped.addEventListener("click", (event) => {
+      const answer = (event.target as Element).closest("button")?.dataset.helped;
+      if (!answer || !this.onHelped) return;
+      this.onHelped(answer === "yes");
+      this.onHelped = undefined;
+      // Thanks takes the question's place, and the whole caption goes a moment later.
+      this.helped.replaceChildren(Object.assign(document.createElement("span"), { textContent: "Thanks. That helps us improve." }));
+      setTimeout(() => this.helped.isConnected && !this.helped.hidden && this.clear(), 1500);
+    });
     const launcher = pick<HTMLButtonElement>(".launcher");
     pick(".launcher span").textContent = appearance.launcherLabel;
     this.at = { x: side === "left" ? 60 : window.innerWidth - 60, y: window.innerHeight - 40 };
@@ -166,6 +184,7 @@ export class Ui {
   /** Move the pointer to an element and show the caption beside it. With no text yet, the pointer goes alone. */
   pointAt(el: Element, text: string) {
     this.target = el;
+    this.hideHelped();
     this.captionText.textContent = text;
     this.caption.hidden = text === "";
     this.cursor.hidden = false;
@@ -178,8 +197,37 @@ export class Ui {
   /** Show text with nothing to point at, above the launcher. */
   say(text: string) {
     this.clearPointer();
+    this.hideHelped();
     this.captionText.textContent = text;
     this.caption.hidden = false;
+    this.placeAboveLauncher();
+  }
+
+  /** Adds "Did this help?" under the caption that is showing. `answer` is called once, if they tap Yes or No. */
+  askIfHelped(answer: (helped: boolean) => void) {
+    if (this.caption.hidden) return;
+    this.onHelped = answer;
+    this.helped.replaceChildren(...this.helpedRow());
+    this.helped.hidden = false;
+    // The caption grew. Following a target moves it each frame anyway; on its own it has to be put back.
+    if (!this.target) this.placeAboveLauncher();
+  }
+
+  private helpedRow(): Node[] {
+    const span = Object.assign(document.createElement("span"), { textContent: "Did this help?" });
+    const yes = Object.assign(document.createElement("button"), { type: "button", textContent: "Yes" });
+    const no = Object.assign(document.createElement("button"), { type: "button", textContent: "No" });
+    yes.dataset.helped = "yes";
+    no.dataset.helped = "no";
+    return [span, yes, no];
+  }
+
+  private hideHelped() {
+    this.helped.hidden = true;
+    this.onHelped = undefined;
+  }
+
+  private placeAboveLauncher() {
     const box = this.caption.getBoundingClientRect();
     const left = this.host.shadowRoot?.querySelector(".dock.left") ? 20 : window.innerWidth - box.width - 20;
     this.caption.style.left = `${Math.max(12, left)}px`;
@@ -195,6 +243,7 @@ export class Ui {
 
   clear() {
     this.clearPointer();
+    this.hideHelped();
     this.caption.hidden = true;
   }
 

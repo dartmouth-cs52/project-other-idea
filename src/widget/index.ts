@@ -1,5 +1,5 @@
 import { DEFAULT_APPEARANCE, STREAM_TYPE, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
-import { Guide } from "./guide.ts";
+import { Guide, type Reporter } from "./guide.ts";
 import { Ui } from "./ui.ts";
 
 // Entry point of the script customers paste into their site:
@@ -57,11 +57,23 @@ async function boot() {
     return reply;
   };
 
+  // Sent as text/plain, which needs no preflight, and with keepalive, so a
+  // report made as the visitor leaves the page still arrives. It never matters
+  // to the visitor whether it does.
+  const report: Reporter = (guide, body) => {
+    void fetch(`${api}/v1/guides/${guide}/report`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({ ...body, site }),
+      keepalive: true,
+    }).catch(() => {});
+  };
+
   const ui: Ui = new Ui(config.appearance, {
     onAsk: (question) => guide.start(question),
     onStop: () => guide.stop(),
   });
-  const guide = new Guide(ui, sendTurn);
+  const guide = new Guide(ui, sendTurn, report);
   guide.resume();
 }
 
