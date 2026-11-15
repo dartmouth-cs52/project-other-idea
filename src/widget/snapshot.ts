@@ -592,6 +592,27 @@ function labelWords(label: Element): string {
   return wordsIn(label, 200, "button, datalist, output");
 }
 
+/** Roles whose own words are what is entered or chosen in them, not a name. */
+const SHOWS_A_VALUE = new Set(["textbox", "searchbox", "combobox", "spinbutton", "slider", "select"]);
+
+/**
+ * A name given for screen readers can leave out the words on the control
+ * itself: a filter chip that shows "state = firing" and is named "Edit filter
+ * with key state". A person finds a control by the words they see, so when the
+ * name does not hold them both are given, the words shown first. The words of
+ * a button or link inside the control are that one's, not this one's.
+ */
+function withShownWords(name: string, el: Element): string {
+  const shown = wordsIn(el, 120, "button, a[href], select, [role='button']");
+  if (!shown) return name;
+  const words = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  const inName = new Set(words(name));
+  const inShown = new Set(words(shown));
+  if (words(shown).every((word) => inName.has(word))) return name;
+  if (words(name).every((word) => inShown.has(word))) return shown;
+  return `${shown.length > 48 ? `${shown.slice(0, 47).trimEnd()}…` : shown} (${name})`;
+}
+
 function labelOf(el: Element, role: string): string {
   const root = el.getRootNode() as Document | ShadowRoot;
   const byIds = (ids: string) =>
@@ -605,7 +626,9 @@ function labelOf(el: Element, role: string): string {
       .trim();
   // An editor's own words are the visitor's. It is named by what its page calls it, or by nothing.
   const typedIn = holdsTyping(el);
-  let raw = el.getAttribute("data-haptic-label") || byIds(el.getAttribute("aria-labelledby") ?? "") || el.getAttribute("aria-label")?.trim() || "";
+  /** The name the page gives for screen readers. */
+  const given = byIds(el.getAttribute("aria-labelledby") ?? "") || el.getAttribute("aria-label")?.trim() || "";
+  let raw = el.getAttribute("data-haptic-label") || (given && !typedIn && !SHOWS_A_VALUE.has(role) ? withShownWords(given, el) : given);
   const ticks = role === "checkbox" || role === "radio" || role === "switch";
   if (!raw && (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
     // A label can carry its words as an aria-label of its own.

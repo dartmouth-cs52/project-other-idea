@@ -145,3 +145,29 @@ test("a link that opens a menu is listed as opening one, without the address it 
     'link "Docs" [nav] → /docs',
   ]);
 });
+
+// Names -----------------------------------------------------------------------
+
+test("a name for screen readers that leaves out the words on the control is given with those words", { skip }, async () => {
+  const snapshot = await read(`<main>
+    <div role="button" tabindex="0" aria-label="Edit filter with key alertstate"><span>alertstate = firing</span><button aria-label="Remove filter with key alertstate"><svg aria-hidden="true"></svg></button></div>
+    <button aria-label="All series selected">A-series</button>
+    <button aria-label="All series selected">B-series</button>
+    <button aria-label="Time range selected: Last 1 hour">Last 1 hour</button>
+    <button aria-label="Close"><svg></svg></button>
+    <button aria-label="Next page">›</button>
+    <button aria-label="Edit">Edit profile</button>
+    <div role="combobox" tabindex="0" aria-label="Type">Component</div>
+  </main>`);
+  assert.deepEqual(lines(snapshot), [
+    'button "alertstate = firing (Edit filter with key alertstate)" [main]',
+    'button "Remove filter with key alertstate" [main]',
+    'button "A-series (All series selected)" [main]',
+    'button "B-series (All series selected)" [main]',
+    'button "Time range selected: Last 1 hour" [main]',
+    'button "Close" [main]',
+    'button "Next page" [main]',
+    'button "Edit profile" [main]',
+    'combobox "Type" [main]',
+  ]);
+});
