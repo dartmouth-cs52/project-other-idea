@@ -1,0 +1,91 @@
+# Publishes the widget's server to Cloudflare, which serves it at widget.joinhaptic.com.
+#
+# It runs when a change to the server or the widget lands on main, and can also
+# be started by hand from the Actions tab. Pull requests never run it, so
+# nothing goes live before a merge.
+#
+# It uses the same two repository secrets as the site's deploy, under Settings,
+# Secrets and variables, Actions:
+#   CLOUDFLARE_API_TOKEN   a Cloudflare API token made from the "Edit Cloudflare Workers" template
+#   CLOUDFLARE_ACCOUNT_ID  the Cloudflare account the Worker lives in
+# and one more, which the server needs to call a real model:
+#   ANTHROPIC_API_KEY      copied onto the Worker as a secret on every deploy
+# Without it the deploy still goes ahead, and the server works only while
+# HAPTIC_MODEL in wrangler.jsonc is "mock".
+
+name: Deploy widget server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "worker/**"
+      - "wrangler.jsonc"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+# One deploy at a time. A second one waits for the first to finish.
+concurrency:
+  group: deploy-widget
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check the Cloudflare secrets are set
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID under Settings, Secrets and variables, Actions."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      # Builds the widget, packs it into the Worker and publishes it.
+      - name: Build and publish
+        run: npm run deploy
+
+      # After the publish, so the Worker exists the first time. Setting a secret
+      # takes effect at once and does not need another deploy.
+      - name: Put the model key on the server
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::warning::There is no ANTHROPIC_API_KEY secret, so the server has no model key. It answers only while HAPTIC_MODEL is \"mock\"."
+            exit 0
+          fi
+          printf '%s' "$KEY" | npx wrangler secret put ANTHROPIC_API_KEY
+
+      - name: Check the live server answers
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error --output /dev/null https://widget.joinhaptic.com/widget.js; then
+              echo "widget.joinhaptic.com is up."
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "::error::widget.joinhaptic.com did not answer after the deploy."
+          exit 1
