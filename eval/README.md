@@ -20,7 +20,7 @@ npm run eval -- --models mock
 `mock` is the keyword matcher. It needs no key and costs nothing, and it gets about four cases in ten right, so that is the floor a real model has to clear.
 
 ```bash
-npm run eval -- --models claude-opus-5-5,claude-sonnet-5-5@off,claude-haiku-5-5@off --yes
+npm run eval -- --models claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5@off --yes
 ```
 
 Each model can take settings after `@`: `low`, `medium` or `high` for effort, and `off` for no thinking before the answer. Real models need `ANTHROPIC_API_KEY`, and every call is billed, so without `--yes` the command only prints how many calls it would make.
@@ -33,6 +33,7 @@ The run goes through the same code as the live server, so the setup that wins is
 
 - **right pointer** is the score: the pointer went to a right control, or to nothing when nothing was left.
 - **plausible range** is where the true score could lie given how few cases there are. Two models whose ranges overlap have not been told apart yet. Add cases before choosing between them.
+- **clean sentence** is how often the model's sentence could be shown as written. The server tidies every sentence, so a visitor never sees the difference, but a low figure means the setting is fighting the reply's format.
 - **status agrees** is reported beside the score and is not part of it, because models differ on whether a guide's last click is "continue" or "done".
 - **typical ms** is the middle step, start to finish. **slow ms** is the step that nine in ten are faster than. Compare timings only within one run: the service's speed drifts from hour to hour.
 - **ms to pointer** is how long until the model had named the control, which is when the pointer starts to move.
@@ -72,7 +73,9 @@ One run on 15 November 2026: all 74 cases, each asked once, from a GitHub runner
 
 The three misses by Opus and Sonnet were all at the end of a guide: each pointed at something more when nothing was left to do. Four of Haiku's five were mistakes inside a guide: it skipped required fields twice, pointed at nothing twice when the right control was listed, and once pointed at "New project" when asked how to delete one.
 
-The live server runs Sonnet with thinking off. It matched Opus on accuracy and speed here, at half the price. Haiku was about a quarter of a second quicker to the pointer and made mistakes that would send a visitor the wrong way.
+Sonnet with thinking off looked like the pick from that table, and it was switched on. Asked the 17 joinhaptic.com cases on the live server, it ended two sentences with a stray closing brace and left blank lines after several more. With thinking left on, Sonnet and Opus each gave 17 clean sentences out of 17 and were no slower. So thinking off bought no speed and damaged the text, and the table above did not show it because it did not look at the sentence.
+
+The live server runs Opus with thinking on, at low effort: the one setting that is both in the table and checked for clean text. Sonnet with thinking on costs half as much and may be as good, but its accuracy has not been measured. The next run should include it. Haiku was about a quarter of a second quicker to the pointer and made mistakes that would send a visitor the wrong way.
 
 Read this with care. It is one run, the ranges overlap, and the timings are from GitHub's runner at one time of day. A case that expects nothing is also strict: a model that ends a guide by pointing at where the answer is counts as a miss.
 
