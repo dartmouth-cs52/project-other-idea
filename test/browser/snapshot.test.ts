@@ -661,3 +661,13 @@ test("the current one of a row is marked only when one alone carries such a clas
     'button "Italic"',
   ]);
 });
+
+test("a label that takes clicks for its field is not listed beside the field, unless the field cannot be seen", { skip }, async () => {
+  const snapshot = await read(`<form style="font:16px sans-serif">
+    <label style="cursor:pointer"><span><input type="radio" name="p"></span><span>Strong</span></label>
+    <label style="cursor:pointer"><span><input type="radio" name="p"></span><span>Weak</span></label>
+    <input type="checkbox" id="t1" style="position:absolute;opacity:0"><label for="t1" style="cursor:pointer"><span>Writing Templates</span></label>
+    <input type="checkbox" id="t2" style="display:none"><label for="t2" style="cursor:pointer"><span>Only the label shows</span></label>
+  </form>`);
+  assert.deepEqual(lines(snapshot), ['radio "Strong" [form]', 'radio "Weak" [form]', 'checkbox "Writing Templates" [form]', 'clickable "Only the label shows" [form]']);
+});

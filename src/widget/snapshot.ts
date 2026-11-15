@@ -24,7 +24,7 @@ const LANDMARKS: Record<string, string> = {
   form: "form", search: "search", menu: "menu", menubar: "menu", listbox: "list", tablist: "tabs", toolbar: "toolbar",
 };
 const TEXT_TAGS = new Set(["P", "LI", "DD", "DT", "SPAN", "DIV", "SMALL", "STRONG", "B", "EM", "LABEL", "TD", "TH", "FIGCAPTION", "H4", "H5", "H6", "A"]);
-const MAYBE_CLICKABLE = new Set(["DIV", "SPAN", "LI", "IMG", "TD", "TR", "TH", "P", "I", "A", "SECTION", "ARTICLE"]);
+const MAYBE_CLICKABLE = new Set(["DIV", "SPAN", "LI", "IMG", "TD", "TR", "TH", "P", "I", "A", "SECTION", "ARTICLE", "LABEL"]);
 /** Tags that take a tabindex so that they can be scrolled or jumped to, not so that they can be clicked. */
 const FOCUSABLE_NOT_CLICKABLE = new Set(["BODY", "MAIN", "PRE", "CODE", "TABLE", "FORM", "DIALOG"]);
 const ICON_CLASS =
@@ -840,6 +840,11 @@ function roleOf(el: Element, explicitRole: string, pointerStartsHere: boolean): 
   if ((el as HTMLElement).isContentEditable && !(el.parentElement as HTMLElement | null)?.isContentEditable) return "textbox";
   // A link with no address is still a link to whoever is looking at it: the app handles the click itself.
   if (tag === "A" && (el.hasAttribute("onclick") || pointerStartsHere || isFocusable(el))) return "link";
+  // A label that shows the pointer is pressed for its field, which is listed. Only when the field cannot be seen is the label what the visitor presses.
+  if (tag === "LABEL") {
+    const field = (el as HTMLLabelElement).control;
+    if (field && isRendered(field)) return "";
+  }
   if (el.hasAttribute("onclick") || pointerStartsHere) return "clickable";
   // Something the keyboard can land on is there to be used, whatever it looks like: a row, a card, a tile.
   if (isFocusable(el) && !FOCUSABLE_NOT_CLICKABLE.has(tag) && !scrolls(el)) return "clickable";
