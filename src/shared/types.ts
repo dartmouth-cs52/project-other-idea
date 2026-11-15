@@ -165,12 +165,71 @@ function safeDecode(segment: string): string {
 // Text ----------------------------------------------------------------------
 
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+/** Digits written with the spaces and marks a phone number has. Whether it is one is decided in `maskNumbers`. */
 const PHONE = /\+?\d[\d\s().-]{7,}\d/g;
 const LONG_DIGITS = /\d{5,}/g;
+/** A date in figures, standing on its own among such digits: 2026-11-15, 15.11.2026, 11-15-26. */
+const DATE = /(^|[\s(])(\d{4}[-.]\d{1,2}[-.]\d{1,2}|\d{1,2}[-.]\d{1,2}[-.](?:\d{4}|\d{2}))(?=$|[\s)])/g;
+/** Fewer digits than this is a price, a size or a model number, not a phone number. */
+const MIN_PHONE_DIGITS = 9;
+/** A question names one or two things. More than this is not a question. */
+const MAX_OWN = 8;
 
-/** Collapse whitespace, mask emails and long numbers, cap the length. */
-export function cleanText(text: string, max = 80): string {
-  const masked = text.replace(/\s+/g, " ").trim().replace(EMAIL, "[email]").replace(PHONE, "[number]").replace(LONG_DIGITS, "[number]");
+/**
+ * What a visitor named in their own question that would otherwise be masked:
+ * an email address, or a run of five or more digits such as an account or an
+ * order number. The visitor wrote it, so the same thing on the page tells the
+ * model nothing it was not already told, and is left readable. Only a whole
+ * match counts: a number that merely ends or begins the same stays masked.
+ */
+export function namedIn(question: string): Set<string> {
+  const found = new Set<string>();
+  for (const email of question.match(EMAIL) ?? []) if (found.size < MAX_OWN) found.add(email.toLowerCase());
+  for (const digits of question.replace(EMAIL, " ").match(LONG_DIGITS) ?? []) if (found.size < MAX_OWN) found.add(digits);
+  return found;
+}
+
+/**
+ * Masks phone numbers and long runs of digits. A date is left alone, and so
+ * is a run of digits that is one of `own`, the things the visitor named.
+ */
+function maskNumbers(text: string, own?: ReadonlySet<string>): string {
+  const whole = (piece: string): string => piece.replace(/\+?\d(?:[\d\s().-]*\d)?/, "[number]");
+  // One of the visitor's numbers standing among other digits stays, and every digit on either side of it goes.
+  const around = (piece: string): string => {
+    for (const run of piece.matchAll(/\d+/g)) {
+      if (own?.has(run[0])) return around(piece.slice(0, run.index)) + run[0] + around(piece.slice(run.index + run[0].length));
+    }
+    return whole(piece);
+  };
+  const maskRun = (piece: string): string => {
+    if (piece.replace(/\D/g, "").length < MIN_PHONE_DIGITS) return piece;
+    return own?.size ? around(piece) : whole(piece);
+  };
+  return text
+    .replace(PHONE, (candidate) => {
+      let out = "";
+      let from = 0;
+      for (const date of candidate.matchAll(DATE)) {
+        const start = date.index + (date[1] ?? "").length;
+        out += maskRun(candidate.slice(from, start)) + (date[2] ?? "");
+        from = start + (date[2] ?? "").length;
+      }
+      return out + maskRun(candidate.slice(from));
+    })
+    .replace(LONG_DIGITS, (digits) => (own?.has(digits) ? digits : "[number]"));
+}
+
+/** Collapse whitespace, mask emails and long numbers, cap the length. `own` is what must stay readable: see `namedIn`. */
+export function cleanText(text: string, max = 80, own?: ReadonlySet<string>): string {
+  const spaced = text.replace(/\s+/g, " ").trim();
+  let masked = "";
+  let from = 0;
+  for (const email of spaced.matchAll(EMAIL)) {
+    masked += maskNumbers(spaced.slice(from, email.index), own) + (own?.has(email[0].toLowerCase()) ? email[0] : "[email]");
+    from = email.index + email[0].length;
+  }
+  masked += maskNumbers(spaced.slice(from), own);
   return masked.length > max ? masked.slice(0, max - 1).trimEnd() + "…" : masked;
 }
 

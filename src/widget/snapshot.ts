@@ -1,4 +1,4 @@
-import { cleanText, describeElement, normalizePath, type SnapElement, type Snapshot } from "../shared/types.ts";
+import { cleanText as maskAndTrim, describeElement, normalizePath, namedIn, type SnapElement, type Snapshot } from "../shared/types.ts";
 
 // Turns the live page into the list of elements the model sees. One read-only
 // pass over the DOM. Input values are never read: labels only.
@@ -55,7 +55,20 @@ interface Scope {
   heading: string;
 }
 
-export function takeSnapshot(ignore: Element): PageSnapshot {
+/**
+ * What the visitor named in their question, for as long as one page is being
+ * read. The same email or long number on the page is left readable.
+ */
+let own: ReadonlySet<string> = new Set();
+const cleanText = (text: string, max = 80): string => maskAndTrim(text, max, own);
+
+/**
+ * Reads the page. `question` is what the visitor asked: an email or a long
+ * number in it is the only one left unmasked. Every reading within one guide
+ * has to be given the same question, or one control would be named two ways.
+ */
+export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
+  own = namedIn(question);
   const candidates: Candidate[] = [];
   const headings: string[] = [];
   const texts: { text: string; visible: boolean }[] = [];
