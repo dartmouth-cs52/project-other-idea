@@ -7,7 +7,7 @@ import { usePortalContainer } from "./portal";
 const fieldBase =
   "w-full rounded-md border border-line-strong bg-panel px-2.5 text-[13px] text-ink shadow-xs outline-none placeholder:text-ink-3 focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-sunken disabled:text-ink-3 aria-[invalid=true]:border-danger";
 
-export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { prefix?: ReactNode; suffix?: ReactNode }>(
+export const Input = forwardRef<HTMLInputElement, Omit<InputHTMLAttributes<HTMLInputElement>, "prefix"> & { prefix?: ReactNode; suffix?: ReactNode }>(
   function Input({ className, prefix, suffix, ...rest }, ref) {
     if (!prefix && !suffix) return <input ref={ref} className={cn(fieldBase, "h-8", className)} {...rest} />;
     return (

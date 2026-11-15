@@ -1,5 +1,8 @@
 import type { RouteObject } from "react-router";
-import { PageHeader } from "@/ui/display";
+import { ApprovalDetailPage } from "./ApprovalDetailPage";
+import { ApprovalsPage } from "./ApprovalsPage";
 
-// Placeholder. This area is being built.
-export const routes: RouteObject[] = [{ path: "approvals/*", element: <PageHeader title="approvals" description="Coming soon." /> }];
+export const routes: RouteObject[] = [
+  { path: "approvals", element: <ApprovalsPage /> },
+  { path: "approvals/:id", element: <ApprovalDetailPage /> },
+];

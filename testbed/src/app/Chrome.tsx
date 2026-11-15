@@ -13,7 +13,7 @@ export function MaintenanceBanner() {
   const set = useLab((s) => s.set);
   if (!on) return null;
   return (
-    <div role="status" className="fixed inset-x-0 top-0 z-[45] flex h-9 items-center justify-center gap-3 bg-warn px-10 text-[13px] font-medium text-white">
+    <div role="status" className="fixed inset-x-0 top-0 z-[45] flex h-6 items-center justify-center gap-3 bg-warn px-10 text-[12px] font-medium text-white">
       Scheduled maintenance on Saturday from 2 to 4 AM Pacific. Card payments are not affected.
       <button type="button" aria-label="Dismiss banner" onClick={() => set({ banner: false })} className="absolute right-3 cursor-pointer opacity-80 hover:opacity-100">
         <X className="size-4" />

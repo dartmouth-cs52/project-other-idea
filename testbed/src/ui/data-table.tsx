@@ -183,7 +183,7 @@ export function DataTable<T>({
   );
 
   return (
-    <div className={cn("flex flex-col overflow-hidden rounded-lg border border-line bg-panel shadow-xs", className)}>
+    <div className={cn("relative flex flex-col overflow-hidden rounded-lg border border-line bg-panel shadow-xs", className)}>
       {toolbar || columnPicker || (bulkActions && selectedIds.length) ? (
         <div className="flex min-h-12 flex-wrap items-center gap-2 border-b border-line px-3 py-2">
           {bulkActions && selectedIds.length ? (

@@ -1,5 +1,10 @@
 import type { RouteObject } from "react-router";
-import { PageHeader } from "@/ui/display";
+import { ArticlePage, ContactPage, HelpHome, WhatsNewPage } from "./HelpPages";
 
-// Placeholder. This area is being built.
-export const routes: RouteObject[] = [{ path: "help/*", element: <PageHeader title="help" description="Coming soon." /> }];
+// The sidebar opens /help with a full page load. Static paths rank above :slug.
+export const routes: RouteObject[] = [
+  { path: "help", element: <HelpHome /> },
+  { path: "help/whats-new", element: <WhatsNewPage /> },
+  { path: "help/contact", element: <ContactPage /> },
+  { path: "help/:slug", element: <ArticlePage /> },
+];

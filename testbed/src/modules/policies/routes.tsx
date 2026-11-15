@@ -1,5 +1,11 @@
 import type { RouteObject } from "react-router";
-import { PageHeader } from "@/ui/display";
+import { HandbookPage } from "./HandbookPage";
+import { PoliciesPage } from "./PoliciesPage";
+import { RuleBuilderPage } from "./RuleBuilderPage";
 
-// Placeholder. This area is being built.
-export const routes: RouteObject[] = [{ path: "policies/*", element: <PageHeader title="policies" description="Coming soon." /> }];
+export const routes: RouteObject[] = [
+  { path: "policies", element: <PoliciesPage /> },
+  { path: "policies/handbook", element: <HandbookPage /> },
+  { path: "policies/new", element: <RuleBuilderPage /> },
+  { path: "policies/:id", element: <RuleBuilderPage /> },
+];

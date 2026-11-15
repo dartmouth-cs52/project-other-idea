@@ -118,8 +118,8 @@ export function LinkTabs({ tabs, active }: { tabs: { to: string; label: string; 
           role="tab"
           aria-selected={active === t.to}
           className={cn(
-            "-mb-px flex items-center gap-1.5 border-b-2 border-transparent px-0.5 pb-2 text-[13px] font-medium whitespace-nowrap text-ink-3 hover:text-ink",
-            active === t.to && "border-brand text-ink",
+            "-mb-px flex items-center gap-1.5 border-b-2 px-0.5 pb-2 text-[13px] font-medium whitespace-nowrap",
+            active === t.to ? "border-brand text-ink" : "border-transparent text-ink-3 hover:text-ink",
           )}
         >
           {t.label}

@@ -82,12 +82,13 @@ export type Feature =
   | "apiAccess"
   | "budgets"
   | "billPay"
-  | "perDiem";
+  | "perDiem"
+  | "customRoles";
 
 const PLAN_FEATURES: Record<Plan, Feature[]> = {
   starter: ["billPay"],
   growth: ["billPay", "erpSync", "budgets", "advancedReports", "perDiem", "apiAccess", "customApprovalChains"],
-  enterprise: ["billPay", "erpSync", "budgets", "advancedReports", "perDiem", "apiAccess", "customApprovalChains", "multiEntity", "procurement", "sso", "auditLog"],
+  enterprise: ["billPay", "erpSync", "budgets", "advancedReports", "perDiem", "apiAccess", "customApprovalChains", "multiEntity", "procurement", "sso", "auditLog", "customRoles"],
 };
 
 export const PLAN_LABELS: Record<Plan, string> = { starter: "Starter", growth: "Growth", enterprise: "Enterprise" };

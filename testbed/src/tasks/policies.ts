@@ -1,3 +1,123 @@
-import type { Task } from "./types";
+import { any, button, DONE, link, type Task } from "./types";
 
-export const tasks: Task[] = [];
+export const tasks: Task[] = [
+  {
+    id: "policies-meal-approver",
+    start: "/approvals",
+    goal: "who approves meals over $150 and how do I change it to finance",
+    steps: [
+      { expect: [link("Policies")], act: { click: 'role=link[name="Policies"]' } },
+      { expect: [link("Meals over $150 need a manager")], act: { click: "text=Meals over $150 need a manager" } },
+      { expect: [any("Approver role")], act: { click: 'role=combobox[name="Approver role"]' } },
+      { expect: [any("Finance team")], act: { click: 'role=option[name="Finance team"]' } },
+      { expect: [button("Save changes")], act: { click: 'role=button[name="Save changes"]' } },
+      DONE,
+    ],
+    covers: ["nav-sidebar", "form-custom-select", "form-save-bar", "layout-fixed-bar"],
+  },
+  {
+    id: "policies-turn-on-weekend",
+    start: "/policies",
+    goal: "turn on the weekend spend rule",
+    steps: [{ expect: [any("Flag weekend spend enabled")], act: { click: 'role=switch[name="Flag weekend spend enabled"]' } }, DONE],
+    covers: ["form-switch", "async-optimistic", "overlay-toast-undo"],
+  },
+  {
+    id: "policies-meal-receipt-threshold",
+    start: "/policies",
+    goal: "require receipts for every meal over $10",
+    steps: [
+      { expect: [button("Edit Receipt threshold for Meals")], act: { click: 'role=button[name="Edit Receipt threshold for Meals"]' } },
+      { expect: [any("Receipt threshold for Meals")], act: { fill: ['role=textbox[name="Receipt threshold for Meals"]', "10"] } },
+      { expect: [], act: { click: "text=Receipt requirements" } },
+      DONE,
+    ],
+    covers: ["form-inline-edit", "overlay-toast-undo"],
+  },
+  {
+    id: "policies-new-block-hotels",
+    start: "/policies",
+    goal: "make a rule that blocks hotel charges over $400",
+    steps: [
+      { expect: [link("New rule")], act: { click: 'role=link[name="New rule"]' } },
+      { expect: [any("Rule name")], act: { fill: ['role=textbox[name="Rule name"]', "Block hotels over $400"] } },
+      { expect: [any("Condition 1 amount")], act: { fill: ['role=spinbutton[name="Condition 1 amount"]', "400"] } },
+      { expect: [button("Add condition")], act: { click: 'role=button[name="Add condition"]' } },
+      { expect: [any("Condition 2 category")], act: { click: 'role=combobox[name="Condition 2 category"]' } },
+      { expect: [any("Lodging")], act: { click: "role=option[name=/Lodging/]" } },
+      // The Approver section disappears once the action isn't "Require approval".
+      { expect: [any("Block the charge")], act: { click: 'role=radio[name^="Block the charge"]' } },
+      { expect: [button("Save changes")], act: { click: 'role=button[name="Save changes"]' } },
+      DONE,
+    ],
+    covers: ["form-radio-cards", "form-combobox", "form-conditional", "form-save-bar", "form-custom-select"],
+  },
+  {
+    id: "policies-second-approver-starter",
+    start: "/policies",
+    lab: { plan: "starter" },
+    goal: "add a second approval step to the bills over $10,000 rule",
+    steps: [
+      { expect: [link("Bills over $10,000 go to the controller")], act: { click: "text=Bills over $10,000 go to the controller" } },
+      { expect: [button("Upgrade")] },
+      DONE,
+    ],
+    covers: ["access-plan", "nav-deep-route"],
+  },
+  {
+    id: "policies-per-diem-starter",
+    start: "/",
+    lab: { plan: "starter" },
+    goal: "where do I change per diem rates for New York",
+    steps: [{ expect: [link("Policies")], act: { click: 'role=link[name="Policies"]' } }, { expect: [button("Upgrade to Growth")] }, DONE],
+    covers: ["access-plan", "nav-sidebar"],
+  },
+  {
+    id: "policies-per-diem-edit",
+    start: "/policies",
+    goal: "raise the New York meals per diem to $85",
+    steps: [
+      { expect: [button("Edit Meals rate for New York, NY")], act: { click: 'role=button[name="Edit Meals rate for New York, NY"]' } },
+      { expect: [any("Meals rate for New York, NY")], act: { fill: ['role=textbox[name="Meals rate for New York, NY"]', "85"] } },
+      { expect: [], act: { click: "text=Per diem rates" } },
+      DONE,
+    ],
+    covers: ["form-inline-edit"],
+  },
+  {
+    id: "policies-publish-handbook",
+    start: "/policies",
+    goal: "update the expense handbook and publish it",
+    steps: [
+      { expect: [link("Handbook")], act: { click: 'role=tab[name="Handbook"]' } },
+      { expect: [any("Expense policy")], act: { fill: ['role=textbox[name="Expense policy"]', "Meals are capped at $175 per charge."] } },
+      { expect: [button("Publish")], act: { click: 'role=button[name="Publish"]' } },
+      { expect: [any("What changed?")], act: { fill: ['role=textbox[name^="What changed?"]', "Raised the meal cap"] } },
+      { expect: [button("Publish version 4")], act: { click: 'role=button[name="Publish version 4"]' } },
+      DONE,
+    ],
+    covers: ["nav-tabs", "form-rich-text", "overlay-modal", "form-unsaved-guard"],
+  },
+  {
+    id: "policies-delete-gift-rule",
+    start: "/policies",
+    goal: "how would I delete the gift card rule",
+    steps: [
+      { expect: [link("Block gift cards")], act: { click: "text=Block gift cards" } },
+      { expect: [button("Delete rule")], act: { click: 'role=button[name="Delete rule"]' } },
+      // A guide points at the confirm button and stops. It never presses it.
+      { expect: [button("Delete rule")] },
+      DONE,
+    ],
+    covers: ["danger-delete", "overlay-modal"],
+  },
+  {
+    id: "policies-employee-edit-handbook",
+    start: "/policies/handbook",
+    lab: { role: "employee" },
+    goal: "fix a typo in the expense policy",
+    steps: [{ expect: [] }],
+    covers: ["access-role", "cant-do"],
+    note: "Employees see the handbook read-only. Only Admin or Finance can edit and publish it.",
+  },
+];

@@ -1,5 +1,12 @@
 import type { RouteObject } from "react-router";
-import { PageHeader } from "@/ui/display";
+import { ChartPage } from "./ChartPage";
+import { ClosePage } from "./ClosePage";
+import { MappingsPage } from "./MappingsPage";
+import { SyncPage } from "./SyncPage";
 
-// Placeholder. This area is being built.
-export const routes: RouteObject[] = [{ path: "accounting/*", element: <PageHeader title="accounting" description="Coming soon." /> }];
+export const routes: RouteObject[] = [
+  { path: "accounting", element: <ClosePage /> },
+  { path: "accounting/chart", element: <ChartPage /> },
+  { path: "accounting/sync", element: <SyncPage /> },
+  { path: "accounting/mappings", element: <MappingsPage /> },
+];

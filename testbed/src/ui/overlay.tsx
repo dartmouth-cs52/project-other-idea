@@ -30,7 +30,7 @@ export function Modal(props: ModalProps) {
   return native ? <NativeModal {...props} /> : <RadixModal {...props} />;
 }
 
-function ModalBody({ title, description, footer, children, onClose, TitleTag, DescTag }: ModalProps & { onClose: () => void; TitleTag: React.ElementType; DescTag: React.ElementType }) {
+function ModalBody({ title, description, footer, children, onClose, TitleTag, DescTag, dismissable }: ModalProps & { onClose: () => void; TitleTag: React.ElementType; DescTag: React.ElementType }) {
   return (
     <>
       <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
@@ -38,9 +38,11 @@ function ModalBody({ title, description, footer, children, onClose, TitleTag, De
           <TitleTag className="text-[15px] font-semibold text-ink">{title}</TitleTag>
           {description ? <DescTag className="text-[13px] text-ink-2">{description}</DescTag> : null}
         </div>
-        <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose}>
-          <X />
-        </Button>
+        {dismissable === false ? null : (
+          <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose}>
+            <X />
+          </Button>
+        )}
       </div>
       <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
       {footer ? <div className="flex items-center justify-end gap-2 border-t border-line bg-sunken/60 px-5 py-3">{footer}</div> : null}
@@ -206,7 +208,7 @@ const menuItem =
   "relative flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] text-ink outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-sunken [&_svg]:size-4 [&_svg]:text-ink-3";
 
 export interface MenuEntry {
-  label: ReactNode;
+  label?: ReactNode;
   icon?: ReactNode;
   onSelect?: () => void;
   shortcut?: string;
@@ -252,7 +254,7 @@ export function Menu({ trigger, items, align = "end", label }: { trigger: ReactN
   const container = usePortalContainer();
   return (
     <RMenu.Root modal={false}>
-      <RMenu.Trigger asChild aria-label={label}>
+      <RMenu.Trigger asChild {...(label ? { "aria-label": label } : {})}>
         {trigger}
       </RMenu.Trigger>
       <RMenu.Portal container={container}>

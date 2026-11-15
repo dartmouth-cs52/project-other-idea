@@ -1,3 +1,185 @@
-import type { Task } from "./types";
+import { button, DONE, link, type Task } from "./types";
 
-export const tasks: Task[] = [];
+// Reimbursements. Avery Stone's own claims include a rejected mileage trip
+// "Eugene, OR to Hood River, OR" (rmb_000fm) and an approved one "Seattle, WA
+// to Corvallis, OR". On the Team tab, Urban Mayert's "Summit Conferences"
+// claim (rmb_000hn) is waiting for her approval.
+
+export const tasks: Task[] = [
+  {
+    id: "rmb-mileage-client-visit",
+    start: "/reimbursements",
+    goal: "submit mileage for a client visit, Portland, OR to Salem, OR and back",
+    covers: ["form-switch", "form-conditional", "form-validation", "layout-fixed-bar"],
+    steps: [
+      { expect: [link("Log mileage"), link("New reimbursement")], act: { click: 'role=link[name="Log mileage"]' } },
+      { expect: [{ label: "From", role: "textbox" }], act: { fill: ['role=textbox[name="From"]', "Portland, OR"] } },
+      { expect: [{ label: "To", role: "textbox" }], act: { fill: ['role=textbox[name="To"s]', "Salem, OR"] } },
+      { expect: [{ label: "Round trip", role: "switch" }], act: { click: 'role=switch[name="Round trip"]' } },
+      { expect: [{ label: "Business purpose", role: "textbox" }], act: { fill: ['role=textbox[name="Business purpose"]', "Client visit, Harborview Hotels"] } },
+      { expect: [button("Submit for approval")], act: { click: 'role=button[name="Submit for approval"]' } },
+      DONE,
+    ],
+  },
+  {
+    id: "rmb-mileage-wrong-page",
+    start: "/cards",
+    goal: "how do I get paid back for driving my own car to a customer",
+    covers: ["nav-sidebar", "form-radio-cards"],
+    steps: [
+      { expect: [link("Reimbursements")], act: { click: 'role=link[name="Reimbursements"]' } },
+      { expect: [link("Log mileage"), link("New reimbursement")], act: { click: 'role=link[name="Log mileage"]' } },
+      DONE,
+    ],
+  },
+  {
+    id: "rmb-mileage-manual-miles",
+    start: "/reimbursements/new?kind=mileage",
+    goal: "the calculated miles are wrong, I took a detour. How do I put in 58 miles?",
+    covers: ["form-conditional"],
+    steps: [
+      { expect: [{ label: "The route was different. Enter miles myself", role: "checkbox" }], act: { click: 'role=checkbox[name="The route was different. Enter miles myself"]' } },
+      { expect: [{ label: "Miles one way", role: "textbox" }], act: { fill: ['role=textbox[name="Miles one way"]', "58"] } },
+      DONE,
+    ],
+  },
+  {
+    id: "rmb-team-lunch",
+    start: "/reimbursements",
+    goal: "I paid $64 for a team lunch at Basil Street Bistro with my own card",
+    covers: ["form-combobox", "form-validation", "form-date"],
+    steps: [
+      { expect: [link("New reimbursement")], act: { click: 'role=link[name="New reimbursement"]' } },
+      { expect: [{ label: "Merchant", role: "textbox" }], act: { fill: ['role=textbox[name="Merchant"]', "Basil Street Bistro"] } },
+      { expect: [{ label: "Amount", role: "textbox" }], act: { fill: ['role=textbox[name="Amount"]', "64"] } },
+      { expect: [{ label: "Category", role: "combobox" }], act: { click: 'role=combobox[name="Category"]' } },
+      { expect: [{ label: "Meals", role: "option" }], act: { click: 'role=option[name="Meals"]' } },
+      { expect: [button("Submit for approval")], act: { click: 'role=button[name="Submit for approval"]' } },
+      DONE,
+    ],
+  },
+  {
+    id: "rmb-split-hotel",
+    start: "/reimbursements/new",
+    goal: "split my $420 Harborview Hotels bill into $360 lodging and $60 meals",
+    covers: ["form-switch", "form-custom-select", "form-conditional", "ambiguity-duplicate-label"],
+    steps: [
+      { expect: [{ label: "Merchant", role: "textbox" }], act: { fill: ['role=textbox[name="Merchant"]', "Harborview Hotels"] } },
+      { expect: [{ label: "Amount", role: "textbox" }], act: { fill: ['role=textbox[name="Amount"] >> nth=0', "420"] } },
+      { expect: [{ label: "Split across categories", role: "switch" }], act: { click: 'role=switch[name="Split across categories"]' } },
+      { expect: [{ label: "Line 1 category", role: "combobox" }], act: { click: 'role=combobox[name="Line 1 category"]' } },
+      { expect: [{ label: "Lodging", role: "option" }], act: { click: 'role=option[name="Lodging"]' } },
+      { expect: [{ label: "Amount", role: "textbox" }], act: { fill: ['role=textbox[name="Amount"] >> nth=1', "360"] } },
+      { expect: [{ label: "Line 2 category", role: "combobox" }], act: { click: 'role=combobox[name="Line 2 category"]' } },
+      { expect: [{ label: "Meals", role: "option" }], act: { click: 'role=option[name="Meals"]' } },
+      { expect: [{ label: "Amount", role: "textbox" }], act: { fill: ['role=textbox[name="Amount"] >> nth=2', "60"] } },
+      { expect: [button("Save as draft")], act: { click: 'role=button[name="Save as draft"]' } },
+      DONE,
+    ],
+  },
+  {
+    id: "rmb-per-diem",
+    start: "/reimbursements/new",
+    goal: "claim per diem for my trip to Chicago",
+    covers: ["form-radio-cards", "form-custom-select", "form-date-range"],
+    steps: [
+      { expect: [{ label: "Per diem", role: "radio" }], act: { click: 'role=radio[name=/Per diem/]' } },
+      { expect: [{ label: "Destination", role: "combobox" }], act: { click: 'role=combobox[name="Destination"]' } },
+      { expect: [{ label: "Chicago, IL", role: "option" }], act: { click: 'role=option[name=/^Chicago, IL/]' } },
+      { expect: [button("Any date")], act: { click: 'role=button[name="Any date"]' } },
+      DONE,
+    ],
+  },
+  {
+    id: "rmb-per-diem-starter-cant",
+    start: "/reimbursements/new",
+    lab: { plan: "starter" },
+    goal: "claim per diem for my trip to Chicago",
+    covers: ["cant-do", "access-plan"],
+    note: "Per diem is on the Growth plan and this workspace is on Starter. Picking Per diem shows an upgrade prompt. Haptic should say per diem isn't available on this plan and suggest an out-of-pocket claim with receipts, not press Upgrade.",
+    steps: [{ expect: [{ label: "Per diem", role: "radio" }], act: { click: 'role=radio[name=/Per diem/]' } }, DONE],
+  },
+  {
+    id: "rmb-fix-rejected",
+    start: "/reimbursements",
+    goal: "my Hood River mileage got rejected, how do I fix it and send it again",
+    covers: ["nav-deep-route", "form-validation"],
+    steps: [
+      { expect: [link("Eugene, OR to Hood River, OR")], act: { click: 'role=link[name="Eugene, OR to Hood River, OR"]' } },
+      { expect: [link("Edit and resubmit")], act: { click: 'role=link[name="Edit and resubmit"]' } },
+      { expect: [{ label: "Business purpose", role: "textbox" }], act: { fill: ['role=textbox[name="Business purpose"]', "Customer workshop at Columbia Gorge Labs"] } },
+      { expect: [button("Submit for approval")], act: { click: 'role=button[name="Submit for approval"]' } },
+      DONE,
+    ],
+  },
+  {
+    id: "rmb-filter-rejected",
+    start: "/reimbursements",
+    goal: "show only my rejected reimbursements",
+    covers: ["form-native-select", "data-filter"],
+    steps: [{ expect: [{ label: "Status", role: "combobox" }], act: { select: ['role=combobox[name="Status"]', "Rejected"] } }, DONE],
+  },
+  {
+    id: "rmb-expand-row",
+    start: "/reimbursements",
+    goal: "how many miles did I claim for the Seattle to Corvallis drive",
+    covers: ["data-expand"],
+    steps: [
+      { expect: [button("Expand row"), link("Seattle, WA to Corvallis, OR")], act: { click: '[role=row]:has-text("Seattle, WA to Corvallis, OR") >> role=button[name="Expand row"]' } },
+      DONE,
+    ],
+  },
+  {
+    id: "rmb-approve-team",
+    start: "/reimbursements",
+    lab: { role: "manager" },
+    goal: "approve Urban Mayert's conference reimbursement",
+    covers: ["nav-tabs", "access-role", "overlay-toast-undo"],
+    steps: [
+      { expect: [{ label: "Team", role: "tab" }], act: { click: 'role=tab[name=/Team/]' } },
+      { expect: [link("Summit Conferences")], act: { click: 'role=link[name="Summit Conferences"]' } },
+      { expect: [button("Approve")], act: { click: 'role=button[name="Approve"]' } },
+      DONE,
+    ],
+  },
+  {
+    id: "rmb-reject-with-reason",
+    start: "/reimbursements/rmb_000hn",
+    goal: "send this back, the receipt is for the wrong amount",
+    covers: ["overlay-modal", "form-validation"],
+    steps: [
+      { expect: [button("Reject")], act: { click: 'role=button[name="Reject"]' } },
+      { expect: [{ label: "Reason", role: "textbox" }], act: { fill: ['role=textbox[name="Reason"]', "The receipt total doesn't match the amount claimed."] } },
+      { expect: [button("Reject")], act: { click: 'role=dialog >> role=button[name="Reject"]' } },
+      DONE,
+    ],
+  },
+  {
+    id: "rmb-comment",
+    start: "/reimbursements/rmb_000hn",
+    goal: "ask Urban which conference this was for",
+    covers: ["nav-deep-route"],
+    steps: [
+      { expect: [{ label: "Add a comment", role: "textbox" }], act: { fill: ['role=textbox[name="Add a comment"]', "Which conference was this for?"] } },
+      { expect: [button("Post comment")], act: { click: 'role=button[name="Post comment"]' } },
+      DONE,
+    ],
+  },
+  {
+    id: "rmb-team-employee-cant",
+    start: "/reimbursements",
+    lab: { role: "employee" },
+    goal: "where can I see my team's reimbursements",
+    covers: ["cant-do", "access-role"],
+    note: "Employees can't see other people's reimbursements. The Team tab opens to a locked empty state that says only managers can. Haptic should say that rather than point at the tab as if it would help.",
+    steps: [DONE],
+  },
+  {
+    id: "rmb-withdraw-approved-cant",
+    start: "/reimbursements",
+    goal: "I entered the wrong amount on my Seattle to Corvallis mileage. Can I take it back?",
+    covers: ["cant-do"],
+    note: "That claim is already approved, so there's no Withdraw or Edit. Only submitted claims can be withdrawn. The answer is to leave a comment on it or ask Finance.",
+    steps: [{ expect: [link("Seattle, WA to Corvallis, OR")], act: { click: 'role=link[name="Seattle, WA to Corvallis, OR"]' } }, DONE],
+  },
+];

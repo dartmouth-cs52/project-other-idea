@@ -126,8 +126,8 @@ export function UpgradePrompt({ title, needs, compact }: { title: string; needs:
       <span className="grid size-10 place-items-center rounded-full bg-brand-soft text-brand">
         <Sparkles className="size-5" />
       </span>
-      <p className="text-[15px] font-semibold">{title} is on the {PLAN_LABELS[needs]} plan</p>
-      <p className="max-w-sm text-[13px] text-ink-3">Your workspace is on a plan that doesn't include this. Upgrade to turn it on for everyone.</p>
+      <p className="text-[15px] font-semibold">{title}</p>
+      <p className="max-w-sm text-[13px] text-ink-3">This comes with the {PLAN_LABELS[needs]} plan, and your workspace isn't on it yet. Upgrade to turn it on for everyone.</p>
       <Button variant="primary" onClick={() => setLab({ plan: needs })}>
         Upgrade to {PLAN_LABELS[needs]}
       </Button>
