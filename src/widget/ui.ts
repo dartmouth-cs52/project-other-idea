@@ -27,10 +27,10 @@ button { font: inherit; cursor: pointer; }
 .panel { width: min(320px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 14px;
   padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.16); }
 [hidden] { display: none !important; }
-.panel form { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 10px; background: #f5f5f4; }
-.panel form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
-.panel input { width: 100%; height: 40px; font: inherit; color: inherit; padding: 4px 12px 0; border: 0; background: transparent; outline: none; }
-.panel input::placeholder { color: #78716c; }
+.ask { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 10px; background: #f5f5f4; }
+.ask:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+.ask input { width: 100%; height: 40px; font: inherit; color: inherit; padding: 4px 12px 0; border: 0; background: transparent; outline: none; }
+.panel ::placeholder { color: #78716c; }
 .panel .send { display: inline-flex; align-items: center; justify-content: center; align-self: flex-end; width: 32px; height: 32px; margin: 6px 10px 8px; border: 0;
   border-radius: 999px; background: #1c1917; color: #fafaf9; }
 .panel .send svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -63,6 +63,17 @@ button { font: inherit; cursor: pointer; }
 .helped button { display: inline-flex; align-items: center; justify-content: center; height: 32px; border: 0; border-radius: 999px; padding: 0 14px;
   background: #e7e5e4; color: #1c1917; font-weight: 500; }
 .helped button:hover { background: #d6d3d1; }
+.handoff { display: flex; flex-direction: column; gap: 8px; padding: 0 2px 8px 12px; }
+.handoff .row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 32px; }
+.handoff .row span { margin-right: auto; color: #78716c; }
+.handoff button { display: inline-flex; align-items: center; justify-content: center; height: 32px; border: 0; border-radius: 999px; padding: 0 14px;
+  background: #e7e5e4; color: #1c1917; font-weight: 500; }
+.handoff button:hover { background: #d6d3d1; }
+.handoff button.go { background: #1c1917; color: #fafaf9; }
+.handoff button:disabled { opacity: .5; cursor: default; }
+.person { display: flex; flex-direction: column; gap: 8px; margin-left: -10px; }
+.person input, .person textarea { width: 100%; font: inherit; color: inherit; padding: 8px 12px; border: 1px solid #e7e5e4; border-radius: 10px; background: #fff; outline: none; resize: none; }
+.person input:focus, .person textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 .note { margin: 0; padding: 8px 12px 4px; font-size: 12px; line-height: 16px; color: #78716c; }
 .note a { color: inherit; text-decoration: none; }
 .note a:hover, .note a:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
@@ -94,6 +105,7 @@ export class Ui {
   private readonly captionText: HTMLElement;
   private readonly helped: HTMLElement;
   private readonly thread: HTMLElement;
+  private readonly handoff: HTMLElement;
   private onHelped?: (helped: boolean) => void;
   private target?: Element;
   private frame = 0;
@@ -113,7 +125,15 @@ export class Ui {
         <div class="panel" hidden>
           <div class="thread" hidden><p class="asked"></p><div class="reply"><p></p><ul class="sources" hidden></ul></div></div>
           <div class="helped" hidden></div>
-          <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
+          <div class="handoff" hidden>
+            <div class="row offer"><span></span><button type="button" class="open"></button></div>
+            <form class="person" hidden>
+              <input type="email" required maxlength="200" placeholder="Your email" aria-label="Your email">
+              <textarea rows="2" maxlength="1000" placeholder="Anything to add" aria-label="Anything to add"></textarea>
+              <div class="row"><span></span><button type="button" class="cancel">Cancel</button><button type="submit" class="go">Send</button></div>
+            </form>
+          </div>
+          <form class="ask"><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
           <div class="status" hidden><span></span><button class="stop" type="button">Stop</button></div>
           <p class="note">Haptic <a href="${ABOUT_URL}" target="_blank" rel="noopener noreferrer">is an AI guide and can be wrong.</a></p>
         </div>
@@ -121,8 +141,9 @@ export class Ui {
       </div>`;
     const pick = <T extends Element>(selector: string) => root.querySelector(selector) as T;
     this.panel = pick(".panel");
-    this.form = pick("form");
-    this.input = pick("input");
+    this.form = pick(".ask");
+    this.input = pick(".ask input");
+    this.handoff = pick(".handoff");
     this.status = pick(".status");
     this.statusText = pick(".status span");
     this.ring = pick(".ring");
@@ -200,6 +221,7 @@ export class Ui {
     if (text) {
       this.panel.hidden = false;
       this.hideHelped();
+      this.hideHandoff();
     } else this.input.value = "";
   }
 
@@ -228,6 +250,55 @@ export class Ui {
 
   clearAnswer() {
     this.thread.hidden = true;
+    this.hideHandoff();
+  }
+
+  /**
+   * Offers the way to a person, as one button under the reply. `open` is
+   * called when it is pressed. With `form`, pressing it shows a short form
+   * instead, and `send` is called with what the visitor typed: it resolves to
+   * true when the company got it.
+   */
+  offerHandoff(label: string, open: () => void, send?: (email: string, note: string) => Promise<boolean>) {
+    const pick = <T extends HTMLElement>(selector: string) => this.handoff.querySelector(selector) as T;
+    const [offer, form] = [pick(".offer"), pick<HTMLFormElement>(".person")];
+    const [button, said, email, note, go, formSaid] = [pick<HTMLButtonElement>(".open"), pick(".offer span"), pick<HTMLInputElement>(".person input"), pick<HTMLTextAreaElement>("textarea"), pick<HTMLButtonElement>(".go"), pick(".person .row span")];
+    const show = (which: "offer" | "form") => {
+      offer.hidden = which !== "offer";
+      form.hidden = which !== "form";
+    };
+    button.textContent = label;
+    button.hidden = false;
+    said.textContent = "";
+    formSaid.textContent = "";
+    show("offer");
+    button.onclick = () => {
+      if (!send) return open();
+      show("form");
+      email.focus();
+    };
+    pick<HTMLButtonElement>(".cancel").onclick = () => show("offer");
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      if (!send || !email.reportValidity()) return;
+      go.disabled = true;
+      formSaid.textContent = "Sending…";
+      const sent = await send(email.value.trim(), note.value.trim());
+      go.disabled = false;
+      if (!sent) return void (formSaid.textContent = "That didn't send. Try again.");
+      // It is with a person now, and the widget says so: from here on they are not talking to the AI about this.
+      email.value = note.value = "";
+      show("offer");
+      button.hidden = true;
+      said.textContent = "Sent to the team. A person will reply by email.";
+    };
+    this.handoff.hidden = false;
+    this.panel.hidden = false;
+    if (!this.target && !this.caption.hidden) this.placeAboveDock();
+  }
+
+  hideHandoff() {
+    this.handoff.hidden = true;
   }
 
   /** Move the pointer to an element and show the caption beside it. With no text yet, the pointer goes alone. */

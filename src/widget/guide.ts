@@ -5,10 +5,13 @@ import {
   normalizePath,
   type GuideOutcome,
   type GuideReport,
+  type HandoffRequest,
   type HistoryTurn,
   type Mode,
+  type PublicHandoff,
   type SnapElement,
   type Snapshot,
+  type TranscriptTurn,
   type TurnReply,
   type TurnRequest,
 } from "../shared/types.ts";
@@ -91,6 +94,18 @@ export interface Watch {
 /** Says how a guide went. Sent once per ending, and again when the visitor answers "Did this help?". */
 export type Reporter = (guide: string, report: Omit<GuideReport, "site">) => void;
 
+/** The way to a person, when the site has one: what the widget was told about it, and how its form is posted. */
+export interface HandoffWay {
+  config: PublicHandoff;
+  /** Posts the widget's form. Resolves to true when the company got it. */
+  send(form: Omit<HandoffRequest, "site">): Promise<boolean>;
+}
+
+/** Questions in a row that ended without the visitor saying it helped, after which a person is offered. */
+const OFFER_PERSON_AFTER = 3;
+/** How much of the conversation goes to a person with a handoff. */
+const MAX_TRANSCRIPT = 16;
+
 /** Endings worth asking "Did this help?" about. A stop or a failure already says no. */
 const ASK_IF_HELPED: GuideOutcome[] = ["finished", "shown", "nothing_to_point_at", "loop", "step_limit", "answered"];
 
@@ -111,6 +126,10 @@ export class Guide {
    * clears it.
    */
   private thread: HistoryTurn[] = [];
+  /** Everything said since the visitor last pressed Stop, for handing to a person. */
+  private transcript: TranscriptTurn[] = [];
+  /** Questions in a row that ended without a "Yes" to "Did this help?". */
+  private misses = 0;
   private step = 0;
   private previous?: Snapshot;
   /** The element the last step pointed at, and whether the visitor used it. */
@@ -125,6 +144,7 @@ export class Guide {
     private readonly ui: Ui,
     private readonly sendTurn: (request: Omit<TurnRequest, "site">, watch?: Watch) => Promise<TurnReply>,
     private readonly report: Reporter = () => {},
+    private readonly handoff?: HandoffWay,
   ) {}
 
   /**
@@ -150,6 +170,8 @@ export class Guide {
     this.end(this.unconfirmed ?? "stopped");
     this.reset();
     this.thread = [];
+    this.transcript = [];
+    this.misses = 0;
     this.ui.clear();
     this.ui.clearAnswer();
     this.ui.setBusy("");
@@ -283,7 +305,11 @@ export class Guide {
       return this.turn(run, `${event} ${nudge}`, true);
     }
 
-    this.history.push({ role: "user", text: this.step === 0 ? this.asked : (event ?? "The page changed.") }, { role: "assistant", text: reply.say });
+    // The model is sent the question with addresses and numbers masked. The transcript is the visitor's own
+    // words, kept in the browser, and only goes anywhere if they ask for a person.
+    const did = this.step === 0 ? this.goal : (event ?? "The page changed.");
+    this.history.push({ role: "user", text: this.step === 0 ? this.asked : did }, { role: "assistant", text: reply.say });
+    this.transcript = [...this.transcript, { role: "user" as const, text: did }, { role: "assistant" as const, text: reply.say, ...(reply.mode ? { kind: reply.mode } : {}) }].slice(-MAX_TRANSCRIPT);
     this.step++;
     this.previous = page.snapshot;
     this.last = listed ? { key: elementKey(listed), used: false } : undefined;
@@ -446,7 +472,45 @@ export class Guide {
     if (!id) return;
     this.id = "";
     this.report(id, { outcome });
-    if (ASK_IF_HELPED.includes(outcome)) this.ui.askIfHelped((helped) => this.report(id, { helped }));
+    if (outcome !== "stopped") this.misses++;
+    if (ASK_IF_HELPED.includes(outcome)) {
+      this.ui.askIfHelped((helped) => {
+        this.report(id, { helped });
+        if (helped) this.misses = 0;
+        // "No" is the plainest sign that a person is needed.
+        else this.offerPerson(id);
+      });
+    }
+    // A person is offered when Haptic has just said it can't help, and when a few questions in a row have got nowhere.
+    // Not after every reply: most questions don't need one. And not for a question that had nothing to do with the site.
+    if (outcome === "not_covered" || outcome === "sensitive" || (this.misses >= OFFER_PERSON_AFTER && outcome !== "off_topic")) this.offerPerson(id);
+  }
+
+  /**
+   * Shows the button that leads to a person, if the site has such a way.
+   *
+   * The page hears about it first, as a "haptic:handoff" event on the
+   * document, with the conversation and the page. A site that cancels the
+   * event (preventDefault) has taken over, say by opening its own chat with
+   * the conversation filled in, and the widget does nothing more.
+   */
+  private offerPerson(guide: string) {
+    const way = this.handoff;
+    if (!way) return;
+    const { config } = way;
+    const transcript = this.transcript;
+    const path = normalizePath(location.pathname);
+    const took = () => this.report(guide, { handoff: true });
+    const open = () => {
+      const heard = new CustomEvent("haptic:handoff", { cancelable: true, detail: { question: this.goal, path, transcript } });
+      if (!document.dispatchEvent(heard)) return took();
+      if (config.url) window.open(config.url, "_blank", "noopener");
+      else if (config.email) location.href = mailTo(config.email, transcript, path);
+      took();
+    };
+    // The server records that the form was used when it passes it on, so the widget doesn't report it twice.
+    const send = config.form ? (email: string, note: string) => way.send({ guide, email, note, path, transcript }) : undefined;
+    this.ui.offerHandoff(config.label, open, send);
   }
 
   private save(event?: string) {
@@ -467,6 +531,18 @@ export class Guide {
       // Storage full or blocked. The guide just won't survive a page load.
     }
   }
+}
+
+/** A link that opens the visitor's own mail program, with the conversation written into the message. */
+function mailTo(address: string, transcript: TranscriptTurn[], path: string): string {
+  const lines = transcript.map((turn) => `${turn.role === "user" ? "Me" : "Haptic"}: ${turn.text}`);
+  // Mail programs give up on a very long link, so the oldest lines go first.
+  let body = "";
+  for (const line of lines.reverse()) {
+    if (body.length + line.length > 1500) break;
+    body = `${line}\n${body}`;
+  }
+  return `mailto:${address}?subject=${encodeURIComponent("A question Haptic couldn't answer")}&body=${encodeURIComponent(`\n\n---\nI was on ${location.origin}${path} and asked Haptic:\n${body}`)}`;
 }
 
 /** A random v4 UUID. crypto.randomUUID exists only on https pages, and some customers test on plain http. */
