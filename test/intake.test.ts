@@ -53,6 +53,14 @@ test("a page's outline has its links, buttons and field labels", () => {
   assert.equal(controls, 4);
 });
 
+test("a link that opens a menu is outlined as a button, and its address is still read", () => {
+  const html = `<a href="/help" aria-haspopup="true">Help</a><a href="/more" aria-expanded="false">More</a><a href="/docs" aria-haspopup="false">Docs</a>`;
+  const { page, found } = extractPage(html, "https://app.acme.com/");
+  assert.deepEqual(page.links, [{ label: "Docs", to: "/docs" }]);
+  assert.deepEqual(page.buttons, ["Help", "More"]);
+  assert.deepEqual(found, ["https://app.acme.com/help", "https://app.acme.com/more", "https://app.acme.com/docs"]);
+});
+
 const page = (path: string, extra: Partial<PageNode> = {}): PageNode => ({ path, title: path, headings: [], links: [{ label: "Home", to: "/" }], buttons: [], fields: [], ...extra });
 
 test("navigation shared by most pages is listed once in the site map", () => {

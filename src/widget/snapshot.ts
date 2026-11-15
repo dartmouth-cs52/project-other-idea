@@ -125,7 +125,7 @@ export function takeSnapshot(ignore: Element, question: string): PageSnapshot {
         if (options.length) added.options = options;
         const icon = iconOf(el);
         if (icon) added.icon = icon;
-        const state = stateOf(el);
+        const state = stateOf(el, role);
         if (state.length) added.state = state;
         const href = hrefOf(el);
         if (href) added.href = href;
@@ -580,9 +580,24 @@ function iconOf(el: Element): string | undefined {
   return undefined;
 }
 
-function stateOf(el: Element): string[] {
+/**
+ * What using a control opens, when the page says so: a menu, a list or a
+ * dialog. A field says it only because it suggests entries as it is typed in,
+ * and its role has already said that.
+ */
+function opens(el: Element, role: string): string {
+  const popup = (el.getAttribute("aria-haspopup") ?? "").toLowerCase();
+  if (!popup || popup === "false" || role === "combobox" || role === "textbox" || role === "searchbox" || role === "select") return "";
+  if (popup === "dialog") return "opens a dialog";
+  return popup === "listbox" || popup === "tree" || popup === "grid" ? "opens a list" : "opens a menu";
+}
+
+/** A state is at most 16 characters: the server cuts anything longer. */
+function stateOf(el: Element, role: string): string[] {
   const state: string[] = [];
   if ((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true") state.push("disabled");
+  const popup = opens(el, role);
+  if (popup) state.push(popup);
   const expanded = el.getAttribute("aria-expanded");
   if (expanded === "true") state.push("expanded");
   else if (expanded === "false") state.push("collapsed");
@@ -598,6 +613,9 @@ function stateOf(el: Element): string[] {
 
 function hrefOf(el: Element): string | undefined {
   if (!(el instanceof HTMLAnchorElement)) return undefined;
+  // A link that opens a menu or unfolds a section does that when clicked. The
+  // address it carries is for a browser without scripts, and would be taken for where a click leads.
+  if (el.hasAttribute("aria-expanded") || !["", "false"].includes((el.getAttribute("aria-haspopup") ?? "").toLowerCase())) return undefined;
   const raw = el.getAttribute("href");
   if (!raw || raw.startsWith("#") || raw.startsWith("javascript:")) return undefined;
   try {

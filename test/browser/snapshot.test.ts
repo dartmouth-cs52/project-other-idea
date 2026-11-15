@@ -49,3 +49,24 @@ test("a date is not masked, and a row is named by it", { skip }, async () => {
     'link "Funds Transfer Received" [row: 10-02-2026] → /t',
   ]);
 });
+
+// Menus -----------------------------------------------------------------------
+
+test("a link that opens a menu is listed as opening one, without the address it carries", { skip }, async () => {
+  const snapshot = await read(`<nav>
+    <a href="/help/shortcuts" aria-haspopup="true" aria-expanded="false">Help</a>
+    <a href="/dashboards" role="button" aria-haspopup="menu" aria-expanded="true">Dashboards</a>
+    <a href="/more" aria-expanded="false">More</a>
+    <input type="checkbox" role="button" aria-haspopup="true" aria-label="Tools">
+    <button aria-haspopup="dialog">Share</button>
+    <a href="/docs">Docs</a>
+  </nav>`);
+  assert.deepEqual(lines(snapshot), [
+    'link "Help" (opens a menu, collapsed) [nav]',
+    'button "Dashboards" (opens a menu, expanded) [nav]',
+    'link "More" (collapsed) [nav]',
+    'button "Tools" (opens a menu) [nav]',
+    'button "Share" (opens a dialog) [nav]',
+    'link "Docs" [nav] → /docs',
+  ]);
+});
