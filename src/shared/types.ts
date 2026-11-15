@@ -30,6 +30,16 @@ export interface SiteSource {
   notesFile?: string;
   /** File paths, directories or URLs. */
   docs: string[];
+  /** How the intake read the pages: in a browser, or as the HTML the server sends. Absent on sites built before there was a choice. */
+  reader?: "browser" | "text";
+  /** How many links away from the start the browser reader goes. */
+  maxDepth?: number;
+  /** Patterns for addresses or link labels the reader leaves alone. */
+  skip?: string[];
+  /** Path prefixes the reader stays inside. */
+  within?: string[];
+  /** More pages to start reading from. */
+  also?: string[];
 }
 
 export interface Appearance {
