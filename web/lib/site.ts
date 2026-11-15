@@ -26,7 +26,7 @@ export const faqs = [
   },
   {
     q: "How do I add Haptic to my product?",
-    a: "Today it is one script tag in your app. During onboarding we read your site and your help docs, so Haptic knows your product before it meets your users.",
+    a: "Sign in, paste your site's address, and add one script tag. While you set up, Haptic reads your public pages to learn what your product calls things. On pages behind your login it reads the screen live, as your user sees it.",
   },
   {
     q: "Does Haptic click things for my users?",
@@ -49,3 +49,8 @@ export const faqs = [
     a: "Not yet. Haptic is early, and we would rather say so than overpromise. If you have security or compliance needs, tell us and we will be clear about what we support today.",
   },
 ] as const;
+
+/** The widget's script, as it goes in every customer's tag. It must never change. */
+export const widgetScriptUrl = `${(process.env.NEXT_PUBLIC_WIDGET_URL ?? "https://widget.joinhaptic.com").replace(/\/$/, "")}/widget.js`;
+
+export const signInHref = "/sign-in/";
