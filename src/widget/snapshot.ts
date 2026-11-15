@@ -271,12 +271,13 @@ export function isField(el: Element): boolean {
 /**
  * A label's own words. When the label wraps its field, the field's options or
  * contents are part of the label's text, and those must not end up in its name.
+ * Neither must decoration hidden from screen readers, like the star on a required field.
  */
 function labelWords(label: Element): string {
   let text = "";
   for (const node of label.childNodes) {
     if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
-    else if (node instanceof Element && !node.matches("select, textarea, input, button, datalist, output")) text += labelWords(node);
+    else if (node instanceof Element && !node.matches('select, textarea, input, button, datalist, output, [aria-hidden="true"]')) text += labelWords(node);
   }
   return text;
 }
