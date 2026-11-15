@@ -54,8 +54,18 @@ button { font: inherit; cursor: pointer; }
 .helped button { display: inline-flex; align-items: center; justify-content: center; height: 32px; border: 0; border-radius: 999px; padding: 0 14px;
   background: #e7e5e4; color: #1c1917; font-weight: 500; }
 .helped button:hover { background: #d6d3d1; }
+.note { margin: 0; padding: 8px 12px 4px; font-size: 12px; line-height: 16px; color: #78716c; }
+.note a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.note a:hover { color: #1c1917; }
 @media (prefers-reduced-motion: reduce) { .cursor { transition: none; } }
 `;
+
+// A visitor is told they are dealing with an AI before they ask it anything,
+// which the EU's AI Act has required since August 2026. It is one line under
+// the ask box, there whenever the ask box is. It is not a setting: a customer
+// can change the launcher's word, and cannot take this away. The link goes to
+// the page that says what Haptic reads and keeps.
+const ABOUT_URL = "https://joinhaptic.com/privacy/";
 
 export interface UiHandlers {
   onAsk: (question: string) => void;
@@ -94,6 +104,7 @@ export class Ui {
           <div class="helped" hidden></div>
           <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
           <div class="status" hidden><span></span><button class="stop" type="button">Stop</button></div>
+          <p class="note">Haptic <a href="${ABOUT_URL}" target="_blank" rel="noopener noreferrer">is AI and can make mistakes.</a></p>
         </div>
         <button class="launcher" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${POINTER_PATH}"/></svg><span></span></button>
       </div>`;
