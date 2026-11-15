@@ -84,23 +84,29 @@ async function readSite(env: Env, id: string): Promise<SiteContext | undefined> 
 
 /** How long an answer about the off switch is trusted. The store itself can lag by up to a minute more. */
 const SWITCH_KEEP_MS = 30_000;
+/** How soon the store is asked again after it failed to answer. */
+const SWITCH_RETRY_MS = 5_000;
 const switches = new Map<string, { at: number; off: boolean }>();
 
 async function isOff(env: Env, id: string): Promise<boolean> {
   if (env.HAPTIC_OFF === "1") return true;
   const held = switches.get(id);
   if (held && Date.now() - held.at < SWITCH_KEEP_MS) return held.off;
-  let off = held?.off ?? false;
   try {
     const [all, one] = await Promise.all([env.SITES.get("off:all"), env.SITES.get(`off:${id}`)]);
-    off = all !== null || one !== null;
+    const off = all !== null || one !== null;
+    if (switches.size > 1000) switches.clear();
+    switches.set(id, { at: Date.now(), off });
+    return off;
   } catch (error) {
-    // The store did not answer. Whatever was last known stands, so a blip neither stops a site nor restarts one.
+    // The store did not answer. Whatever was last known stands, so a blip
+    // neither stops a site nor restarts one, and the store is asked again in a
+    // few seconds. When nothing was known the site runs, and nothing is
+    // remembered: the very next request asks again.
     console.error("Couldn't read the off switch:", error);
+    if (held) held.at = Date.now() - SWITCH_KEEP_MS + SWITCH_RETRY_MS;
+    return held?.off ?? false;
   }
-  if (switches.size > 1000) switches.clear();
-  switches.set(id, { at: Date.now(), off });
-  return off;
 }
 
 /**
