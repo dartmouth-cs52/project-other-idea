@@ -89,26 +89,36 @@ async function readSite(env: Env, id: string): Promise<SiteContext | undefined> 
 const SWITCH_KEEP_MS = 30_000;
 /** How soon the store is asked again after it failed to answer. */
 const SWITCH_RETRY_MS = 5_000;
+/** How long a step waits for the store's answer. Past it, the read is taken as failed. */
+const SWITCH_WAIT_MS = 300;
 const switches = new Map<string, { at: number; off: boolean }>();
 
 async function isOff(env: Env, id: string): Promise<boolean> {
   if (env.HAPTIC_OFF === "1") return true;
   const held = switches.get(id);
   if (held && Date.now() - held.at < SWITCH_KEEP_MS) return held.off;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const [all, one] = await Promise.all([env.SITES.get("off:all"), env.SITES.get(`off:${id}`)]);
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`no answer in ${SWITCH_WAIT_MS} ms`)), SWITCH_WAIT_MS);
+    });
+    const [all, one] = await Promise.race([Promise.all([env.SITES.get("off:all"), env.SITES.get(`off:${id}`)]), late]);
     const off = all !== null || one !== null;
     if (switches.size > 1000) switches.clear();
     switches.set(id, { at: Date.now(), off });
     return off;
   } catch (error) {
-    // The store did not answer. Whatever was last known stands, so a blip
-    // neither stops a site nor restarts one, and the store is asked again in a
-    // few seconds. When nothing was known the site runs, and nothing is
-    // remembered: the very next request asks again.
+    // The store did not answer, or not in time. Whatever was last known stands, so a blip neither
+    // stops a site nor restarts one. When nothing was known the site runs: a copy of the Worker that
+    // starts during an outage cannot know a site was switched off. Either way the store is asked
+    // again in a few seconds and not on every step, so a store that fails slowly does not slow them all.
     console.error("Couldn't read the off switch:", error);
-    if (held) held.at = Date.now() - SWITCH_KEEP_MS + SWITCH_RETRY_MS;
-    return held?.off ?? false;
+    const off = held?.off ?? false;
+    if (switches.size > 1000) switches.clear();
+    switches.set(id, { at: Date.now() - SWITCH_KEEP_MS + SWITCH_RETRY_MS, off });
+    return off;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
