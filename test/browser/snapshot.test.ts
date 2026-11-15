@@ -7,6 +7,8 @@ import { lines, startBrowser } from "./page.ts";
 // list for it. Run with: npm run test:browser
 
 const started = await startBrowser();
+// On CI the browser is installed on purpose, so a missing one is a failure there and not a reason to skip.
+if (process.env.CI && typeof started === "string") throw new Error(started);
 const browser = typeof started === "string" ? undefined : started;
 const skip = typeof started === "string" ? started : false;
 after(() => browser?.close());
