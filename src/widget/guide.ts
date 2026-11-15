@@ -1,4 +1,4 @@
-import { describeElement, normalizePath, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { cleanText, describeElement, normalizePath, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { currentPath, describeChange, elementKey, isField, NOTHING_CHANGED, takeSnapshot } from "./snapshot.ts";
 import type { Ui } from "./ui.ts";
 
@@ -42,6 +42,26 @@ function onceStaying(then: () => void) {
     clearInterval(check);
     then();
   }, 250);
+}
+
+/** Controls whose own caption says what they are. Anything else that can be clicked may be a region of the page. */
+const NAMED_BY_ITS_TEXT =
+  'a[href], button, summary, label, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"], [role="treeitem"]';
+
+/**
+ * A name for something the visitor clicked that was not the step they were
+ * shown. It goes to the server, so it follows the same rules as the rest of
+ * the page: emails and long numbers are masked, and nothing a person may have
+ * written is read. A field, an editor, anything inside an editor, and a
+ * region of the page all come back with no name.
+ */
+export function nameOfClicked(clicked: Element): string {
+  const given = clicked.getAttribute("aria-label");
+  if (given) return cleanText(given, 60);
+  if (!clicked.matches(NAMED_BY_ITS_TEXT)) return "";
+  if ((clicked as HTMLElement).isContentEditable) return "";
+  if (clicked.querySelector("input, textarea, select, [contenteditable]")) return "";
+  return cleanText(clicked.textContent || "", 60);
 }
 
 /** What the visitor did, in words for the model, and whether it was the step they were shown. */
@@ -391,7 +411,8 @@ function waitForAction(
     done({ event, onTarget });
   };
   const filled = () => finish(`The user filled in ${name}. You can't see what they entered.`, true);
-  const labelOfClicked = (el: Element) => (el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
+  // Named by the same rules as on main: masked, and never from a field or an editor.
+  const labelOfClicked = nameOfClicked;
   /** Whether a click that landed on `path` was a click on the target, counting the label that stands in for it. */
   const onTarget = (path: EventTarget[]) =>
     path.includes(target) || path.some((node) => node instanceof HTMLLabelElement && (node.control === target || node.contains(target)));
