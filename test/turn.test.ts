@@ -88,9 +88,26 @@ test("the model is told what a step with nothing to point at means (ui5 and graf
   assert.match(rules, /"continue" with target null means "do this, I'm watching": use it only when the step has nothing that can be pointed at, like pressing a key\./);
 });
 
+test("the model is told today's date, outside the part of the prompt that is kept (parabank: asked about October, it offered 2024)", () => {
+  const first = { ...request(""), step: 0, history: [] };
+  delete (first as { event?: string }).event;
+  const serverClock = new Date("2026-11-15T23:30:00Z");
+  // The visitor's own date when the widget sent one. Here it is already Monday where they are.
+  const theirs = buildUserMessage({ ...first, today: "2026-11-16" }, serverClock);
+  assert.match(theirs, /<\/page>\n\nToday is Monday 16 November 2026\.\n\nThe visitor asks: update my billing card$/);
+  // The server's date otherwise, and when what was sent is not a date.
+  assert.match(buildUserMessage(first, serverClock), /\n\nToday is Sunday 15 November 2026\.\n\n/);
+  assert.match(buildUserMessage({ ...first, today: "soon" }, serverClock), /\n\nToday is Sunday 15 November 2026\.\n\n/);
+  // Later questions carry it too, before what has happened so far.
+  assert.match(buildUserMessage({ ...request('The user clicked link "Billing".'), today: "2026-11-16" }, serverClock), /<\/page>\n\nToday is Monday 16 November 2026\.\n\n<progress>/);
+  // The rules and the site's knowledge are cached for every question on a site. A date there would throw the cache away each midnight.
+  assert.doesNotMatch(rules, /Today is|20\d\d/);
+});
+
 test("the question asked after the last step is worded as a closing one", () => {
-  const closing = buildUserMessage({ ...request('The user clicked link "Billing".'), closing: true });
-  const plain = buildUserMessage(request('The user clicked link "Billing".'));
+  const at = new Date("2026-11-15T12:00:00Z");
+  const closing = buildUserMessage({ ...request('The user clicked link "Billing".'), closing: true }, at);
+  const plain = buildUserMessage(request('The user clicked link "Billing".'), at);
   const NEXT = 'Give the next step, or confirm in one sentence with status "done" if the goal is complete.';
   assert.ok(plain.endsWith(NEXT));
   assert.ok(!closing.includes(NEXT));

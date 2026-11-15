@@ -89,8 +89,26 @@ const NEXT_STEP = `Give the next step, or confirm in one sentence with status "d
  */
 const CLOSING = `The visitor has done what you called the last step. If what they asked for now shows, reply "done" with target null and say in one sentence what shows. If the answer is a place on this page, you may point at it with "done". If the goal still needs a control, point at it with "continue". Never point at an optional extra.`;
 
-export function buildUserMessage(request: TurnRequest): string {
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** "2026-11-15" as "Sunday 15 November 2026". The month is in words, so day and month cannot be read the wrong way round. */
+function dateInWords(day: string): string | undefined {
+  const date = new Date(`${day}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(date.getTime())) return undefined;
+  return `${WEEKDAYS[date.getUTCDay()]} ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+}
+
+/**
+ * Everything that changes from one question to the next. The date is here and
+ * not in the system part, which is cached: there it would empty the cache
+ * every midnight. It is the visitor's own date when the widget sent one, and
+ * the server's otherwise.
+ */
+export function buildUserMessage(request: TurnRequest, now: Date = new Date()): string {
   const parts = [`<page>\n${renderSnapshot(request.snapshot)}\n</page>`];
+  // The model does not know what day it is. Asked about "October", it offered dates two years back.
+  parts.push(`Today is ${dateInWords(request.today ?? "") ?? dateInWords(now.toISOString().slice(0, 10))}.`);
   if (request.step === 0 && !request.event) {
     parts.push(`The visitor asks: ${request.goal}`);
   } else {
