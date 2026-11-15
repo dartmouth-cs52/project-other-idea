@@ -146,6 +146,7 @@ npm test                          # unit tests (node:test)
 npm run typecheck                 # tsc, strict
 npm run build                     # bundle the widget to dist/widget.js
 npm run eval -- --models mock     # the guide benchmark, no API key needed
+npm run test:browser              # the widget in Chromium, Firefox and WebKit
 ```
 
 `web/` and `testbed/` are separate packages with their own `npm run dev` and `npm run build`. CI typechecks, tests and builds the server, and lints and builds the website, on every push and pull request. Pushes to `main` deploy the website and the widget server.
@@ -155,6 +156,7 @@ npm run eval -- --models mock     # the guide benchmark, no API key needed
 | Doc | Covers |
 |---|---|
 | [Operations](docs/operations.md) | Deploying, the database, what is recorded about visitors, billing outcomes, the kill switch, spend limits and step costs |
+| [The widget on a live page](docs/widget.md) | Modal dialogs, covered controls, route changes, and the browser tests |
 | [Answers and hand-off](docs/answers.md) | Answering from help docs, the server-side rules, and hand-off to a person |
 | [Benchmark](eval/README.md) | How cases work, how to run them, and results |
 | [Website and dashboard](web/README.md) | Sign-in, approvals, the dashboard, and deploying the site |
