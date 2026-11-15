@@ -34,6 +34,7 @@ interface Run {
   statusAgrees: boolean;
   why: string;
   ms: number;
+  msToTarget: number;
   said: string;
   servedBy: string;
   tokens?: { input: number; cacheRead: number; cacheWrite: number; output: number };
@@ -110,6 +111,7 @@ async function main() {
       "right pointer": `${passed}/${answered.length} (${percent(passed, answered.length)})`,
       "plausible range": `${Math.round(range.low * 100)}-${Math.round(range.high * 100)}%`,
       "status agrees": percent(answered.filter((run) => run.statusAgrees).length, answered.length),
+      "ms to pointer": middle(answered.map((run) => run.msToTarget).sort((a, b) => a - b), 0.5),
       "typical ms": middle(times, 0.5),
       "slow ms (9 in 10 are faster)": middle(times, 0.9),
       "tokens in / cached / out": tokens.length ? `${mean((run) => run.tokens!.input)} / ${mean((run) => run.tokens!.cacheRead)} / ${mean((run) => run.tokens!.output)}` : "n/a",
@@ -136,12 +138,12 @@ async function runOne(name: string, settings: TurnSettings, item: Case, site: Pa
   try {
     const measure = await measureTurn(site, { ...item.request, site: site.id }, settings);
     const result = score(item, measure.reply);
-    return { ...base, ...result, ms: measure.ms, said: measure.reply.say, servedBy: measure.model, ...(measure.tokens ? { tokens: measure.tokens } : {}) };
+    return { ...base, ...result, ms: measure.ms, msToTarget: measure.msToTarget, said: measure.reply.say, servedBy: measure.model, ...(measure.tokens ? { tokens: measure.tokens } : {}) };
   } catch (error) {
     // Bad credentials fail every call the same way, so there's no point going on.
     if (error instanceof TurnError && error.status === 500) throw error;
     const message = error instanceof Error ? error.message : String(error);
-    return { ...base, pass: false, statusAgrees: false, why: "", ms: 0, said: "", servedBy: "", error: message };
+    return { ...base, pass: false, statusAgrees: false, why: "", ms: 0, msToTarget: 0, said: "", servedBy: "", error: message };
   }
 }
 
