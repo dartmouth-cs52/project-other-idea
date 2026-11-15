@@ -16,10 +16,10 @@ import { cn } from "@/lib/utils";
 
 /**
  * Where the sample app in the demos lives. It has no brand name on purpose: Haptic runs inside
- * the visitor's own product, so the address says "your app" and the app's header carries a plain
- * mark with no name beside it. Change it here and every demo follows.
+ * the visitor's own product, so the address is the standard placeholder domain and the app's
+ * header carries a plain mark with no name beside it. Change it here and every demo follows.
  */
-export const APP_DOMAIN = "yourapp.com";
+export const APP_DOMAIN = "example.com";
 
 /** The pointer's one signature movement: quick to leave, slow to land, so the eye arrives with it. */
 export const GLIDE_EASE = [0.2, 0.8, 0.2, 1] as const;
