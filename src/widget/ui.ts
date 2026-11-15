@@ -96,6 +96,12 @@ export class Ui {
   /** What lay under the caption once it was placed, and whether the caption has moved for this control yet. */
   private under?: { el: Element | null; moved: boolean };
   private looked = 0;
+  /**
+   * Something on the page that took the keyboard from the ask box the moment
+   * it had it: a menu or a list that keeps the keyboard to itself and is not
+   * a dialog. While it is open the widget sits inside it, as it does in a dialog.
+   */
+  private captor?: Element;
   private frame = 0;
   /** Where the pointer last was, so each move starts from there. */
   private at: { x: number; y: number };
@@ -144,13 +150,20 @@ export class Ui {
     pick(".stop").addEventListener("click", handlers.onStop);
     pick(".close").addEventListener("click", handlers.onStop);
 
-    // Typing in the ask box mustn't trigger the page's keyboard shortcuts or focus traps.
+    // Typing in the ask box mustn't trigger the page's keyboard shortcuts or
+    // focus traps. Escape is the page's, though, unless it is closing our own
+    // ask box: an open menu or dialog closes on it.
     for (const type of ["keydown", "keyup", "keypress", "focusin"]) {
       this.host.addEventListener(type, (event) => {
-        if (type === "keydown" && (event as KeyboardEvent).key === "Escape") this.panel.hidden = true;
+        if ((event as KeyboardEvent).key === "Escape") {
+          const fromPanel = this.panel.contains(event.composedPath()[0] as Node);
+          if (!fromPanel || (type === "keydown" && this.panel.hidden)) return;
+          if (type === "keydown") this.panel.hidden = true;
+        }
         event.stopPropagation();
       });
     }
+    this.watchKeyboard();
     this.host.setAttribute("popover", "manual");
     this.setState("idle");
     this.place();
@@ -166,9 +179,11 @@ export class Ui {
    * back out when it closes.
    */
   place = () => {
-    const modal = findOpenModal(this.host);
-    const home = modal ?? document.documentElement;
+    if (this.captor && !(this.captor.isConnected && this.captor.getClientRects().length > 0)) this.captor = undefined;
+    const home = this.captor ?? findOpenModal(this.host) ?? document.documentElement;
     if (this.host.parentNode === home) return;
+    // Moving takes the keyboard from whatever of ours had it, so it is given back.
+    const focused = this.host.shadowRoot?.activeElement as HTMLElement | null | undefined;
     home.appendChild(this.host);
     try {
       // Being a popover puts us in the top layer too, above anything the page stacks with z-index.
@@ -176,7 +191,34 @@ export class Ui {
     } catch {
       // No popover support. The fixed position and z-index still apply.
     }
+    focused?.focus();
   };
+
+  /**
+   * Notices the page pulling the keyboard out of the ask box the moment the
+   * visitor put it there, which is what a menu that keeps the keyboard to
+   * itself does, and moves the widget into whatever took it. A visitor who
+   * moves the keyboard themselves, by clicking what took it or with Tab, is
+   * left alone. Nothing is listened to outside our own element.
+   */
+  private watchKeyboard() {
+    let wanted = 0;
+    let tabbed = 0;
+    this.host.addEventListener("pointerdown", () => (wanted = performance.now()));
+    this.input.addEventListener("keydown", (event) => {
+      if (event.key === "Tab") tabbed = performance.now();
+    });
+    this.input.addEventListener("focusout", (event) => {
+      const to = event.relatedTarget;
+      const now = performance.now();
+      if (!(to instanceof Element) || to === this.captor || to.contains(this.host) || now - wanted > 500 || now - tabbed < 500) return;
+      // What the visitor clicked has the mouse over it. A list that takes the keyboard back does not.
+      if (to.matches(":hover")) return;
+      this.captor = to;
+      this.place();
+      this.input.focus();
+    });
+  }
 
   /** Show the ask box busy with a message, or back to the input when `text` is empty. */
   setBusy(text: string) {
