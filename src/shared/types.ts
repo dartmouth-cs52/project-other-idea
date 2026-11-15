@@ -115,6 +115,9 @@ export interface TurnRequest {
   snapshot: Snapshot;
 }
 
+/** The format a step is streamed in: one JSON value per line. The widget asks for it in its Accept header. */
+export const STREAM_TYPE = "application/x-ndjson";
+
 export interface TurnReply {
   /** Element id from the snapshot to point at, or null. */
   target: string | null;

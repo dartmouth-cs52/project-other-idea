@@ -16,6 +16,19 @@ const OFF_TRACK = "Finding the way from here…";
 const RESUME_WINDOW_MS = 3 * 60 * 1000;
 const CLICKABLE = "a[href], button, summary, select, input, textarea, label, [role], [onclick]";
 
+/** What the visitor did, in words for the model, and whether it was the step they were shown. */
+interface Acted {
+  event: string;
+  onTarget: boolean;
+}
+
+/** A pointer shown before the rest of the reply was in, and what the visitor did with it, if anything yet. */
+interface EarlyPointer {
+  el: Element;
+  stop: () => void;
+  acted?: Acted;
+}
+
 interface SavedGuide {
   goal: string;
   history: HistoryTurn[];
@@ -43,7 +56,7 @@ export class Guide {
 
   constructor(
     private readonly ui: Ui,
-    private readonly sendTurn: (request: Omit<TurnRequest, "site">) => Promise<TurnReply>,
+    private readonly sendTurn: (request: Omit<TurnRequest, "site">, onTarget?: (id: string) => void) => Promise<TurnReply>,
   ) {}
 
   start(goal: string) {
@@ -94,18 +107,57 @@ export class Guide {
     ui.place();
     const page = takeSnapshot(ui.host);
     const change = event && this.previous ? describeChange(this.previous, page.snapshot) : undefined;
+
+    // The server names the control before it has finished the sentence about
+    // it. The pointer goes there at once. The visitor may act on it straight
+    // away, so their action is listened for from that moment and kept until
+    // the rest of the reply arrives.
+    let early: EarlyPointer | undefined;
+    let whenActed: ((what: Acted) => void) | undefined;
+    const pointEarly = (id: string) => {
+      const el = page.elements.get(id);
+      if (run !== this.run || early || !el?.isConnected || normalizePath(location.pathname) !== page.snapshot.path) return;
+      const listed = page.snapshot.elements.find((element) => element.id === id);
+      if (listed?.offscreen) el.scrollIntoView({ block: "center", behavior: "smooth" });
+      ui.pointAt(el, "");
+      const waiting: EarlyPointer = {
+        el,
+        stop: waitForAction(el, listed, ui.host, (what) => {
+          waiting.acted = what;
+          // If this click loads a new page before the reply is in, the next page still needs to know about it.
+          this.strayed = !what.onTarget;
+          this.save(what.event);
+          whenActed?.(what);
+        }),
+      };
+      early = waiting;
+      this.stopWaiting = waiting.stop;
+    };
+    /** Takes back an early pointer that the full reply did not bear out. */
+    const dropEarly = () => {
+      if (!early) return;
+      early.stop();
+      if (this.stopWaiting === early.stop) this.stopWaiting = undefined;
+      early = undefined;
+      ui.clearPointer();
+    };
+
     let reply: TurnReply;
     try {
-      reply = await this.sendTurn({
-        goal: this.goal,
-        step: this.step,
-        history: this.history.slice(-MAX_HISTORY),
-        snapshot: page.snapshot,
-        ...(event ? { event } : {}),
-        ...(change ? { change } : {}),
-      });
+      reply = await this.sendTurn(
+        {
+          goal: this.goal,
+          step: this.step,
+          history: this.history.slice(-MAX_HISTORY),
+          snapshot: page.snapshot,
+          ...(event ? { event } : {}),
+          ...(change ? { change } : {}),
+        },
+        pointEarly,
+      );
     } catch (error) {
       if (run !== this.run) return;
+      dropEarly();
       console.warn("[Haptic]", error);
       return this.finish("Something went wrong on our side. Try asking again.");
     }
@@ -114,6 +166,7 @@ export class Guide {
     // The answer is about a page the visitor has already left. Start over from where they are now.
     const here = normalizePath(location.pathname);
     if (here !== page.snapshot.path) {
+      dropEarly();
       await settle(ui.host);
       if (run !== this.run) return;
       return this.turn(run, `${event ?? ""} The user went from ${page.snapshot.path} to ${here}.`.trim());
@@ -125,6 +178,7 @@ export class Guide {
     // Pointing again at what the visitor just used, with the page unchanged,
     // is a loop. Ask once more saying so, then give up rather than repeat.
     if (listed && this.last?.used && this.last.key === elementKey(listed) && change === NOTHING_CHANGED && reply.status === "continue") {
+      dropEarly();
       if (nudged) return this.finish("That step didn't change anything I can see, so I've stopped here. Ask again if there's more to do.");
       const nudge = `You pointed at ${describeElement(listed)} again, but the user already used it and nothing changed. Don't point at it again: move on, or say it's done.`;
       return this.turn(run, `${event} ${nudge}`, true);
@@ -136,12 +190,20 @@ export class Guide {
     this.last = listed ? { key: elementKey(listed), used: false } : undefined;
     this.strayed = false;
 
-    if (!el || !el.isConnected) return this.finish(reply.say);
-    if (listed?.offscreen) el.scrollIntoView({ block: "center", behavior: "smooth" });
-    ui.pointAt(el, reply.say);
+    if (!el || !el.isConnected) {
+      dropEarly();
+      return this.finish(reply.say);
+    }
+    if (early?.el !== el) {
+      dropEarly();
+      if (listed?.offscreen) el.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    // If they have already used it, the caption would only flash.
+    if (!early?.acted) ui.pointAt(el, reply.say);
 
     if (reply.status === "done") {
       // An explanation that points at something. Leave it up until they click anywhere.
+      early?.stop();
       ui.setBusy("");
       ui.closePanel();
       forget();
@@ -153,7 +215,7 @@ export class Guide {
 
     ui.closePanel();
     this.save();
-    this.stopWaiting = waitForAction(el, listed, ui.host, (what) => {
+    const acted = (what: Acted) => {
       this.stopWaiting = undefined;
       if (this.last && what.onTarget) this.last.used = true;
       this.strayed = !what.onTarget;
@@ -164,7 +226,11 @@ export class Guide {
       void settle(ui.host).then(() => {
         if (run === this.run) void this.turn(run, what.event);
       });
-    });
+    };
+    // The early pointer is already listening. Hand its result over, now or when it comes.
+    if (early?.acted) acted(early.acted);
+    else if (early) whenActed = acted;
+    else this.stopWaiting = waitForAction(el, listed, ui.host, acted);
   }
 
   private finish(text: string) {
@@ -220,7 +286,7 @@ function waitForAction(
   target: Element,
   listed: SnapElement | undefined,
   host: Element,
-  done: (what: { event: string; onTarget: boolean }) => void,
+  done: (what: Acted) => void,
 ): () => void {
   const name = listed ? describeElement(listed) : "the element you pointed at";
   const field = isField(target);
