@@ -53,10 +53,9 @@ export interface StepTokens {
 /** What one step cost, in US dollars. The stand-in model costs nothing. */
 export function costOf(model: string, tokens: StepTokens | undefined, cache: "5m" | "1h"): number {
   if (model === "mock" || !tokens) return 0;
-  // The longest name that starts the model's ID, so "claude-sonnet-5-5" is not priced as "claude-sonnet-5".
-  const name = Object.keys(PRICES)
-    .filter((known) => model.startsWith(known))
-    .sort((a, b) => b.length - a.length)[0];
+  // The ID exactly, or with a date after it, as some IDs carry. Anything else, a newer model whose ID
+  // only starts like one here among them ("claude-opus-5-6"), is priced at the top of the table.
+  const name = Object.keys(PRICES).find((known) => model === known || (model.startsWith(`${known}-`) && /^\d{8}$/.test(model.slice(known.length + 1))));
   let price = name ? PRICES[name]! : DEAREST;
   if (name === "claude-haiku-5-5" && tokens.input + tokens.cacheRead + tokens.cacheWrite > HAIKU_LONG_FROM) price = HAIKU_LONG;
   const write = cache === "1h" ? price.write1h : price.write5m;

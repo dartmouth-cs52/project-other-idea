@@ -52,6 +52,10 @@ test("a step is priced from its tokens, and an unknown model is priced at the to
   assert.equal(costOf("claude-fable-5-1", million, "1h"), 60);
   assert.equal(costOf("claude-fable-5", million, "1h"), 60);
   assert.equal(costOf("claude-mythos-5-1", million, "1h"), 60);
+  // An ID with a date after it is that model. A newer model whose ID only starts like one in the table is not.
+  assert.equal(costOf("claude-sonnet-5-5-20261201", million, "1h"), costOf("claude-sonnet-5-5", million, "1h"));
+  assert.equal(costOf("claude-opus-5-6", million, "1h"), costOf("claude-something-new", million, "1h"));
+  assert.equal(costOf("claude-sonnet-5-6", million, "1h"), costOf("claude-something-new", million, "1h"));
   // A model the table does not know is never priced below one it does, whatever the mix of tokens.
   const known = ["claude-fable-5-2", "claude-fable-5-1", "claude-fable-5", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-haiku-5-5"];
   for (const mix of [tokens, cold, million, { input: 0, cacheRead: 1_000_000, cacheWrite: 0, output: 0 }]) {
