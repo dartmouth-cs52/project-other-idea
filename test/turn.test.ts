@@ -163,7 +163,8 @@ test("the new marks on a control are printed as sent, and the two that are not p
   assert.ok(page.includes('e4 textbox "Please enter" [form › 2 of 2]'));
   assert.ok(page.includes('e5 button "B-series (All series selected)" [main]'));
   assert.match(rules, /A field or group marked "required" has to be filled in or chosen before its form's button will work\./);
-  assert.match(rules, /An element marked as showing on hover is hidden until the mouse is over that spot: point at it and say to move the mouse there\./);
+  // The mark is quoted as Job A's widget sends it. If that wording changes, this line of the rules changes with it.
+  assert.match(rules, /An element marked "shows on hover" is hidden until the mouse is over that spot: point at it and say to move the mouse there\./);
 });
 
 test("the question asked after the last step is worded as a closing one", () => {
