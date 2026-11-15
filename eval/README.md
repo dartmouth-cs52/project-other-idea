@@ -60,6 +60,22 @@ A guide can stop before a button that must not be pressed. The joinhaptic.com fo
 
 It drives a browser with Playwright, which this project does not install. The steps are at the top of `eval/record.ts`.
 
+## Results
+
+One run on 15 November 2026: all 74 cases, each asked once, from a GitHub runner. Effort was low for all three.
+
+| Setting | Right pointer | Plausible range | Status agrees | ms to pointer | Typical ms | Slow ms |
+|---|---|---|---|---|---|---|
+| `claude-opus-5-5` | 72/74 (97%) | 91-99% | 99% | 1140 | 1626 | 2180 |
+| `claude-sonnet-5-5@off` | 73/74 (99%) | 93-100% | 92% | 1154 | 1587 | 1869 |
+| `claude-haiku-5-5@off` | 69/74 (93%) | 85-97% | 89% | 884 | 1076 | 1701 |
+
+The three misses by Opus and Sonnet were all at the end of a guide: each pointed at something more when nothing was left to do. Four of Haiku's five were mistakes inside a guide: it skipped required fields twice, pointed at nothing twice when the right control was listed, and once pointed at "New project" when asked how to delete one.
+
+The live server runs Sonnet with thinking off. It matched Opus on accuracy and speed here, at half the price. Haiku was about a quarter of a second quicker to the pointer and made mistakes that would send a visitor the wrong way.
+
+Read this with care. It is one run, the ranges overlap, and the timings are from GitHub's runner at one time of day. A case that expects nothing is also strict: a model that ends a guide by pointing at where the answer is counts as a miss.
+
 ## What this does not measure yet
 
 - Whole guides driven end to end by a model. Each case starts from the right path, so a model is never scored on recovering from its own wrong step.
