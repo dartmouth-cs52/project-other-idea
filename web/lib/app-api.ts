@@ -61,7 +61,7 @@ export interface Site {
   reading: Reading | null;
 }
 
-export type Outcome = "finished" | "stopped" | "nothing_to_point_at" | "loop" | "step_limit" | "error" | "abandoned" | "under_way";
+export type Outcome = "finished" | "shown" | "stopped" | "nothing_to_point_at" | "loop" | "step_limit" | "error" | "abandoned" | "under_way";
 
 export interface Insights {
   days: number;
@@ -84,6 +84,13 @@ export interface Insights {
   wrongClicks: { path: string; target_label: string; shown: number; wrong: number }[];
 }
 
+export interface FinishedList {
+  month: string;
+  count: number;
+  more: boolean;
+  guides: { id: string; question: string; started_at: string; ended_at: string; started_path: string; origin: string | null; step_count: number }[];
+}
+
 export interface GuideDetail {
   id: string;
   question: string;
@@ -99,7 +106,7 @@ export interface GuideDetail {
     target_label: string | null;
     target_context: string | null;
     said: string;
-    status: "continue" | "done";
+    status: "continue" | "done" | "stuck";
     event: string | null;
     strayed: boolean;
     ms: number;
@@ -109,6 +116,7 @@ export interface GuideDetail {
 
 export const OUTCOME_LABEL: Record<Outcome, string> = {
   finished: "Finished",
+  shown: "Answered, not clicked",
   stopped: "Stopped by the visitor",
   nothing_to_point_at: "Nothing to point at",
   loop: "Went in a loop",

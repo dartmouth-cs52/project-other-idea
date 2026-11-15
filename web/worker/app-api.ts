@@ -17,7 +17,7 @@ import { DEFAULT_APPEARANCE, type PageNode, type SiteContext } from "../../src/s
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
-import { insights, guideSteps } from "./insights";
+import { finishedCsv, finishedGuides, guideSteps, insights, monthOf } from "./insights";
 import { MAX_PAGES, readMore, startReading, type BrowserBinding, type Reading } from "./reader";
 
 export interface AppEnv extends AuthEnv {
@@ -82,7 +82,7 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
 
     if (path === "/sites" && request.method === "POST") return reply(await addSite(sql, org, await body(request)), 201);
 
-    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/guides\/([^/]+))?$/.exec(path);
+    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/finished|\/guides\/([^/]+))?$/.exec(path);
     if (match) {
       const id = match[1] ?? "";
       if (!SITE_ID.test(id)) throw new Refusal(404, "No such site.");
@@ -94,6 +94,17 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
         await ownedSite(sql, org, id);
         const days = Math.min(Math.max(Number(url.searchParams.get("days")) || 30, 1), 365);
         return reply(await insights(sql, id, days));
+      }
+      if (sub === "/finished" && request.method === "GET") {
+        const site = await ownedSite(sql, org, id);
+        const asked = url.searchParams.get("month") ?? "";
+        const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(asked) ? asked : monthOf(new Date());
+        const list = await finishedGuides(sql, id, month);
+        if (url.searchParams.get("format") !== "csv") return reply(list);
+        const name = `haptic-finished-guides-${new URL(site.origin).hostname}-${month}.csv`.replace(/[^a-z0-9.-]/gi, "-");
+        const headers = new Headers({ "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="${name}"`, "cache-control": "no-store" });
+        for (const cookie of cookies) headers.append("set-cookie", cookie);
+        return new Response(finishedCsv(list), { headers });
       }
       if (match[3] && request.method === "GET") {
         await ownedSite(sql, org, id);

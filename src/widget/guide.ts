@@ -57,11 +57,17 @@ interface SavedGuide {
 export type Reporter = (guide: string, report: Omit<GuideReport, "site">) => void;
 
 /** Endings worth asking "Did this help?" about. A stop or a failure already says no. */
-const ASK_IF_HELPED: GuideOutcome[] = ["finished", "nothing_to_point_at", "loop", "step_limit"];
+const ASK_IF_HELPED: GuideOutcome[] = ["finished", "shown", "nothing_to_point_at", "loop", "step_limit"];
 
 export class Guide {
   /** Empty when no guide is under way, or once the current one has reported how it ended. */
   private id = "";
+  /**
+   * Set while a first answer points at something and waits to see whether the
+   * visitor uses it. Asking something new, or closing the caption, ends the
+   * guide this way and not as stopped.
+   */
+  private unconfirmed?: GuideOutcome;
   private goal = "";
   private history: HistoryTurn[] = [];
   private step = 0;
@@ -82,7 +88,7 @@ export class Guide {
 
   start(goal: string) {
     // Asking something new while a guide is under way ends that one.
-    this.end("stopped");
+    this.end(this.unconfirmed ?? "stopped");
     this.reset();
     this.id = newGuideId();
     this.goal = goal;
@@ -90,7 +96,7 @@ export class Guide {
   }
 
   stop() {
-    this.end("stopped");
+    this.end(this.unconfirmed ?? "stopped");
     this.reset();
     this.ui.clear();
     this.ui.setBusy("");
@@ -122,6 +128,7 @@ export class Guide {
     this.previous = undefined;
     this.last = undefined;
     this.strayed = false;
+    this.unconfirmed = undefined;
     forget();
   }
 
@@ -218,13 +225,18 @@ export class Guide {
     this.last = listed ? { key: elementKey(listed), used: false } : undefined;
     this.strayed = false;
 
+    // Only a finished guide is billed. It is finished when the visitor followed the steps and is now
+    // where they asked to be, or when they used the control the last answer pointed at. A first answer
+    // that the visitor did not act on, or that only needed words, was shown, and is free.
+    const arrived = this.step > 1;
+    if (reply.status === "stuck") {
+      dropEarly();
+      return this.finish(reply.say, "nothing_to_point_at");
+    }
     if (!el || !el.isConnected) {
       dropEarly();
-      // After some steps, "done" with nothing to point at is the guide arriving. On the first reply
-      // it is Haptic answering without showing anything, which the prompt also allows for "can't
-      // find a way forward", so it counts as nothing to point at. "Did this help?" tells the two
-      // apart, and the dashboard drops a guide from "unanswered" when the visitor says it helped.
-      return this.finish(reply.say, reply.status === "done" && this.step > 1 ? "finished" : "nothing_to_point_at");
+      if (reply.status === "done") return this.finish(reply.say, arrived ? "finished" : "shown");
+      return this.finish(reply.say, "nothing_to_point_at");
     }
     if (early?.el !== el) {
       dropEarly();
@@ -234,19 +246,48 @@ export class Guide {
     if (!early?.acted) ui.pointAt(el, reply.say);
 
     if (reply.status === "done") {
-      // An explanation that points at something. Leave it up until they click anywhere but on Haptic itself.
-      early?.stop();
+      // The last answer points at something. Leave it up until they click anywhere but on Haptic itself.
       ui.setBusy("");
       ui.closePanel();
       forget();
-      this.end("finished");
       const dismiss = (event: MouseEvent) => {
         if (event.composedPath().includes(ui.host)) return;
         document.removeEventListener("click", dismiss, true);
         if (run === this.run) ui.clear();
       };
       document.addEventListener("click", dismiss, true);
-      this.stopWaiting = () => document.removeEventListener("click", dismiss, true);
+
+      // After following steps, the visitor is on the screen they asked for.
+      if (arrived) {
+        early?.stop();
+        this.end("finished");
+        this.stopWaiting = () => document.removeEventListener("click", dismiss, true);
+        return;
+      }
+
+      // A first answer that points: finished if they use what it points at, shown if they do anything
+      // else, close the caption, ask something new, or leave the page.
+      this.unconfirmed = "shown";
+      let stopUse = () => {};
+      const conclude = (used: boolean) => {
+        if (run !== this.run || !this.unconfirmed) return;
+        this.unconfirmed = undefined;
+        window.removeEventListener("pagehide", left);
+        stopUse();
+        this.end(used ? "finished" : "shown");
+      };
+      const left = () => conclude(false);
+      window.addEventListener("pagehide", left);
+      this.stopWaiting = () => {
+        window.removeEventListener("pagehide", left);
+        stopUse();
+        document.removeEventListener("click", dismiss, true);
+      };
+      if (early?.acted) return conclude(early.acted.onTarget);
+      // The early pointer's own listener saves the guide for the next page, which must not happen once
+      // it has ended. So it stops, and a plain one takes over.
+      early?.stop();
+      stopUse = waitForAction(el, listed, ui.host, (what) => conclude(what.onTarget));
       return;
     }
 

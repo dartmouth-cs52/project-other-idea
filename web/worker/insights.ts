@@ -78,6 +78,43 @@ export async function insights(sql: Sql, site: string, days: number) {
   return { days, summary: summary[0], outcomes, unanswered, recent, abandonedAt, wrongClicks };
 }
 
+/** "2026-11" for the month a date falls in, in UTC. Bills are counted by UTC month. */
+export function monthOf(date: Date): string {
+  return date.toISOString().slice(0, 7);
+}
+
+/**
+ * Every guide on a site that finished in one month, the guides billing will
+ * count. Pricing promises each one is listed, so there is no cap short of
+ * MAX_FINISHED_LISTED, far above what any plan includes.
+ */
+export async function finishedGuides(sql: Sql, site: string, month: string) {
+  const start = new Date(`${month}-01T00:00:00.000Z`);
+  const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+  const rows = (await sql.query(
+    `select g.id, g.question, g.started_at, g.ended_at, g.started_path, g.origin, g.step_count
+    from guides g where g.site_id = $1 and g.outcome = 'finished' and g.ended_at >= $2 and g.ended_at < $3
+    order by g.ended_at desc limit ${MAX_FINISHED_LISTED + 1}`,
+    [site, start.toISOString(), end.toISOString()],
+  )) as { id: string; question: string; started_at: string; ended_at: string; started_path: string; origin: string | null; step_count: number }[];
+  return { month, count: Math.min(rows.length, MAX_FINISHED_LISTED), more: rows.length > MAX_FINISHED_LISTED, guides: rows.slice(0, MAX_FINISHED_LISTED) };
+}
+
+const MAX_FINISHED_LISTED = 50_000;
+
+/** The same list as a spreadsheet file, one guide per row. */
+export function finishedCsv(list: Awaited<ReturnType<typeof finishedGuides>>): string {
+  const cell = (value: unknown) => {
+    // Times come from the database as Date objects. A spreadsheet sorts the ISO form correctly.
+    const text = value === null || value === undefined ? "" : value instanceof Date ? value.toISOString() : String(value);
+    // Quote every cell, double any quote inside, and stop a spreadsheet reading a question as a formula.
+    return `"${(/^[=+\-@\t\r]/.test(text) ? `'${text}` : text).replace(/"/g, '""')}"`;
+  };
+  const lines = [["finished_at", "question", "started_on", "origin", "steps", "guide_id"].map(cell).join(",")];
+  for (const guide of list.guides) lines.push([guide.ended_at, guide.question, guide.started_path, guide.origin, guide.step_count, guide.id].map(cell).join(","));
+  return lines.join("\r\n") + "\r\n";
+}
+
 export async function guideSteps(sql: Sql, site: string, guide: string) {
   if (!/^[0-9a-f-]{36}$/.test(guide)) return undefined;
   const rows = await sql.query(

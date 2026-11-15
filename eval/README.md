@@ -34,7 +34,7 @@ The run goes through the same code as the live server, so the setup that wins is
 - **right pointer** is the score: the pointer went to a right control, or to nothing when nothing was left.
 - **plausible range** is where the true score could lie given how few cases there are. Two models whose ranges overlap have not been told apart yet. Add cases before choosing between them.
 - **clean sentence** is how often the model's sentence could be shown as written. The server tidies every sentence, so a visitor never sees the difference, but a low figure means the setting is fighting the reply's format.
-- **status agrees** is reported beside the score and is not part of it, because models differ on whether a guide's last click is "continue" or "done".
+- **status agrees** is reported beside the score and is not part of it, because models differ on whether a guide's last click is "continue" or "done". A reply can also be "stuck", when the model finds no way forward. The cases do not expect it, so it counts against status agreement only.
 - **typical ms** is the middle step, start to finish. **slow ms** is the step that nine in ten are faster than. Compare timings only within one run: the service's speed drifts from hour to hour.
 - **ms to pointer** is how long until the model had named the control, which is when the pointer starts to move.
 
