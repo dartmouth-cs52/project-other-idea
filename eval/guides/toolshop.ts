@@ -6,7 +6,7 @@ import { button, DONE, link, type Guide, type GuideSet } from "../guide.ts";
 // product, invoice and cart ids change with every reset, so nothing here leans on an id: guides
 // start on fixed paths and pick products by name.
 //
-// Every guide runs as the project's published test customer with one Combination Pliers in the
+// Every guide runs as one of the project's published test customers with one pair of pliers in the
 // basket (see `before`), because most of what a shopper asks about needs a basket or an account.
 //
 // Five steps are marked `unlisted`. Two are markup: the control has no href, role or pointer
@@ -175,17 +175,42 @@ export default {
   origin: "https://practicesoftwaretesting.com",
   hasTag: false,
   about: "Practice Software Testing's Toolshop, an Angular demo store: catalogue filters, basket, a four-step checkout and a customer account. It stands for e-commerce and checkout flows.",
-  // Signs in as the published test customer, then puts one Combination Pliers in the basket.
+  // Signs in as one of the shop's published test customers, then puts one pair of pliers in the basket.
   // The two hovers only wait: for the sign-in to finish, and for the basket to show in the header.
+  //
+  // Which customer. The shop's README publishes three, and everyone who practises here shares them:
+  // customer@ (Jane Doe), customer2@ (Jack Howe) and customer3@ (Bob Smith, password pass123).
+  // An account is locked after three wrong passwords in a row, and anyone who sends the
+  // forgot-password form for it sets its password to "welcome02". Both last until the database is
+  // rebuilt, which happens every hour on the hour (UTC), and nothing a visitor can do undoes them
+  // sooner. Watched for two hours on 15 November 2026 (UTC): customer@ was locked by 16:46 and
+  // stayed locked until the rebuild at 17:00, then was locked again by 17:50. customer3@ was
+  // locked by 16:49. customer2@ had no failed sign-in in either hour. Other people placed 5 orders
+  // as customer@ and 4 as customer3@ in the first hour and none as customer2@. It is shared all
+  // the same: someone placed 3 orders as customer2@ in the second hour.
+  // customer3@ also has no past orders, which latest-order needs. So this signs in as customer2@,
+  // the least used of the three, which has past orders and an address like Jane Doe's (street and
+  // city filled in, the rest empty). It can still be locked by someone else in any given hour.
+  // ACCOUNT_MENU above still names Jane Doe. Whole-guide runs never read it, but it has to name
+  // Jack Howe before this file is recorded again.
+  //
+  // Which pliers. Every product starts the hour with 25 in stock, and a product with none has its
+  // Add to cart button switched off, which is what stopped this block before. Combination Pliers
+  // is the first card on the home page and is what everyone else's script buys: in that same hour
+  // its stock was down to 6 by 16:40 and to 1 by 16:55, and no other pliers had sold at all. So the
+  // basket gets the first pliers on the home page that are in stock and are not Combination
+  // Pliers: "Pliers", and Slip Joint Pliers if those ever run out.
+  //
+  // Both risks grow as the hour goes on, so the safest time to run this set is just after the hour.
   before: {
     path: "/auth/login",
     acts: [
-      { fill: ["#email", "customer@practicesoftwaretesting.com"] },
+      { fill: ["#email", "customer2@practicesoftwaretesting.com"] },
       { fill: ["#password", "welcome01"] },
       { click: '[data-test="login-submit"]' },
       { hover: '[data-test="nav-menu"]' },
       { click: '[data-test="nav-home"]' },
-      { click: 'a.card:has-text("Combination Pliers")' },
+      { click: 'a.card:has-text("Pliers"):not(:has-text("Combination")):not(:has([data-test="out-of-stock"]))' },
       { click: "#btn-add-to-cart" },
       { hover: '[data-test="nav-cart"]' },
     ],
