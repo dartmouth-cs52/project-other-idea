@@ -26,7 +26,7 @@ const EFFORTS: readonly string[] = ["low", "medium", "high"];
 
 function settingsFrom(env: ModelEnv): TurnSettings {
   return {
-    model: env.HAPTIC_MODEL || "claude-opus-5-5",
+    model: env.HAPTIC_MODEL || "claude-sonnet-5-5",
     // Each step is a small decision and the visitor is waiting on it, so the least effort is the default.
     effort: EFFORTS.includes(env.HAPTIC_EFFORT ?? "") ? (env.HAPTIC_EFFORT as Effort) : "low",
     thinking: env.HAPTIC_THINKING === "off" ? "off" : "default",
@@ -61,6 +61,8 @@ export interface TurnMeasure {
   ms: number;
   /** Until the control to point at was known, which is when the pointer can start moving. */
   msToTarget: number;
+  /** The sentence exactly as the model wrote it, before tidySay. The benchmark compares the two. */
+  wrote: string;
   tokens?: { input: number; cacheRead: number; cacheWrite: number; output: number };
 }
 
@@ -72,6 +74,15 @@ const Reply = z.object({
 
 /** The reply's first field, as soon as it is complete in the text streamed so far. */
 const TARGET_SO_FAR = /"target"\s*:\s*(?:"([^"]*)"|null)/;
+
+/**
+ * The sentence a visitor reads, tidied: no blank space at either end, and no
+ * closing brace left over from the reply's own JSON. Some settings add one.
+ * Sonnet with thinking off did in about one reply in eight.
+ */
+export function tidySay(say: string): string {
+  return say.replace(/[\s}]+$/, "").trimStart();
+}
 
 /** Thrown for failures the visitor's browser should hear about with a specific status. */
 export class TurnError extends Error {
@@ -107,7 +118,7 @@ export async function measureTurn(
     if (onPage(id)) onTarget?.(id);
   };
 
-  let answer: Omit<TurnMeasure, "ms" | "msToTarget">;
+  let answer: Omit<TurnMeasure, "ms" | "msToTarget" | "wrote">;
   if (settings.model === "mock") {
     const reply = mockTurn(request);
     if (mockPauseMs > 0) {
@@ -119,7 +130,9 @@ export async function measureTurn(
   // The model can only point at what's on the page it was shown.
   if (!onPage(answer.reply.target)) answer.reply.target = null;
   targetKnown(answer.reply.target);
-  return { ...answer, ms: Date.now() - started, msToTarget: msToTarget ?? Date.now() - started };
+  const wrote = answer.reply.say;
+  answer.reply.say = tidySay(wrote);
+  return { ...answer, ms: Date.now() - started, msToTarget: msToTarget ?? Date.now() - started, wrote };
 }
 
 /**
@@ -137,7 +150,7 @@ async function claudeTurn(
   request: TurnRequest,
   settings: TurnSettings,
   targetKnown: (id: string | null) => void,
-): Promise<Omit<TurnMeasure, "ms" | "msToTarget">> {
+): Promise<Omit<TurnMeasure, "ms" | "msToTarget" | "wrote">> {
   client ??= new Anthropic(apiKey ? { apiKey } : {});
   const messages: Anthropic.Beta.BetaMessageParam[] = request.history.map((turn) => ({ role: turn.role, content: turn.text }));
   // The conversation has to start with a user message.

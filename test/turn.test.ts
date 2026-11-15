@@ -63,3 +63,12 @@ test("a click on the control it pointed at is not called out", async () => {
 test("the model is told to say so when a click goes off the way", () => {
   assert.match(buildSystemPrompt(site), /start "say" with "Not that one\."/);
 });
+
+test("what the visitor reads is tidied, whatever the model wrote", async () => {
+  const { tidySay } = await import("../src/server/model.ts");
+  assert.equal(tidySay("Now fill in your Company name.}"), "Now fill in your Company name.");
+  assert.equal(tidySay("Type your last name.\n\n"), "Type your last name.");
+  assert.equal(tidySay("  Click Save.\n}\n"), "Click Save.");
+  // A sentence that is already clean is left alone, brackets inside it included.
+  assert.equal(tidySay('Click the link that reads "[email]".'), 'Click the link that reads "[email]".');
+});

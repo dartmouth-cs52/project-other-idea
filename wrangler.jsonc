@@ -10,9 +10,10 @@
   // One visitor on one site gets 30 steps a minute.
   "ratelimits": [{ "name": "TURN_LIMIT", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }],
   "vars": {
-    // "mock" is the keyword stand-in, which needs no API key. Set a Claude model ID here once the
-    // ANTHROPIC_API_KEY secret is on the Worker: npx wrangler secret put ANTHROPIC_API_KEY
-    "HAPTIC_MODEL": "mock"
+    // The model that answers each step, chosen by the benchmark (see eval/README.md, "Results").
+    // It needs the ANTHROPIC_API_KEY secret on the Worker, which the deploy workflow puts there.
+    // "mock" is the keyword stand-in, which needs no key.
+    "HAPTIC_MODEL": "claude-sonnet-5-5"
   },
   "workers_dev": true,
   // The address in every customer's script tag. It must never change.

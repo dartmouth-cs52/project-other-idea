@@ -95,7 +95,7 @@ Without it the Worker still answers, from the KV store sites were kept in before
 
 What is kept from visitors follows one rule: the question, each control pointed at, wrong clicks, how the guide ended, whether they said it helped, and timings. Emails and long numbers are masked. Page contents are not kept, and what people type is never read. A guide that never reports an ending was abandoned. The first time the script calls from an allowed origin is how the dashboard knows a site is connected, and a call from an origin that is not allowed is kept too, so the dashboard can say why an install looks dead.
 
-The online server answers with the keyword stand-in until it has a model to call: `HAPTIC_MODEL` in `wrangler.jsonc` is `mock`. To switch it on, put the key on the Worker with `npx wrangler secret put ANTHROPIC_API_KEY`, set `HAPTIC_MODEL` to a Claude model ID, and deploy.
+The online server calls the model named by `HAPTIC_MODEL` in `wrangler.jsonc`, which the benchmark chose (see [`eval/README.md`](eval/README.md), "Results"). Its key is the repository's `ANTHROPIC_API_KEY` secret, which the deploy workflow copies onto the Worker. Set `HAPTIC_MODEL` to `mock` to run it on the keyword stand-in, which needs no key.
 
 ## Authors
 

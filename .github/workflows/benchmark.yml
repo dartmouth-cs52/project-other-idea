@@ -24,7 +24,7 @@ on:
     inputs:
       models:
         description: "Models to compare, comma-separated. After @: low, medium or high effort, and off for no thinking."
-        default: "claude-opus-5-5,claude-sonnet-5-5@off,claude-haiku-5-5@off"
+        default: "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5,claude-haiku-5-5@off"
       repeat:
         description: "Times to ask each case. More gives steadier timings and costs more."
         default: "1"
