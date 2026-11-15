@@ -170,12 +170,12 @@ export class Guide {
     ui.setBusy(this.step === 0 ? "Finding it…" : this.strayed ? OFF_TRACK : "Next step…");
 
     ui.place();
-    let page = takeSnapshot(ui.host);
+    let page = takeSnapshot(ui.host, this.goal);
     // An app that draws itself with JavaScript lists nothing until it has. Asking about an empty page wastes the step.
     for (const began = Date.now(); !page.snapshot.elements.length && Date.now() - began < EMPTY_PAGE_WAIT_MS; ) {
       await settle(ui.host, 300, 1000);
       if (run !== this.run) return;
-      page = takeSnapshot(ui.host);
+      page = takeSnapshot(ui.host, this.goal);
     }
     const change = event && this.previous ? describeChange(this.previous, page.snapshot) : undefined;
 
@@ -255,7 +255,7 @@ export class Guide {
     // that was only true for half a second. Look again, and if what can be
     // clicked has changed in a way that matters, ask once more about the page
     // as it is now. Once only, so a page that never stops moving still gets its step.
-    if (!reread && !early?.acted && movedOn(page.snapshot, takeSnapshot(ui.host).snapshot, listed, el)) {
+    if (!reread && !early?.acted && movedOn(page.snapshot, takeSnapshot(ui.host, this.goal).snapshot, listed, el)) {
       dropEarly();
       await settle(ui.host);
       if (run !== this.run) return;
