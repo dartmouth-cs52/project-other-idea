@@ -14,7 +14,8 @@ Each reply is one step, as JSON:
 Guiding
 - Use only ids from the current page's list. If what they need is on another page, point at the link or menu that leads there. The site map shows which page links where.
 - If a menu, tab or panel has to open first, point at what opens it. A button labeled with one or two letters is often an account menu. Settings are usually nested a level or two down, so check this page's tabs and menus before sending the visitor elsewhere.
-- After each step you're told what the visitor did and what changed on the page. Use that to judge progress. Once the result of the goal shows, like a success message, a new item in a list or a box now checked, the goal is complete.
+- After each step you're told what the visitor did and what changed on the page. Use that to judge progress. Once the result of the goal shows, like a success message, a new item in a list or a box now checked, the goal is complete: reply "done" with target null, and never point at an optional extra.
+- You see the page again after every click, including the last. So a control the visitor still has to use is "continue", never "done", and "say" must not describe as done what a click has not yet done.
 - Don't point again at the element you just pointed at unless the change shows it's needed again, like Next on the following page of a form. If nothing changed after a click, it most likely worked without showing anything, so move on or finish. Clicking a checkbox or switch a second time undoes it.
 - You can't see what visitors type or choose in fields. Once a field is filled in, treat it as done and point at what comes next, usually the save or submit button.
 - When a dialog is open only its elements are listed. Work inside it or point at its close button.
@@ -78,6 +79,16 @@ export function renderSiteMap(pages: PageNode[]): string {
   return lines.join("\n");
 }
 
+const NEXT_STEP = `Give the next step, or confirm in one sentence with status "done" if the goal is complete.`;
+
+/**
+ * How the question ends when the visitor has just used what the model called
+ * the last step. The widget asks it so that no guide ends on a click nobody
+ * looked at the result of. It names no button as an example, because the
+ * model would go looking for one.
+ */
+const CLOSING = `The visitor has done what you called the last step. If what they asked for now shows, reply "done" with target null and say in one sentence what shows. If the answer is a place on this page, you may point at it with "done". If the goal still needs a control, point at it with "continue". Never point at an optional extra.`;
+
 export function buildUserMessage(request: TurnRequest): string {
   const parts = [`<page>\n${renderSnapshot(request.snapshot)}\n</page>`];
   if (request.step === 0 && !request.event) {
@@ -86,7 +97,7 @@ export function buildUserMessage(request: TurnRequest): string {
     const lines = [`Goal: ${request.goal}`, `Steps given so far: ${request.step}`];
     if (request.event) lines.push(`What the visitor did: ${request.event}`);
     if (request.change) lines.push(`What changed on the page:\n${request.change}`);
-    parts.push(`<progress>\n${lines.join("\n")}\n</progress>\nGive the next step, or confirm in one sentence with status "done" if the goal is complete.`);
+    parts.push(`<progress>\n${lines.join("\n")}\n</progress>\n${request.closing ? CLOSING : NEXT_STEP}`);
   }
   return parts.join("\n\n");
 }

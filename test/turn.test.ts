@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildSystemPrompt } from "../src/server/prompt.ts";
+import { buildSystemPrompt, buildUserMessage } from "../src/server/prompt.ts";
 import { DEFAULT_APPEARANCE, type SiteContext, type SnapElement, type TurnRequest } from "../src/shared/types.ts";
 
 // These use the stand-in model, so they run with no API key. The model is
@@ -62,6 +62,43 @@ test("a click on the control it pointed at is not called out", async () => {
 
 test("the model is told to say so when a click goes off the way", () => {
   assert.match(buildSystemPrompt(site), /start "say" with "Not that one\."/);
+});
+
+// What the model is told. No model can be asked here, so these check that each
+// rule is in the prompt, and name the failure that was seen and that it answers.
+
+const rules = buildSystemPrompt(site);
+
+test("the model is told it sees the page after the last click too (jira 13 of 13: 'done' while pointing at a control nobody had used yet)", () => {
+  assert.match(rules, /You see the page again after every click, including the last/);
+  assert.match(rules, /a control the visitor still has to use is "continue", never "done"/);
+  assert.match(rules, /"say" must not describe as done what a click has not yet done/);
+});
+
+test("the model is told to point at nothing more once the goal is reached (10 single steps, and 28 of 177 finished guides, pointed at an extra)", () => {
+  assert.match(rules, /the goal is complete: reply "done" with target null, and never point at an optional extra/);
+});
+
+test("the question asked after the last step is worded as a closing one", () => {
+  const closing = buildUserMessage({ ...request('The user clicked link "Billing".'), closing: true });
+  const plain = buildUserMessage(request('The user clicked link "Billing".'));
+  const NEXT = 'Give the next step, or confirm in one sentence with status "done" if the goal is complete.';
+  assert.ok(plain.endsWith(NEXT));
+  assert.ok(!closing.includes(NEXT));
+  const wording = closing.slice(closing.lastIndexOf("</progress>") + "</progress>".length).trim();
+  assert.match(wording, /^The visitor has done what you called the last step\./);
+  assert.match(wording, /If what they asked for now shows, reply "done" with target null and say in one sentence what shows\./);
+  assert.match(wording, /If the answer is a place on this page, you may point at it with "done"\./);
+  assert.match(wording, /If the goal still needs a control, point at it with "continue"\./);
+  assert.match(wording, /Never point at an optional extra\.$/);
+  // No button is named as an example: the model would take it for the thing to look for.
+  assert.doesNotMatch(wording, /save|submit|apply/i);
+  // Everything before the wording is the same question.
+  assert.equal(closing.slice(0, closing.lastIndexOf("</progress>")), plain.slice(0, plain.lastIndexOf("</progress>")));
+  // A first question is never a closing one, whatever it is marked as.
+  const first = { ...request(""), step: 0, history: [], closing: true as const };
+  delete (first as { event?: string }).event;
+  assert.ok(buildUserMessage(first).endsWith("The visitor asks: update my billing card"));
 });
 
 test("what the visitor reads is tidied, whatever the model wrote", async () => {
