@@ -70,9 +70,15 @@ test("the model is told to say so when a click goes off the way", () => {
 const rules = buildSystemPrompt(site);
 
 test("the model is told it sees the page after the last click too (jira 13 of 13: 'done' while pointing at a control nobody had used yet)", () => {
-  assert.match(rules, /You see the page again after every click, including the last/);
-  assert.match(rules, /a control the visitor still has to use is "continue", never "done"/);
-  assert.match(rules, /"say" must not describe as done what a click has not yet done/);
+  assert.match(rules, /You see the page again after every click, including the last\./);
+  // OrangeHRM, 5 of 15 early endings: "done", pointing at the Mobile field, saying "Update your number in the Mobile field, then click Save".
+  assert.match(rules, /"done" is wrong while you point at a control the visitor still has to use, such as a field still to be filled in/);
+  assert.match(rules, /and wrong whenever "say" tells them to do something after the target\./);
+  assert.match(rules, /Never describe as done what a click has not yet done\./);
+});
+
+test("the model is told the pointer and the sentence must be about the same control (orangehrm: 'click page 2' with the pointer on page 1; wikipedia: it named Applications and pointed elsewhere)", () => {
+  assert.match(rules, /- "target": [^\n]* It must be the very element "say" names, not one beside it\.\n/);
 });
 
 test("the model is told to point at nothing more once the goal is reached (10 single steps, and 28 of 177 finished guides, pointed at an extra)", () => {
@@ -231,6 +237,11 @@ const SEEN: [what: string, wrote: string, shown: string][] = [
     "the same with a curly quote mark",
     "Your name is filled in, so click Next to go on to the Choose a location step.”}</br>",
     "Your name is filled in, so click Next to go on to the Choose a location step.",
+  ],
+  [
+    "the same again, from another app",
+    "Click Leave in the left menu. Email notification settings are usually under Admin, but start by checking Leave for related options.”}</br>",
+    "Click Leave in the left menu. Email notification settings are usually under Admin, but start by checking Leave for related options.",
   ],
   [
     "a quote mark and a scrap of code, a character with no width, and double spaces",
