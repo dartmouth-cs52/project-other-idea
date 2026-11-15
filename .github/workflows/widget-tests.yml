@@ -1,0 +1,49 @@
+# Runs the widget's browser tests: small local pages with the real widget on
+# them and a scripted model. Nothing is billed and nothing leaves the runner.
+#
+# They are kept out of `npm test` because they need a browser, which the
+# project does not install. This workflow installs one for the run.
+
+name: Widget tests
+
+on:
+  pull_request:
+    paths:
+      - "src/widget/**"
+      - "src/shared/**"
+      - "test/widget/**"
+      - "eval/browser.ts"
+      - "package.json"
+  push:
+    branches: [main]
+    paths:
+      - "src/widget/**"
+      - "src/shared/**"
+      - "test/widget/**"
+      - "eval/browser.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  widget:
+    name: Widget in a browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install a browser for this run
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - run: npm run test:widget

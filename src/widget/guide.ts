@@ -1,4 +1,4 @@
-import { describeElement, normalizePath, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { cleanText, describeElement, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { currentPath, describeChange, elementKey, isField, NOTHING_CHANGED, takeSnapshot } from "./snapshot.ts";
 import type { Ui } from "./ui.ts";
 
@@ -165,8 +165,12 @@ export class Guide {
     // the rest of the reply arrives.
     let early: EarlyPointer | undefined;
     let whenActed: ((what: Acted) => void) | undefined;
-    /** Every control that was on the page when it was read. Anything else a visitor clicks appeared since. */
-    const known = new Set(page.elements.values());
+    /** Every control that was on the page when it was read, with how the list named it. Anything else a visitor clicks appeared since. */
+    const known = new Map<Element, SnapElement>();
+    for (const element of page.snapshot.elements) {
+      const node = page.elements.get(element.id);
+      if (node) known.set(node, element);
+    }
     const pointEarly = (id: string) => {
       const el = page.elements.get(id);
       if (run !== this.run || early || !el?.isConnected || currentPath() !== page.snapshot.path) return;
@@ -370,9 +374,10 @@ function waitForAction(
   target: Element,
   listed: SnapElement | undefined,
   host: Element,
-  known: Set<Element>,
+  listing: Map<Element, SnapElement>,
   done: (what: Acted) => void,
 ): () => void {
+  const known = listing;
   const name = listed ? describeElement(listed) : "the element you pointed at";
   const field = isField(target);
   // A field nobody can type in is used by clicking it.
@@ -391,7 +396,7 @@ function waitForAction(
     done({ event, onTarget });
   };
   const filled = () => finish(`The user filled in ${name}. You can't see what they entered.`, true);
-  const labelOfClicked = (el: Element) => (el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
+  const labelOfClicked = (el: Element) => wordsOn(el, listing);
   /** Whether a click that landed on `path` was a click on the target, counting the label that stands in for it. */
   const onTarget = (path: EventTarget[]) =>
     path.includes(target) || path.some((node) => node instanceof HTMLLabelElement && (node.control === target || node.contains(target)));
@@ -479,6 +484,25 @@ function waitForAction(
   document.addEventListener("keydown", onKey, true);
   document.addEventListener("focusout", onLeave, true);
   return stop;
+}
+
+/**
+ * What to call something the visitor clicked, in an event. A control the page
+ * was read with keeps the name the list gave it. Anything else is named by
+ * its own few words, masked like all page text. Nothing is ever read from a
+ * field, from anything a visitor can write in, or from a box that holds one:
+ * that text is theirs. A box that holds other controls, or a long run of
+ * text, is a container, and a container's text is not a name.
+ */
+function wordsOn(el: Element, listing: Map<Element, SnapElement>): string {
+  const listed = listing.get(el);
+  if (listed) return cleanText(listed.label, 60);
+  if (isField(el) || el.querySelector("input, textarea, select, [contenteditable]")) return "";
+  const said = el.getAttribute("aria-label") || el.getAttribute("title");
+  if (said) return cleanText(said, 60);
+  const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  if (text.length > 60 || el.querySelectorAll(CLICKABLE).length > 1) return "";
+  return cleanText(text, 60);
 }
 
 /** Resolves once the page itself has finished arriving, or after a few seconds if it never says so. */
