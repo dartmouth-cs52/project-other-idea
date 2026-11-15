@@ -8,6 +8,11 @@ test("paths collapse ids and drop the query string", () => {
   assert.equal(normalizePath("https://a.com/orders/8812?tab=1#x"), "/orders/:id");
   assert.equal(normalizePath("/users/3f2b8c1e-1111-4222-8333-abcdefabcdef/edit"), "/users/:id/edit");
   assert.equal(normalizePath("/settings/step-3"), "/settings/step-3");
+  // A phone number or a long number in a path is masked, as it is in the page's text.
+  assert.equal(normalizePath("/contacts/415-555-0132/edit"), "/contacts/:id/edit");
+  assert.equal(normalizePath("/call/%2B14155550132"), "/call/:id");
+  assert.equal(normalizePath("/invoices/2024-001234"), "/invoices/:id");
+  assert.equal(normalizePath("/v2/oauth2/settings"), "/v2/oauth2/settings");
 });
 
 test("emails and long numbers are masked", () => {
