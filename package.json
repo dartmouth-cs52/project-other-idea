@@ -18,7 +18,8 @@
     "eval:record": "tsx eval/record.ts",
     "eval:look": "tsx eval/look.ts",
     "eval:guides": "tsx --env-file-if-exists=.env eval/drive.ts",
-    "eval:import": "tsx eval/import.ts"
+    "eval:import": "tsx eval/import.ts",
+    "eval:toolkits": "tsx eval/toolkits/run.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
