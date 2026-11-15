@@ -55,8 +55,8 @@ button { font: inherit; cursor: pointer; }
   background: #e7e5e4; color: #1c1917; font-weight: 500; }
 .helped button:hover { background: #d6d3d1; }
 .note { margin: 0; padding: 8px 12px 4px; font-size: 12px; line-height: 16px; color: #78716c; }
-.note a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
-.note a:hover { color: #1c1917; }
+.note a { color: inherit; text-decoration: none; }
+.note a:hover, .note a:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .cursor { transition: none; } }
 `;
 

@@ -491,9 +491,11 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
 - **Finish plainly.** Haptic confirms in a sentence, shows the green tick, and
   reopens the ask box.
 - **Say it is an AI.** One line of 12px Muted text sits under the ask box,
-  "Haptic is AI and can make mistakes." Its last words are an underlined link
-  to the page that says what Haptic reads and keeps. The launcher carries no
-  tag. A customer can change the launcher's word, and cannot remove the line.
+  "Haptic is AI and can make mistakes." It looks like plain text, with no
+  underline. Its last words are a link to the page that says what Haptic reads
+  and keeps, and the underline shows only under the mouse or keyboard focus.
+  The launcher carries no tag. A customer can change the launcher's word, and
+  cannot remove the line.
 
 ## Do's and Don'ts
 
