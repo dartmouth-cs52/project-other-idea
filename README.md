@@ -95,6 +95,8 @@ npm run tag -- --url http://localhost:4000/demo/ --id site_demo --name "Acme Con
 
 Click **Ask** and try "how do I change my billing info". With `HAPTIC_MODEL=mock` the answers come from a keyword matcher, which is only good for testing the plumbing.
 
+The demo app has a small help centre of its own, in `demo/help`: twelve articles about a product that does not exist. Add `--answers on` to the command above to try Answers on it: ask "how long does an invite link last", then "how do I transfer ownership", which the articles leave out on purpose. One article, on roles, tells the reader to press a Remove button the app does not have, so there is something for the check against the live page to find. The plans article has prices and a refund rule in it, which Haptic must never state.
+
 For a real site:
 
 ```bash
