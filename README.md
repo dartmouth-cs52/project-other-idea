@@ -69,7 +69,7 @@ It prints the tag to paste before `</body>`. `npm run tag -- --help` lists every
 
 `npm test` runs the unit tests and `npm run typecheck` checks types.
 
-`npm run eval -- --models mock` runs the benchmark: 74 fixed steps with known right answers, on the demo app and on joinhaptic.com, scored for any model. See [`eval/README.md`](eval/README.md).
+`npm run eval -- --models mock` runs the benchmark: 565 fixed steps with known right answers, 448 of them on twelve real apps, scored for any model. `npm run eval:guides` runs whole guides in a browser, start to finish. See [`eval/README.md`](eval/README.md) for both, and for where Haptic stands on them.
 
 ## Deployment
 

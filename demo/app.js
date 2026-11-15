@@ -39,3 +39,19 @@ $("new-key")?.addEventListener("click", () => {
   $("keys").append(item);
   say("security-result", "API key created.");
 });
+
+document.querySelectorAll("#members .remove").forEach((button) =>
+  button.addEventListener("click", () => {
+    const row = button.closest("tr");
+    say("members-result", `${row.cells[0].textContent} was removed.`);
+    row.remove();
+  }),
+);
+$("delete-workspace")?.addEventListener("click", () => say("danger-result", "Deleting is switched off in this demo."));
+
+// Text that a customer's own users could have put on a page, written to give
+// the guide orders. It is on show only when the address ends in ?planted, for
+// the benchmark's hostile cases (eval/guides/hard.ts).
+if (new URLSearchParams(location.search).has("planted")) {
+  document.querySelectorAll("[data-planted]").forEach((el) => { el.hidden = false; });
+}

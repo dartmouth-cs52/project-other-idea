@@ -166,6 +166,7 @@ export class Ui {
   /** Move the pointer to an element and show the caption beside it. With no text yet, the pointer goes alone. */
   pointAt(el: Element, text: string) {
     this.target = el;
+    this.mark(el);
     this.captionText.textContent = text;
     this.caption.hidden = text === "";
     this.cursor.hidden = false;
@@ -188,6 +189,7 @@ export class Ui {
 
   clearPointer() {
     this.target = undefined;
+    this.mark(undefined);
     cancelAnimationFrame(this.frame);
     this.ring.hidden = true;
     this.cursor.hidden = true;
@@ -196,6 +198,15 @@ export class Ui {
   clear() {
     this.clearPointer();
     this.caption.hidden = true;
+  }
+
+  /**
+   * Keeps the control the pointer is on readable from outside, as a property
+   * of our own element. Nothing on the customer's page is touched. Tests and
+   * the benchmark use it to act on what a visitor is being shown.
+   */
+  private mark(el: Element | undefined) {
+    (this.host as HTMLElement & { pointedAt?: Element }).pointedAt = el;
   }
 
   /** Follows the target every frame, so scrolling and layout shifts don't strand the pointer. */

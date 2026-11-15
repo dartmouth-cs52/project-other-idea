@@ -15,7 +15,10 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "eval": "tsx --env-file-if-exists=.env eval/run.ts",
-    "eval:record": "tsx eval/record.ts"
+    "eval:record": "tsx eval/record.ts",
+    "eval:look": "tsx eval/look.ts",
+    "eval:guides": "tsx --env-file-if-exists=.env eval/drive.ts",
+    "eval:import": "tsx eval/import.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
