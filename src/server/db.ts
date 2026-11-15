@@ -137,7 +137,23 @@ export class Store {
       ]);
     });
     this.track(guide, write);
-    return write.then(() => this.recordCost(guide, request.step, measure));
+    return write.then(() => this.recordCost(guide, request.step, measure)).then(() => this.recordKind(guide, request.step, measure));
+  }
+
+  /**
+   * On a site with Answers on, adds what kind of reply the step was and the
+   * help docs it rested on. Like the cost, it is a statement of its own for
+   * columns that came later (db/migrations/0005). A site without Answers
+   * sends nothing here.
+   */
+  private recordKind(guide: string, step: number, measure: TurnMeasure): Promise<void> {
+    const { mode, reason } = measure.reply;
+    if (!mode) return Promise.resolve();
+    return this.quietly("record what kind of reply a step was (has db/migrations/0005 been applied?)", async () => {
+      await this.sql`
+        update steps set mode = ${mode}, reason = ${reason ?? null}, sources = ${measure.cited}, overruled = ${measure.overruled ?? null}
+        where guide_id = ${guide} and n = ${step}`;
+    });
   }
 
   /**
