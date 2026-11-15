@@ -95,6 +95,8 @@ const ACCOUNTS = `<h1>Accounts Overview</h1>
     <tr><td><a href="/activity?id=12345">12345</a></td><td>$10.00</td></tr>
     <tr><td><a href="/activity?id=13344">13344</a></td><td>$20.00</td></tr>
     <tr><td><a href="/activity?id=133440">133440</a></td><td>$30.00</td></tr>
+    <tr><td><a href="/activity?id=23344">23344</a></td><td>$40.00</td></tr>
+    <tr><td><a href="/activity?id=1334455">1334455</a></td><td>$50.00</td></tr>
   </table>
   <p>Account Number: 13344</p>
   <select aria-label="From account"><option>12345</option><option>13344</option></select>`;
@@ -102,14 +104,16 @@ const ACCOUNTS = `<h1>Accounts Overview</h1>
 test("a number the visitor named is left as it is, and every other long number stays masked", { skip }, async () => {
   const snapshot = await read(ACCOUNTS, { goal: "Show me the deposits that came into account 13344 in October" });
   const links = snapshot.elements.filter((element) => element.role === "link").map((element) => element.label);
-  assert.deepEqual(links, ["[number]", "13344", "[number]"]);
+  // 133440 and 1334455 contain it, and 23344 ends the same way. They are other accounts, and stay masked.
+  assert.deepEqual(links, ["[number]", "13344", "[number]", "[number]", "[number]"]);
+  assert.ok(!JSON.stringify(snapshot).match(/23344|1334455|133440|12345/), JSON.stringify(snapshot));
   assert.ok(snapshot.text.includes("Account Number: 13344"));
   assert.deepEqual(snapshot.elements.find((element) => element.role === "select")?.options, ["[number]", "13344"]);
 });
 
 test("with no number in the question every long number is masked", { skip }, async () => {
   const snapshot = await read(ACCOUNTS, { goal: "Show me my deposits" });
-  assert.deepEqual(snapshot.elements.filter((element) => element.role === "link").map((element) => element.label), ["[number]", "[number]", "[number]"]);
+  assert.deepEqual(snapshot.elements.filter((element) => element.role === "link").map((element) => element.label), ["[number]", "[number]", "[number]", "[number]", "[number]"]);
   assert.ok(snapshot.text.includes("Account Number: [number]"));
 });
 

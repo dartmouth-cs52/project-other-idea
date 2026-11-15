@@ -32,6 +32,9 @@ test("what the visitor named in their own question stays readable, and only when
   assert.equal(cleanText("133440 and 913344", 80, own), "[number] and [number]");
   assert.equal(cleanText("13344 12456 99999", 80, own), "13344 12456 [number]");
   assert.equal(cleanText("603 13344 10", 80, own), "[number] 13344 [number]");
+  // Not by its ending, not inside a longer number, and not as one part of a number written with dashes.
+  assert.equal(cleanText("23344, 1334455, 913344 and 13344-5566-77", 80, own), "[number], [number], [number] and [number]");
+  assert.equal(cleanText("acct (13344) or 13344-5566", 80, own), "acct (13344) or [number]");
   assert.equal(cleanText("sam@acme.com, pat@acme.com", 80, own), "sam@acme.com, [email]");
   assert.equal(cleanText("603-646-1110", 80, own), "[number]");
   assert.equal(cleanText("13344"), "[number]");

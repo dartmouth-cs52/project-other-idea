@@ -195,13 +195,11 @@ export function namedIn(question: string): Set<string> {
  */
 function maskNumbers(text: string, own?: ReadonlySet<string>): string {
   const whole = (piece: string): string => piece.replace(/\+?\d(?:[\d\s().-]*\d)?/, "[number]");
-  // One of the visitor's numbers standing among other digits stays, and every digit on either side of it goes.
-  const around = (piece: string): string => {
-    for (const run of piece.matchAll(/\d+/g)) {
-      if (own?.has(run[0])) return around(piece.slice(0, run.index)) + run[0] + around(piece.slice(run.index + run[0].length));
-    }
-    return whole(piece);
-  };
+  // Digits set apart by spaces can be several numbers, like a row's account numbers. Each piece that is
+  // one of the visitor's numbers stays, and every other piece goes. Digits joined by a dash, a dot or a
+  // bracket are one number, so "13344-5566" goes whole: part of a number is never left readable.
+  const around = (piece: string): string =>
+    piece.replace(/\S+/g, (token) => (own?.has(token.replace(/^[(+]+|[),.;:]+$/g, "")) ? token : /\d/.test(token) ? whole(token) : token));
   const maskRun = (piece: string): string => {
     if (piece.replace(/\D/g, "").length < MIN_PHONE_DIGITS) return piece;
     return own?.size ? around(piece) : whole(piece);
