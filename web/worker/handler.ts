@@ -19,6 +19,8 @@ export interface Env extends AppEnv {
   NOTIFY_TO?: string;
   /** Slows down anyone hammering the form. */
   FORM_LIMIT?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+  /** Slows down anyone hammering sign-in, which can send an email on each try. */
+  AUTH_LIMIT?: { limit(options: { key: string }): Promise<{ success: boolean }> };
 }
 
 const SITE = "joinhaptic.com";
@@ -35,7 +37,14 @@ export async function handle(request: Request, env: Env, assets: Assets): Promis
   }
 
   if (url.pathname === "/api/request-access") return requestAccess(request, env, url);
-  if (url.pathname.startsWith("/api/auth/")) return proxyAuth(request, env);
+  if (url.pathname.startsWith("/api/auth/")) {
+    // Signing in can send an email, and Neon sees every caller as this Worker, so the limit has to be kept here.
+    // Checking who is signed in is a GET and is not counted.
+    if (request.method !== "GET" && env.AUTH_LIMIT && !(await env.AUTH_LIMIT.limit({ key: request.headers.get("cf-connecting-ip") ?? "unknown" })).success) {
+      return json({ message: "Too many tries. Wait a minute and try again.", code: "TOO_MANY_REQUESTS" }, 429);
+    }
+    return proxyAuth(request, env);
+  }
   if (url.pathname.startsWith("/api/app/")) return appApi(request, env, url);
 
   const response = await assets.fetch(request);

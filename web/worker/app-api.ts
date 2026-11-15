@@ -89,7 +89,7 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
       const sub = match[2];
       if (!sub && request.method === "GET") return reply(await siteStatus(sql, env, org, id));
       if (!sub && request.method === "PATCH") return reply(await changeSite(sql, env, org, id, await body(request)));
-      if (sub === "/read" && request.method === "POST") return reply(await readSite(sql, env, org, id));
+      if (sub === "/read" && request.method === "POST") return reply(await readSite(sql, env, org, id, (await body(request)).restart === true));
       if (sub === "/insights" && request.method === "GET") {
         await ownedSite(sql, org, id);
         const days = Math.min(Math.max(Number(url.searchParams.get("days")) || 30, 1), 365);
@@ -265,19 +265,29 @@ async function changeSite(sql: Sql, env: AppEnv, org: Organization, id: string, 
   return siteStatus(sql, env, org, id);
 }
 
-async function readSite(sql: Sql, env: AppEnv, org: Organization, id: string) {
+async function readSite(sql: Sql, env: AppEnv, org: Organization, id: string, restart: boolean) {
   const site = await ownedSite(sql, org, id);
   const pages = site.context.pages ?? [];
-  if (!site.reading || site.reading.finishedAt) return readingSummary(site.reading, pages);
-  const batch = await readMore(site.reading, env.BROWSER);
+  // A reading that ended with nothing read may be tried again. One that read anything is kept as it is.
+  const reading = restart && site.reading?.finishedAt && !pages.length ? startReading(site.context.source.url) : site.reading;
+  if (!reading || reading.finishedAt) return readingSummary(reading, pages);
+  const batch = await readMore(reading, env.BROWSER);
   const byPath = new Map(pages.map((page) => [page.path, page]));
   for (const page of batch.pages) byPath.set(page.path, page);
   const merged = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
-  // Only the pages and the reading change, so an edit to the name or origins made meanwhile is kept.
+  // The address pasted may be the site's other name, acme.com for www.acme.com. The widget will run on the
+  // one it redirects to, so that becomes the site's origin and is allowed too.
+  const moved = batch.movedTo ?? null;
+  // Only the pages, the reading and that origin change, so an edit to the name or origins made meanwhile is kept.
   await sql`
     update sites set
       context = jsonb_set(jsonb_set(context, '{pages}', ${JSON.stringify(merged)}::jsonb), '{updatedAt}', to_jsonb(now()::text)),
-      reading = ${JSON.stringify(batch.reading)}::jsonb, updated_at = now()
+      reading = ${JSON.stringify(batch.reading)}::jsonb,
+      origin = coalesce(${moved}::text, origin),
+      allowed_origins = case
+        when ${moved}::text is null or ${moved}::text = any(allowed_origins) or cardinality(allowed_origins) >= ${MAX_ORIGINS} then allowed_origins
+        else array_append(allowed_origins, ${moved}::text) end,
+      updated_at = now()
     where id = ${id} and company_id = ${org.id}`;
   return readingSummary(batch.reading, merged);
 }

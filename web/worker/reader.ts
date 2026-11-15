@@ -29,6 +29,8 @@ export interface Reading {
   thin: string[];
   max: number;
   via?: "browser" | "http";
+  /** The origin being read. It starts as the one pasted and moves if the first page redirects to the same site's other address. */
+  origin?: string;
   startedAt: string;
   finishedAt?: string;
 }
@@ -42,15 +44,36 @@ const PER_BATCH = { browser: 3, http: 6 };
 const TIMEOUT_MS = 15_000;
 const USER_AGENT = "HapticReader/1.0 (+https://joinhaptic.com)";
 const NOT_PAGES = /\.(png|jpe?g|gif|svg|webp|ico|pdf|zip|css|js|json|xml|txt|mp4|woff2?)$/i;
+/** Most page addresses taken from a sitemap. The reading stops at `max` pages anyway. */
+const MAX_FROM_SITEMAP = 200;
 
 export function startReading(url: string): Reading {
   return { queue: [url], seen: [], failed: [], thin: [], max: MAX_PAGES, startedAt: new Date().toISOString() };
 }
 
-/** Reads the next few pages. Returns the pages read and the reading to save, which is finished once nothing is left. */
-export async function readMore(reading: Reading, browser?: BrowserBinding): Promise<{ pages: PageNode[]; reading: Reading }> {
+/**
+ * True when two addresses are the same site under its other name: with or
+ * without www, or http against https. A redirect between those is followed. A
+ * redirect anywhere else, such as to a sign-in service, is not.
+ */
+export function sameSite(a: URL, b: URL): boolean {
+  const bare = (url: URL) => url.hostname.replace(/^www\./, "");
+  return bare(a) === bare(b) && a.port === b.port;
+}
+
+/**
+ * Reads the next few pages. Returns the pages read and the reading to save,
+ * which is finished once nothing is left. The first call reads only the page
+ * that was pasted, to learn where the site really lives: `movedTo` is set when
+ * that page redirected to the site's other address, which is then the origin
+ * read from there on.
+ */
+export async function readMore(reading: Reading, browser?: BrowserBinding): Promise<{ pages: PageNode[]; reading: Reading; movedTo?: string }> {
   const next = { ...reading, queue: [...reading.queue], seen: [...reading.seen], failed: [...reading.failed], thin: [...reading.thin] };
-  const origin = next.queue[0] ? new URL(next.queue[0]).origin : "";
+  const first = next.seen.length === 0;
+  const start = next.queue[0] ? new URL(next.queue[0]) : undefined;
+  next.origin ??= start?.origin ?? "";
+  const fail = (url: string, reason: string) => void next.failed.push({ url, reason });
   const take = (count: number) => {
     const urls: string[] = [];
     while (next.queue.length && urls.length < count && next.seen.length < next.max) {
@@ -65,30 +88,45 @@ export async function readMore(reading: Reading, browser?: BrowserBinding): Prom
 
   let outlines: { url: string; outline: RawOutline }[] = [];
   if (browser) {
-    const urls = take(PER_BATCH.browser);
+    const urls = take(first ? 1 : PER_BATCH.browser);
     try {
-      outlines = await readWithBrowser(browser, urls, (url, reason) => next.failed.push({ url, reason }));
+      outlines = await readWithBrowser(browser, urls, fail);
       next.via = "browser";
     } catch (error) {
       // No browser to be had right now (a limit, or none on the plan). Read these as plain HTML instead.
       console.error("Browser Rendering failed, reading as HTML:", error instanceof Error ? error.message : error);
-      outlines = await readWithFetch(urls, (url, reason) => next.failed.push({ url, reason }));
+      outlines = await readWithFetch(urls, fail);
       next.via = "http";
     }
   } else {
-    outlines = await readWithFetch(take(PER_BATCH.http), (url, reason) => next.failed.push({ url, reason }));
+    outlines = await readWithFetch(take(first ? 1 : PER_BATCH.http), fail);
     next.via = "http";
+  }
+
+  let movedTo: string | undefined;
+  if (first && start && outlines[0]) {
+    const landed = new URL(outlines[0].url);
+    if (landed.origin !== start.origin && sameSite(start, landed)) movedTo = next.origin = landed.origin;
   }
 
   const pages: PageNode[] = [];
   for (const { url, outline } of outlines) {
+    // A page that sent us to another site, such as a sign-in service, is not one of this site's pages.
+    if (new URL(url).origin !== next.origin) {
+      fail(url, "leads to another site");
+      continue;
+    }
     const { page, found, controls } = toPageNode(url, outline);
     pages.push(page);
     if (controls < 3) next.thin.push(page.path);
     for (const link of found) {
-      if (new URL(link).origin === origin && !NOT_PAGES.test(new URL(link).pathname) && !next.seen.includes(normalizePath(new URL(link).pathname))) next.queue.push(link);
+      if (new URL(link).origin === next.origin && !NOT_PAGES.test(new URL(link).pathname) && !next.seen.includes(normalizePath(new URL(link).pathname))) next.queue.push(link);
     }
   }
+  // After the links on the first page, which are the site's own navigation, come the pages its sitemap lists.
+  // A site built with JavaScript may have no links in its HTML at all, and this is then the only way to its pages.
+  if (first && pages.length) next.queue.push(...(await sitemapUrls(next.origin)).filter((url) => !next.seen.includes(normalizePath(new URL(url).pathname))));
+
   // Keep the queue short: one waiting URL per path is enough.
   const queued = new Set<string>();
   next.queue = next.queue.filter((url) => {
@@ -101,7 +139,22 @@ export async function readMore(reading: Reading, browser?: BrowserBinding): Prom
     next.queue = [];
     next.finishedAt = new Date().toISOString();
   }
-  return { pages, reading: next };
+  return { pages, reading: next, ...(movedTo ? { movedTo } : {}) };
+}
+
+/** The pages a site lists in /sitemap.xml, on its own origin. Empty when there is none or it cannot be read. */
+async function sitemapUrls(origin: string): Promise<string[]> {
+  try {
+    const response = await fetch(`${origin}/sitemap.xml`, { headers: { "User-Agent": USER_AGENT }, redirect: "follow", signal: AbortSignal.timeout(TIMEOUT_MS) });
+    if (!response.ok) return [];
+    const text = (await response.text()).slice(0, 2_000_000);
+    return [...text.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)]
+      .map((match) => (match[1] ?? "").replace(/&amp;/g, "&"))
+      .filter((loc) => URL.canParse(loc) && new URL(loc).origin === origin && !NOT_PAGES.test(new URL(loc).pathname))
+      .slice(0, MAX_FROM_SITEMAP);
+  } catch {
+    return [];
+  }
 }
 
 async function readWithBrowser(binding: BrowserBinding, urls: string[], fail: (url: string, reason: string) => void) {

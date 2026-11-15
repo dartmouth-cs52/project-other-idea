@@ -8,7 +8,6 @@ export interface InstallOption {
   where: string;
   /** The code to copy, if there is any beyond the tag itself. */
   code?: string;
-  language?: string;
   /** Extra steps or caveats, one per line. */
   notes?: string[];
 }
@@ -25,7 +24,6 @@ export function installOptions(scriptUrl: string, siteId: string): InstallOption
       label: "Script tag",
       where: "Paste this just before </body> on every page, usually in the one layout or template every page shares.",
       code: tag,
-      language: "html",
     },
     {
       id: "next",
@@ -43,21 +41,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }`,
-      language: "tsx",
     },
     {
       id: "react",
       label: "React",
       where: "For an app built with Vite or Create React App, paste the tag into index.html, just before </body>. It loads once and follows people from page to page.",
       code: tag,
-      language: "html",
     },
     {
       id: "gtm",
       label: "Google Tag Manager",
       where: "If your site already loads Google Tag Manager, you can add Haptic without touching the code.",
       code: tag,
-      language: "html",
       notes: [
         "In your container, choose Tags, then New, then Custom HTML.",
         "Paste the tag above into the HTML box.",
@@ -69,13 +64,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       label: "Website builders",
       where: "Every builder below has a place for code that goes at the end of every page. Paste the tag there.",
       code: tag,
-      language: "html",
       notes: [
-        "Webflow: Site settings, Custom code, Footer code. Then publish the site.",
-        "WordPress: a code snippets plugin such as WPCode, set to the site-wide footer, or your theme's footer.php just before </body>.",
-        "Squarespace: Settings, Advanced, Code injection, Footer. Code injection needs a paid plan.",
-        "Wix: Settings, Custom code, Add custom code, placed at Body end on all pages. This needs a premium plan and a connected domain.",
-        "Shopify: Online Store, Themes, Edit code, theme.liquid, just before </body>.",
+        "In Webflow, open Site settings, Custom code, Footer code. Then publish the site.",
+        "In WordPress, use a code snippets plugin such as WPCode, set to the site wide footer, or your theme's footer.php just before </body>.",
+        "In Squarespace, open Settings, Advanced, Code injection, Footer. Code injection needs a paid plan.",
+        "In Wix, open Settings, Custom code, Add custom code, placed at Body end on all pages. This needs a premium plan and a connected domain.",
+        "In Shopify, open Online Store, Themes, Edit code, theme.liquid, and paste it just before </body>.",
       ],
     },
   ];

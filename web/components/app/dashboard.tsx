@@ -31,7 +31,12 @@ export function Dashboard() {
         const me = await api<Me>("/me");
         if (live) setState({ kind: "ready", me });
       } catch (failure) {
-        if (failure instanceof ApiError && failure.status === 401) return window.location.replace("/sign-in/");
+        if (failure instanceof ApiError && failure.status === 401) {
+          // A sign-in link that was already used or has expired comes back here with an error in the address.
+          // Take it along, so the sign-in page can say what happened.
+          const linkError = new URLSearchParams(window.location.search).get("error");
+          return window.location.replace(linkError ? `/sign-in/?error=${encodeURIComponent(linkError)}` : "/sign-in/");
+        }
         if (live) setState({ kind: "failed", message: (failure as Error).message });
       }
     })();

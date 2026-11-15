@@ -45,6 +45,8 @@ export function SiteView({ siteId }: { siteId: string }) {
     };
   }, [load, site?.connected]);
 
+  const pages = useReading(site);
+
   if (error && !site) return <Card><p className="text-base text-muted-foreground">{error}</p></Card>;
   if (!site) return <Card><p className="text-base text-muted-foreground">Loading your site</p></Card>;
 
@@ -58,16 +60,59 @@ export function SiteView({ siteId }: { siteId: string }) {
       {site.connected ? (
         <>
           <InsightsView siteId={site.id} refreshKey={refreshKey} />
-          <InstallHealth site={site} onChange={setSite} />
+          <InstallHealth site={site} reading={pages.reading} onChange={setSite} />
         </>
       ) : (
-        <Setup site={site} onChange={setSite} />
+        <Setup site={site} pages={pages} onChange={setSite} />
       )}
     </div>
   );
 }
 
-function Setup({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
+/**
+ * Keeps the reading of a site's public pages going while its page is open, a
+ * few pages per request, whether or not the site has connected yet. A fast
+ * install must not leave the site with only the first few pages.
+ */
+function useReading(site: Site | null) {
+  const [reading, setReading] = useState<Reading | null>(null);
+  const [stalled, setStalled] = useState(false);
+  const busy = useRef(false);
+  const siteId = site?.id;
+  const unfinished = Boolean(site?.reading && !site.reading.done);
+
+  const run = useCallback(
+    async (restart: boolean) => {
+      if (!siteId || busy.current) return;
+      busy.current = true;
+      setStalled(false);
+      try {
+        for (let round = 0; round < 20; round++) {
+          const next = await api<Reading | null>(`/sites/${siteId}/read`, { method: "POST", body: restart && round === 0 ? { restart: true } : {} });
+          setReading(next);
+          if (!next || next.done) break;
+        }
+      } catch {
+        setStalled(true);
+      } finally {
+        busy.current = false;
+      }
+    },
+    [siteId],
+  );
+
+  useEffect(() => {
+    if (!unfinished) return;
+    const start = setTimeout(() => void run(false), 0);
+    return () => clearTimeout(start);
+  }, [unfinished, run]);
+
+  return { reading: reading ?? site?.reading ?? null, stalled, retry: () => void run(true) };
+}
+
+type Pages = ReturnType<typeof useReading>;
+
+function Setup({ site, pages, onChange }: { site: Site; pages: Pages; onChange: (site: Site) => void }) {
   const developerLink = typeof window === "undefined" ? "" : `${window.location.origin}/install/?site=${site.id}`;
   const mail = `mailto:?subject=${encodeURIComponent("Please add Haptic to our site")}&body=${encodeURIComponent(
     `Hi,\n\nCould you add Haptic to ${site.origin}? It is one script tag on every page, including pages behind the login. Everything you need, for each kind of stack, is here.\n\n${developerLink}\n\nThanks`,
@@ -75,7 +120,7 @@ function Setup({ site, onChange }: { site: Site; onChange: (site: Site) => void 
 
   return (
     <div className="flex flex-col gap-6">
-      <ReadPages site={site} />
+      <ReadPages pages={pages} />
 
       <Card>
         <div className="flex items-center gap-3">
@@ -100,40 +145,30 @@ function Setup({ site, onChange }: { site: Site; onChange: (site: Site) => void 
   );
 }
 
-/** Step 1. Reads the public pages a few at a time, showing each as it comes, until all are read. */
-function ReadPages({ site }: { site: Site }) {
-  const [reading, setReading] = useState<Reading | null>(site.reading);
-  const [failed, setFailed] = useState(false);
-  const busy = useRef(false);
-
-  useEffect(() => {
-    let live = true;
-    async function more() {
-      if (busy.current) return;
-      busy.current = true;
-      try {
-        for (let round = 0; round < 20 && live; round++) {
-          const next = await api<Reading | null>(`/sites/${site.id}/read`, { method: "POST" });
-          if (!live) break;
-          setReading(next);
-          if (!next || next.done) break;
-        }
-      } catch {
-        if (live) setFailed(true);
-      } finally {
-        busy.current = false;
-      }
-    }
-    if (reading && !reading.done) void more();
-    return () => {
-      live = false;
-    };
-    // Starts once per site. Each round updates `reading` itself.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [site.id]);
-
+/** Step 1. Shows the public pages as they are read, a few at a time, and says so plainly when none could be. */
+function ReadPages({ pages }: { pages: Pages }) {
+  const { reading, stalled, retry } = pages;
   if (!reading) return null;
   const done = reading.done;
+
+  if (done && reading.read === 0) {
+    return (
+      <Card>
+        <div className="flex items-center gap-3">
+          <StepMark n={1} />
+          <h2 className="text-2xl font-medium tracking-[-0.02em]">Haptic could not read your site</h2>
+        </div>
+        <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
+          The address did not answer, or it sends visitors somewhere else, such as a sign in page. You can carry on. Haptic reads each page live once the
+          script is on it, so guides still work.
+        </p>
+        <Button variant="secondary" className="self-start" onClick={retry}>
+          Try again
+        </Button>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <div className="flex items-center gap-3">
@@ -147,7 +182,7 @@ function ReadPages({ site }: { site: Site }) {
           ? "Haptic has read your public pages, so it knows what your product calls things. Screens behind your login are read live, on the page each person is looking at."
           : "Haptic is reading your public pages, following links, tabs and menus. It never submits a form or changes anything."}
       </p>
-      {failed && !done && <p className="text-sm text-muted-foreground">Reading stopped for now. It picks up again when you reload this page.</p>}
+      {stalled && !done && <p className="text-sm text-muted-foreground">Reading stopped for now. It picks up again when you reload this page.</p>}
       {reading.pages.length > 0 && (
         <ul className="grid max-h-56 gap-x-6 gap-y-1 overflow-y-auto rounded-lg border bg-card p-4 text-sm sm:grid-cols-2">
           {reading.pages.map((page) => (
@@ -178,7 +213,8 @@ function Connection({ site, onChange }: { site: Site; onChange: (site: Site) => 
       {refused.length ? (
         <div className="flex flex-col gap-3">
           <p className="max-w-[65ch] text-base leading-6">
-            The script is running, but on an address this site does not allow yet. Haptic stays hidden there until you allow it.
+            The script is running, but on an address this site does not allow yet. Haptic stays hidden there until you allow it, and then shows up
+            within a minute. Only allow an address you know is yours.
           </p>
           <ul className="flex flex-col divide-y rounded-lg border bg-card">
             {refused.map((row) => (
@@ -282,10 +318,15 @@ function AllowedOrigins({ site, onChange }: { site: Site; onChange: (site: Site)
 }
 
 /** Once connected: where the script has been seen, and the list of allowed addresses. */
-function InstallHealth({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
+function InstallHealth({ site, reading, onChange }: { site: Site; reading: Reading | null; onChange: (site: Site) => void }) {
   return (
     <Card>
       <CardTitle>Install</CardTitle>
+      {reading && reading.read > 0 && (
+        <p className="text-sm text-muted-foreground">
+          {reading.read} public {reading.read === 1 ? "page" : "pages"} read{reading.done ? "." : ", and still reading."}
+        </p>
+      )}
       <ul className="flex flex-col divide-y rounded-lg border bg-card">
         {site.origins.map((row) => (
           <li key={row.origin} className="flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">

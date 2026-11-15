@@ -56,7 +56,6 @@ export interface Site {
   origin: string;
   allowedOrigins: string[];
   scriptUrl: string;
-  tag: string;
   connected: boolean;
   origins: SeenOrigin[];
   reading: Reading | null;
@@ -118,6 +117,3 @@ export const OUTCOME_LABEL: Record<Outcome, string> = {
   abandoned: "Abandoned",
   under_way: "Under way",
 };
-
-/** Endings the company should look at. */
-export const BAD_OUTCOMES: Outcome[] = ["nothing_to_point_at", "loop", "step_limit", "error", "abandoned"];

@@ -9,6 +9,8 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Depends on a file generated at deploy time.
     "worker/embedded.ts",
+    // What `wrangler dev` writes while it runs.
+    ".wrangler/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",

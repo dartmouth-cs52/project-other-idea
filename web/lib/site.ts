@@ -26,7 +26,7 @@ export const faqs = [
   },
   {
     q: "How do I add Haptic to my product?",
-    a: "Sign in, paste your site's address, and add one script tag. While you set up, Haptic reads your public pages to learn what your product calls things. On pages behind your login it reads the screen live, as your user sees it.",
+    a: "Once your company has access, sign in, paste your site's address, and add one script tag. While you set up, Haptic reads your public pages to learn what your product calls things. On pages behind your login it reads the screen live, as your user sees it.",
   },
   {
     q: "Does Haptic click things for my users?",
