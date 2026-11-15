@@ -9,6 +9,8 @@ import { buildSystemPrompt, buildUserMessage } from "./prompt.ts";
 // to point at is known before the sentence that goes with it is finished.
 
 type Effort = "low" | "medium" | "high";
+/** How long the provider keeps a site's rules and knowledge ready between steps. */
+type CacheLife = "5m" | "1h";
 
 /** How a step is asked for. The server reads these from the environment, and the benchmark tries several. */
 export interface TurnSettings {
@@ -17,9 +19,19 @@ export interface TurnSettings {
   effort: Effort;
   /** "off" asks for no thinking before the answer, on the models that allow it. */
   thinking: "default" | "off";
+  /** How long a site's cached prompt outlives its last step. */
+  cache: CacheLife;
 }
 
-/** The names the settings are read from: HAPTIC_MODEL, HAPTIC_EFFORT, HAPTIC_THINKING and ANTHROPIC_API_KEY. */
+/**
+ * An hour, because a quiet site sees gaps longer than five minutes between
+ * visitors, and every gap past the cache's life is a step paid for in full.
+ * Writing an hour's cache costs 2x the input price where five minutes costs
+ * 1.25x, so a site that never goes five minutes without a step is cheaper on "5m".
+ */
+export const DEFAULT_CACHE: CacheLife = "1h";
+
+/** The names the settings are read from: HAPTIC_MODEL, HAPTIC_EFFORT, HAPTIC_THINKING, HAPTIC_CACHE and ANTHROPIC_API_KEY. */
 export type ModelEnv = Record<string, string | undefined>;
 
 const EFFORTS: readonly string[] = ["low", "medium", "high"];
@@ -30,6 +42,7 @@ function settingsFrom(env: ModelEnv): TurnSettings {
     // Each step is a small decision and the visitor is waiting on it, so the least effort is the default.
     effort: EFFORTS.includes(env.HAPTIC_EFFORT ?? "") ? (env.HAPTIC_EFFORT as Effort) : "low",
     thinking: env.HAPTIC_THINKING === "off" ? "off" : "default",
+    cache: env.HAPTIC_CACHE === "5m" || env.HAPTIC_CACHE === "1h" ? env.HAPTIC_CACHE : DEFAULT_CACHE,
   };
 }
 
@@ -171,7 +184,7 @@ async function claudeTurn(
       ...(settings.thinking === "off" ? withoutThinking(settings.model) : {}),
       output_config: { effort: settings.effort, format: betaZodOutputFormat(Reply) },
       // Rules and site knowledge are the same for every turn on a site, so they're cached.
-      system: [{ type: "text", text: buildSystemPrompt(site), cache_control: { type: "ephemeral" } }],
+      system: [{ type: "text", text: buildSystemPrompt(site), cache_control: { type: "ephemeral", ttl: settings.cache } }],
       messages,
     });
     // The reply is JSON with "target" first, so it is the first thing that can be acted on.
@@ -190,7 +203,7 @@ async function claudeTurn(
   const { usage } = response;
   console.log(
     `turn ${site.id} step ${request.step}: ${Date.now() - started} ms, ${response.model}, ` +
-      `input ${usage.input_tokens}, cache read ${usage.cache_read_input_tokens ?? 0}, output ${usage.output_tokens}`,
+      `input ${usage.input_tokens}, cache read ${usage.cache_read_input_tokens ?? 0}, cache write ${usage.cache_creation_input_tokens ?? 0}, output ${usage.output_tokens}`,
   );
 
   const tokens = {

@@ -25,6 +25,7 @@ export interface Env {
   HAPTIC_MODEL?: string;
   HAPTIC_EFFORT?: string;
   HAPTIC_THINKING?: string;
+  HAPTIC_CACHE?: string;
   HAPTIC_MOCK_PAUSE_MS?: string;
   /** A secret, set with `wrangler secret put`. Not needed while HAPTIC_MODEL is "mock". */
   ANTHROPIC_API_KEY?: string;
@@ -69,6 +70,7 @@ export default {
       HAPTIC_MODEL: env.HAPTIC_MODEL,
       HAPTIC_EFFORT: env.HAPTIC_EFFORT,
       HAPTIC_THINKING: env.HAPTIC_THINKING,
+      HAPTIC_CACHE: env.HAPTIC_CACHE,
       HAPTIC_MOCK_PAUSE_MS: env.HAPTIC_MOCK_PAUSE_MS,
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
     });

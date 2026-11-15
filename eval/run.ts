@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { measureTurn, TurnError, type TurnSettings } from "../src/server/model.ts";
+import { DEFAULT_CACHE, measureTurn, TurnError, type TurnSettings } from "../src/server/model.ts";
 import { loadCaseFiles, plausibleRange, score, type Case } from "./cases.ts";
 
 // Runs every benchmark case against one or more models and prints how often
@@ -45,7 +45,7 @@ interface Run {
 
 function parseModel(spec: string): { name: string; settings: TurnSettings } {
   const [model = "", ...flags] = spec.trim().split("@");
-  const settings: TurnSettings = { model, effort: "low", thinking: "default" };
+  const settings: TurnSettings = { model, effort: "low", thinking: "default", cache: DEFAULT_CACHE };
   for (const flag of flags) {
     if (flag === "low" || flag === "medium" || flag === "high") settings.effort = flag;
     else if (flag === "off") settings.thinking = "off";

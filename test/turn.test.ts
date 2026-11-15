@@ -92,3 +92,15 @@ test("the model is told that stuck is its own status, apart from done", () => {
   assert.match(prompt, /"stuck" when you can't find a way forward/);
   assert.doesNotMatch(prompt, /"done" when[^.]*can't find a way forward/);
 });
+
+test("a site's prompt is kept for an hour unless the setting says five minutes", async () => {
+  const model = await import("../src/server/model.ts");
+  const cacheWith = (value?: string) => {
+    model.configure({ HAPTIC_MODEL: "mock", HAPTIC_CACHE: value });
+    return model.SETTINGS.cache;
+  };
+  assert.equal(cacheWith(), "1h");
+  assert.equal(cacheWith("5m"), "5m");
+  assert.equal(cacheWith("forever"), "1h");
+  model.configure({ HAPTIC_MODEL: "mock" });
+});
