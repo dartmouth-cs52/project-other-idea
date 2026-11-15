@@ -249,7 +249,11 @@ export function judgeEvent(event: string | undefined, action: Action, used: Snap
   if (!event) return { heard: "unclear", why: "the widget asked again without saying what the visitor did" };
   if (/instead of|without using|something else/i.test(event)) return { heard: "wrong", why: "it says the visitor did not use the control they used" };
   const named = used ? describeElement(used) : `"${words ?? ""}"`;
-  const mentions = (used && (event.includes(named) || (used.label && event.includes(`"${used.label}"`)))) || (words && event.includes(words));
+  // Words alone must be what the sentence quotes, from its start: "15" is not named by a calendar's whole text that holds it,
+  // nor "PDF" by its parent menu item "Export as PDF JPG PNG". State words after the name ("… Today") are fine.
+  const quoted = [...event.matchAll(/"([^"]*)"/g)].map((match) => match[1]!);
+  const namesWords = !!words && quoted.some((q) => q === words || (q.startsWith(words) && /^\W/.test(q.slice(words.length))));
+  const mentions = (used && (event.includes(named) || (used.label && event.includes(`"${used.label}"`)))) || namesWords;
   if (!mentions) return { heard: "unclear", why: `the sentence does not name ${named}` };
   const verbs =
     "type" in action ? /filled|typed|entered|wrote/i : "drag" in action ? /filled|moved|set|changed|dragged|slid|clicked/i : "click" in action ? /clicked|chose|picked|selected|pressed|opened|checked|ticked|toggled/i : /./;

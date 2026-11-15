@@ -63,7 +63,7 @@ const kit: Kit = {
       steps: [
         { click: { role: "button", name: "Toggle menu" } },
         { hover: { role: "menuitem", name: "Preferences", where: "page" } },
-        { click: { role: "menuitem", name: "Theme", where: "page" } },
+        { click: { role: "menuitem", name: "Settings", where: "page" } },
       ],
     },
     { kind: "tabs", path: story("components-tablist--default"), demo: "components-tablist--default", steps: [{ click: { role: "tab", name: "Second Tab" } }] },

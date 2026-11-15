@@ -20,6 +20,7 @@ const HELP = `Usage: npm run eval:toolkits -- [toolkit] [component] [options]
   component        A kind of control (${KINDS.slice(0, 6).join(", ")}, ...) or a demo's name. All when left out.
   --widget <dir>   The checkout whose widget is tested. This one when left out.
   --table <files>  Print the table and the faults from saved results, and run nothing. Several files, separated by commas, are read as one run, a demo in a later file replacing the same demo in an earlier one.
+  --save <file>    With --table: also write the results read as one file, to compare a later run against.
   --compare <files> Show each cell of the table beside the same cell of earlier results.
   --pause <ms>     Wait between demos, to keep a modest pace on other people's sites. 2000 by default.
   --shots <dir>    Keep a screenshot and the list the widget sent at each question, to look at a failure by hand.
@@ -37,12 +38,17 @@ async function main() {
       pause: { type: "string", default: "2000" },
       headed: { type: "boolean", default: false },
       shots: { type: "string" },
+      save: { type: "string" },
       help: { type: "boolean", default: false },
     },
   });
   if (values.help) return console.log(HELP);
   const before = values.compare ? await loadResults(values.compare) : undefined;
-  if (values.table) return print(await loadResults(values.table), before);
+  if (values.table) {
+    const run = await loadResults(values.table);
+    if (values.save) await writeFile(values.save, JSON.stringify(run, null, 1) + "\n");
+    return print(run, before);
+  }
 
   const [kitArg = "all", component] = positionals;
   const kits = kitArg === "all" ? KITS : KITS.filter((kit) => kit.id === kitArg);
@@ -80,7 +86,9 @@ async function main() {
   }
   run.finishedAt = new Date().toISOString();
   await mkdir(RESULTS_DIR, { recursive: true });
-  const file = `${RESULTS_DIR}${run.startedAt.slice(0, 19).replace(/[:T]/g, "-")}-${bundles.fingerprint}.json`;
+  // Named by when, what and which widget, so runs side by side never write the same file.
+  const what = [kitArg, component].filter(Boolean).join("-").replace(/[^\w-]+/g, "_");
+  const file = `${RESULTS_DIR}${run.startedAt.slice(0, 23).replace(/[:T.]/g, "-")}-${what}-${bundles.fingerprint}.json`;
   await writeFile(file, JSON.stringify(run, null, 1) + "\n");
   console.log(`\nResults: ${file}\n`);
   print(run, before);
