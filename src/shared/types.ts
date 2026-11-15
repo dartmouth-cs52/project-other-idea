@@ -186,6 +186,12 @@ export interface TurnReply {
   status: "continue" | "done" | "stuck";
   /** One or two sentences shown next to the pointer. */
   say: string;
+  /**
+   * True when the server answered without asking the model, because the site
+   * is switched off or has spent its budget. The guide stopped there: it did
+   * not finish, and there is nothing to ask the visitor about.
+   */
+  paused?: true;
 }
 
 // Paths ---------------------------------------------------------------------
