@@ -163,11 +163,11 @@ export class Ui {
     this.panel.hidden = true;
   }
 
-  /** Move the pointer to an element and show the caption beside it. */
+  /** Move the pointer to an element and show the caption beside it. With no text yet, the pointer goes alone. */
   pointAt(el: Element, text: string) {
     this.target = el;
     this.captionText.textContent = text;
-    this.caption.hidden = false;
+    this.caption.hidden = text === "";
     this.cursor.hidden = false;
     // Paint once at the old spot so the transition has somewhere to start from.
     this.cursor.style.transform = `translate(${this.at.x - POINTER_TIP.x}px, ${this.at.y - POINTER_TIP.y}px)`;

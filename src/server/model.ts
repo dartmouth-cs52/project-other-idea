@@ -5,9 +5,8 @@ import type { SiteContext, TurnReply, TurnRequest } from "../shared/types.ts";
 import { buildSystemPrompt, buildUserMessage } from "./prompt.ts";
 
 // One model call per step. HAPTIC_MODEL picks the model, or "mock" for a
-// keyword matcher that needs no API key.
-
-export const MODEL = process.env.HAPTIC_MODEL || "claude-opus-5-5";
+// keyword matcher that needs no API key. The reply is streamed, so the control
+// to point at is known before the sentence that goes with it is finished.
 
 type Effort = "low" | "medium" | "high";
 
@@ -20,21 +19,48 @@ export interface TurnSettings {
   thinking: "default" | "off";
 }
 
+/** The names the settings are read from: HAPTIC_MODEL, HAPTIC_EFFORT, HAPTIC_THINKING and ANTHROPIC_API_KEY. */
+export type ModelEnv = Record<string, string | undefined>;
+
 const EFFORTS: readonly string[] = ["low", "medium", "high"];
 
-export const SETTINGS: TurnSettings = {
-  model: MODEL,
-  // Each step is a small decision and the visitor is waiting on it, so the least effort is the default.
-  effort: EFFORTS.includes(process.env.HAPTIC_EFFORT ?? "") ? (process.env.HAPTIC_EFFORT as Effort) : "low",
-  thinking: process.env.HAPTIC_THINKING === "off" ? "off" : "default",
-};
+function settingsFrom(env: ModelEnv): TurnSettings {
+  return {
+    model: env.HAPTIC_MODEL || "claude-opus-5-5",
+    // Each step is a small decision and the visitor is waiting on it, so the least effort is the default.
+    effort: EFFORTS.includes(env.HAPTIC_EFFORT ?? "") ? (env.HAPTIC_EFFORT as Effort) : "low",
+    thinking: env.HAPTIC_THINKING === "off" ? "off" : "default",
+  };
+}
+
+// On Node the settings are in process.env when this file loads. A Cloudflare
+// Worker is only handed its settings with each request, so its entry point
+// passes them to configure().
+const startEnv: ModelEnv = typeof process === "undefined" ? {} : process.env;
+export let SETTINGS: TurnSettings = settingsFrom(startEnv);
+/** For trying the early pointer with no API key: the stand-in names its control, then waits this long before finishing. */
+let mockPauseMs = Number(startEnv.HAPTIC_MOCK_PAUSE_MS) || 0;
+let apiKey: string | undefined;
+let client: Anthropic | undefined;
+
+export function configure(env: ModelEnv) {
+  SETTINGS = settingsFrom(env);
+  mockPauseMs = Number(env.HAPTIC_MOCK_PAUSE_MS) || 0;
+  if (env.ANTHROPIC_API_KEY !== apiKey) {
+    apiKey = env.ANTHROPIC_API_KEY;
+    client = undefined;
+  }
+}
 
 /** A step's reply, with what it took to get. */
 export interface TurnMeasure {
   reply: TurnReply;
   /** The model that answered. After a fallback it is not the one asked for. */
   model: string;
+  /** The whole step. */
   ms: number;
+  /** Until the control to point at was known, which is when the pointer can start moving. */
+  msToTarget: number;
   tokens?: { input: number; cacheRead: number; cacheWrite: number; output: number };
 }
 
@@ -43,6 +69,9 @@ const Reply = z.object({
   status: z.enum(["continue", "done"]),
   say: z.string().describe("One or two short sentences for the visitor"),
 });
+
+/** The reply's first field, as soon as it is complete in the text streamed so far. */
+const TARGET_SO_FAR = /"target"\s*:\s*(?:"([^"]*)"|null)/;
 
 /** Thrown for failures the visitor's browser should hear about with a specific status. */
 export class TurnError extends Error {
@@ -54,19 +83,43 @@ export class TurnError extends Error {
   }
 }
 
-let client: Anthropic | undefined;
-
 export async function runTurn(site: SiteContext, request: TurnRequest): Promise<TurnReply> {
   return (await measureTurn(site, request)).reply;
 }
 
-/** One step, timed. The benchmark calls this with the settings it wants to compare. */
-export async function measureTurn(site: SiteContext, request: TurnRequest, settings: TurnSettings = SETTINGS): Promise<TurnMeasure> {
+/**
+ * One step, timed. `onTarget` is called once, as soon as the control to point
+ * at is known and only if it is on the page the model was shown. The benchmark
+ * calls this with the settings it wants to compare.
+ */
+export async function measureTurn(
+  site: SiteContext,
+  request: TurnRequest,
+  settings: TurnSettings = SETTINGS,
+  onTarget?: (id: string) => void,
+): Promise<TurnMeasure> {
   const started = Date.now();
-  const answer = settings.model === "mock" ? { reply: mockTurn(request), model: "mock" } : await claudeTurn(site, request, settings);
+  let msToTarget: number | undefined;
+  const onPage = (id: string | null): id is string => id !== null && request.snapshot.elements.some((element) => element.id === id);
+  const targetKnown = (id: string | null) => {
+    if (msToTarget !== undefined) return;
+    msToTarget = Date.now() - started;
+    if (onPage(id)) onTarget?.(id);
+  };
+
+  let answer: Omit<TurnMeasure, "ms" | "msToTarget">;
+  if (settings.model === "mock") {
+    const reply = mockTurn(request);
+    if (mockPauseMs > 0) {
+      targetKnown(reply.target);
+      await new Promise((resolve) => setTimeout(resolve, mockPauseMs));
+    }
+    answer = { reply, model: "mock" };
+  } else answer = await claudeTurn(site, request, settings, targetKnown);
   // The model can only point at what's on the page it was shown.
-  if (answer.reply.target && !request.snapshot.elements.some((element) => element.id === answer.reply.target)) answer.reply.target = null;
-  return { ...answer, ms: Date.now() - started };
+  if (!onPage(answer.reply.target)) answer.reply.target = null;
+  targetKnown(answer.reply.target);
+  return { ...answer, ms: Date.now() - started, msToTarget: msToTarget ?? Date.now() - started };
 }
 
 /**
@@ -79,8 +132,13 @@ function withoutThinking(model: string): { thinking?: { type: "disabled" } | { t
   return {};
 }
 
-async function claudeTurn(site: SiteContext, request: TurnRequest, settings: TurnSettings): Promise<Omit<TurnMeasure, "ms">> {
-  client ??= new Anthropic();
+async function claudeTurn(
+  site: SiteContext,
+  request: TurnRequest,
+  settings: TurnSettings,
+  targetKnown: (id: string | null) => void,
+): Promise<Omit<TurnMeasure, "ms" | "msToTarget">> {
+  client ??= new Anthropic(apiKey ? { apiKey } : {});
   const messages: Anthropic.Beta.BetaMessageParam[] = request.history.map((turn) => ({ role: turn.role, content: turn.text }));
   // The conversation has to start with a user message.
   while (messages[0]?.role === "assistant") messages.shift();
@@ -93,7 +151,7 @@ async function claudeTurn(site: SiteContext, request: TurnRequest, settings: Tur
   const started = Date.now();
   let response;
   try {
-    response = await client.beta.messages.parse({
+    const stream = client.beta.messages.stream({
       model: settings.model,
       max_tokens: 4000,
       ...fallback,
@@ -103,6 +161,12 @@ async function claudeTurn(site: SiteContext, request: TurnRequest, settings: Tur
       system: [{ type: "text", text: buildSystemPrompt(site), cache_control: { type: "ephemeral" } }],
       messages,
     });
+    // The reply is JSON with "target" first, so it is the first thing that can be acted on.
+    stream.on("text", (_delta, soFar) => {
+      const found = TARGET_SO_FAR.exec(soFar);
+      if (found) targetKnown(found[1] ?? null);
+    });
+    response = await stream.finalMessage();
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) throw new TurnError(500, "The server's Anthropic credentials are missing or invalid.");
     if (error instanceof Anthropic.RateLimitError) throw new TurnError(503, "The model is rate limited. Try again shortly.");
