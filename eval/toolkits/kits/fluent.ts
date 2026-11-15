@@ -40,8 +40,9 @@ const kit: Kit = {
       overlay: true,
       steps: [
         { click: { role: "button", name: "Open Best pets" } },
-        { click: { role: "option", name: "Cat", where: "page" } },
-        { click: { role: "option", name: "Fish", where: "page" } },
+        // Its choices are tick boxes in a menu, not options.
+        { click: { role: "menuitemcheckbox", name: "Cat", where: "page" } },
+        { click: { role: "menuitemcheckbox", name: "Fish", where: "page" } },
       ],
     },
     { kind: "checkbox", path: story("components-checkbox--default"), demo: "components-checkbox--default", steps: [{ click: { role: "checkbox", nth: 0 } }] },

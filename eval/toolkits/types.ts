@@ -125,6 +125,8 @@ export interface ListedResult {
   unnamed: { line: string; treeName: string; markup: string }[];
   /** Groups of listed controls whose whole line is the same. */
   duplicates: Duplicate[];
+  /** Listed controls whose line lacks a state the accessibility tree gives them. */
+  stateMissing: { line: string; treeState: string; markup: string }[];
   /** Listed controls in the demo, and how many distinct lines they make. */
   lines: number;
   distinct: number;
@@ -204,7 +206,7 @@ export interface DemoResult {
 
 export interface RunResults {
   /** The checkout whose widget was tested, and its commit. */
-  widget: { checkout: string; commit: string };
+  widget: { checkout: string; commit: string; fingerprint?: string };
   startedAt: string;
   finishedAt: string;
   results: DemoResult[];

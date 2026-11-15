@@ -125,7 +125,11 @@ function shown(el: Element): boolean {
   if (!el.isConnected) return false;
   const rendered = typeof el.checkVisibility === "function" ? el.checkVisibility({ visibilityProperty: true }) : el.getClientRects().length > 0;
   if (!rendered) return false;
-  if (visibleRect(el)) return true;
+  const box = visibleRect(el);
+  // A box of a pixel or clipped to nothing is there for screen readers only, like a focus trap's sentinel.
+  const style = getComputedStyle(el);
+  const hiddenForEyes = (box && box.width <= 1.5 && box.height <= 1.5) || /rect\(0(px)?,? 0(px)?,? 0(px)?,? 0(px)?\)/.test(style.clip) || style.clipPath === "inset(50%)";
+  if (box && !hiddenForEyes) return true;
   // A box drawn in place of a hidden real input: the visitor uses its label.
   const labels = (el as HTMLInputElement).labels;
   return !!labels && Array.from(labels).some((label) => !!visibleRect(label));
@@ -242,7 +246,7 @@ const toolkit = {
   relate(expected: number[], listed: Record<string, number>) {
     const wanted = expected.map(at);
     const entries = Object.entries(listed).map(([id, handle]) => ({ id, el: at(handle) }));
-    return wanted.map((el) => {
+    const found = wanted.map((el) => {
       if (!el) return undefined;
       const same = entries.find((entry) => entry.el === el);
       if (same) return same.id;
@@ -261,6 +265,13 @@ const toolkit = {
       // A native choice is listed as one of its select's options.
       const select = el instanceof HTMLOptionElement ? el.closest("select") : null;
       return select ? entries.find((entry) => entry.el === select)?.id : undefined;
+    });
+    // A box the tree calls a control around exactly one other control, like a menu item around its link, is that control.
+    return found.map((id, i) => {
+      const el = wanted[i];
+      if (id || !el) return id;
+      const inner = wanted.flatMap((other, j) => (other && other !== el && within(el, other) ? [j] : []));
+      return inner.length === 1 ? found[inner[0]!] : undefined;
     });
   },
 

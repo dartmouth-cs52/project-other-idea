@@ -52,7 +52,7 @@ const kit: Kit = {
       demo: "dropdown-demo-basic",
       overlay: true,
       // The menu opens when the mouse is over "Hover me", which the page gives no role.
-      steps: [{ hover: { text: "Hover me" } }, { click: { role: "menuitem", name: /2nd menu item/, where: "page" } }],
+      steps: [{ hover: { text: "Hover me" } }, { click: { role: "menuitem", name: "a danger item", where: "page" } }],
     },
     {
       kind: "nested-menu",
@@ -79,7 +79,7 @@ const kit: Kit = {
       path: "/~demos/components-drawer-demo-basic-right",
       demo: "components-drawer-demo-basic-right",
       overlay: true,
-      steps: [{ click: { role: "button", name: "Open" } }, { click: { role: "button", name: "Close", where: "page" } }],
+      steps: [{ click: { role: "button", name: "Open" } }, { click: { role: "button", name: "Close Button", where: "page" } }],
     },
     {
       kind: "date-picker",

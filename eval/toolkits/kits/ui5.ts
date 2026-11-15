@@ -20,7 +20,7 @@ const kit: Kit = {
     { kind: "button", path: page("Button"), demo: "button1", steps: [{ click: { role: "button", nth: 0 } }] },
     { kind: "icon-button", path: page("Button"), demo: "icon-only-comment", steps: [{ click: { role: "button", nth: 0 } }] },
     { kind: "tooltip-icon-button", path: page("Button"), demo: "icon-only-blank-text", steps: [{ click: { role: "button", nth: 0 } }] },
-    { kind: "text-field", path: page("Input"), demo: "myInput", steps: [{ type: { role: "combobox", nth: 0 }, text: "Hello" }] },
+    { kind: "text-field", path: page("Input"), demo: "myInput", steps: [{ type: { role: "textbox", nth: 0 }, text: "Hello" }] },
     { kind: "native-select", path: "/", demo: "", steps: [], skip: "UI5 Web Components have no native select" },
     {
       kind: "select",
@@ -72,7 +72,8 @@ const kit: Kit = {
       path: page("DatePicker"),
       demo: "dp5",
       overlay: true,
-      steps: [{ click: { role: "button", nth: 0 } }, { click: { role: "gridcell", name: /^15\b/, where: "page" } }],
+      // The calendar's button is hidden from the accessibility tree, so the visitor opens it the keyboard's way.
+      steps: [{ keys: { role: "textbox", nth: 0 }, press: ["F4"] }, { click: { role: "gridcell", name: /\b15\b/, where: "page" } }],
     },
     {
       kind: "date-range-picker",
@@ -80,9 +81,9 @@ const kit: Kit = {
       demo: "daterange-picker1",
       overlay: true,
       steps: [
-        { click: { role: "button", nth: 0 } },
-        { click: { role: "gridcell", name: /^10\b/, where: "page" } },
-        { click: { role: "gridcell", name: /^14\b/, where: "page" } },
+        { keys: { role: "textbox", nth: 0 }, press: ["F4"] },
+        { click: { role: "gridcell", name: /\b10\b/, where: "page" } },
+        { click: { role: "gridcell", name: /\b14\b/, where: "page" } },
       ],
     },
     { kind: "table", path: "/", demo: "", steps: [], skip: "The table is in a separate UI5 package whose test pages were not used" },

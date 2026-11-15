@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
@@ -32,6 +33,8 @@ const HERE = fileURLToPath(new URL(".", import.meta.url));
 export interface Bundles {
   checkout: string;
   commit: string;
+  /** A hash of the widget as built, the same for any commit that leaves the widget alone. */
+  fingerprint: string;
   widget: string;
   /** The widget's own reading of the page, exposed so each listed entry can be tied to its element. */
   probe: string;
@@ -81,6 +84,7 @@ export async function bundle(checkoutGiven: string): Promise<Bundles> {
   return {
     checkout,
     commit: commitOf(checkout),
+    fingerprint: createHash("sha256").update(text(widget)).digest("hex").slice(0, 12),
     widget: text(widget),
     probe: text(probe),
     probeAll: lifted.count === LIMITS.length ? text(probeAll) : "",
@@ -243,6 +247,8 @@ export interface AxControl {
   role: string;
   name: string;
   disabled: boolean;
+  checked: boolean;
+  expanded: boolean;
 }
 
 /** Roles that are a control a visitor uses, as Chrome's accessibility tree names them. */
@@ -329,7 +335,14 @@ export class Session {
         });
         await this.cdp.send("Runtime.releaseObject", { objectId: object.objectId }).catch(() => undefined);
         if (typeof result.value !== "number" || result.value < 0) continue;
-        found.push({ handle: result.value, role, name: String(node.name?.value ?? "").trim(), disabled: property("disabled") === true });
+        found.push({
+          handle: result.value,
+          role,
+          name: String(node.name?.value ?? "").trim(),
+          disabled: property("disabled") === true,
+          checked: property("checked") === "true",
+          expanded: property("expanded") === true,
+        });
       } catch {
         // The node went away while it was being read.
       }

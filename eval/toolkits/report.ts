@@ -12,7 +12,7 @@ export function coverageNote(run: RunResults): string {
   const where = [...byWhere].map(([what, n]) => `${n} in ${what === "iframe" ? "an iframe" : `a ${what}`}`).join(", ");
   const notTested = run.results.filter((r) => !r.tested && !r.unreadable);
   return [
-    `Widget: ${run.widget.checkout} at ${run.widget.commit}.`,
+    `Widget: ${run.widget.checkout} at ${run.widget.commit}${run.widget.fingerprint ? ` (built widget ${run.widget.fingerprint})` : ""}.`,
     "Not covered: the widget does not read controls inside an iframe, inside a closed shadow root, or drawn on a canvas, so no check here can pass or fail them.",
     `Demos ruled out for that reason: ${unreadable.length}${where ? ` (${where})` : ""}.`,
     `Demos not tested for other reasons: ${notTested.length}${notTested.length ? ` (${notTested.map((r) => `${r.kit} ${r.kind}: ${r.why}`).join("; ")})` : ""}.`,
@@ -150,6 +150,7 @@ export function faults(run: RunResults): string {
     if (!r.tested) continue;
     for (const m of r.listed?.missing ?? []) add(`missing ${m.role} ${m.reason}`, `A ${m.role} the accessibility tree has is not listed (${m.reason})`, r, `${m.role} "${m.name}" ${m.markup}`);
     for (const u of r.listed?.unnamed ?? []) add(`unnamed ${u.line.split(" ")[0]}`, `A ${u.line.split(" ")[0]} is listed with no name${u.treeName ? " though the tree names it" : ""}`, r, `${u.line}${u.treeName ? ` (tree: "${u.treeName}")` : ""} ${u.markup}`);
+    for (const m of r.listed?.stateMissing ?? []) add(`state ${m.treeState}`, `A control the accessibility tree calls ${m.treeState} is listed without that state`, r, `${m.line} ${m.markup}`);
     for (const d of r.listed?.duplicates ?? []) {
       const shared = d.treeSame ? " (the accessibility tree names them alike too)" : " (the accessibility tree tells them apart)";
       add(`same line ${d.line.split(" ")[0]} ${d.treeSame}`, `${d.line.split(" ")[0]} controls listed with the same whole line${shared}`, r, `${d.count} x ${d.line} ${d.markup}`);

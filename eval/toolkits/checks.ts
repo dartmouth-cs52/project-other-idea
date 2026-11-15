@@ -271,8 +271,10 @@ async function judgeListed(session: Session, state: PageState, expected: Shown[]
     const all = await session.call<Reading>("snap", true);
     cut = await session.call<(string | undefined)[]>("relate", unmatched.map((c) => c.handle), all.ids);
   }
+  // Only a list that was cut can have lost a control to the limit.
+  const wasCut = state.reading.snapshot.truncated;
   for (const [i, control] of unmatched.entries()) {
-    missing.push({ role: control.role, name: control.name, reason: cut[i] ? "cut by the limit" : "not read", markup: await session.call<string>("markup", control.handle) });
+    missing.push({ role: control.role, name: control.name, reason: cut[i] && wasCut ? "cut by the limit" : "not read", markup: await session.call<string>("markup", control.handle) });
   }
   const byId = new Map(state.reading.snapshot.elements.map((element) => [element.id, element]));
   const treeName = new Map<string, string>();
@@ -282,6 +284,15 @@ async function judgeListed(session: Session, state: PageState, expected: Shown[]
   for (const element of listed) {
     if (element.label || element.icon) continue;
     unnamed.push({ line: lineOf(element), treeName: treeName.get(element.id) ?? "", markup: await session.call<string>("markup", state.reading.ids[element.id]!) });
+  }
+  // A state the accessibility tree gives a control that its line leaves out: a disabled item offered as usable.
+  const stateMissing: ListedResult["stateMissing"] = [];
+  for (const [i, id] of related.entries()) {
+    const element = id ? byId.get(id) : undefined;
+    const control = expected[i]!;
+    if (!element) continue;
+    const lacks = (["disabled", "checked", "expanded"] as const).filter((name) => control[name] && !element.state?.includes(name));
+    if (lacks.length) stateMissing.push({ line: lineOf(element), treeState: lacks.join(", "), markup: await session.call<string>("markup", control.handle) });
   }
   const groups = new Map<string, SnapElement[]>();
   for (const element of listed) groups.set(lineOf(element), [...(groups.get(lineOf(element)) ?? []), element]);
@@ -297,6 +308,7 @@ async function judgeListed(session: Session, state: PageState, expected: Shown[]
     missing,
     unnamed,
     duplicates,
+    stateMissing,
     lines: listed.length,
     distinct: groups.size,
     matchedSent: sameList(state.reading.snapshot.elements, sent.elements),
@@ -311,6 +323,7 @@ function merge(into: ListedResult, more: ListedResult, where: string): ListedRes
     missing: [...into.missing, ...tag(more.missing)],
     unnamed: [...into.unnamed, ...tag(more.unnamed)],
     duplicates: [...into.duplicates, ...tag(more.duplicates)],
+    stateMissing: [...into.stateMissing, ...tag(more.stateMissing)],
     lines: into.lines + more.lines,
     distinct: into.distinct + more.distinct,
     matchedSent: into.matchedSent && more.matchedSent,
@@ -551,7 +564,10 @@ async function runStep(
     const after = await read(session);
     const opened = await judgeOpened(session, chrome, seen, appeared, after, result, demoResult);
     const addedNow = await session.call<number>("addedShown");
-    if (!last && (opened.length || addedNow > addedBefore)) {
+    // Only an opening is waited on: a field clicked into, or a menu the mouse went over. A pick that is not heard is not silence.
+    const opening = "hover" in action || target.where !== "page";
+    if (!last && opening && (opened.length || addedNow > addedBefore)) {
+      await shoot(session, `${demoResult.kit}-${demoResult.demo}-${demoResult.steps.length + 1}-silent`, after.reading.snapshot);
       // The widget waits for a pick in what opened. The visitor makes it without a new pointer.
       result.heard = "silent";
       result.why = "the widget asked nothing after this opened something; the visitor went on to pick in it";
@@ -634,27 +650,31 @@ async function overlayCheck(context: Context, bundles: Bundles, kit: Kit, demo: 
     const first = demo.steps[0]!;
     const target = locate(session, box, targetOf(first));
     if (!(await target.count())) return { ...result, why: "the control that opens it was not found" };
-    const before = await session.axControls();
+    // Only what was shown before counts: a menu is often in the page, hidden, before it opens.
+    const before = (await read(session)).controls;
     const beforeHandles = new Set<number | string>(before.map((c) => c.handle));
-    const beforeWhere = await session.call<Where[]>("where", before.map((c) => c.handle));
-    before.forEach((c, i) => beforeWhere[i]?.inDemo && beforeHandles.add(`${c.role}|${c.name}`));
+    for (const c of before) if (c.inDemo) beforeHandles.add(`${c.role}|${c.name}`);
+    await session.call("watchAdded");
     await act(session, first, await session.handleOf(target));
     await session.page.waitForTimeout(1200);
     const openState = await read(session);
     const overlay = openState.controls.filter((c) => !beforeHandles.has(c.handle) && !(c.inDemo && beforeHandles.has(`${c.role}|${c.name}`)));
-    result.opened = overlay.length > 0;
+    // Some lists draw their choices as boxes with no role. What was put on the screen shows they opened.
+    result.opened = overlay.length > 0 || (await session.call<number>("addedShown")) > 0;
     if (!result.opened) return { ...result, why: "nothing new opened" };
 
+    const stillOpen = async () =>
+      overlay.length ? (await session.call<Where[]>("where", overlay.map((c) => c.handle))).some((w) => w.shown) : (await session.call<number>("addedShown")) > 0;
     const stillShown = async () => (await session.call<Where[]>("where", overlay.map((c) => c.handle))).map((w) => w.shown);
     let openAfterClick = true;
     const asked = await session.ask("What can I do here?", async () => {
-      openAfterClick = (await stillShown()).some(Boolean);
+      openAfterClick = await stillOpen();
     });
     if (!openAfterClick) result.closedBy = "the click on Haptic's button";
     result.typed = asked.typed;
     if (asked.why) result.why = asked.why;
     // Whether it is still open now that the visitor has gone to Haptic's box, before the question is read.
-    result.stayedOpen = (await stillShown()).some(Boolean);
+    result.stayedOpen = await stillOpen();
     if (!result.stayedOpen && !result.closedBy) result.closedBy = "typing in Haptic's box";
     if (!asked.typed) {
       await shoot(session, `${kit.id}-${demo.demo}-overlay`, { path: "", title: "", headings: [], text: [], elements: [], truncated: false });
@@ -665,7 +685,7 @@ async function overlayCheck(context: Context, bundles: Bundles, kit: Kit, demo: 
     await shoot(session, `${kit.id}-${demo.demo}-overlay`, turn.request.snapshot);
     const still = await stillShown();
     const open = overlay.filter((_, i) => still[i]);
-    result.stayedOpen &&= open.length > 0;
+    result.stayedOpen &&= overlay.length ? open.length > 0 : await stillOpen();
     result.expected = open.length;
     const state = await read(session);
     const related = await session.call<(string | undefined)[]>("relate", open.map((c) => c.handle), state.reading.ids);

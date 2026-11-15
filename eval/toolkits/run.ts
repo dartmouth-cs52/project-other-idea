@@ -19,8 +19,8 @@ const HELP = `Usage: npm run eval:toolkits -- [toolkit] [component] [options]
   toolkit          ${KITS.map((kit) => kit.id).join(", ")}, or all (the default).
   component        A kind of control (${KINDS.slice(0, 6).join(", ")}, ...) or a demo's name. All when left out.
   --widget <dir>   The checkout whose widget is tested. This one when left out.
-  --table <file>   Print the table and the faults from a saved results file, and run nothing.
-  --compare <file> Show each cell of the table beside the same cell of an earlier results file.
+  --table <files>  Print the table and the faults from saved results, and run nothing. Several files, separated by commas, are read as one run.
+  --compare <files> Show each cell of the table beside the same cell of earlier results.
   --pause <ms>     Wait between demos, to keep a modest pace on other people's sites. 2000 by default.
   --shots <dir>    Keep a screenshot and the list the widget sent at each question, to look at a failure by hand.
   --headed         Show the browser.`;
@@ -41,8 +41,8 @@ async function main() {
     },
   });
   if (values.help) return console.log(HELP);
-  const before = values.compare ? (JSON.parse(await readFile(values.compare, "utf8")) as RunResults) : undefined;
-  if (values.table) return print(JSON.parse(await readFile(values.table, "utf8")) as RunResults, before);
+  const before = values.compare ? await loadResults(values.compare) : undefined;
+  if (values.table) return print(await loadResults(values.table), before);
 
   const [kitArg = "all", component] = positionals;
   const kits = kitArg === "all" ? KITS : KITS.filter((kit) => kit.id === kitArg);
@@ -51,10 +51,10 @@ async function main() {
 
   if (values.shots) keepShots(values.shots);
   const bundles = await bundle(values.widget ?? THIS_CHECKOUT);
-  console.log(`Testing the widget from ${bundles.checkout} at ${bundles.commit}.`);
+  console.log(`Testing the widget from ${bundles.checkout} at ${bundles.commit} (widget ${bundles.fingerprint}).`);
   if (!bundles.probeAll) console.log("Its length limits could not be found to lift, so a missing control cannot be told apart from one cut by a limit.");
   const browser = await launch(values.headed);
-  const run: RunResults = { widget: { checkout: bundles.checkout, commit: bundles.commit }, startedAt: new Date().toISOString(), finishedAt: "", results: [] };
+  const run: RunResults = { widget: { checkout: bundles.checkout, commit: bundles.commit, fingerprint: bundles.fingerprint }, startedAt: new Date().toISOString(), finishedAt: "", results: [] };
   const pause = Number(values.pause);
   try {
     for (const kit of kits) {
@@ -80,10 +80,23 @@ async function main() {
   }
   run.finishedAt = new Date().toISOString();
   await mkdir(RESULTS_DIR, { recursive: true });
-  const file = `${RESULTS_DIR}${run.startedAt.slice(0, 19).replace(/[:T]/g, "-")}-${bundles.commit.split(" ")[0]}.json`;
+  const file = `${RESULTS_DIR}${run.startedAt.slice(0, 19).replace(/[:T]/g, "-")}-${bundles.fingerprint}.json`;
   await writeFile(file, JSON.stringify(run, null, 1) + "\n");
   console.log(`\nResults: ${file}\n`);
   print(run, before);
+}
+
+/** One results file, or several separated by commas, as from toolkits run side by side, read as one run. */
+async function loadResults(files: string): Promise<RunResults> {
+  const runs = await Promise.all(files.split(",").map(async (file) => JSON.parse(await readFile(file.trim(), "utf8")) as RunResults));
+  const widgets = new Set(runs.map((run) => run.widget.fingerprint ?? `${run.widget.checkout} at ${run.widget.commit}`));
+  if (widgets.size > 1) throw new Error(`These results are from different widgets: ${[...widgets].join("; ")}.`);
+  return {
+    widget: runs[0]!.widget,
+    startedAt: runs.map((run) => run.startedAt).sort()[0]!,
+    finishedAt: runs.map((run) => run.finishedAt).sort().at(-1)!,
+    results: runs.flatMap((run) => run.results),
+  };
 }
 
 function print(run: RunResults, before?: RunResults) {
