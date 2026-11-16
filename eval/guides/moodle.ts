@@ -32,6 +32,20 @@ const CULTURES_CARD: Matcher = { label: "Celebrating Cultures", role: "link", co
 const ONLINE_TEXT = "#id_onlinetext_editor_ifr >> internal:control=enter-frame >> body";
 const FORUM_MESSAGE = "#id_message_ifr >> internal:control=enter-frame >> body";
 
+/**
+ * A rich-text editor as the widget lists it: by its field's label while the page is still setting it up, and once
+ * it is up, by the editable page inside its frame, named by that page's own label and cut at 80 characters.
+ *
+ * A whole-guide run's visitor cannot type into such an editor: the page inside the frame is measured against the
+ * outer page, so no part of it is found that a mouse could reach, and the run ends "stalled" on it whatever was
+ * pointed at. So a guide that needs text in one also ends, unpressed, where the editor is pointed at, on the
+ * right form: that is where a person types, and the typing is theirs.
+ */
+const richText = (label: string): Matcher[] => [
+  { label, role: "textbox" },
+  { label: `${label}. Rich text area. Press ALT-F9 for menu. Press ALT-F10 for toolbar.…`, role: "textbox" },
+];
+
 /** The messaging drawer, and its "Private" section: one of three buttons the widget lists with a chevron and no label ("Starred", "Group", "Private"). */
 const DRAWER = '[data-region="message-drawer"]';
 const PRIVATE_SECTION: Matcher = { label: "", role: "button", icon: "chevron-right", nth: 3 };
@@ -55,6 +69,15 @@ const guides: Guide[] = [
       },
     ],
     reached: { url: "action=editsubmission", selector: `${ONLINE_TEXT}:has-text("made-up street")` },
+    // "Where do I do that?" is answered by the Online text box of this assignment's submission form, and a whole-guide
+    // run's visitor cannot type into it (see richText). The box of another assignment's form, the assignment's page
+    // before "Add submission", or "Save changes" with the box never shown, is not it.
+    otherEnds: [
+      {
+        expect: richText("Online text"),
+        given: { url: "action=editsubmission", selector: ':is(h1, h2, h3, h4, h5, h6, [role="heading"]):has-text("View from your window")' },
+      },
+    ],
   },
   // A form that opens in the page, with a rich-text editor in an iframe, and a button that posts.
   // It starts in the forum: reached by a click from the course page, the forum's own scripts are
@@ -77,6 +100,11 @@ const guides: Guide[] = [
     ],
     // The notice is shown once, on the page that loads after posting.
     reached: { url: "/mod/forum/view\\.php", selector: '.alert-success:has-text("Post added.")' },
+    // A whole-guide run's visitor cannot type the message (see richText), and the forum will not post without one,
+    // so no run could ever reach the notice. The message box of this forum's new-discussion form, pointed at, is
+    // where a person writes the question; the form has to be open, with its Subject. The forum page with no form,
+    // a reply's box, or "Post to forum" pointed at with the message still empty, is not it.
+    otherEnds: [{ expect: richText("Message"), given: { url: "/mod/forum/view\\.php\\?id=706(&|#|$)", selector: "#id_subject" } }],
   },
   // Two page loads to a button that starts an attempt. Starting one would leave "Continue your attempt" for the next run.
   {
@@ -106,7 +134,23 @@ const guides: Guide[] = [
       { expect: [link("Psychology in Cinema")], act: { click: '#region-main a:has-text("Psychology in Cinema")' } },
       DONE,
     ],
-    reached: { url: "course/user\\.php\\?mode=grade&id=62|grade/report/user/index\\.php\\?id=62", text: "Factual recall test" },
+    // The course's grades, or the quiz's own page, whose "Highest grade: …" is the mark the course counts (the quiz
+    // grades by the highest attempt). Another quiz's page, the course page, or the overview of all courses is not it.
+    reached: [
+      { url: "course/user\\.php\\?mode=grade&id=62|grade/report/user/index\\.php\\?id=62", text: "Factual recall test" },
+      { url: "mod/quiz/view\\.php\\?id=723(&|#|$)", text: "Highest grade:" },
+    ],
+    // The question asks for a fact, so the mark said in words is the answer too, wherever it is said. It is read from
+    // the quiz's page as the guide starts: the number in its "Highest grade" heading.
+    // A sentence that names only the lower attempt's mark, or no mark, or hedges, does not pass.
+    says: {
+      shown: {
+        selector: ':is(h1, h2, h3, h4, h5, h6, [role="heading"]):has-text("Highest grade:")',
+        part: "\\d+[.,]\\d+",
+        when: "start",
+        from: "/mod/quiz/view.php?id=723",
+      },
+    },
   },
   // A dialog with a form: a text field and two rows of date dropdowns that share their labels.
   {
