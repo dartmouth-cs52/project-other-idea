@@ -71,6 +71,44 @@ export function neverDecided(question: string, answer: string): boolean {
   return NEVER_ASKED.test(question) || NEVER_SAID.test(answer);
 }
 
+// An amount of money in a sentence is taken for a price, which is right for most products and wrong for one whose
+// own records are money. On Northpine, with Answers on, every caption that repeated the visitor's own figure lost
+// its words: asked to "raise the Platform travel budget to $75,000", the step at Edit budget read "This is the one
+// to use.", and "who approves meals over $150?" was answered "I can't help with that one." (17 of 596 steps in the
+// demo's configuration on 16 November, and that question 3 times in 3). A figure the visitor wrote themselves is
+// theirs: a step that repeats it states no price in the company's name. So in a step, and only there, such a figure
+// is not counted. An answer in words is held to the rule as before, and so is any step when the question is itself
+// about a price, a refund or the visitor's own account, where repeating a figure back would confirm it.
+
+/** An amount of money as a sentence writes it: "$75,000", "€ 12.50", "$75k", "64 dollars". */
+const MONEY = /[$€£¥]\s?(\d[\d.,]*(?:\s?[km]\b)?)|\b(\d[\d.,]*)\s?(?:usd|eur|gbp|dollars?|euros?|pounds?|cents?)\b/gi;
+/** A number as a question writes it, with or without a sign for money: "75,000", "$64", "2.5k". */
+const NUMBER = /\d[\d.,]*(?:[km]\b)?/gi;
+
+/** A written number as plain digits, so that "$75,000", "75000" and "75k" are the same figure. Undefined when it is not one. */
+function plainNumber(written: string): string | undefined {
+  let text = written.toLowerCase().replace(/\s/g, "");
+  const scale = text.endsWith("k") ? 1e3 : text.endsWith("m") ? 1e6 : 1;
+  text = text.replace(/[km]$/, "").replace(/[.,]+$/, "");
+  // "75,000" and "75.000" group thousands. "12.50" and "12,5" are a fraction.
+  text = text.replace(/[.,](?=\d{3}(?:\D|$))/g, "").replace(",", ".");
+  const value = Number(text) * scale;
+  return text && Number.isFinite(value) ? String(value) : undefined;
+}
+
+/**
+ * A step's sentence with every amount of money the visitor wrote in their own question taken out, for the check
+ * that it states no price. The sentence itself is not changed. Any other amount stays, and still counts.
+ */
+export function withoutOwnAmounts(say: string, question: string): string {
+  const own = new Set((question.match(NUMBER) ?? []).map(plainNumber).filter((figure): figure is string => figure !== undefined));
+  if (!own.size) return say;
+  return say.replace(MONEY, (written, afterSign?: string, beforeWord?: string) => {
+    const figure = plainNumber(afterSign ?? beforeWord ?? "");
+    return figure !== undefined && own.has(figure) ? "that amount" : written;
+  });
+}
+
 /**
  * Why the server did not let a reply through as the model wrote it.
  * - no_source: an answer that named none of this site's articles
@@ -137,7 +175,8 @@ export function finishAnswer(site: SiteContext, request: TurnRequest, raw: Model
   // A step says where to click, and leaves the facts to the page. One that states a price or a refund
   // rule on the way has decided the same thing an answer may not, so its words go and its pointer stays.
   const { say, broke } = checkSay(tidySay(raw.say));
-  const stated = NEVER_SAID.test(say);
+  // A figure the visitor wrote themselves is not a price the step states, unless their question is about one.
+  const stated = NEVER_SAID.test(NEVER_ASKED.test(request.goal) ? say : withoutOwnAmounts(say, request.goal));
   return {
     reply: { target, status: raw.status, say: (stated ? "" : say) || (target ? SAY_WITHOUT_WORDS.pointing : SAY_WITHOUT_WORDS.nothing), mode },
     cited: [],

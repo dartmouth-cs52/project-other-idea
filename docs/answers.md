@@ -26,6 +26,8 @@ A how-to question is guided to the end, whether or not an article describes the 
 - An answer in words that names a control on the page without pointing at it is judged the same way, and keeps its words and its articles.
 - An answer that points and calls that the end ("done") goes on from the pointer instead: it is the first step, and the widget asks again once the visitor has used it. For a question of fact, "done" with a pointer still only shows where the thing is.
 
+A step's sentence may repeat an amount of money the visitor wrote in their own question ("raise the budget to $75,000": "Click Edit budget, then set $75,000"). Any other amount still costs the step its words, and so does any amount when the question itself is about a price, a refund or the visitor's own account. An answer in words is held to the rule whoever wrote the figure.
+
 In the widget, an answer is read in the panel: the question, the answer, and under it each article's title, link and date. If the answer is about a control on the page, the pointer goes to it as well. A step's sentence stays beside the pointer. Questions answered in words are remembered until the visitor presses Stop, so "and who can remove them?" is read with what came before.
 
 It is on for a site with help docs unless the site switches it off, and off for a site without any (`answersOn` in `src/shared/types.ts`). A site without it is asked exactly as before: the same prompt, and the same three fields in each reply. A test holds the old prompt to a fingerprint, so it cannot change by accident.
