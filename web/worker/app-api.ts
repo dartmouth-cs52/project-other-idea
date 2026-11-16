@@ -44,6 +44,7 @@ const SITE_ID = /^site_[a-z0-9_]{3,40}$/;
 const MAX_SITES = 5;
 const MAX_ORIGINS = 20;
 const MAX_REFUSED_SHOWN = 5;
+const MAX_NOTES = 20_000;
 
 interface SeenOrigin {
   origin: string;
@@ -53,10 +54,12 @@ interface SeenOrigin {
   requests: number;
 }
 
+/** A request turned away, with what to tell the person. `field` names the one input at fault, so the page can show the message under it. */
 class Refusal extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly field?: string,
   ) {
     super(message);
   }
@@ -96,9 +99,9 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
       if (!SITE_ID.test(id)) throw new Refusal(404, "No such site.");
       const sub = match[2];
       if (!sub && request.method === "GET") return reply(await siteStatus(sql, env, org, id));
-      if (!sub && request.method === "PATCH") return reply(await changeSite(sql, env, org, id, await body(request)));
+      if (!sub && request.method === "PATCH") return reply(await changeSite(sql, env, org, id, await body(request, SITE_BODY)));
       if (!sub && request.method === "DELETE") return reply(await deleteSite(sql, org, id, await body(request)));
-      if (sub === "/docs" && request.method === "POST") return reply(await addDoc(sql, env, org, id, await body(request)), 201);
+      if (sub === "/docs" && request.method === "POST") return reply(await addDoc(sql, env, org, id, await body(request, DOC_BODY)), 201);
       if (sub === "/docs" && request.method === "DELETE") return reply(await removeDoc(sql, env, org, id, url.searchParams.get("source") ?? ""));
       if (sub === "/read" && request.method === "POST") return reply(await readSite(sql, env, org, id, (await body(request)).restart === true));
       if (sub === "/insights" && request.method === "GET") {
@@ -146,15 +149,40 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
     }
     throw new Refusal(404, "Not found.");
   } catch (error) {
-    if (error instanceof Refusal) return reply({ error: error.message }, error.status);
+    if (error instanceof Refusal) return reply({ error: error.message, field: error.field }, error.status);
     console.error("app api:", error);
     return reply({ error: "Something went wrong on our side." }, 500);
   }
 }
 
-async function body(request: Request): Promise<Record<string, unknown>> {
-  const text = await request.text();
-  if (text.length > 20_000) throw new Refusal(413, "That is too long.");
+/** How long a request body may be, in characters as sent, and what to say when it is longer. */
+interface BodyLimit {
+  max: number;
+  message: string;
+  /** The input to show the message under. */
+  field?: string;
+}
+
+const ANY_BODY: BodyLimit = { max: 20_000, message: "That is too long." };
+/**
+ * A pasted doc. Tidying drops indentation and blank lines, so a paste up to twice a doc's length can still
+ * fit, and JSON sends each line break, tab or quote as two characters, so its body can be four times as long.
+ */
+const DOC_BODY: BodyLimit = {
+  max: MAX_DOC_CHARS * 4 + 4_000,
+  message: `That is too long to add. One doc can be up to ${MAX_DOC_CHARS.toLocaleString()} characters. Split it, or paste the part that matters.`,
+  field: "text",
+};
+/** The settings form: the notes, each line break sent as two characters, and the widget's look beside them. */
+const SITE_BODY: BodyLimit = { max: MAX_NOTES * 2 + 4_000, message: `Notes can be up to ${MAX_NOTES.toLocaleString()} characters.`, field: "notes" };
+
+async function body(request: Request, limit: BodyLimit = ANY_BODY): Promise<Record<string, unknown>> {
+  // The limit is in characters, which are only known once decoded. A character is at most three bytes of UTF-8
+  // (one outside the BMP is four bytes but two characters), so a body over three bytes a character is too long
+  // whatever it holds, and is refused before it is read in full. A byte order mark adds three bytes that decode
+  // to nothing, but a JSON object's braces take one byte each, so a body that could be accepted still fits.
+  const text = await textUpTo(request, limit.max * 3);
+  if (text === undefined || text.length > limit.max) throw new Refusal(413, limit.message, limit.field);
   try {
     const value = JSON.parse(text || "{}");
     if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
@@ -162,6 +190,32 @@ async function body(request: Request): Promise<Record<string, unknown>> {
     // Falls through to the refusal.
   }
   throw new Refusal(400, "That was not valid JSON.");
+}
+
+/**
+ * The body as text, or undefined once it is longer than `maxBytes`. `request.text()` would read the whole
+ * body into memory first, and a client can send up to Cloudflare's request limit, far more than a Worker has.
+ * So a declared length that is too long is refused before reading, and the rest are counted as they arrive,
+ * which also covers chunked bodies with no length given.
+ */
+async function textUpTo(request: Request, maxBytes: number): Promise<string | undefined> {
+  if (Number(request.headers.get("content-length")) > maxBytes) return undefined;
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return text + decoder.decode();
+    bytes += value.byteLength;
+    if (bytes > maxBytes) {
+      // Not awaited: the refusal doesn't depend on it, and the rest of the body is never read.
+      reader.cancel().catch(() => {});
+      return undefined;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
 }
 
 // Who is signed in -----------------------------------------------------------
@@ -319,7 +373,6 @@ function docsSummary(docs: Doc[]) {
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
-const MAX_NOTES = 20_000;
 
 /** The widget's look, checked field by field. Anything not given keeps its value. */
 function appearanceFrom(input: unknown, current: Appearance): Appearance {
@@ -361,7 +414,8 @@ async function addDoc(sql: Sql, env: AppEnv, org: Organization, id: string, inpu
     const title = typeof input.title === "string" ? input.title : "";
     const text = typeof input.text === "string" ? input.text : "";
     if (!title.trim() || !text.trim()) throw new Refusal(400, "Give the doc a title and some text.");
-    doc = pastedDoc(title, text.slice(0, MAX_DOC_CHARS * 2));
+    // DOC_BODY bounds the text, so it is tidied whole: a doc over the limit is refused with its real length, not cut short.
+    doc = pastedDoc(title, text);
   }
   if (doc.text.length < 40) throw new Refusal(400, "There was almost no text there. Paste the text instead.");
   if (doc.text.length > MAX_DOC_CHARS) throw new Refusal(400, `That doc is ${doc.text.length.toLocaleString()} characters. One doc can be up to ${MAX_DOC_CHARS.toLocaleString()}. Split it, or paste the part that matters.`);
