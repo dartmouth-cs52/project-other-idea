@@ -5,6 +5,7 @@ import {
   classAsked,
   dateLike,
   grounded,
+  isForwardName,
   isSearchName,
   isSecretField,
   isTypeToConfirm,
@@ -166,6 +167,11 @@ test("the visitor's words ask for a class in every language, and a question abou
   rows(asked, ([commit, words]) => (classAsked(commit, words) ? undefined : `"${words}" should ask for ${commit}`));
   const question = "Can you issue Malika Cummerata a virtual card called Ads with a $500 monthly limit?";
   rows(["destroy", "money", "session", "secret"] as CommitClass[], (commit) => (classAsked(commit, question) ? `the card question asks for ${commit}` : undefined));
+});
+
+test("a button that moves a form on is named so in every language, and nothing else is", () => {
+  rows(["Next", "Next →", "Next step", "Continue", "Siguiente", "Continuar", "Suivant", "Weiter", "Próximo", "Avanti", "Volgende", "次へ", "下一步", "继续"], (name) => (isForwardName(name) ? undefined : `"${name}" moves a form on`));
+  rows(["Back", "Next page of results", "Save and continue", "Cancel", "Issue card", "次へ進む前に保存"], (name) => (isForwardName(name) ? `"${name}" is not only a forward button` : undefined));
 });
 
 // Fields ---------------------------------------------------------------------
