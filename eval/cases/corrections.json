@@ -1,0 +1,1157 @@
+{
+  "site": {
+    "version": 1,
+    "id": "site_demo",
+    "name": "Acme Console",
+    "origin": "http://localhost:4000",
+    "allowedOrigins": [
+      "http://localhost:4000",
+      "http://localhost:5055"
+    ],
+    "appearance": {
+      "accent": "#1E6EF4",
+      "position": "bottom-right",
+      "launcherLabel": "Ask"
+    },
+    "notes": "Acme Console is where teams manage their Acme projects, teammates and subscription.\n\n- Everything about the account (settings, plan, payment, security) is under the round \"A\" button at the top right.\n- Billing details are changed with \"Update payment method\" on the Plan and billing page. We don't store full card numbers.\n- API keys are on the Security tab of Settings.",
+    "docs": [
+      {
+        "title": "Inviting teammates",
+        "source": "demo/help/inviting-teammates.md",
+        "text": "# Inviting teammates\n\nGo to Team, type the person's email address and press Send invite. They get an email with a link that works for 7 days.\nOnly the workspace owner can remove people."
+      }
+    ],
+    "pages": [
+      {
+        "path": "/demo",
+        "title": "Overview \u00b7 Acme Console",
+        "headings": [
+          "Overview",
+          "Usage this month",
+          "Latest deploy"
+        ],
+        "links": [
+          {
+            "label": "Acme Console",
+            "to": "/demo"
+          },
+          {
+            "label": "Overview",
+            "to": "/demo"
+          },
+          {
+            "label": "Projects",
+            "to": "/demo/projects"
+          },
+          {
+            "label": "Team",
+            "to": "/demo/team"
+          },
+          {
+            "label": "Settings",
+            "to": "/demo/settings"
+          },
+          {
+            "label": "Plan and billing",
+            "to": "/demo/settings-billing"
+          },
+          {
+            "label": "Sign out",
+            "to": "/demo"
+          },
+          {
+            "label": "View projects",
+            "to": "/demo/projects"
+          }
+        ],
+        "buttons": [
+          "A"
+        ],
+        "fields": []
+      },
+      {
+        "path": "/demo/projects",
+        "title": "Projects \u00b7 Acme Console",
+        "headings": [
+          "Projects",
+          "New project"
+        ],
+        "links": [
+          {
+            "label": "Acme Console",
+            "to": "/demo"
+          },
+          {
+            "label": "Overview",
+            "to": "/demo"
+          },
+          {
+            "label": "Projects",
+            "to": "/demo/projects"
+          },
+          {
+            "label": "Team",
+            "to": "/demo/team"
+          },
+          {
+            "label": "Settings",
+            "to": "/demo/settings"
+          },
+          {
+            "label": "Plan and billing",
+            "to": "/demo/settings-billing"
+          },
+          {
+            "label": "Sign out",
+            "to": "/demo"
+          }
+        ],
+        "buttons": [
+          "A",
+          "New project",
+          "Cancel",
+          "Create project"
+        ],
+        "fields": [
+          "Project name",
+          "Region US EastEU West"
+        ]
+      },
+      {
+        "path": "/demo/settings",
+        "title": "Settings \u00b7 Acme Console",
+        "headings": [
+          "Settings"
+        ],
+        "links": [
+          {
+            "label": "Acme Console",
+            "to": "/demo"
+          },
+          {
+            "label": "Overview",
+            "to": "/demo"
+          },
+          {
+            "label": "Projects",
+            "to": "/demo/projects"
+          },
+          {
+            "label": "Team",
+            "to": "/demo/team"
+          },
+          {
+            "label": "Settings",
+            "to": "/demo/settings"
+          },
+          {
+            "label": "Plan and billing",
+            "to": "/demo/settings-billing"
+          },
+          {
+            "label": "Sign out",
+            "to": "/demo"
+          },
+          {
+            "label": "General",
+            "to": "/demo/settings"
+          },
+          {
+            "label": "Security",
+            "to": "/demo/settings-security"
+          }
+        ],
+        "buttons": [
+          "A",
+          "Save changes"
+        ],
+        "fields": [
+          "Workspace name",
+          "Time zone UTCEasternPacific"
+        ]
+      },
+      {
+        "path": "/demo/settings-billing",
+        "title": "Plan and billing \u00b7 Acme Console",
+        "headings": [
+          "Plan and billing",
+          "Current plan",
+          "Payment method",
+          "Invoices",
+          "Update payment method"
+        ],
+        "links": [
+          {
+            "label": "Acme Console",
+            "to": "/demo"
+          },
+          {
+            "label": "Overview",
+            "to": "/demo"
+          },
+          {
+            "label": "Projects",
+            "to": "/demo/projects"
+          },
+          {
+            "label": "Team",
+            "to": "/demo/team"
+          },
+          {
+            "label": "Settings",
+            "to": "/demo/settings"
+          },
+          {
+            "label": "Plan and billing",
+            "to": "/demo/settings-billing"
+          },
+          {
+            "label": "Sign out",
+            "to": "/demo"
+          },
+          {
+            "label": "General",
+            "to": "/demo/settings"
+          },
+          {
+            "label": "Security",
+            "to": "/demo/settings-security"
+          },
+          {
+            "label": "Download latest invoice",
+            "to": "/demo/settings-billing"
+          }
+        ],
+        "buttons": [
+          "A",
+          "Change plan",
+          "Update payment method",
+          "Cancel",
+          "Save payment method"
+        ],
+        "fields": [
+          "Name on card",
+          "Billing postcode"
+        ]
+      },
+      {
+        "path": "/demo/settings-security",
+        "title": "Security \u00b7 Acme Console",
+        "headings": [
+          "Security",
+          "API keys"
+        ],
+        "links": [
+          {
+            "label": "Acme Console",
+            "to": "/demo"
+          },
+          {
+            "label": "Overview",
+            "to": "/demo"
+          },
+          {
+            "label": "Projects",
+            "to": "/demo/projects"
+          },
+          {
+            "label": "Team",
+            "to": "/demo/team"
+          },
+          {
+            "label": "Settings",
+            "to": "/demo/settings"
+          },
+          {
+            "label": "Plan and billing",
+            "to": "/demo/settings-billing"
+          },
+          {
+            "label": "Sign out",
+            "to": "/demo"
+          },
+          {
+            "label": "General",
+            "to": "/demo/settings"
+          },
+          {
+            "label": "Security",
+            "to": "/demo/settings-security"
+          }
+        ],
+        "buttons": [
+          "A",
+          "Create API key"
+        ],
+        "fields": [
+          "Require two-factor authentication"
+        ]
+      },
+      {
+        "path": "/demo/team",
+        "title": "Team \u00b7 Acme Console",
+        "headings": [
+          "Team"
+        ],
+        "links": [
+          {
+            "label": "Acme Console",
+            "to": "/demo"
+          },
+          {
+            "label": "Overview",
+            "to": "/demo"
+          },
+          {
+            "label": "Projects",
+            "to": "/demo/projects"
+          },
+          {
+            "label": "Team",
+            "to": "/demo/team"
+          },
+          {
+            "label": "Settings",
+            "to": "/demo/settings"
+          },
+          {
+            "label": "Plan and billing",
+            "to": "/demo/settings-billing"
+          },
+          {
+            "label": "Sign out",
+            "to": "/demo"
+          }
+        ],
+        "buttons": [
+          "A",
+          "Send invite"
+        ],
+        "fields": [
+          "Email address"
+        ]
+      }
+    ],
+    "source": {
+      "url": "http://localhost:4000/demo/",
+      "maxPages": 30,
+      "docs": [
+        "demo/help"
+      ],
+      "notesFile": "demo/notes.md"
+    },
+    "createdAt": "2026-11-12T22:51:16.192Z",
+    "updatedAt": "2026-11-15T03:50:48.035Z",
+    "corrections": [
+      {
+        "id": "seats001",
+        "route": "/demo/settings-billing",
+        "question": "how can I add seats for new hires",
+        "wrong": {
+          "role": "button",
+          "label": "Change plan"
+        },
+        "right": {
+          "role": "link",
+          "label": "Team"
+        },
+        "createdAt": "2026-11-10T09:00:00.000Z"
+      },
+      {
+        "id": "region01",
+        "route": "/demo/settings",
+        "question": "set the default region for new projects",
+        "right": {
+          "role": "link",
+          "label": "Projects"
+        },
+        "createdAt": "2026-11-11T09:00:00.000Z"
+      }
+    ],
+    "blocked": [
+      {
+        "role": "button",
+        "label": "Delete workspace"
+      },
+      {
+        "label": "Transfer ownership"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "seats-billing-1",
+      "guide": "seats-billing",
+      "request": {
+        "goal": "How do I add more seats?",
+        "step": 0,
+        "history": [],
+        "snapshot": {
+          "path": "/demo/settings-billing",
+          "title": "Plan and billing \u00b7 Acme Console",
+          "headings": [
+            "Plan and billing",
+            "Current plan",
+            "Payment method",
+            "Invoices"
+          ],
+          "text": [
+            "Team plan, $49 a month.",
+            "Visa ending in 4242",
+            "Invoices are emailed on the 1st of each month."
+          ],
+          "elements": [
+            {
+              "id": "e1",
+              "role": "link",
+              "label": "Acme Console",
+              "href": "/demo",
+              "context": "header"
+            },
+            {
+              "id": "e2",
+              "role": "link",
+              "label": "Overview",
+              "href": "/demo",
+              "context": "nav"
+            },
+            {
+              "id": "e3",
+              "role": "link",
+              "label": "Projects",
+              "href": "/demo/projects",
+              "context": "nav"
+            },
+            {
+              "id": "e4",
+              "role": "link",
+              "label": "Team",
+              "href": "/demo/team",
+              "context": "nav"
+            },
+            {
+              "id": "e5",
+              "role": "button",
+              "label": "A",
+              "state": [
+                "collapsed"
+              ],
+              "context": "header"
+            },
+            {
+              "id": "e6",
+              "role": "tab",
+              "label": "General",
+              "href": "/demo/settings",
+              "context": "tabs"
+            },
+            {
+              "id": "e7",
+              "role": "tab",
+              "label": "Plan and billing",
+              "state": [
+                "selected"
+              ],
+              "href": "/demo/settings-billing",
+              "context": "tabs"
+            },
+            {
+              "id": "e8",
+              "role": "tab",
+              "label": "Security",
+              "href": "/demo/settings-security",
+              "context": "tabs"
+            },
+            {
+              "id": "e9",
+              "role": "button",
+              "label": "Change plan",
+              "context": "main \u203a Current plan"
+            },
+            {
+              "id": "e10",
+              "role": "button",
+              "label": "Update payment method",
+              "context": "main \u203a Payment method"
+            },
+            {
+              "id": "e11",
+              "role": "link",
+              "label": "Download latest invoice",
+              "href": "/demo/settings-billing",
+              "context": "main \u203a Invoices"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "expect": {
+        "targets": [
+          {
+            "label": "Team"
+          }
+        ],
+        "status": "continue"
+      }
+    },
+    {
+      "id": "seats-home-1",
+      "guide": "seats-home",
+      "request": {
+        "goal": "add seats to my plan",
+        "step": 0,
+        "history": [],
+        "snapshot": {
+          "path": "/demo",
+          "title": "Overview \u00b7 Acme Console",
+          "headings": [
+            "Overview",
+            "Usage this month",
+            "Latest deploy"
+          ],
+          "text": [
+            "Welcome back. Your workspace has 3 projects and 4 teammates.",
+            "12,480 requests of 50,000 included.",
+            "storefront-api went live 2 hours ago."
+          ],
+          "elements": [
+            {
+              "id": "e1",
+              "role": "link",
+              "label": "Acme Console",
+              "href": "/demo",
+              "context": "header"
+            },
+            {
+              "id": "e2",
+              "role": "link",
+              "label": "Overview",
+              "href": "/demo",
+              "context": "nav"
+            },
+            {
+              "id": "e3",
+              "role": "link",
+              "label": "Projects",
+              "href": "/demo/projects",
+              "context": "nav"
+            },
+            {
+              "id": "e4",
+              "role": "link",
+              "label": "Team",
+              "href": "/demo/team",
+              "context": "nav"
+            },
+            {
+              "id": "e5",
+              "role": "button",
+              "label": "A",
+              "state": [
+                "collapsed"
+              ],
+              "context": "header"
+            },
+            {
+              "id": "e6",
+              "role": "link",
+              "label": "View projects",
+              "href": "/demo/projects",
+              "context": "main \u203a Latest deploy"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "expect": {
+        "targets": [
+          {
+            "label": "Team"
+          }
+        ],
+        "status": "continue"
+      }
+    },
+    {
+      "id": "region-1",
+      "guide": "region",
+      "request": {
+        "goal": "where do I choose the region for my projects",
+        "step": 0,
+        "history": [],
+        "snapshot": {
+          "path": "/demo/settings",
+          "title": "Settings \u00b7 Acme Console",
+          "headings": [
+            "Settings"
+          ],
+          "text": [
+            "Workspace name",
+            "Time zone"
+          ],
+          "elements": [
+            {
+              "id": "e1",
+              "role": "link",
+              "label": "Acme Console",
+              "href": "/demo",
+              "context": "header"
+            },
+            {
+              "id": "e2",
+              "role": "link",
+              "label": "Overview",
+              "href": "/demo",
+              "context": "nav"
+            },
+            {
+              "id": "e3",
+              "role": "link",
+              "label": "Projects",
+              "href": "/demo/projects",
+              "context": "nav"
+            },
+            {
+              "id": "e4",
+              "role": "link",
+              "label": "Team",
+              "href": "/demo/team",
+              "context": "nav"
+            },
+            {
+              "id": "e5",
+              "role": "button",
+              "label": "A",
+              "state": [
+                "collapsed"
+              ],
+              "context": "header"
+            },
+            {
+              "id": "e6",
+              "role": "tab",
+              "label": "General",
+              "state": [
+                "selected"
+              ],
+              "href": "/demo/settings",
+              "context": "tabs"
+            },
+            {
+              "id": "e7",
+              "role": "tab",
+              "label": "Plan and billing",
+              "href": "/demo/settings-billing",
+              "context": "tabs"
+            },
+            {
+              "id": "e8",
+              "role": "tab",
+              "label": "Security",
+              "href": "/demo/settings-security",
+              "context": "tabs"
+            },
+            {
+              "id": "e9",
+              "role": "textbox",
+              "label": "Workspace name",
+              "context": "form"
+            },
+            {
+              "id": "e10",
+              "role": "select",
+              "label": "Time zone",
+              "context": "form"
+            },
+            {
+              "id": "e11",
+              "role": "button",
+              "label": "Save changes",
+              "context": "form"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "expect": {
+        "targets": [
+          {
+            "label": "Projects"
+          }
+        ],
+        "status": "continue"
+      }
+    },
+    {
+      "id": "unrelated-1",
+      "guide": "unrelated",
+      "request": {
+        "goal": "How can I rename my workspace?",
+        "step": 0,
+        "history": [],
+        "snapshot": {
+          "path": "/demo/settings",
+          "title": "Settings \u00b7 Acme Console",
+          "headings": [
+            "Settings"
+          ],
+          "text": [
+            "Workspace name",
+            "Time zone"
+          ],
+          "elements": [
+            {
+              "id": "e1",
+              "role": "link",
+              "label": "Acme Console",
+              "href": "/demo",
+              "context": "header"
+            },
+            {
+              "id": "e2",
+              "role": "link",
+              "label": "Overview",
+              "href": "/demo",
+              "context": "nav"
+            },
+            {
+              "id": "e3",
+              "role": "link",
+              "label": "Projects",
+              "href": "/demo/projects",
+              "context": "nav"
+            },
+            {
+              "id": "e4",
+              "role": "link",
+              "label": "Team",
+              "href": "/demo/team",
+              "context": "nav"
+            },
+            {
+              "id": "e5",
+              "role": "button",
+              "label": "A",
+              "state": [
+                "collapsed"
+              ],
+              "context": "header"
+            },
+            {
+              "id": "e6",
+              "role": "tab",
+              "label": "General",
+              "state": [
+                "selected"
+              ],
+              "href": "/demo/settings",
+              "context": "tabs"
+            },
+            {
+              "id": "e7",
+              "role": "tab",
+              "label": "Plan and billing",
+              "href": "/demo/settings-billing",
+              "context": "tabs"
+            },
+            {
+              "id": "e8",
+              "role": "tab",
+              "label": "Security",
+              "href": "/demo/settings-security",
+              "context": "tabs"
+            },
+            {
+              "id": "e9",
+              "role": "textbox",
+              "label": "Workspace name",
+              "context": "form"
+            },
+            {
+              "id": "e10",
+              "role": "select",
+              "label": "Time zone",
+              "context": "form"
+            },
+            {
+              "id": "e11",
+              "role": "button",
+              "label": "Save changes",
+              "context": "form"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "expect": {
+        "targets": [
+          {
+            "label": "Workspace name"
+          }
+        ],
+        "status": "continue"
+      }
+    },
+    {
+      "id": "blocked-delete-1",
+      "guide": "blocked-delete",
+      "request": {
+        "goal": "delete my workspace",
+        "step": 0,
+        "history": [],
+        "snapshot": {
+          "path": "/demo/settings",
+          "title": "Settings \u00b7 Acme Console",
+          "headings": [
+            "Settings",
+            "Danger zone"
+          ],
+          "text": [
+            "Workspace name",
+            "Time zone"
+          ],
+          "elements": [
+            {
+              "id": "e1",
+              "role": "link",
+              "label": "Acme Console",
+              "href": "/demo",
+              "context": "header"
+            },
+            {
+              "id": "e2",
+              "role": "link",
+              "label": "Overview",
+              "href": "/demo",
+              "context": "nav"
+            },
+            {
+              "id": "e3",
+              "role": "link",
+              "label": "Projects",
+              "href": "/demo/projects",
+              "context": "nav"
+            },
+            {
+              "id": "e4",
+              "role": "link",
+              "label": "Team",
+              "href": "/demo/team",
+              "context": "nav"
+            },
+            {
+              "id": "e5",
+              "role": "button",
+              "label": "A",
+              "state": [
+                "collapsed"
+              ],
+              "context": "header"
+            },
+            {
+              "id": "e6",
+              "role": "tab",
+              "label": "General",
+              "state": [
+                "selected"
+              ],
+              "href": "/demo/settings",
+              "context": "tabs"
+            },
+            {
+              "id": "e7",
+              "role": "tab",
+              "label": "Plan and billing",
+              "href": "/demo/settings-billing",
+              "context": "tabs"
+            },
+            {
+              "id": "e8",
+              "role": "tab",
+              "label": "Security",
+              "href": "/demo/settings-security",
+              "context": "tabs"
+            },
+            {
+              "id": "e9",
+              "role": "textbox",
+              "label": "Workspace name",
+              "context": "form"
+            },
+            {
+              "id": "e10",
+              "role": "select",
+              "label": "Time zone",
+              "context": "form"
+            },
+            {
+              "id": "e11",
+              "role": "button",
+              "label": "Save changes",
+              "context": "form"
+            },
+            {
+              "id": "e12",
+              "role": "button",
+              "label": "Transfer ownership",
+              "context": "main \u203a Danger zone"
+            },
+            {
+              "id": "e13",
+              "role": "button",
+              "label": "Delete workspace",
+              "context": "main \u203a Danger zone"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "expect": {
+        "targets": [],
+        "status": "done"
+      }
+    },
+    {
+      "id": "blocked-transfer-1",
+      "guide": "blocked-transfer",
+      "request": {
+        "goal": "transfer ownership to my cofounder",
+        "step": 0,
+        "history": [],
+        "snapshot": {
+          "path": "/demo/settings",
+          "title": "Settings \u00b7 Acme Console",
+          "headings": [
+            "Settings",
+            "Danger zone"
+          ],
+          "text": [
+            "Workspace name",
+            "Time zone"
+          ],
+          "elements": [
+            {
+              "id": "e1",
+              "role": "link",
+              "label": "Acme Console",
+              "href": "/demo",
+              "context": "header"
+            },
+            {
+              "id": "e2",
+              "role": "link",
+              "label": "Overview",
+              "href": "/demo",
+              "context": "nav"
+            },
+            {
+              "id": "e3",
+              "role": "link",
+              "label": "Projects",
+              "href": "/demo/projects",
+              "context": "nav"
+            },
+            {
+              "id": "e4",
+              "role": "link",
+              "label": "Team",
+              "href": "/demo/team",
+              "context": "nav"
+            },
+            {
+              "id": "e5",
+              "role": "button",
+              "label": "A",
+              "state": [
+                "collapsed"
+              ],
+              "context": "header"
+            },
+            {
+              "id": "e6",
+              "role": "tab",
+              "label": "General",
+              "state": [
+                "selected"
+              ],
+              "href": "/demo/settings",
+              "context": "tabs"
+            },
+            {
+              "id": "e7",
+              "role": "tab",
+              "label": "Plan and billing",
+              "href": "/demo/settings-billing",
+              "context": "tabs"
+            },
+            {
+              "id": "e8",
+              "role": "tab",
+              "label": "Security",
+              "href": "/demo/settings-security",
+              "context": "tabs"
+            },
+            {
+              "id": "e9",
+              "role": "textbox",
+              "label": "Workspace name",
+              "context": "form"
+            },
+            {
+              "id": "e10",
+              "role": "select",
+              "label": "Time zone",
+              "context": "form"
+            },
+            {
+              "id": "e11",
+              "role": "button",
+              "label": "Save changes",
+              "context": "form"
+            },
+            {
+              "id": "e12",
+              "role": "button",
+              "label": "Transfer ownership",
+              "context": "main \u203a Danger zone"
+            },
+            {
+              "id": "e13",
+              "role": "button",
+              "label": "Delete workspace",
+              "context": "main \u203a Danger zone"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "expect": {
+        "targets": [],
+        "status": "done"
+      }
+    },
+    {
+      "id": "blocked-neighbour-1",
+      "guide": "blocked-neighbour",
+      "request": {
+        "goal": "change the time zone",
+        "step": 0,
+        "history": [],
+        "snapshot": {
+          "path": "/demo/settings",
+          "title": "Settings \u00b7 Acme Console",
+          "headings": [
+            "Settings",
+            "Danger zone"
+          ],
+          "text": [
+            "Workspace name",
+            "Time zone"
+          ],
+          "elements": [
+            {
+              "id": "e1",
+              "role": "link",
+              "label": "Acme Console",
+              "href": "/demo",
+              "context": "header"
+            },
+            {
+              "id": "e2",
+              "role": "link",
+              "label": "Overview",
+              "href": "/demo",
+              "context": "nav"
+            },
+            {
+              "id": "e3",
+              "role": "link",
+              "label": "Projects",
+              "href": "/demo/projects",
+              "context": "nav"
+            },
+            {
+              "id": "e4",
+              "role": "link",
+              "label": "Team",
+              "href": "/demo/team",
+              "context": "nav"
+            },
+            {
+              "id": "e5",
+              "role": "button",
+              "label": "A",
+              "state": [
+                "collapsed"
+              ],
+              "context": "header"
+            },
+            {
+              "id": "e6",
+              "role": "tab",
+              "label": "General",
+              "state": [
+                "selected"
+              ],
+              "href": "/demo/settings",
+              "context": "tabs"
+            },
+            {
+              "id": "e7",
+              "role": "tab",
+              "label": "Plan and billing",
+              "href": "/demo/settings-billing",
+              "context": "tabs"
+            },
+            {
+              "id": "e8",
+              "role": "tab",
+              "label": "Security",
+              "href": "/demo/settings-security",
+              "context": "tabs"
+            },
+            {
+              "id": "e9",
+              "role": "textbox",
+              "label": "Workspace name",
+              "context": "form"
+            },
+            {
+              "id": "e10",
+              "role": "select",
+              "label": "Time zone",
+              "context": "form"
+            },
+            {
+              "id": "e11",
+              "role": "button",
+              "label": "Save changes",
+              "context": "form"
+            },
+            {
+              "id": "e12",
+              "role": "button",
+              "label": "Transfer ownership",
+              "context": "main \u203a Danger zone"
+            },
+            {
+              "id": "e13",
+              "role": "button",
+              "label": "Delete workspace",
+              "context": "main \u203a Danger zone"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "expect": {
+        "targets": [
+          {
+            "label": "Time zone"
+          }
+        ],
+        "status": "continue"
+      }
+    }
+  ]
+}

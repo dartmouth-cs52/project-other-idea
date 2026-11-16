@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { extractPage } from "../src/intake/crawl.ts";
 import { day, fromHtml, fromText } from "../src/intake/docs.ts";
+import { toPageNode } from "../web/worker/page-node.ts";
 import { buildSystemPrompt, buildUserMessage, renderSiteMap } from "../src/server/prompt.ts";
 import { DEFAULT_APPEARANCE, normalizePath, cleanText, questionKey, type PageNode, type SiteContext } from "../src/shared/types.ts";
 
@@ -42,6 +43,35 @@ test("navigation shared by most pages is listed once in the site map", () => {
   assert.equal(map.split("Home → /").length - 1, 1);
   assert.match(map, /^On most pages: Home → \//);
   assert.match(map, /\/b: "\/b" \| buttons: Export/);
+});
+
+test("what a menu shows once opened is listed behind the control that opens it", () => {
+  const account = { control: 'The "A" menu', links: [{ label: "Plan and billing", to: "/billing" }], buttons: ["Sign out"] };
+  const pages = [page("/", { opens: [account] }), page("/a", { opens: [account] }), page("/b", { opens: [account, { control: "Filters", links: [], buttons: ["Status", "Owner"] }] })];
+  const map = renderSiteMap(pages);
+  // The account menu is the same on every page, so it gets one line of its own. Its label's quotes can't close the label early.
+  assert.equal(map.split("Plan and billing → /billing").length - 1, 1);
+  assert.match(map, /^On most pages, behind "The 'A' menu": Plan and billing → \/billing; Sign out$/m);
+  assert.match(map, /\/b: "\/b" \| behind "Filters": Status; Owner$/m);
+  // A site read without a browser has no openings, and its map is what it always was.
+  assert.doesNotMatch(renderSiteMap([page("/"), page("/a"), page("/b")]), /behind/);
+});
+
+test("the reader keeps each opening's links on this site, masked, and queues the pages they lead to", () => {
+  const raw = {
+    title: "Home", description: "", headings: [], fields: [], opened: 2, buttons: ["A"],
+    links: [{ label: "Projects", href: "https://app.acme.com/projects" }],
+    reveals: [
+      { control: "A", links: [{ label: "Plan and billing", href: "https://app.acme.com/settings/billing#card" }, { label: "Status page", href: "https://status.acme.io/" }], buttons: ["Sign out", "sam@acme.com"] },
+      { control: "Help", links: [{ label: "Docs", href: "https://docs.acme.io/" }], buttons: [] },
+    ],
+  };
+  const { page: read, found, controls } = toPageNode("https://app.acme.com/", raw);
+  assert.deepEqual(read.opens, [{ control: "A", links: [{ label: "Plan and billing", to: "/settings/billing" }], buttons: ["Sign out", "[email]"] }]);
+  assert.deepEqual(found, ["https://app.acme.com/projects", "https://app.acme.com/settings/billing"]);
+  assert.equal(controls, 5);
+  // An outline from plain HTML has no openings, and its page has no `opens` at all.
+  assert.equal("opens" in toPageNode("https://app.acme.com/", { ...raw, reveals: [] }).page, false);
 });
 
 test("the system prompt is the same for every turn, and a doc over budget is left out whole", () => {

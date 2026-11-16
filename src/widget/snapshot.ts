@@ -1,4 +1,5 @@
 import { cleanText, describeElement, normalizePath, type SnapElement, type Snapshot } from "../shared/types.ts";
+import { isCovered } from "./occlusion.ts";
 
 // Turns the live page into the list of elements the model sees. One read-only
 // pass over the DOM. Input values are never read: labels only.
@@ -126,7 +127,10 @@ export function takeSnapshot(ignore: Element): PageSnapshot {
     let added: Candidate | undefined;
     if (role) {
       const rect = el.getBoundingClientRect();
-      if (rect.width > 0 || rect.height > 0) {
+      const onScreen = rect.bottom > 0 && rect.top < viewportHeight;
+      // A control buried under something else can't be clicked, so the model isn't shown it.
+      // On the pilot app it kept pointing at a Restart button that sat under a stack of cards.
+      if ((rect.width > 0 || rect.height > 0) && !(onScreen && isCovered(el, rect, ignore))) {
         added = { el, id: "", role, label: labelOf(el, role), nav: ["nav", "header", "aside", "menu", "tabs"].includes(scope.region) };
         const icon = iconOf(el);
         if (icon) added.icon = icon;
@@ -237,6 +241,12 @@ export function describeChange(before: Snapshot, after: Snapshot): string {
 
 export const NOTHING_CHANGED = "Nothing visible on the page changed.";
 
+/** True when two snapshots show the same controls and headings, whatever their addresses say. */
+export function sameView(a: Snapshot, b: Snapshot): boolean {
+  const view = (snapshot: Snapshot) => [snapshot.dialog ?? "", ...snapshot.headings, ...snapshot.elements.map(elementKey)].join("\n");
+  return view(a) === view(b);
+}
+
 function listSome(items: string[]): string {
   return items.length > 8 ? `${items.slice(0, 8).join(", ")} and ${items.length - 8} more` : items.join(", ");
 }
@@ -335,6 +345,13 @@ function roleOf(el: Element, explicitRole: string, pointerStartsHere: boolean): 
   if ((el as HTMLElement).isContentEditable && !(el.parentElement as HTMLElement | null)?.isContentEditable) return "textbox";
   if (el.hasAttribute("onclick") || pointerStartsHere) return "clickable";
   return "";
+}
+
+/** A control's name as the snapshot would give it: its label, or its icon when it has no words. */
+export function nameOf(el: Element): { label: string; icon?: string } {
+  const role = el.matches("a[href], [role='link']") ? "link" : "button";
+  const icon = iconOf(el);
+  return { label: labelOf(el, role), ...(icon ? { icon } : {}) };
 }
 
 /** True for fields the user fills in or picks from, where a click alone isn't the action. */

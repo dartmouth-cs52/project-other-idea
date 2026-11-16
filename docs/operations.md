@@ -22,7 +22,7 @@ To keep a site's context current, run `npm run tag -- refresh --all` on a schedu
 
 ## The database
 
-Sites, and every guide and step, are kept in Neon, in the project called haptic. The tables are in `db/migrations`, and `npm run db:migrate` applies the ones a database is missing, to the database in `DATABASE_URL`. It talks to Neon over HTTPS. The Worker reads the connection string from a secret:
+Sites, and every guide and step, are kept in Neon, in the project called haptic. The tables are in `db/migrations`, and `npm run db:migrate` applies the ones a database is missing, to the database in `DATABASE_URL`. It talks to Neon over HTTPS. With a `DATABASE_URL` repository secret in GitHub, each deploy of the widget server applies them first; without one the deploy warns, and they have to be applied by hand. Until they are, the server and the dashboard still work, and what needs a missing table or column is skipped and logged. The Worker reads the connection string from a secret:
 
 ```bash
 npx wrangler secret put DATABASE_URL
@@ -34,7 +34,7 @@ Without it the Worker still answers, from the KV store sites were kept in before
 
 ## What is recorded about visitors
 
-What is kept from visitors follows one rule: the question, each control pointed at and where on the page it sits, the page's path and the site's address, wrong clicks (by the caption of what was clicked, never by what a field holds), how the guide ended, whether they said it helped, and timings. Emails, phone numbers and long numbers are masked in the browser, and again before anything is stored. Names are not, so a name on a control or in a page's address can be kept. The rest of the page is not kept, and what people type is never read. The privacy page on the website says the same thing to visitors, so a change to what is kept has to change that page too. The question is recorded when it arrives, before the model answers, so a guide whose first step fails is still on record. Each step's row also has the tokens it used and what it cost, which is where a site's cache-hit rate comes from: `cache_read_tokens` over the sum of the three input columns. A guide that never reports an ending was abandoned.
+What is kept from visitors follows one rule: the question, each control pointed at and where on the page it sits, the page's path and the site's address, wrong clicks (by the caption of what was clicked, never by what a field holds), how the guide ended, whether they said it helped, and timings. Emails, phone numbers and long numbers are masked in the browser, and again before anything is stored. Names are not, so a name on a control or in a page's address can be kept. The rest of the page is not kept, and what people type is never read. Apart from guides, the labels of the pages visitors see are kept for learning the site, with when each was first and last seen, how often, and up to ten hashed visitor ids (see [the widget on a live page](widget.md#learning-the-site-from-visits)). The privacy page on the website says the same thing to visitors, so a change to what is kept has to change that page too. The question is recorded when it arrives, before the model answers, so a guide whose first step fails is still on record. Each step's row also has the tokens it used and what it cost, which is where a site's cache-hit rate comes from: `cache_read_tokens` over the sum of the three input columns. A guide that never reports an ending was abandoned.
 
 ## Which guides are finished
 

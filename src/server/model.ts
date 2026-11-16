@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
+import { BLOCKED_SAY, isBlocked } from "../shared/corrections.ts";
 import { MODES, REASONS, type Mode, type Reason, type SiteContext, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { declinedReply, finishAnswer, neverDecided, type Finished, type ModelReply, type Overruled } from "./answers.ts";
 import type { Ceiling } from "./budget.ts";
@@ -137,6 +138,17 @@ export class TurnError extends Error {
   }
 }
 
+/**
+ * Thrown when the visitor's widget hung up before the step was ready, because
+ * the page changed under it. The model call is stopped, and what it had cost
+ * so far is still counted.
+ */
+export class TurnCancelled extends TurnError {
+  constructor(usd = 0) {
+    super(499, "The widget hung up before the step was ready.", usd);
+  }
+}
+
 /** The most output a step may have. A reply is a few dozen tokens: this is room for a model that thinks first. */
 const MAX_TOKENS = 4000;
 /**
@@ -157,7 +169,7 @@ export function ceilingFor(site: SiteContext, request: TurnRequest, settings: Tu
   const size = (text: string) => Math.ceil(new TextEncoder().encode(text).length / BYTES_PER_TOKEN);
   let prompt = promptTokens.get(site);
   if (prompt === undefined) promptTokens.set(site, (prompt = size(buildSystemPrompt(site))));
-  const input = size(buildUserMessage(request)) + request.history.reduce((sum, turn) => sum + size(turn.text), 0);
+  const input = size(buildUserMessage(request, site)) + request.history.reduce((sum, turn) => sum + size(turn.text), 0);
   const cost = (cacheWrite: number, cacheRead: number) => costOf(settings.model, { input, cacheRead, cacheWrite, output: MAX_TOKENS }, settings.cache);
   return { cold: cost(prompt, 0), warm: cost(0, prompt) };
 }
@@ -190,13 +202,22 @@ interface Answered {
  * as soon as each is known. The benchmark calls this with the settings it
  * wants to compare.
  */
-export async function measureTurn(site: SiteContext, request: TurnRequest, settings: TurnSettings = SETTINGS, watch: Watch = {}): Promise<TurnMeasure> {
+export async function measureTurn(
+  site: SiteContext,
+  request: TurnRequest,
+  settings: TurnSettings = SETTINGS,
+  watch: Watch = {},
+  /** Aborted when the widget hangs up. The model call stops and TurnCancelled is thrown. */
+  signal?: AbortSignal,
+): Promise<TurnMeasure> {
   const started = Date.now();
   const answers = answersOn(site);
   let msToTarget: number | undefined;
   let msToMode: number | undefined;
   let declining = false;
   const onPage = (id: string | null): id is string => id !== null && request.snapshot.elements.some((element) => element.id === id);
+  // A control the site's owner ruled out is never pointed at, whatever the model wrote. Not even for a moment, before the reply is checked.
+  const blocked = (id: string | null) => isBlocked(request.snapshot.elements.find((element) => element.id === id), site.blocked);
   const modeKnown = (mode: string | undefined) => {
     if (msToMode !== undefined || !MODES.includes(mode as Mode)) return;
     msToMode = Date.now() - started;
@@ -207,7 +228,7 @@ export async function measureTurn(site: SiteContext, request: TurnRequest, setti
     if (msToTarget !== undefined) return;
     msToTarget = Date.now() - started;
     // A reply that declines points at nothing, whatever it names.
-    if (onPage(id) && !declining) watch.onTarget?.(id);
+    if (onPage(id) && !declining && !blocked(id)) watch.onTarget?.(id);
   };
 
   let answered: Answered;
@@ -216,10 +237,17 @@ export async function measureTurn(site: SiteContext, request: TurnRequest, setti
     if (mockPauseMs > 0) {
       modeKnown(reply.mode);
       targetKnown(reply.target);
-      await new Promise((resolve) => setTimeout(resolve, mockPauseMs));
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, mockPauseMs);
+        signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(new TurnCancelled(mockUsd));
+        });
+      });
     }
+    if (signal?.aborted) throw new TurnCancelled(mockUsd);
     answered = { reply, model: "mock", usd: mockUsd };
-  } else answered = await claudeTurn(site, request, settings, answers, modeKnown, targetKnown);
+  } else answered = await claudeTurn(site, request, settings, answers, modeKnown, targetKnown, signal);
 
   const wrote = answered.reply.say;
   let finished: Finished;
@@ -231,6 +259,9 @@ export async function measureTurn(site: SiteContext, request: TurnRequest, setti
     const { say, broke } = checkSay(tidySay(wrote));
     // Nothing fit to show was left. The pointer, if there is one, still says where to go.
     finished = { reply: { target, status: answered.reply.status, say: say || (target ? SAY_WITHOUT_WORDS.pointing : SAY_WITHOUT_WORDS.nothing) }, cited: [], broke };
+  }
+  if (blocked(finished.reply.target)) {
+    finished = { reply: { target: null, status: "done", say: BLOCKED_SAY, blocked: true, ...(answers ? { mode: "guide" as const } : {}) }, cited: [], broke: finished.broke, overruled: "blocked" };
   }
   const { reply, cited, broke, overruled, unseen } = finished;
   modeKnown(reply.mode);
@@ -272,12 +303,13 @@ async function claudeTurn(
   answers: boolean,
   modeKnown: (mode: string | undefined) => void,
   targetKnown: (id: string | null) => void,
+  signal?: AbortSignal,
 ): Promise<Answered> {
   client ??= new Anthropic(apiKey ? { apiKey } : {});
   const messages: Anthropic.Beta.BetaMessageParam[] = request.history.map((turn) => ({ role: turn.role, content: turn.text }));
   // The conversation has to start with a user message.
   while (messages[0]?.role === "assistant") messages.shift();
-  messages.push({ role: "user", content: buildUserMessage(request) });
+  messages.push({ role: "user", content: buildUserMessage(request, site) });
 
   // If the model declines a request on policy grounds, the API retries it on a
   // fallback model inside the same call. Haiku has no server-side fallback.
@@ -304,7 +336,7 @@ async function claudeTurn(
       // Rules and site knowledge are the same for every turn on a site, so they're cached.
       system: [{ type: "text", text: buildSystemPrompt(site), cache_control: { type: "ephemeral", ttl: settings.cache } }],
       messages,
-    });
+    }, signal ? { signal } : undefined);
     // The reply is JSON with the fields that can be acted on first: the kind of reply where there is one, then "target".
     stream.on("text", (_delta, soFar) => {
       if (answers) modeKnown(MODE_SO_FAR.exec(soFar)?.[1]);
@@ -322,6 +354,7 @@ async function claudeTurn(
   } catch (error) {
     const soFar = counted && { ...counted.usage, output_tokens: Math.max(counted.usage.output_tokens ?? 0, Math.ceil(streamed / BYTES_PER_TOKEN)) };
     const paid = counted && soFar ? usdOf(soFar, counted.model, settings.cache, settings.model) : 0;
+    if (signal?.aborted) throw new TurnCancelled(paid);
     if (error instanceof Anthropic.AuthenticationError) throw new TurnError(500, "The server's Anthropic credentials are missing or invalid.", paid);
     if (error instanceof Anthropic.RateLimitError) throw new TurnError(503, "The model is rate limited. Try again shortly.", paid);
     if (error instanceof Anthropic.APIError) throw new TurnError(502, `The model call failed (${error.status ?? "no status"}): ${error.message}`, paid);

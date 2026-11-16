@@ -1,3 +1,5 @@
+import type { ControlName, Correction } from "./corrections.ts";
+
 // Shapes shared by the widget (browser), the server and the intake CLI.
 // No DOM or Node APIs here.
 
@@ -16,7 +18,7 @@ export interface SiteContext {
   notes: string;
   /** Help docs the company supplied. */
   docs: Doc[];
-  /** What the crawl found. Pages are nodes and their links are edges, so this is already a graph. */
+  /** What the crawl found. Pages are nodes, and their links and `opens` are edges, so this is a graph of the site. */
   pages: PageNode[];
   /** The inputs this was built from, so `refresh` can rebuild it unattended. */
   source: SiteSource;
@@ -37,6 +39,12 @@ export interface SiteContext {
   answers?: AnswersConfig;
   /** Where a visitor is sent when Haptic can't help. Without it the widget offers nothing. */
   handoff?: Handoff;
+  /** False stops the widget sending outlines of the pages it sees, so the site map is the crawl's alone. On unless set. */
+  learn?: boolean;
+  /** "Point here instead": steps the site's owner fixed from the dashboard. See src/shared/corrections.ts. */
+  corrections?: Correction[];
+  /** Controls Haptic must never point at, like "Delete workspace". Enforced by the server and the widget, not left to the prompt. */
+  blocked?: ControlName[];
   createdAt: string;
   updatedAt: string;
 }
@@ -91,6 +99,21 @@ export interface PageNode {
   buttons: string[];
   /** Labels of form fields. */
   fields: string[];
+  /**
+   * What each menu, tab or accordion showed when the reader opened it. These
+   * are the edges that take two clicks: the control first, then what it shows.
+   * Only a reader that runs the page in a browser can fill this in.
+   */
+  opens?: PageOpening[];
+}
+
+export interface PageOpening {
+  /** The label of the control that has to be clicked first. */
+  control: string;
+  /** Same-site links that appeared, and where each one leads. */
+  links: { label: string; to: string }[];
+  /** Buttons, tabs and menu items that appeared. */
+  buttons: string[];
 }
 
 /**
@@ -127,6 +150,10 @@ export interface PublicSiteConfig {
   appearance: Appearance;
   /** Set when Haptic is switched off here. The widget then draws nothing. */
   off?: true;
+  /** Set when the site has asked not to be learned from its visits. The widget then sends no outlines. */
+  learn?: false;
+  /** Controls Haptic must never point at. The widget checks every pointer against it. */
+  blocked?: ControlName[];
   handoff?: PublicHandoff;
 }
 
@@ -167,6 +194,12 @@ export interface HistoryTurn {
 
 export interface TurnRequest {
   site: string;
+  /**
+   * The random id the widget keeps in the browser (src/widget/learn.ts). The
+   * server keeps only a hash of it made with the site's id, so the dashboard
+   * can count people rather than questions. Never part of the prompt.
+   */
+  visitor?: string;
   /** Made by the widget when the question is asked, and kept across page loads, so a guide's steps can be tied together. */
   guide?: string;
   goal: string;
@@ -200,12 +233,51 @@ export interface TurnRequest {
  * And on a site with Answers on, none of them billed:
  * - answered: the question was answered in words from the help docs
  * - not_covered, sensitive, off_topic: Haptic said it couldn't help, for that reason
+ * And on any site:
+ * - blocked: the step was a control the site's owner said never to point at, so Haptic said it can't help with that here
  */
-export const GUIDE_OUTCOMES = ["finished", "shown", "stopped", "nothing_to_point_at", "loop", "step_limit", "error", "answered", "not_covered", "sensitive", "off_topic"] as const;
+export const GUIDE_OUTCOMES = ["finished", "shown", "stopped", "nothing_to_point_at", "loop", "step_limit", "error", "answered", "not_covered", "sensitive", "off_topic", "blocked"] as const;
 export type GuideOutcome = (typeof GUIDE_OUTCOMES)[number];
 
 /** A guide id, as the widget makes it with crypto.randomUUID(). */
 export const GUIDE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+/**
+ * What the widget sends about a page it has seen, once per page per tab, so
+ * Haptic learns the site from real visits as well as from the crawl. Labels
+ * only: never what is typed into a field, never what is in a table's cells,
+ * and with emails and numbers masked. A label reaches the prompt only once
+ * several different visitors have sent it (see src/server/learned.ts).
+ */
+export interface PageOutline {
+  /** Normalized, like /orders/:id. */
+  path: string;
+  title: string;
+  headings: string[];
+  /** Same-site links, and controls a click on which led to another page, like "View, in a dialog". */
+  links: { label: string; to: string }[];
+  /** Buttons, tabs and menu items. An icon-only one is named by its icon, like "icon:share-2". */
+  buttons: string[];
+}
+
+/** What the widget posts to /v1/outline. */
+export interface OutlineReport {
+  site: string;
+  /** A random id the widget keeps in the site's localStorage. The server keeps only a hash of it, made per site. */
+  visitor?: string;
+  outline: PageOutline;
+}
+
+/**
+ * True for a label worth learning: short, with a letter in it, and with
+ * nothing masked. A label that held an email address or a long number was
+ * about one person, so it is dropped whole rather than kept with a hole in it.
+ */
+export function isLearnableLabel(label: string): boolean {
+  if (!label || label.length > 60) return false;
+  if (/\[(?:email|number)\]/.test(label)) return false;
+  return /\p{L}/u.test(label);
+}
 
 /** What the widget sends when a guide ends, again if the visitor says whether it helped, and again if they ask for a person. */
 export interface GuideReport {
@@ -300,6 +372,8 @@ export interface TurnReply {
    * not finish, and there is nothing to ask the visitor about.
    */
   paused?: true;
+  /** True when the model named a control the site's owner has ruled out. The pointer stays put and `say` is the fixed sentence. */
+  blocked?: true;
   /** Only on a site with Answers on. */
   mode?: Mode;
   /** Only with mode "cannot_help". */

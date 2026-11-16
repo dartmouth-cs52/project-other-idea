@@ -11,20 +11,60 @@ export interface RawOutline {
   fields: string[];
   /** How many disclosure controls were opened to reveal more. */
   opened: number;
+  /** What each of those showed, for the ones that showed a link or a button. */
+  reveals: RawReveal[];
+}
+
+/** One control the reader opened, and the links and buttons that were not on show until it did. */
+export interface RawReveal {
+  control: string;
+  links: { label: string; href: string }[];
+  buttons: string[];
 }
 
 /**
  * Opens what navigation hides without changing anything: <details>, tabs, and
  * buttons that declare they show or hide something (aria-expanded=false with
  * aria-controls or aria-haspopup). Never a link, never a control inside a form,
- * never a submit button. Resolves with how many it opened.
+ * never a submit button.
+ *
+ * Resolves with how many it opened and what each one showed: the links and
+ * buttons on show after the click that were not on show before it. Each of
+ * those is marked, so outlinePage lists it under its opening and not as
+ * something the page shows at once.
  */
-export async function openDisclosures(limit: number): Promise<number> {
+export async function openDisclosures(limit: number): Promise<{ opened: number; reveals: RawReveal[] }> {
   const pause = () => new Promise((resolve) => setTimeout(resolve, 250));
+  const text = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
+  const name = (el: Element) => text(el.getAttribute("aria-label")) || text((el as HTMLElement).innerText) || text(el.getAttribute("title"));
+  // A closed <details> keeps boxes for what is inside it, so having a box is not enough: checkVisibility knows they are not drawn.
+  const drawn = (el: Element) => el.getClientRects().length > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  const onShow = () => new Set(Array.from(document.querySelectorAll("a[href], button, [role='button'], [role='tab'], [role='menuitem'], summary")).filter(drawn));
+  const reveals: RawReveal[] = [];
+  /** Notes what is on show now and was not in `before`, as what `control` opens. */
+  const record = (control: Element, label: string, before: Set<Element>) => {
+    const links: { label: string; href: string }[] = [];
+    const buttons: string[] = [];
+    for (const el of onShow()) {
+      if (before.has(el) || el === control || control.contains(el)) continue;
+      el.setAttribute("data-haptic-revealed", "");
+      const shown = name(el);
+      if (!shown) continue;
+      if (el instanceof HTMLAnchorElement) {
+        if (el.href.startsWith("http")) links.push({ label: shown, href: el.href });
+      } else buttons.push(shown);
+    }
+    // A control with no name can't be pointed at by name, so what it showed stays unlisted.
+    if (label && (links.length || buttons.length)) reveals.push({ control: label, links: links.slice(0, 30), buttons: Array.from(new Set(buttons)).slice(0, 20) });
+  };
+
   let opened = 0;
   for (const details of Array.from(document.querySelectorAll("details:not([open])")).slice(0, limit)) {
+    const summary = details.querySelector(":scope > summary");
+    const before = onShow();
     details.setAttribute("open", "");
     opened++;
+    if (summary) record(summary, name(summary), before);
   }
   const candidates = Array.from(
     document.querySelectorAll<HTMLElement>(
@@ -40,11 +80,15 @@ export async function openDisclosures(limit: number): Promise<number> {
   const start = location.href;
   for (const el of candidates.slice(0, Math.max(0, limit - opened))) {
     if (location.href !== start || !el.isConnected) break;
+    // Read before the click: opening can change the control's own words, "Show more" to "Show less".
+    const label = name(el);
+    const before = onShow();
     el.click();
     opened++;
     await pause();
+    if (location.href === start) record(el, label, before);
   }
-  return opened;
+  return { opened, reveals };
 }
 
 /** The page's outline: title, headings, where links lead, and the names of buttons and fields. */
@@ -57,7 +101,8 @@ export function outlinePage(): RawOutline {
 
   const links: { label: string; href: string }[] = [];
   for (const a of Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
-    if (!a.href.startsWith("http")) continue;
+    // What an opened menu or tab revealed is listed under that opening.
+    if (!a.href.startsWith("http") || a.hasAttribute("data-haptic-revealed")) continue;
     links.push({ label: visible(a) ? name(a) : text(a.getAttribute("aria-label")) || text(a.textContent), href: a.href });
   }
   const fields = Array.from(document.querySelectorAll<HTMLInputElement>("input, select, textarea"))
@@ -73,11 +118,12 @@ export function outlinePage(): RawOutline {
     links: links.slice(0, 300),
     buttons: unique(
       Array.from(document.querySelectorAll("button, [role='button'], [role='tab'], [role='menuitem'], input[type='submit'], input[type='button'], summary"))
-        .filter(visible)
+        .filter((el) => visible(el) && !el.hasAttribute("data-haptic-revealed"))
         .map(name),
       40,
     ),
     fields: unique(fields, 30),
     opened: 0,
+    reveals: [],
   };
 }

@@ -33,6 +33,14 @@ on:
         type: choice
         options: [guides, guides-with-answers, answers]
         default: guides
+      cases:
+        description: "For guides: case files from eval/cases to run, comma-separated, like demo,joinhaptic. Empty runs them all."
+        default: ""
+      corrections:
+        description: "For guides: with, or without the sites' corrections and ruled-out controls, to see what they change."
+        type: choice
+        options: [with, without]
+        default: with
 
 # Lets the run ask GitHub for the token that proves which repository and branch it is.
 permissions:
@@ -48,6 +56,8 @@ jobs:
       MODELS: ${{ inputs.models }}
       REPEAT: ${{ inputs.repeat }}
       SUITE: ${{ inputs.suite }}
+      CASES: ${{ inputs.cases }}
+      CORRECTIONS: ${{ inputs.corrections }}
     steps:
       # Each setting is passed on only when it has a value. An empty key would
       # still take the place of federation, and an empty workspace would be sent as one.
@@ -104,13 +114,16 @@ jobs:
       # The Answers benchmark checks its judge against the labelled answers first, so the table that follows can be believed.
       - name: Run the benchmark
         run: |
+          options=()
+          if [ -n "$CASES" ]; then options+=(--cases "$CASES"); fi
+          if [ "$CORRECTIONS" = "without" ]; then options+=(--without-corrections); fi
           case "$SUITE" in
             answers)
               { npm run -s eval:answers -- --check-judge --yes; npm run -s eval:answers -- --models "$MODELS" --judge --yes; } | tee benchmark.txt ;;
             guides-with-answers)
-              npm run -s eval -- --models "$MODELS" --repeat "$REPEAT" --answers --yes | tee benchmark.txt ;;
+              npm run -s eval -- --models "$MODELS" --repeat "$REPEAT" --answers "${options[@]}" --yes | tee benchmark.txt ;;
             *)
-              npm run -s eval -- --models "$MODELS" --repeat "$REPEAT" --yes | tee benchmark.txt ;;
+              npm run -s eval -- --models "$MODELS" --repeat "$REPEAT" "${options[@]}" --yes | tee benchmark.txt ;;
           esac
           { echo '```'; cat benchmark.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 

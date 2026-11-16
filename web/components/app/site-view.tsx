@@ -7,6 +7,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, type Reading, type Site } from "@/lib/app-api";
 import { InstallOptions } from "./install-options";
+import { GuidingRules } from "./guiding-rules";
 import { InsightsView } from "./insights-view";
 import { SiteSettings } from "./site-settings";
 import { Card, CardTitle, CopyButton, DoneMark, FailedCard, StepMark, when } from "./parts";
@@ -85,7 +86,8 @@ export function SiteView({ siteId, onDeleted }: { siteId: string; onDeleted: () 
         <SiteSettings site={site} onChange={setSite} onDeleted={onDeleted} />
       ) : site.connected ? (
         <>
-          <InsightsView siteId={site.id} refreshKey={refreshKey} />
+          <InsightsView siteId={site.id} refreshKey={refreshKey} onCorrected={(corrections) => setSite({ ...site, corrections })} />
+          <GuidingRules site={site} onChange={setSite} />
           <InstallHealth site={site} reading={pages.reading} onChange={setSite} />
         </>
       ) : (
@@ -167,6 +169,7 @@ function Setup({ site, pages, onChange }: { site: Site; pages: Pages; onChange: 
       </Card>
 
       <Connection site={site} onChange={onChange} />
+      <GuidingRules site={site} onChange={onChange} />
     </div>
   );
 }

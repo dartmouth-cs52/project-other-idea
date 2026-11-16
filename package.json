@@ -20,7 +20,8 @@
     "eval:record": "tsx eval/record.ts",
     "eval:answers": "tsx --env-file-if-exists=.env eval/answers-run.ts",
     "eval:answers:record": "tsx eval/answers-record.ts",
-    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts"
+    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts",
+    "test:browser": "tsx --test --test-concurrency=1 test/browser/*.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
@@ -31,6 +32,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
+    "playwright": "^1.64.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "wrangler": "^4.162.0"

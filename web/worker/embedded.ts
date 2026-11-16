@@ -7,7 +7,7 @@
 //
 // `site.generated.json` is written by `scripts/embed-site.mjs` after a build.
 
-import { handle, type Assets, type Env } from "./handler";
+import { daily, handle, type Assets, type Env } from "./handler";
 import files from "./site.generated.json";
 
 type Packed = { type: string; text?: string; base64?: string };
@@ -57,6 +57,9 @@ const assets: Assets = {
 const worker = {
   fetch(request: Request, env: Env): Promise<Response> {
     return handle(request, env, assets);
+  },
+  scheduled(_event: unknown, env: Env, ctx: { waitUntil(work: Promise<unknown>): void }) {
+    ctx.waitUntil(daily(env));
   },
 };
 

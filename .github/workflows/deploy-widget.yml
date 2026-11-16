@@ -62,6 +62,18 @@ jobs:
 
       - run: npm test
 
+      # Before the publish, so new code finds its tables. Migrations only add, so the code
+      # already live keeps working on the migrated database.
+      - name: Apply database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::warning::There is no DATABASE_URL secret, so migrations were not applied. Run npm run db:migrate by hand."
+            exit 0
+          fi
+          npm run db:migrate
+
       # Builds the widget, packs it into the Worker and publishes it.
       - name: Build and publish
         run: npm run deploy

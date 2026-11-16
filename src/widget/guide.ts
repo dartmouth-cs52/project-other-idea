@@ -15,7 +15,9 @@ import {
   type TurnReply,
   type TurnRequest,
 } from "../shared/types.ts";
-import { describeChange, elementKey, isField, NOTHING_CHANGED, takeSnapshot } from "./snapshot.ts";
+import { BLOCKED_SAY, isBlocked, type ControlName } from "../shared/corrections.ts";
+import { onAddressChange } from "./navigation.ts";
+import { describeChange, elementKey, isField, NOTHING_CHANGED, sameView, takeSnapshot, type PageSnapshot } from "./snapshot.ts";
 import type { Ui } from "./ui.ts";
 
 // Runs one guide: ask the model for a step, point at it, wait for the visitor
@@ -132,6 +134,8 @@ export class Guide {
   private misses = 0;
   private step = 0;
   private previous?: Snapshot;
+  /** The page as it was last sent to the server, whether or not the answer was used. */
+  private lastSent?: Snapshot;
   /** The element the last step pointed at, and whether the visitor used it. */
   private last?: { key: string; used: boolean };
   /** The visitor's last action was not the step they were shown. Cleared once the next step is given. */
@@ -142,9 +146,11 @@ export class Guide {
 
   constructor(
     private readonly ui: Ui,
-    private readonly sendTurn: (request: Omit<TurnRequest, "site">, watch?: Watch) => Promise<TurnReply>,
+    private readonly sendTurn: (request: Omit<TurnRequest, "site">, watch?: Watch, signal?: AbortSignal) => Promise<TurnReply>,
     private readonly report: Reporter = () => {},
     private readonly handoff?: HandoffWay,
+    /** Controls the site's owner ruled out. Checked here as well as on the server, so the pointer never goes to one. */
+    private readonly blocked: ControlName[] = [],
   ) {}
 
   /**
@@ -202,6 +208,7 @@ export class Guide {
     this.history = [];
     this.step = 0;
     this.previous = undefined;
+    this.lastSent = undefined;
     this.last = undefined;
     this.strayed = false;
     this.unconfirmed = undefined;
@@ -214,7 +221,16 @@ export class Guide {
     ui.setBusy(this.step === 0 ? "Finding it…" : this.strayed ? OFF_TRACK : "Next step…");
 
     ui.place();
-    const page = takeSnapshot(ui.host);
+    let page = takeSnapshot(ui.host);
+    // A single-page app can change the address before it draws the new page.
+    // A new address over the same controls as the page last sent hasn't been
+    // drawn yet, so wait for the page to change before reading it.
+    if (this.lastSent && page.snapshot.path !== this.lastSent.path && sameView(this.lastSent, page.snapshot)) {
+      await settle(ui.host, 300, 3000, true);
+      if (run !== this.run) return;
+      ui.place();
+      page = takeSnapshot(ui.host);
+    }
     const change = event && this.previous ? describeChange(this.previous, page.snapshot) : undefined;
 
     // The server names the control before it has finished the sentence about
@@ -227,6 +243,7 @@ export class Guide {
       const el = page.elements.get(id);
       if (run !== this.run || early || !el?.isConnected || normalizePath(location.pathname) !== page.snapshot.path) return;
       const listed = page.snapshot.elements.find((element) => element.id === id);
+      if (isBlocked(listed, this.blocked)) return;
       if (listed?.offscreen) el.scrollIntoView({ block: "center", behavior: "smooth" });
       ui.pointAt(el, "");
       const waiting: EarlyPointer = {
@@ -256,6 +273,28 @@ export class Guide {
       ui.clearPointer();
     };
 
+    // If the address changes while the model is answering, the answer is about
+    // a page the visitor has left, like the page they were on when they
+    // clicked a link that took a moment to load. It is dropped at once and the
+    // step is asked again from the new page.
+    const abort = new AbortController();
+    let moved = false;
+    const stopWatching = onAddressChange((_from, to) => {
+      if (moved || normalizePath(new URL(to).pathname) === page.snapshot.path) return;
+      moved = true;
+      abort.abort();
+    });
+    /** Asks for the step again, from the page the visitor is on now. */
+    const startOver = async () => {
+      dropEarly();
+      const here = normalizePath(location.pathname);
+      ui.setBusy(this.step === 0 ? "Finding it…" : "Next step…");
+      await settle(ui.host);
+      if (run !== this.run) return;
+      return this.turn(run, `${event ?? ""} The user went from ${page.snapshot.path} to ${here}.`.trim());
+    };
+
+    this.lastSent = page.snapshot;
     let reply: TurnReply;
     try {
       reply = await this.sendTurn(
@@ -274,13 +313,17 @@ export class Guide {
           // An answer takes a moment longer than a pointer, so say what the wait is for.
           onMode: (mode) => run === this.run && mode === "answer" && ui.setBusy("Reading the help docs…"),
         },
+        abort.signal,
       );
     } catch (error) {
+      stopWatching();
       if (run !== this.run) return;
+      if (moved) return startOver();
       dropEarly();
       console.warn("[Haptic]", error);
       return this.finish("Something went wrong on our side. Try asking again.", "error");
     }
+    stopWatching();
     if (run !== this.run) return;
 
     // The site is switched off or has spent its budget, and the model was not asked.
@@ -290,16 +333,16 @@ export class Guide {
     }
 
     // The answer is about a page the visitor has already left. Start over from where they are now.
-    const here = normalizePath(location.pathname);
-    if (here !== page.snapshot.path) {
-      dropEarly();
-      await settle(ui.host);
-      if (run !== this.run) return;
-      return this.turn(run, `${event ?? ""} The user went from ${page.snapshot.path} to ${here}.`.trim());
-    }
+    if (moved || normalizePath(location.pathname) !== page.snapshot.path) return startOver();
 
     const el = reply.target ? page.elements.get(reply.target) : undefined;
     const listed = reply.target ? page.snapshot.elements.find((element) => element.id === reply.target) : undefined;
+
+    // A control the site's owner ruled out. The server says so, and the widget checks for itself.
+    if (reply.blocked || isBlocked(listed, this.blocked)) {
+      dropEarly();
+      return this.finish(reply.blocked ? reply.say : BLOCKED_SAY, "blocked");
+    }
 
     // Pointing again at what the visitor just used, with the page unchanged,
     // is a loop. Ask once more saying so, then give up rather than repeat.
@@ -360,18 +403,25 @@ export class Guide {
       ui.setBusy("");
       if (!inPanel) ui.closePanel();
       forget();
-      const dismiss = (event: MouseEvent) => {
-        if (event.composedPath().includes(ui.host)) return;
-        document.removeEventListener("click", dismiss, true);
+      // Going to another page some other way, like the back button, takes it down too.
+      let stopAddress = () => {};
+      const dismiss = (event?: MouseEvent) => {
+        if (event?.composedPath().includes(ui.host)) return;
+        unlisten();
         if (run === this.run) ui.clear();
       };
+      const unlisten = () => {
+        document.removeEventListener("click", dismiss, true);
+        stopAddress();
+      };
+      stopAddress = onAddressChange(() => dismiss());
       document.addEventListener("click", dismiss, true);
 
       // An answer in words that also points ends as answered, whatever the visitor does next. Answers are not billed.
       if (inPanel) {
         early?.stop();
         this.end("answered");
-        this.stopWaiting = () => document.removeEventListener("click", dismiss, true);
+        this.stopWaiting = unlisten;
         return;
       }
 
@@ -379,7 +429,7 @@ export class Guide {
       if (arrived) {
         early?.stop();
         this.end("finished");
-        this.stopWaiting = () => document.removeEventListener("click", dismiss, true);
+        this.stopWaiting = unlisten;
         return;
       }
 
@@ -399,7 +449,7 @@ export class Guide {
       this.stopWaiting = () => {
         window.removeEventListener("pagehide", left);
         stopUse();
-        document.removeEventListener("click", dismiss, true);
+        unlisten();
       };
       if (early?.acted) return conclude(early.acted.onTarget);
       // The early pointer's own listener saves the guide for the next page, which must not happen once
@@ -629,13 +679,13 @@ function waitForAction(
     if (event.key === "Enter" && field && event.composedPath().includes(target)) filled();
   };
   // Back, forward and anything else that changes the address without a click we saw.
-  const poll = setInterval(() => {
+  const stopAddress = onAddressChange(() => {
     if (location.href !== startUrl) finish(`The user went to ${normalizePath(location.pathname)} without using ${name}.`, false);
-  }, 500);
+  });
 
   const stop = () => {
     clearTimeout(typing);
-    clearInterval(poll);
+    stopAddress();
     document.removeEventListener("click", onClick, true);
     document.removeEventListener("input", onInput, true);
     document.removeEventListener("change", onInput, true);
@@ -655,11 +705,13 @@ const LOADING = '[aria-busy="true"], [role="progressbar"], .animate-spin, .anima
 /**
  * Resolves once the page has stopped changing, so the next snapshot shows the
  * result of a click and not a half-rendered page. Waits only as long as the
- * page keeps changing, up to `maxMs`.
+ * page keeps changing, up to `maxMs`. With `untilChanged`, a quiet page isn't
+ * enough: it waits for the page to change at least once first, still no longer than `maxMs`.
  */
-export function settle(ignore: Element, quietMs = 300, maxMs = 3000): Promise<void> {
+export function settle(ignore: Element, quietMs = 300, maxMs = 3000, untilChanged = false): Promise<void> {
   return new Promise((resolve) => {
     let quiet: ReturnType<typeof setTimeout>;
+    let changed = false;
     const finish = () => {
       observer.disconnect();
       clearTimeout(quiet);
@@ -671,11 +723,13 @@ export function settle(ignore: Element, quietMs = 300, maxMs = 3000): Promise<vo
       quiet = setTimeout(() => {
         const loading = Array.from(document.querySelectorAll(LOADING)).some((el) => !ignore.contains(el) && el.getClientRects().length > 0);
         if (loading) restart();
-        else finish();
+        else if (!untilChanged || changed) finish();
       }, quietMs);
     };
     const observer = new MutationObserver((records) => {
-      if (records.some((record) => record.target !== ignore && !ignore.contains(record.target))) restart();
+      if (!records.some((record) => record.target !== ignore && !ignore.contains(record.target))) return;
+      changed = true;
+      restart();
     });
     observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
     const limit = setTimeout(finish, maxMs);

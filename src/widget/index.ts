@@ -1,5 +1,6 @@
 import { DEFAULT_APPEARANCE, MODES, STREAM_TYPE, type Mode, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { Guide, type HandoffWay, type Reporter, type Watch } from "./guide.ts";
+import { startLearning, visitorId } from "./learn.ts";
 import { Ui } from "./ui.ts";
 
 // Entry point of the script customers paste into their site:
@@ -29,11 +30,15 @@ async function boot() {
   // The reply comes as lines of JSON. The first lines say what kind of reply
   // it is (on a site with Answers on) and name the control to point at, each as
   // soon as the model has decided. The last is the whole reply.
-  const sendTurn = async (request: Omit<TurnRequest, "site">, watch: Watch = {}): Promise<TurnReply> => {
+  // So the dashboard can count people and not questions. The server keeps only a hash of it, made with the site's id.
+  const visitor = visitorId();
+  const sendTurn = async (request: Omit<TurnRequest, "site">, watch: Watch = {}, signal?: AbortSignal): Promise<TurnReply> => {
+    // Aborting hangs up on the server, which stops asking the model and records the step as dropped.
     const response = await fetch(`${api}/v1/turn`, {
       method: "POST",
+      signal,
       headers: { "Content-Type": "application/json", Accept: STREAM_TYPE },
-      body: JSON.stringify({ ...request, site }),
+      body: JSON.stringify({ ...request, site, ...(visitor ? { visitor } : {}) }),
     });
     if (!response.ok) throw new Error(`Turn failed with ${response.status}: ${await response.text()}`);
     if (!response.body || !(response.headers.get("Content-Type") ?? "").includes(STREAM_TYPE)) return response.json();
@@ -85,8 +90,16 @@ async function boot() {
         .then((response) => response.ok)
         .catch(() => false),
   };
-  const guide = new Guide(ui, sendTurn, report, handoff);
+  const guide = new Guide(ui, sendTurn, report, handoff, config.blocked ?? []);
   guide.resume();
+
+  // Each page's outline, so the site map keeps up with the product. Sent as
+  // text/plain, which needs no preflight, and it never matters to the visitor whether it arrives.
+  if (config.learn !== false) {
+    startLearning((body) => {
+      void fetch(`${api}/v1/outline`, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ ...body, site }) }).catch(() => {});
+    }, ui.host);
+  }
 }
 
 const start = () => boot().catch((error) => console.warn("[Haptic]", error));

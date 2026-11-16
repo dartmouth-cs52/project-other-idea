@@ -1,4 +1,5 @@
-import type { Doc, PageNode, SiteContext, SnapElement, Snapshot, TurnRequest } from "../shared/types.ts";
+import { controlText, correctionsFor } from "../shared/corrections.ts";
+import type { Doc, PageNode, PageOpening, SiteContext, SnapElement, Snapshot, TurnRequest } from "../shared/types.ts";
 
 // Builds what the model reads. The system part (rules and site knowledge) is
 // identical for every turn on a site, so it's cached. Everything that changes
@@ -114,6 +115,12 @@ export function buildSystemPrompt(site: SiteContext): string {
   const parts = [(answers ? ANSWER_RULES : RULES).replaceAll("{site_name}", site.name || "this website")];
   if (site.notes.trim()) parts.push(`# About this site, from its owner\n${site.notes.trim()}`);
   if (site.pages.length) parts.push(`# Site map\n<site_map>\n${renderSiteMap(site.pages)}\n</site_map>`);
+  // Only for a site that has such a list, so every other site's prompt is as it was.
+  if (site.blocked?.length) {
+    parts.push(
+      `# Controls never to point at, from its owner\nThe site's owner doesn't want visitors guided to these. Never point at one, wherever it is on the page. If the visitor asks for what one does, set target to null and status "done", and say you can't help with that here.\n${site.blocked.map((control) => `- ${controlText(control)}`).join("\n")}`,
+    );
+  }
   if (answers) {
     const articles = articlesOf(site).map(renderArticle);
     parts.push(`# Help docs, from the site's owner\n<help_docs>\n${articles.length ? articles.join("\n\n") : "(This site has no help articles, so nothing can be answered in words.)"}\n</help_docs>`);
@@ -158,38 +165,66 @@ function renderArticle({ id, doc }: Article): string {
   return `<article id="${id}" title="${title}"${doc.updated ? ` updated="${doc.updated}"` : ""}>\n${shut(doc.text)}\n</article>`;
 }
 
+/** Buttons listed for one page, after those on most pages. A page with more is usually a list of the visitor's own things. */
+const MAX_PAGE_BUTTONS = 24;
+
 /**
  * One line per page. Links and buttons that repeat on most pages (the main
  * navigation) are listed once at the top, which leaves each page's line for
- * what's specific to it.
+ * what's specific to it. The same goes for a menu that opens the same way on
+ * most pages, like an account menu. The pages are the crawl's, with what
+ * traffic has taught Haptic merged in (src/server/learned.ts).
+ *
+ * What a menu, tab or accordion shows once it is opened reads
+ * `behind "Account": Billing → /billing`, so the model knows which control to
+ * point at first.
  */
 export function renderSiteMap(pages: PageNode[]): string {
   const link = (l: { label: string; to: string }) => `${l.label} → ${l.to}`;
+  const opening = (o: PageOpening) => `behind "${o.control.replace(/"/g, "'")}": ${[...o.links.map(link), ...o.buttons].join("; ")}`;
   const counts = new Map<string, number>();
   for (const page of pages) {
-    for (const item of new Set([...page.links.map(link), ...page.buttons])) counts.set(item, (counts.get(item) ?? 0) + 1);
+    for (const item of new Set([...page.links.map(link), ...page.buttons, ...(page.opens ?? []).map(opening)])) counts.set(item, (counts.get(item) ?? 0) + 1);
   }
   const sharedMin = Math.max(3, Math.ceil(pages.length / 2));
   const shared = new Set([...counts].filter(([, count]) => count >= sharedMin).map(([item]) => item));
+  const sharedOpenings = new Set(pages.flatMap((page) => (page.opens ?? []).map(opening)).filter((item) => shared.has(item)));
+  for (const item of sharedOpenings) shared.delete(item);
 
   const lines: string[] = [];
   if (shared.size) lines.push(`On most pages: ${[...shared].join("; ")}`);
+  for (const item of sharedOpenings) lines.push(`On most pages, ${item}`);
   for (const page of pages) {
-    const parts = [`"${page.title}"`];
+    // A page only traffic knows may not have a title that enough visitors shared.
+    const parts = page.title ? [`"${page.title}"`] : [];
     if (page.description) parts.push(page.description);
     if (page.headings.length) parts.push(`headings: ${page.headings.join(", ")}`);
     const links = page.links.map(link).filter((item) => !shared.has(item));
     if (links.length) parts.push(`links: ${links.join("; ")}`);
-    const buttons = page.buttons.filter((item) => !shared.has(item));
+    const buttons = page.buttons.filter((item) => !shared.has(item)).slice(0, MAX_PAGE_BUTTONS);
     if (buttons.length) parts.push(`buttons: ${buttons.join(", ")}`);
     if (page.fields.length) parts.push(`fields: ${page.fields.join(", ")}`);
-    lines.push(`${page.path}: ${parts.join(" | ")}`);
+    for (const item of (page.opens ?? []).map(opening)) if (!sharedOpenings.has(item)) parts.push(item);
+    if (parts.length) lines.push(`${page.path}: ${parts.join(" | ")}`);
   }
   return lines.join("\n");
 }
 
-export function buildUserMessage(request: TurnRequest): string {
+/**
+ * The part of the prompt that changes with every step. With `site`, the
+ * owner's corrections that fit this question or this page go with it, before
+ * the question. A site without any is asked exactly as before.
+ */
+export function buildUserMessage(request: TurnRequest, site?: SiteContext): string {
   const parts = [`<page>\n${renderSnapshot(request.snapshot)}\n</page>`];
+  const corrections = correctionsFor(site?.corrections, request.snapshot.path, request.goal);
+  if (corrections.length) {
+    const lines = corrections.map(
+      (correction) =>
+        `- On ${correction.route}, asked "${correction.question.replace(/"/g, "'")}": point at ${controlText(correction.right)}${correction.wrong ? `, not ${controlText(correction.wrong)}` : ""}.`,
+    );
+    parts.push(`<corrections>\nThe site's owner corrected earlier guides. Where one is about the same task and its control is in this page's list, point at that control.\n${lines.join("\n")}\n</corrections>`);
+  }
   if (request.step === 0 && !request.event) {
     parts.push(`The visitor asks: ${request.goal}`);
   } else {

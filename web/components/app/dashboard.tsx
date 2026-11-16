@@ -12,6 +12,11 @@ import { accessHref } from "@/lib/site";
 import { AppNav, Card, FailedCard, leaveFor } from "./parts";
 import { SiteView } from "./site-view";
 
+/** The first word of the person's name, from Google. Someone who signed in by an emailed link has none. */
+function firstName(name: string | undefined): string | undefined {
+  return name?.trim().split(/\s+/)[0] || undefined;
+}
+
 type State = { kind: "loading" } | { kind: "failed"; message: string } | { kind: "ready"; me: Me };
 
 export function Dashboard() {
@@ -46,7 +51,7 @@ export function Dashboard() {
   const me = state.kind === "ready" ? state.me : undefined;
   return (
     <>
-      <AppNav who={me ? [me.organization?.name, me.user.email].filter(Boolean).join(", ") : undefined} />
+      <AppNav who={me ? (firstName(me.user.name) ?? me.user.email) : undefined} email={me?.user.email} />
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-12">
         {state.kind === "loading" && <p className="text-base text-muted-foreground">Signing you in</p>}
         {state.kind === "failed" && (
@@ -55,7 +60,7 @@ export function Dashboard() {
         {me && !me.approved && <NotApproved me={me} />}
         {me?.approved && !me.sites?.length && (
           <AddSite
-            company={me.organization?.name ?? ""}
+            name={firstName(me.user.name)}
             onAdded={async (id) => {
               setState({ kind: "ready", me: await api<Me>("/me") });
               router.replace(`/dashboard/?site=${id}`);
@@ -113,7 +118,7 @@ function NotApproved({ me }: { me: Me }) {
   );
 }
 
-function AddSite({ company, onAdded }: { company: string; onAdded: (id: string) => void }) {
+function AddSite({ name, onAdded }: { name?: string; onAdded: (id: string) => void }) {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
@@ -134,7 +139,7 @@ function AddSite({ company, onAdded }: { company: string; onAdded: (id: string) 
   return (
     <div className="grid items-start gap-10 md:grid-cols-2">
       <div className="flex flex-col gap-4">
-        <h1 className="text-4xl font-medium tracking-[-0.03em] text-balance">Welcome{company ? `, ${company}` : ""}.</h1>
+        <h1 className="text-4xl font-medium tracking-[-0.03em] text-balance">Welcome{name ? `, ${name}` : ""}.</h1>
         <p className="text-lg leading-7 text-muted-foreground">
           Paste your site&apos;s address. Haptic reads its public pages while you add the script, then shows you when it connects.
         </p>
