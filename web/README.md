@@ -82,7 +82,7 @@ To go back to Neon's own email, turn the webhook off. Neon's webhook URL must be
 
 ## Haptic on this site
 
-Haptic runs on joinhaptic.com, so people can try it before they ask for access. `components/haptic-tag.tsx` is the tag our install steps give a Next.js customer, and the footer draws it, so it is on every public page and not on the dashboard or the approve page, which have no footer. It loads `https://widget.joinhaptic.com/widget.js` for the site `site_joinhaptic`, whose one allowed origin is https://joinhaptic.com. Anywhere else, such as haptic-web.joinhaptic.workers.dev or `npm run preview`, the widget server turns it away and no launcher shows.
+Haptic runs on joinhaptic.com, so people can try it before they ask for access. `components/haptic-tag.tsx` is the tag our install steps give a Next.js customer, and the footer draws it, so it is on every public page and not on the dashboard or the approve page, which have no footer. Once loaded, the widget stays in the page through Next.js's moves between pages, so those two pages are always left with a full page load (`leaveFor` in `components/app/parts.tsx`): Back cannot bring it to them. Keep it that way when adding a link out of them. It loads `https://widget.joinhaptic.com/widget.js` for the site `site_joinhaptic`, whose one allowed origin is https://joinhaptic.com. Anywhere else, such as haptic-web.joinhaptic.workers.dev or `npm run preview`, the widget server turns it away and no launcher shows.
 
 To try it against a widget server on your machine, build with `NEXT_PUBLIC_WIDGET_URL=http://localhost:4000` and `NEXT_PUBLIC_HAPTIC_SITE` set to a site of yours that allows the address you open. Set `NEXT_PUBLIC_HAPTIC_SITE` to nothing to build without it.
 
