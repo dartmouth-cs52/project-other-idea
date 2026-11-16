@@ -48,18 +48,28 @@ function psqlLater(url: string, input: string): Promise<string> {
   });
 }
 
-/** A value as one psql \bind argument: quoted, with quotes and backslashes doubled. */
+/** A value as one psql \bind argument: quoted, with quotes and backslashes doubled. Never null: see `script`. */
 function bound(value: unknown): string {
-  if (value === null || value === undefined) return "''";
   const text = value instanceof Date ? value.toISOString() : Array.isArray(value) ? `{${value.map((item) => `"${String(item).replace(/["\\]/g, "\\$&")}"`).join(",")}}` : String(value);
   return `'${text.replace(/\\/g, "\\\\").replace(/'/g, "''")}'`;
 }
 
 type Rows = Record<string, unknown>[];
 
-/** One query, written out for psql so its rows come back as one line of JSON. */
-function script(text: string, params: unknown[]): string {
-  const statement = text.trim().replace(/;$/, "");
+/**
+ * One query, written out for psql so its rows come back as one line of JSON. psql's \bind can't pass a
+ * null, so a null value is written into the statement as NULL and the parameters after it are renumbered.
+ */
+function script(text: string, values: unknown[]): string {
+  const params: unknown[] = [];
+  const places = values.map((value) => (value === null || value === undefined ? 0 : params.push(value)));
+  const statement = text
+    .trim()
+    .replace(/;$/, "")
+    .replace(/\$(\d+)(?!\d)/g, (whole, n: string) => {
+      const place = places[Number(n) - 1];
+      return place === undefined ? whole : place === 0 ? "NULL" : `$${place}`;
+    });
   const writes = /^(update|insert|delete)\b/i.test(statement);
   // A write without RETURNING has no rows to read back.
   const wrapped = writes && !/\breturning\b/i.test(statement) ? statement : `with t as (${statement}) select coalesce(json_agg(t), '[]'::json) from t`;
