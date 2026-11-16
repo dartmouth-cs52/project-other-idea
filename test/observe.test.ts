@@ -178,3 +178,11 @@ test("the keys a sentence asks for are read from it", () => {
   assert.deepEqual(keysAsked("Click Save. Press it once."), []);
   assert.deepEqual(keysAsked("Click the Enter button."), []);
 });
+
+test("a press that began on the control and came up on a box around it, as a drag does, is the step", () => {
+  // Material UI's slider: the press is on the thumb, and the click goes to the slider that holds the thumb and the rail.
+  const around = where({ controls: [3], name: "", aroundTarget: true });
+  assert.deepEqual(run(BUTTON, [press(0, TARGET), release(400), click(401, around)]).verdict, { how: "clicked", onTarget: true, strayed: false });
+  // A press that began elsewhere and came up there is still nothing.
+  assert.equal(run(BUTTON, [press(0, BLANK), release(400), click(401, around)]).verdict, undefined);
+});

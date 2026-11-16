@@ -185,6 +185,8 @@ export function hear(heard: Heard, seen: Seen, pointed: Pointed): Heard {
     case "click": {
       const down = next.press;
       next.press = undefined;
+      // A press that began on the control and came up on a box around it, as a drag does: the click goes to what holds both.
+      if (down?.where.onTarget && seen.where.aroundTarget) return acted(down.where, seen.at);
       // A list that opens as the mouse goes down slides under it, so the click
       // that follows lands on the list's backdrop or on nothing. What was pressed is what was used.
       const pressed = down?.where.controls[0];

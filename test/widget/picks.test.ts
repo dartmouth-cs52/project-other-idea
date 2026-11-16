@@ -123,3 +123,129 @@ test("a press on another control inside the pointed field's box is that control,
     await session.close();
   }
 });
+
+// Ant Design's dropdown: the menu opens while the mouse is over the trigger,
+// a link that goes nowhere, and closes once an entry is clicked.
+const HOVER_MENU = `<h1>Dropdown</h1>
+  <a id="trigger" href="#" onclick="return false" style="display:inline-block;padding:6px">Hover me</a><button type="button">Save</button>
+  <script>
+    const trigger = document.getElementById('trigger');
+    let menu, timer;
+    const close = () => { menu?.remove(); menu = undefined; };
+    trigger.addEventListener('mouseenter', () => {
+      clearTimeout(timer);
+      if (menu) return;
+      menu = document.createElement('ul');
+      menu.setAttribute('role', 'menu');
+      menu.style.cssText = 'position:absolute;top:70px;left:24px;margin:0;padding:4px;list-style:none;background:#fff;border:1px solid #999';
+      menu.innerHTML = '<li role="menuitem" style="padding:6px">1st menu item</li><li role="menuitem" style="padding:6px">a danger item</li>';
+      for (const item of menu.children) item.addEventListener('click', close);
+      menu.addEventListener('mouseenter', () => clearTimeout(timer));
+      menu.addEventListener('mouseleave', () => { timer = setTimeout(close, 300); });
+      document.body.append(menu);
+    });
+    trigger.addEventListener('mouseleave', () => { timer = setTimeout(close, 300); });
+  </script>`;
+
+test("a pick in a menu that opened while the visitor's mouse was over the pointed control is a pick, not a wrong click", async () => {
+  const session = await start(HOVER_MENU, (request, index) => (index === 0 ? point(request, "Hover me", "Hover over Hover me and choose a danger item.") : words("Done.")));
+  try {
+    await session.ask("the danger item");
+    await session.untilState("pointing");
+    const box = (await session.page.locator("#trigger").boundingBox())!;
+    await session.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 });
+    await session.page.waitForTimeout(300);
+    const item = (await session.page.locator('[role="menuitem"]:has-text("a danger item")').boundingBox())!;
+    // Down to the menu the way a hand goes, through the gap under the trigger.
+    await session.page.mouse.move(item.x + 20, item.y + item.height / 2, { steps: 6 });
+    await session.page.mouse.down();
+    await session.page.mouse.up();
+    const second = await session.untilAsked(2, 6000);
+    assert.match(second.event ?? "", /^The user chose "a danger item" from the list that link "Hover me" opened\./);
+  } finally {
+    await session.close();
+  }
+});
+
+// Carbon's nested menu: an entry that opens a menu of its own while the mouse
+// is over it. The inner menu is inside the entry's element.
+const NESTED_MENU = `<h1>Report</h1>
+  <ul role="menu" style="width:200px;margin:0;padding:4px;list-style:none;border:1px solid #999">
+    <li role="menuitem" tabindex="-1" style="padding:6px">Share</li>
+    <li id="export" role="menuitem" tabindex="-1" aria-haspopup="true" aria-expanded="false" style="padding:6px;position:relative">Export as
+      <ul id="sub" role="menu" hidden style="position:absolute;left:190px;top:0;width:120px;margin:0;padding:4px;list-style:none;background:#fff;border:1px solid #999">
+        <li role="menuitem" tabindex="-1" style="padding:6px">PDF</li><li role="menuitem" tabindex="-1" style="padding:6px">JPG</li>
+      </ul>
+    </li>
+  </ul><p id="out"></p>
+  <script>
+    const exp = document.getElementById('export'), sub = document.getElementById('sub');
+    exp.addEventListener('mouseenter', () => { sub.hidden = false; exp.setAttribute('aria-expanded', 'true'); });
+    for (const item of sub.children) item.addEventListener('click', (event) => {
+      event.stopPropagation();
+      sub.hidden = true; exp.setAttribute('aria-expanded', 'false');
+      document.getElementById('out').textContent = 'Exported as ' + item.textContent;
+    });
+  </script>`;
+
+test("a pick in a submenu that sits inside the pointed entry is named as the pick, not as the entry", async () => {
+  const session = await start(NESTED_MENU, (request, index) => (index === 0 ? point(request, request.snapshot.elements.find((element) => element.label.startsWith("Export as"))!.label, "Hover over Export as and choose PDF.") : words("Done.")));
+  try {
+    await session.ask("export as pdf");
+    await session.untilState("pointing");
+    const box = (await session.page.locator("#export").boundingBox())!;
+    await session.page.mouse.move(box.x + 30, box.y + 12, { steps: 4 });
+    await session.page.waitForTimeout(300);
+    const pdf = (await session.page.locator('#sub [role="menuitem"]:has-text("PDF")').boundingBox())!;
+    await session.page.mouse.move(box.x + 120, box.y + 12, { steps: 3 });
+    await session.page.mouse.move(pdf.x + 20, pdf.y + pdf.height / 2, { steps: 3 });
+    await session.page.mouse.down();
+    await session.page.mouse.up();
+    const second = await session.untilAsked(2, 6000);
+    assert.match(second.event ?? "", /^The user chose "PDF" from the list that menuitem "Export as[^"]*" opened\./);
+  } finally {
+    await session.close();
+  }
+});
+
+// Material UI's slider: a range input the size of the thumb, clipped to nothing.
+// The thumb follows the mouse while it is held down, and the page sets the
+// input's value with no input or change event.
+const SLIDER = `<h1>Sound</h1>
+  <span id="root" style="position:relative;display:inline-block;width:300px;height:20px;margin:20px;cursor:pointer">
+    <span style="position:absolute;top:9px;left:0;right:0;height:2px;background:#999"></span>
+    <span id="thumb" style="position:absolute;top:0;left:90px;width:20px;height:20px;border-radius:50%;background:#1976d2">
+      <input id="volume" type="range" aria-label="Volume" min="0" max="100" value="30" aria-valuenow="30" style="position:absolute;width:100%;height:100%;overflow:hidden;clip:rect(0 0 0 0);border:0;margin:-1px;padding:0;white-space:nowrap">
+    </span>
+  </span><button type="button">Mute</button>
+  <script>
+    const root = document.getElementById('root'), thumb = document.getElementById('thumb'), input = document.getElementById('volume');
+    let held = false;
+    const set = (x) => {
+      const value = Math.round(Math.min(100, Math.max(0, ((x - root.getBoundingClientRect().left) / 300) * 100)));
+      input.value = String(value);
+      input.setAttribute('aria-valuenow', String(value));
+      thumb.style.left = value * 3 - 10 + 'px';
+    };
+    root.addEventListener('pointerdown', (event) => { held = true; set(event.clientX); event.preventDefault(); });
+    document.addEventListener('pointermove', (event) => held && set(event.clientX));
+    document.addEventListener('pointerup', () => { held = false; });
+  </script>`;
+
+test("a slider dragged with the mouse, which sends no input event, is heard", async () => {
+  const session = await start(SLIDER, (request, index) => (index === 0 ? point(request, "Volume", "Drag the Volume slider to the right.") : words("Done.")));
+  try {
+    await session.ask("louder");
+    await session.untilState("pointing");
+    await session.page.waitForTimeout(400);
+    const box = (await session.page.locator("#thumb").boundingBox())!;
+    await session.page.mouse.move(box.x + 10, box.y + 10);
+    await session.page.mouse.down();
+    await session.page.mouse.move(box.x + 70, box.y + 10, { steps: 6 });
+    await session.page.mouse.up();
+    const second = await session.untilAsked(2, 6000);
+    assert.match(second.event ?? "", /^The user moved slider "Volume"\./);
+  } finally {
+    await session.close();
+  }
+});

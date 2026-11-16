@@ -722,9 +722,9 @@ function isDrawn(el: Element): boolean {
   return el.getClientRects().length > 0;
 }
 
-/** Text is typed into it. A dropdown is picked from, and a field nobody can type in is used by clicking it. */
+/** Text is typed into it. A dropdown is picked from, a slider is dragged, and a field nobody can type in is used by clicking it. */
 function isTyped(el: Element): boolean {
-  return isField(el) && !(el instanceof HTMLSelectElement) && !(el as HTMLInputElement).readOnly;
+  return isField(el) && !(el instanceof HTMLSelectElement) && !(el as HTMLInputElement).readOnly && !(el instanceof HTMLInputElement && el.type === "range");
 }
 
 /** The element the keyboard is in, looking inside shadow roots. */
@@ -762,7 +762,10 @@ function hitAt(x: number, y: number): Element | null {
  * field or from anything a visitor can write in.
  */
 function lookOf(el: Element): string {
-  const attributes = ["aria-expanded", "aria-checked", "aria-selected", "aria-pressed", "aria-current", "aria-disabled", "aria-label", "title"].map((name) => el.getAttribute(name) ?? "");
+  // A slider's value is a number it reports, not something anyone wrote.
+  const attributes = ["aria-expanded", "aria-checked", "aria-selected", "aria-pressed", "aria-current", "aria-disabled", "aria-label", "title", "aria-valuenow", "aria-valuetext"].map(
+    (name) => el.getAttribute(name) ?? "",
+  );
   const ticked = el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio") ? String(el.checked) : "";
   const words = isField(el) ? "" : (el.textContent ?? "").slice(0, 120);
   return [...attributes, ticked, String((el as HTMLButtonElement).disabled === true), words].join("|");
@@ -846,6 +849,8 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   let pressed: { el?: Element; x: number; y: number } | undefined;
   /** What the pointed control opened, once it is known. */
   let popup: Element | undefined;
+  /** When the mouse last came over the pointed control. A menu can open on that alone. */
+  let hovered: number | undefined;
   let idle = 0;
 
   /** The snapshot's own test for something a visitor can click: a tag or role that says so, a place in the list, or a pointer cursor that starts here. */
@@ -878,7 +883,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   const insidePopup = (path: EventTarget[], first: Element): boolean => {
     const root = popupOf();
     if (root && path.includes(root)) return true;
-    if (!isExpanded() && heard.opened === undefined) return false;
+    if (!isExpanded() && heard.opened === undefined && hovered === undefined) return false;
     // New since the pointer went up, and clicked after the visitor went into the control: it is what the control opened.
     if (isNew(first) && !listing.has(first)) {
       popup ??= layerOf(first);
@@ -913,18 +918,22 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   const whereOf = (path: EventTarget[], point?: { x: number; y: number }): Where => {
     const controls = path.filter((node): node is Element => node instanceof Element && isControl(node));
     const first = controls[0];
+    // A control inside the pointed one that has come on show since, like an entry of a submenu drawn inside its parent entry, is what it opened.
+    const opened = !!first && first !== target && isWithin(target, first) && isNew(first);
+    if (opened) popup ??= layerOf(first);
     const onTarget =
-      path.includes(target) ||
-      path.some((node) => node instanceof HTMLLabelElement && (node.control === target || node.contains(target))) ||
-      inTargetBox(controls, point) ||
-      onPart(path, first);
+      !opened &&
+      (path.includes(target) ||
+        path.some((node) => node instanceof HTMLLabelElement && (node.control === target || node.contains(target))) ||
+        inTargetBox(controls, point) ||
+        onPart(path, first));
     return {
       onTarget,
       controls: controls.map(numberOf),
       name: first ? nameOfClicked(first, listing) : "",
       known: !!first && (listing.has(first) || !isNew(first)),
-      inPopup: !onTarget && !!first && insidePopup(path, first),
-      aroundTarget: !onTarget && !!first && first.contains(target),
+      inPopup: !onTarget && !!first && (opened || insidePopup(path, first)),
+      aroundTarget: !onTarget && !opened && !!first && first.contains(target),
     };
   };
   const fate = (): Fate => {
@@ -945,7 +954,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   const sentence = (verdict: Verdict): string => {
     switch (verdict.how) {
       case "clicked":
-        return `The user clicked ${name}.`;
+        return target.matches('[role="slider"], input[type="range"]') ? `The user moved ${name}.` : `The user clicked ${name}.`;
       case "filled":
         return `The user filled in ${name}. You can't see what they entered.`;
       case "opened":
@@ -988,6 +997,10 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     pressed = { x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY, ...(el ? { el } : {}) };
     feed({ type: "press", at: performance.now(), where });
   };
+  const onOver = (event: Event) => {
+    const path = outside(event);
+    if (path?.includes(target) || (path && onPart(path, undefined))) hovered = performance.now();
+  };
   const onRelease = () => feed({ type: "release", at: performance.now() });
   const onCancel = () => feed({ type: "cancel", at: performance.now() });
   const onClick = (event: Event) => {
@@ -1023,6 +1036,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
 
   const listeners = ([
     [document, "pointerdown", onPress],
+    [document, "pointerover", onOver],
     [document, "pointerup", onRelease],
     [document, "pointercancel", onCancel],
     [document, "click", onClick],
