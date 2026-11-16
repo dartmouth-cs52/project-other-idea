@@ -158,7 +158,7 @@ npm run test:browser              # the widget in Chromium, Firefox and WebKit
 | Doc | Covers |
 |---|---|
 | [Operations](docs/operations.md) | Deploying, the database, what is recorded about visitors, billing outcomes, the kill switch, spend limits and step costs |
-| [The widget on a live page](docs/widget.md) | Modal dialogs, covered controls, route changes, learning the site from visits, and the browser tests |
+| [The widget on a live page](docs/widget.md) | Modal dialogs, covered controls, route changes, learning the site from visits, putting the launcher away, and the browser tests |
 | [Correcting Haptic](docs/corrections.md) | What people can't find, guide health and its emails, "Point here instead", and controls Haptic must never point at |
 | [Answers and hand-off](docs/answers.md) | Answering from help docs, the server-side rules, and hand-off to a person |
 | [Benchmark](eval/README.md) | How cases work, how to run them, and results |

@@ -29,9 +29,9 @@ on:
         description: "Times to ask each case. More gives steadier timings and costs more."
         default: "1"
       suite:
-        description: "guides: the right pointer. guides-with-answers: the same cases, asked as a site with Answers on. answers: the Answers benchmark, with the judge."
+        description: "guides: the right pointer, each site asked as it is live (Answers on where it has help docs). guides-with-answers and guides-without-answers: the same cases with Answers forced on or off. answers: the Answers benchmark, with the judge."
         type: choice
-        options: [guides, guides-with-answers, answers]
+        options: [guides, guides-with-answers, guides-without-answers, answers]
         default: guides
       cases:
         description: "For guides: case files from eval/cases to run, comma-separated, like demo,joinhaptic. Empty runs them all."
@@ -122,6 +122,8 @@ jobs:
               { npm run -s eval:answers -- --check-judge --yes; npm run -s eval:answers -- --models "$MODELS" --judge --yes; } | tee benchmark.txt ;;
             guides-with-answers)
               npm run -s eval -- --models "$MODELS" --repeat "$REPEAT" --answers "${options[@]}" --yes | tee benchmark.txt ;;
+            guides-without-answers)
+              npm run -s eval -- --models "$MODELS" --repeat "$REPEAT" --without-answers "${options[@]}" --yes | tee benchmark.txt ;;
             *)
               npm run -s eval -- --models "$MODELS" --repeat "$REPEAT" "${options[@]}" --yes | tee benchmark.txt ;;
           esac

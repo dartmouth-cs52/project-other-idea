@@ -24,6 +24,10 @@ Each label is counted by distinct visitor (`src/server/learned.ts`). The widget 
 
 **On your own machine.** Without a database, what is learned is kept in `data/learned.json`, which `.gitignore` leaves out, so restarting the server doesn't forget the site. Delete the file to start again.
 
+## Putting the launcher away
+
+A visitor who doesn't want the launcher in the corner can minimize it. A small button with a minus shows on the launcher's corner while the mouse is over it or it has focus, and turns it into a dot. The dot opens up a little to show the pointer when the mouse is over it, and a click brings the launcher back. The choice is kept in the site's `localStorage` as `haptic.minimized`, so it holds on the next page. Where storage is blocked, the launcher is minimized on that page only. `test/browser/minimize.test.ts` covers it in all three browsers.
+
 ## Testing in browsers
 
 `npm run test:browser` runs the widget in Chromium, Firefox and WebKit, on small pages made for each test, against a stand-in server that answers each step from a script (`test/browser/harness.ts`). It needs Playwright's browsers once: `npx playwright install chromium firefox webkit`. `BROWSERS=chromium npm run test:browser` runs one.

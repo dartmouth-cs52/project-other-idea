@@ -25,6 +25,8 @@ const HELP = `Usage: npm run eval -- --models <list> [options]
   --limit <n>       Only the first n cases, for a quick check.
   --answers         Ask every case as a site with Answers on would be asked: the longer prompt and the reply
                     with a mode. The right pointers are the same, so this shows whether guiding got worse.
+                    Without it, each site is asked as it would be live: Answers is on for a site with help docs.
+  --without-answers Ask every case with Answers off, the way every site was asked before it was on by default.
   --without-corrections
                     Ask every case as if its site had no corrections and no controls ruled out, to see what they change.
                     eval/cases/corrections.json is the file where it shows.
@@ -64,6 +66,7 @@ async function main() {
       repeat: { type: "string", default: "1" },
       limit: { type: "string" },
       answers: { type: "boolean", default: false },
+      "without-answers": { type: "boolean", default: false },
       "without-corrections": { type: "boolean", default: false },
       yes: { type: "boolean", default: false },
       help: { type: "boolean", default: false },
@@ -76,10 +79,12 @@ async function main() {
   const models = values.models.split(",").filter(Boolean).map(parseModel);
   const repeat = Math.max(1, Number(values.repeat) || 1);
   const files = await loadCaseFiles(values.cases?.split(",").filter(Boolean));
-  // With --answers each site is asked as if it had Answers switched on. Its help docs and everything else stay as they were.
+  // With --answers each site is asked as if it had Answers switched on, and with --without-answers as if off.
+  // Its help docs and everything else stay as they were.
   // With --without-corrections the owner's corrections and ruled-out controls are taken away, and nothing else.
   const asked = (site: (typeof files)[number]["file"]["site"]) => {
-    const changed = values.answers ? { ...site, answers: { ...site.answers, enabled: true } } : { ...site };
+    const forced = values.answers ? true : values["without-answers"] ? false : undefined;
+    const changed = forced === undefined ? { ...site } : { ...site, answers: { ...site.answers, enabled: forced } };
     if (values["without-corrections"]) {
       delete changed.corrections;
       delete changed.blocked;
@@ -92,7 +97,7 @@ async function main() {
 
   const calls = work.length * models.length * repeat;
   const billed = models.filter((model) => model.settings.model !== "mock").length * work.length * repeat;
-  console.log(`${work.length} cases from ${files.map((file) => file.name).join(", ")}${values.answers ? ", asked with Answers on" : ""}${values["without-corrections"] ? ", without corrections" : ""}, ${models.length} model setting${models.length === 1 ? "" : "s"}, ${calls} calls${billed ? `, ${billed} of them billed` : ""}.`);
+  console.log(`${work.length} cases from ${files.map((file) => file.name).join(", ")}${values.answers ? ", asked with Answers on" : values["without-answers"] ? ", asked with Answers off" : ""}${values["without-corrections"] ? ", without corrections" : ""}, ${models.length} model setting${models.length === 1 ? "" : "s"}, ${calls} calls${billed ? `, ${billed} of them billed` : ""}.`);
   if (billed && !values.yes) {
     console.log("Add --yes to run it.");
     return;
