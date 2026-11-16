@@ -57,13 +57,15 @@ button { font: inherit; cursor: pointer; }
 .note { padding: 0 12px 6px; color: #78716c; font-size: 13px; line-height: 18px; }
 .did { padding: 4px 4px 2px; }
 .did h2 { margin: 4px 8px 6px; font-size: 13px; line-height: 18px; font-weight: 600; color: #1c1917; }
-.did ul { list-style: none; margin: 0; padding: 0; }
-.did .line { display: flex; width: 100%; gap: 10px; align-items: baseline; border: 0; border-radius: 8px; padding: 4px 8px; background: transparent; color: #44403c;
+.did ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: fit-content(50%) minmax(0, 1fr); column-gap: 12px; }
+.did li, .did .line { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); grid-template-columns: subgrid; }
+.did .line { width: 100%; align-items: baseline; border: 0; border-radius: 8px; padding: 4px 8px; background: transparent; color: #1c1917;
   font-size: 13px; line-height: 18px; text-align: left; }
 .did .line:hover { background: #f5f5f4; }
-.did .name { flex: none; max-width: 45%; color: #78716c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.did .value { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.did .mine { flex: none; color: #78716c; font-style: italic; }
+.did .name { color: #78716c; overflow-wrap: anywhere; }
+.did .value { font-weight: 500; overflow-wrap: anywhere; }
+.did .mine { grid-column: 2; color: #78716c; font-style: italic; }
+.unseen { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .did p { margin: 6px 8px 4px; color: #78716c; font-size: 13px; line-height: 18px; }
 .ring { position: fixed; border: 2px solid var(--accent); border-radius: 10px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
   transition: opacity .2s; }
@@ -110,6 +112,10 @@ const PRESENT_CSS = `
   box-shadow: 0 0 0 3px var(--accent), 0 14px 40px rgba(0,0,0,.4); }
 .caption .close { width: 36px; height: 36px; }
 .caption .close svg { width: 16px; height: 16px; }
+.panel:has(.did:not([hidden])) { width: min(380px, calc(100vw - 40px)); }
+.did h2 { font-size: 18px; line-height: 24px; }
+.did .line { font-size: 17px; line-height: 24px; padding: 5px 8px; }
+.did p { font-size: 15px; line-height: 21px; }
 `;
 
 /**
@@ -761,6 +767,9 @@ export class Ui {
    * "What I did", in the panel: one line per field Haptic set, written from
    * what it did, and a closing line. A click on a line calls `onLine` with
    * its index. Nothing here is read from the page. An empty list hides it.
+   * Names and values sit in two columns, so each line reads as the field and
+   * then what it holds. Between them is a colon no one sees, so the line
+   * reads the same way to a screen reader and as text.
    */
   showDid(lines: DidShown[], closing: string, onLine?: (index: number) => void) {
     const list = this.did.querySelector("ul")!;
@@ -778,13 +787,13 @@ export class Ui {
       const value = document.createElement("span");
       value.className = "value";
       value.textContent = line.value ?? "";
-      button.append(name, value);
+      button.append(name, unseen(/[?:]$/.test(line.name) ? " " : ": "), value);
       const aside = line.partly ? ACTING_WORDS.partly : line.mine ? ACTING_WORDS.mine : "";
       if (aside) {
         const note = document.createElement("span");
         note.className = "mine";
         note.textContent = aside;
-        button.append(note);
+        button.append(unseen(" ("), note, unseen(")"));
       }
       item.append(button);
       list.append(item);
@@ -1220,6 +1229,11 @@ function make<K extends keyof HTMLElementTagNameMap>(tag: K, attributes: Record<
   for (const [name, value] of Object.entries(attributes)) el.setAttribute(name, value);
   el.append(...children);
   return el;
+}
+
+/** Words that are read as text and by screen readers, and not drawn. */
+function unseen(text: string): HTMLSpanElement {
+  return make("span", { class: "unseen" }, text);
 }
 
 /** One of our icons: a single path on a 24 by 24 grid. */

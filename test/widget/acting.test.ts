@@ -528,6 +528,80 @@ test("a person the visitor named is picked from a list that shows each name with
   }
 });
 
+/** A card's first page as Northpine draws it: radios drawn as cards with a line that describes each, a name, and a list of people with their jobs beside them. */
+const CARD_PAGE = `${WATCH}<h1>New card</h1><form id="card">
+  <div role="radiogroup" style="display:flex;gap:8px">
+    <button type="button" role="radio" aria-checked="true" id="virtual" style="display:flex;flex-direction:column;text-align:left;padding:8px">
+      <span>Virtual card</span><span style="font-size:12px">Use online and in Apple Pay in minutes.</span></button>
+    <button type="button" role="radio" aria-checked="false" id="physical" style="display:flex;flex-direction:column;text-align:left;padding:8px">
+      <span>Physical card</span><span style="font-size:12px">A metal card mailed to the holder.</span></button>
+  </div>
+  <p><label for="name">Card name</label> <input id="name"></p>
+  <p><label for="holder">Cardholder</label>
+  <button id="holder" type="button" role="combobox" aria-expanded="false" aria-controls="people" aria-label="Cardholder">Search people…</button></p>
+  <div id="people" role="listbox" hidden style="position:absolute;background:#fff;border:1px solid #999;padding:4px;width:320px">
+    <div role="option" style="display:flex;gap:8px"><span>Malika Cummerata</span><span style="margin-left:auto">Growth Marketing Lead</span></div>
+    <div role="option" style="display:flex;gap:8px"><span>Ravi Patel</span><span style="margin-left:auto">Designer</span></div>
+  </div>
+  <button id="issue" type="submit" data-watch>Issue card</button></form>
+  <script>
+    for (const radio of document.querySelectorAll('[role="radio"]')) radio.addEventListener('click', () => {
+      for (const other of document.querySelectorAll('[role="radio"]')) other.setAttribute('aria-checked', String(other === radio));
+    });
+    const holder = document.getElementById('holder'), people = document.getElementById('people');
+    const show = (open) => { people.hidden = !open; holder.setAttribute('aria-expanded', String(open)); };
+    holder.addEventListener('click', () => show(people.hidden));
+    for (const option of people.children) option.addEventListener('click', () => { holder.textContent = option.firstElementChild.textContent; show(false); });
+    document.getElementById('card').addEventListener('submit', (event) => event.preventDefault());
+  </script>`;
+
+/** Where the lines of What I did are drawn: each name's box and each value's, and the line as text. */
+const didBoxes = (session: Session): Promise<{ text: string; nameRight: number; valueLeft: number; nameTop: number; valueTop: number }[]> =>
+  session.page.evaluate(() =>
+    Array.from(document.querySelector("haptic-root")!.shadowRoot!.querySelectorAll(".did .line")).map((line) => {
+      const [name, value] = [".name", ".value"].map((part) => line.querySelector(part)!.getBoundingClientRect());
+      return { text: (line.textContent ?? "").replace(/\s+/g, " ").trim(), nameRight: name!.right, valueLeft: value!.left, nameTop: name!.top, valueTop: value!.top };
+    }),
+  );
+
+test("What I did lists only what Haptic changed, each line the field and then what it holds, in two columns, in presentation mode too", async () => {
+  for (const present of [false, true]) {
+    const session = await start(
+      CARD_PAGE,
+      (request, index) => {
+        if (index === 0) return { target: request.snapshot.elements.find((element) => element.label.startsWith("Virtual card"))!.id, do: "click", commits: false, status: "continue", say: "Keeping it virtual.", mode: "act" };
+        if (index === 1) return doing(request, "Card name", "type", "Typing the card's name.", "Ads");
+        if (index === 2) return doing(request, "Cardholder", "choose", "Choosing Malika Cummerata.", "Malika Cummerata", "combobox");
+        return handOver(request, "Issue card", "Ready. Check the card and click Issue card.");
+      },
+      "/",
+      { acting: { ...ACTING_ON, confirmFirst: false }, present },
+    );
+    try {
+      await session.ask("Can you issue Malika Cummerata a virtual card called Ads?", { act: true });
+      await session.untilAsked(4, 20_000);
+      await session.until(async () => (await session.did()).closing !== "", "What I did to show");
+      const asked = session.requests;
+      assert.match(asked[1]!.event ?? "", /was already chosen, so you left it\./);
+      assert.deepEqual((await session.did()).lines, ["Card name: Ads", "Cardholder: Malika Cummerata"], "a radio that was already chosen is listed");
+      const lines = await didBoxes(session);
+      assert.deepEqual(
+        lines.map((line) => line.text),
+        ["Card name: Ads", "Cardholder: Malika Cummerata"],
+      );
+      // Each name stands on its own, left of its value, and the values start at one edge.
+      for (const line of lines) {
+        assert.ok(line.valueLeft >= line.nameRight + 8, `"${line.text}": the value runs on from the name (${line.nameRight} to ${line.valueLeft}), present ${present}`);
+        assert.ok(Math.abs(line.valueTop - line.nameTop) < 4, `"${line.text}": the value is not beside its name, present ${present}`);
+      }
+      assert.ok(Math.abs(lines[0]!.valueLeft - lines[1]!.valueLeft) < 1, `the values do not start at one edge, present ${present}`);
+      assert.deepEqual(await reachedOn(session, "issue"), []);
+    } finally {
+      await session.close();
+    }
+  }
+});
+
 test("a tab that is a link to its own route, drawn again when the route changes, is done by Haptic, not given to the visitor", async () => {
   const session = await start(
     `${WATCH}<h1>People</h1><div id="tabs"></div><main id="panel"></main>

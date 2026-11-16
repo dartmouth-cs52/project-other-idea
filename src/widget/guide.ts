@@ -409,10 +409,13 @@ export class Guide {
     });
   }
 
-  /** Adds or updates a line of "What I did": a control set twice keeps its last value. */
+  /** Adds or updates a line of "What I did": a control set twice keeps its last value, and a radio chosen takes the place of another of its group. */
   private noteDid(session: ActSession, did: DidLine, partly = false) {
     const line = { name: did.name || "Field", ...(did.value !== undefined ? { value: did.value } : {}), ...(did.mine ? { mine: true } : {}), ...(partly ? { partly: true } : {}), el: new WeakRef(did.el) };
-    const at = session.did.findIndex((kept) => kept.el?.deref() === did.el);
+    const at = session.did.findIndex((kept) => {
+      const el = kept.el?.deref();
+      return el === did.el || (!!el && sameRadioGroup(el, did.el));
+    });
     if (at >= 0) session.did[at] = line;
     else session.did.push(line);
     const shown = this.didOnShow;
@@ -1962,6 +1965,15 @@ const stuckMarks = new WeakSet<Element>();
  * whole time again for each in turn would keep the first question back for a
  * minute on a page with a few spinners that never stop.
  */
+/** Whether two radios are choices of one group, so that choosing one leaves the other unchosen. */
+function sameRadioGroup(a: Element, b: Element): boolean {
+  const isRadio = (el: Element) => el.getAttribute("role") === "radio" || (el instanceof HTMLInputElement && el.type === "radio");
+  if (a === b || !isRadio(a) || !isRadio(b)) return false;
+  const group = a.closest('[role="radiogroup"]');
+  if (group) return group === b.closest('[role="radiogroup"]');
+  return a instanceof HTMLInputElement && b instanceof HTMLInputElement && !!a.name && a.name === b.name && a.form === b.form;
+}
+
 function markStuck(ignore: Element) {
   for (let mark = loadingMark(ignore), count = 0; mark && count < 50; mark = loadingMark(ignore), count++) stuckMarks.add(mark);
 }

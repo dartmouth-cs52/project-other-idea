@@ -70,13 +70,17 @@ export interface ActStep {
   listed?: SnapElement;
 }
 
-/** One line of "What I did" at the hand-over. Values are the visitor's own words or the page's option words, never read from the page. */
+/**
+ * One line of "What I did" at the hand-over, for a control Haptic changed: a
+ * control that already showed what was asked for has none. Values are the
+ * visitor's own words or the page's option words, never read from the page.
+ */
 export interface DidLine {
   /** The field or control, which the line points at when clicked. */
   el: Element;
-  /** The control's name as the visitor sees it. */
+  /** The control's name as the visitor sees it. For a radio, the name of its group, or its own name when the page gives its group none. */
   name: string;
-  /** What was typed or chosen, or "on" or "off" for a tick box. */
+  /** What was typed or chosen, "on" or "off" for a tick box, and for a radio its own name, or "chosen" when that is the line's name. */
   value?: string;
   /** Set by Haptic though the visitor did not say it: "my choice, check it". */
   mine?: boolean;
@@ -455,12 +459,16 @@ async function pressOption(run: Run): Promise<Outcome> {
   if (from && list && choosesFor(from, list)) {
     const shown = shownOf(from);
     const words = optionWords(el);
+    // Read while the list is on show: once it closes, the option's lines may be gone.
+    const lead = leadWords(el, words);
     // Named before the pick: after it, a select's words are the choice.
     const [fromName, fromLabel] = [nameOf(run, from), listedName(run, from)];
     await press(run, el, run.plan, EYE_IN_LIST_MS);
     if (!(await waitFor(run, () => picked(el, list, from, shown, words), CHECK_MS))) return run.failed(el, undefined, "choose");
     if (!isDrawn(list) || !expanded(from)) run.session.opened = undefined;
-    return run.done(`You chose "${cleanText(words, 60)}" from the list that ${fromName} opened.`, { did: { el: from, name: fromLabel, value: words, ...(run.plan.mine ? { mine: true } : {}) } });
+    // A field that shows just what it showed before was not changed, and is not listed in What I did.
+    const changed = shownOf(from).all !== shown.all;
+    return run.done(`You chose "${cleanText(words, 60)}" from the list that ${fromName} opened.`, changed ? { did: { el: from, name: fromLabel, value: lead, ...(run.plan.mine ? { mine: true } : {}) } } : {});
   }
   let before: Signs | undefined;
   let pressing: Popups | undefined;
@@ -554,8 +562,9 @@ async function setTick(run: Run): Promise<Outcome> {
   if (now === undefined) return run.failed(el, undefined, "set");
   const want = run.plan.want ?? (run.plan.act === "uncheck" ? false : run.plan.act === "check" ? true : !now);
   const kind = kindOfTick(el);
-  const did: DidLine = { el, name: cleanText(run.plan.name, 60), value: want ? "on" : "off", ...(run.plan.mine ? { mine: true } : {}) };
-  if (now === want) return run.done(`${capital(run.name)} was already ${tickWord(kind, want, true)}, so you left it.`, { did });
+  // Left as it was: nothing for What I did.
+  if (now === want) return run.done(`${capital(run.name)} was already ${tickWord(kind, want, true)}, so you left it.`);
+  const did = tickLine(el, kind, cleanText(run.plan.name, 60), want, !!run.plan.mine);
   const wire = run.plan.tripwire ? tripwire(el, run.session.host) : undefined;
   if (wire) run.onEnd(() => wire.stop());
   const startedAt = Date.now();
@@ -570,6 +579,43 @@ async function setTick(run: Run): Promise<Outcome> {
   if (!took) return run.failed(el, undefined, "set");
   const stop = wire ? await tripped(run, wire, startedAt) : undefined;
   return stop ?? run.done(`You ${tickWord(kind, want, false)} ${run.name}.`, { did });
+}
+
+/**
+ * The line of What I did for a box Haptic ticked or a radio it chose, without
+ * the words that only describe it. A radio is a choice in its group: the
+ * group's name with the radio's own, or when the page names no group, the
+ * radio's own name with "chosen".
+ */
+function tickLine(el: Element, kind: "checkbox" | "radio" | "switch", whole: string, on: boolean, mine: boolean): DidLine {
+  const own = leadWords(el, whole);
+  const group = kind === "radio" ? groupName(el) : "";
+  const line: DidLine = kind !== "radio" ? { el, name: own, value: on ? "on" : "off" } : group ? { el, name: group, value: own } : { el, name: own, value: "chosen" };
+  return mine ? { ...line, mine: true } : line;
+}
+
+/** What the page names a radio's group by: the radio group's own name, or its fieldset's legend. Empty when it names it by nothing. */
+function groupName(el: Element): string {
+  const group = el.closest('[role="radiogroup"]');
+  if (group) return fieldName(group);
+  const legend = el.closest("fieldset")?.querySelector(":scope > legend");
+  return legend ? cleanText(optionWords(legend), 60) : "";
+}
+
+/**
+ * The first line of what a control shows, when its words are set out in more
+ * than one block: a choice's title above its description, a person's name
+ * beside their job. The rest only describes it. What comes out is always the
+ * start of `whole`, the name it already has, so nothing new is read out.
+ */
+function leadWords(el: Element, whole: string): string {
+  const source = el.textContent?.trim() ? el : ((el as HTMLInputElement).labels?.[0] ?? el);
+  const first = ((source as HTMLElement).innerText ?? "")
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .find(Boolean);
+  const lead = cleanText(first ?? "", 60);
+  return lead && lead.length < whole.length && squash(whole).startsWith(squash(lead)) ? lead : whole;
 }
 
 function kindOfTick(el: Element): "checkbox" | "radio" | "switch" {
@@ -626,6 +672,8 @@ async function typeStep(run: Run, field: HTMLInputElement | HTMLTextAreaElement)
   if (isReadOnly(field) || field.disabled) return run.failed(field, undefined, "type in");
   run.listen(field);
   const invalidBefore = field.getAttribute("aria-invalid") === "true";
+  // Read only to tell whether the typing changed it, and never kept.
+  const before = field.value;
   const typed = await typeInto(run, field, run.plan, text);
   let took = await waitFor(run, () => holdsText(field, typed.text), 600);
   if (!took) {
@@ -636,7 +684,7 @@ async function typeStep(run: Run, field: HTMLInputElement | HTMLTextAreaElement)
   if (!took) return run.failed(field, undefined, "type in");
   const invalid = !invalidBefore && field.getAttribute("aria-invalid") === "true";
   const did: DidLine = { el: field, name: cleanText(run.plan.name, 60), value: typed.text };
-  return run.done(`You typed "${cleanText(typed.text, 120)}" in ${run.name}.${invalid ? " The page marks it as not valid." : ""}`, { did });
+  return run.done(`You typed "${cleanText(typed.text, 120)}" in ${run.name}.${invalid ? " The page marks it as not valid." : ""}`, field.value !== before ? { did } : {});
 }
 
 /**
@@ -738,7 +786,7 @@ async function chooseNative(run: Run, select: HTMLSelectElement): Promise<Outcom
   if (pick.kind !== "act") throw refused(pick);
   const words = (option.label || option.text).trim();
   const did: DidLine = { el: select, name: cleanText(run.plan.name, 60), value: words, ...(run.plan.mine ? { mine: true } : {}) };
-  if (option.selected) return run.done(`${capital(run.name)} already shows "${cleanText(words, 60)}", so you left it.`, { did });
+  if (option.selected) return run.done(`${capital(run.name)} already shows "${cleanText(words, 60)}", so you left it.`);
   const point = await getThere(run, select, run.plan, EYE_MS);
   await hoverTo(run, point.x, point.y);
   run.check();
@@ -789,6 +837,8 @@ async function chooseCustom(run: Run): Promise<Outcome> {
     watch = watchPopups(trigger);
   };
   run.listen(trigger);
+  // What the field shows before Haptic touches it, to tell whether the pick changed it. Read here, never kept.
+  const atStart = shownOf(trigger).all;
   const typable = isTextField(trigger) && !isReadOnly(trigger);
   const words = searchWords(value);
   let searched = "";
@@ -841,6 +891,8 @@ async function chooseCustom(run: Run): Promise<Outcome> {
 
   // 4. Press it.
   const optionText = optionWords(option);
+  // Read while the list is on show: once it closes, the option's lines may be gone.
+  const lead = leadWords(option, optionText);
   const multiple = popup.querySelector('[aria-multiselectable="true"]') !== null || popup.getAttribute("aria-multiselectable") === "true";
   const wire = run.plan.tripwire ? tripwire(trigger, run.session.host) : undefined;
   if (wire) run.onEnd(() => wire.stop());
@@ -871,12 +923,13 @@ async function chooseCustom(run: Run): Promise<Outcome> {
     await waitFor(run, () => !isDrawn(popup) || !expanded(trigger), 400);
   }
   if (!isDrawn(popup) || !expanded(trigger)) run.session.opened = undefined;
-  const did: DidLine = { el: trigger, name: label, value: optionText, ...(run.plan.mine ? { mine: true } : {}) };
+  const did: DidLine = { el: trigger, name: label, value: lead, ...(run.plan.mine ? { mine: true } : {}) };
   if (wire) {
     const stop = await tripped(run, wire, startedAt);
     if (stop) return stop;
   }
-  return run.done(`You chose "${cleanText(optionText, 60)}" from the list that ${run.name} opened.`, { did });
+  // A field that shows just what it showed before the pick was not changed, and is not listed in What I did.
+  return run.done(`You chose "${cleanText(optionText, 60)}" from the list that ${run.name} opened.`, shownOf(trigger).all !== atStart ? { did } : {});
 }
 
 /** Opening a list with the keys a list listens for, when a press opened nothing. */

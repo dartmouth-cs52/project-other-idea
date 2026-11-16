@@ -163,6 +163,10 @@ test("text typed into an input that listens for input, as Angular's forms do, re
       assert.equal(await page.text("#model"), "Ads");
       assert.deepEqual(outcome.did, { name: "Card name", value: "Ads" });
       assert.equal(outcome.typed, 3);
+      // The same text again changes nothing, so What I did does not list it.
+      const again = await page.run({ target: "#name", act: "type", control: "text", value: "Ads", role: "textbox" });
+      assert.equal(again.kind, "done", json(again));
+      assert.equal(again.did, undefined);
     },
   ));
 
@@ -285,6 +289,11 @@ test("a native select is set without opening the browser's list, and the page he
       assert.equal(outcome.event, 'You chose "Per month" in select "Resets".');
       assert.equal(await page.text("#model"), "month");
       assert.equal(outcome.heard?.how, "filled");
+      assert.deepEqual(outcome.did, { name: "Resets", value: "Per month" });
+      // A choice it already shows is left, and What I did does not list it.
+      const again = await page.run({ target: "#resets", act: "choose", control: "select", value: "Monthly", role: "select" });
+      assert.match(again.event ?? "", /already shows "Per month", so you left it/);
+      assert.equal(again.did, undefined);
     },
   ));
 
@@ -337,6 +346,7 @@ test("a tick box already as wanted is left alone, with no press at all", () =>
     assert.match(outcome.event ?? "", /already ticked/);
     assert.deepEqual(await page.counted("#lock-label"), {});
     assert.equal(outcome.actions, 0);
+    assert.equal(outcome.did, undefined, "a box left as it was is listed in What I did");
   }));
 
 test("unticking sets the state off rather than toggling it", () =>
@@ -362,7 +372,34 @@ test("a radio is chosen through its label", () =>
     assert.equal(outcome.kind, "done", json(outcome));
     assert.equal(outcome.event, 'You chose radio "For someone else".');
     assert.equal(await page.page.isChecked("#someone"), true);
-    assert.deepEqual(outcome.did, { name: "For someone else", value: "on", mine: true });
+    // A radio is a choice in its group: the line is the group's name and the radio's own.
+    assert.deepEqual(outcome.did, { name: "Who is it for", value: "For someone else", mine: true });
+  }));
+
+/** Radios drawn as cards, as Northpine's wizard draws them: a title over a line that describes it, in a group with no name. */
+const CARD_RADIOS = `
+  <div role="radiogroup" style="display:flex;gap:8px">
+    <button type="button" role="radio" aria-checked="true" id="me" style="display:flex;flex-direction:column;text-align:left;padding:8px">
+      <span>For myself</span><span style="font-size:12px">Avery Stone, Controller</span></button>
+    <button type="button" role="radio" aria-checked="false" id="someone" style="display:flex;flex-direction:column;text-align:left;padding:8px">
+      <span>For someone else</span><span style="font-size:12px">A teammate, contractor or new hire</span></button>
+  </div>
+  <script>
+    for (const radio of document.querySelectorAll('[role="radio"]')) radio.addEventListener('click', () => {
+      for (const other of document.querySelectorAll('[role="radio"]')) other.setAttribute('aria-checked', String(other === radio));
+    });
+  </script>`;
+
+test("a radio drawn as a card is listed in What I did by its title alone, and one already chosen is not listed", () =>
+  on(CARD_RADIOS, async (page) => {
+    const outcome = await page.run({ target: "#someone", act: "click", control: "tick", want: true, role: "radio", name: "For someone else A teammate, contractor or new hire", mine: true });
+    assert.equal(outcome.kind, "done", json(outcome));
+    assert.equal(await page.page.getAttribute("#someone", "aria-checked"), "true");
+    // The group has no name, so the radio's own name leads the line: without the words that only describe it.
+    assert.deepEqual(outcome.did, { name: "For someone else", value: "chosen", mine: true });
+    const again = await page.run({ target: "#someone", act: "click", control: "tick", want: true, role: "radio", name: "For someone else A teammate, contractor or new hire" });
+    assert.match(again.event ?? "", /already chosen, so you left it/);
+    assert.equal(again.did, undefined);
   }));
 
 test("a switch is turned on", () =>
@@ -775,6 +812,42 @@ test("a click-opened menu is opened, its submenu opened by resting on its entry,
   }));
 
 // What the real MUI and Ant Design demos showed ----------------------------------------
+
+/** A list of people, each option a name and a job beside it, as cmdk lists draw them. The field shows the name alone. */
+const PEOPLE = `
+  <span id="holder-label">Cardholder</span>
+  <button id="holder" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="holder-label">Search people…</button>
+  <script>
+    const trigger = document.getElementById('holder');
+    trigger.addEventListener('click', () => {
+      if (document.getElementById('people')) return;
+      const list = document.createElement('div');
+      list.id = 'people'; list.setAttribute('role', 'listbox');
+      list.style.cssText = 'position:absolute;top:60px;left:24px;width:320px;border:1px solid #999;background:#fff';
+      for (const [name, job] of [['Malika Cummerata', 'Growth Marketing Lead'], ['Sam Okafor', 'Controller']]) {
+        const option = document.createElement('div');
+        option.setAttribute('role', 'option'); option.style.cssText = 'display:flex;gap:8px;padding:6px;cursor:pointer';
+        option.innerHTML = '<span></span><span style="margin-left:auto;font-size:12px"></span>';
+        option.children[0].textContent = name; option.children[1].textContent = job;
+        option.addEventListener('click', () => { trigger.textContent = name; trigger.setAttribute('aria-expanded', 'false'); list.remove(); });
+        list.append(option);
+      }
+      document.body.append(list);
+      trigger.setAttribute('aria-expanded', 'true');
+    });
+  </script>`;
+
+test("a pick is listed in What I did by the option's first words, and a pick the field already showed is not listed", () =>
+  on(PEOPLE, async (page) => {
+    const outcome = await page.run({ target: "#holder", act: "choose", control: "combobox", value: "Malika Cummerata", role: "combobox", name: "Cardholder" });
+    assert.equal(outcome.kind, "done", json(outcome));
+    assert.equal(outcome.event, 'You chose "Malika Cummerata Growth Marketing Lead" from the list that combobox "Cardholder" opened.');
+    assert.equal(await page.text("#holder"), "Malika Cummerata");
+    assert.deepEqual(outcome.did, { name: "Cardholder", value: "Malika Cummerata" });
+    const again = await page.run({ target: "#holder", act: "choose", control: "combobox", value: "Malika Cummerata", role: "combobox", name: "Cardholder" });
+    assert.equal(again.kind, "done", json(again));
+    assert.equal(again.did, undefined);
+  }));
 
 test("a pick made in two steps, the list opened and then the option pressed, is named by the field, not by the words it shows after", () =>
   on(MUI_SELECT, async (page) => {
