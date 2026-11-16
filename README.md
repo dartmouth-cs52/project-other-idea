@@ -120,7 +120,7 @@ Sonnet runs in production. It matches the best accuracy, names the control about
 
 ## Quick start
 
-Requires Node 20 or later.
+Requires Node 20.19+ or 22.9+ (CI uses Node 22).
 
 ```bash
 npm install
