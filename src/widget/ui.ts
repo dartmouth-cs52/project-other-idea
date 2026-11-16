@@ -182,21 +182,29 @@ export class Ui {
     // Typing in the ask box mustn't trigger the page's keyboard shortcuts or focus traps.
     for (const type of ["keydown", "keyup", "keypress", "focusin"]) {
       this.host.addEventListener(type, (event) => {
-        if (type === "keydown" && (event as KeyboardEvent).key === "Escape") this.panel.hidden = true;
+        if (type === "keydown" && (event as KeyboardEvent).key === "Escape" && !this.panel.hidden) {
+          this.panel.hidden = true;
+          // Inside a page's modal <dialog>, Escape would also close the dialog. It was meant for our panel only.
+          event.preventDefault();
+        }
         event.stopPropagation();
       });
     }
     this.host.setAttribute("popover", "manual");
+    this.watchTopLayer();
     this.place();
+    // A backstop for anything the watchers miss, like a framework removing the dialog we were in.
     setInterval(this.place, 500);
   }
 
   /**
    * Keeps our element on top and usable. A page's modal <dialog> sits in the
    * browser's top layer and makes everything outside it inert, so while one is
-   * open we move inside it, and move back out when it closes.
+   * open we move inside it, and move back out when it closes. With `raise`,
+   * we are shown again even where we are, so that something the page has just
+   * put in the top layer, like a popover, does not cover the pointer.
    */
-  place = () => {
+  place = (raise?: unknown) => {
     let modal: Element | undefined;
     try {
       modal = Array.from(document.querySelectorAll("dialog:modal")).pop();
@@ -204,15 +212,44 @@ export class Ui {
       // :modal unsupported, so there's no top layer to compete with.
     }
     const home = modal ?? document.documentElement;
-    if (this.host.parentNode === home) return;
-    home.appendChild(this.host);
+    if (this.host.parentNode === home && raise !== true) return;
+    if (this.host.parentNode !== home) home.appendChild(this.host);
     try {
       // Being a popover puts us in the top layer too, above anything the page stacks with z-index.
+      // The last element shown is the one on top, so a popover that is already showing is shown again.
+      if (this.host.matches(":popover-open")) this.host.hidePopover();
       this.host.showPopover();
     } catch {
       // No popover support. The fixed position and z-index still apply.
     }
   };
+
+  /**
+   * Moves us the moment a page's dialog opens or closes, rather than on the
+   * next check. Until then we would be inert behind the dialog, or hidden
+   * inside a dialog that has closed.
+   */
+  private watchTopLayer() {
+    // showModal() and close() both set or remove the dialog's open attribute,
+    // which is seen before the next frame, in every browser.
+    new MutationObserver((records) => {
+      if (records.some((record) => record.target instanceof HTMLDialogElement)) this.place();
+    }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["open"] });
+    // Some pages swap out the whole document's children. Put ourselves back.
+    new MutationObserver(() => {
+      if (!this.host.isConnected) this.place();
+    }).observe(document.documentElement, { childList: true });
+    // A popover or dialog the page opens goes on top of us. Go back on top.
+    document.addEventListener(
+      "toggle",
+      (event) => {
+        const opened = event.target instanceof Element && event.target !== this.host && (event as ToggleEvent).newState === "open";
+        // <details> fires the same event, and is not in the top layer.
+        if (opened && (event.target as Element).matches("[popover], dialog")) this.place(true);
+      },
+      true,
+    );
+  }
 
   /** Show the ask box busy with a message, or back to the input when `text` is empty. */
   setBusy(text: string) {
