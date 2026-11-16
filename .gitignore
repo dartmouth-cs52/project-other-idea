@@ -5,5 +5,10 @@ dist/
 .DS_Store
 *.log
 # Site contexts are built by `npm run tag`. The demo's is rebuilt on demand.
-data/
-coverage/
+# Anchored to the root, so folders called data elsewhere (testbed/src/data) are kept.
+/data/
+# Benchmark runs. The cases in eval/cases are kept; each run's numbers are not.
+eval/results/
+# Wrangler's local state.
+.wrangler/
+.dev.vars

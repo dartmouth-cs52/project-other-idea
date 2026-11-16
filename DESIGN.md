@@ -44,6 +44,8 @@ colors:
   pointer-border-dark: "#FFFFFF"
   success-dark: "#30D158"
   success-foreground-dark: "#1C1917"
+  error: "#DC2626"
+  error-dark: "#F87171"
 typography:
   display:
     fontFamily: Geist
@@ -252,10 +254,14 @@ looks stark.
 - **Done green (#008932):** The small round tick that says a task is finished.
   Blue means in progress and green means done, so the two never share a screen.
   Not for buttons, text or bubbles.
+- **Error red (#DC2626):** Forms only. The star on a required field, the
+  outline and message on a field that failed its check, and the alert when
+  sending fails. It is shadcn's destructive colour.
 
 Dark mode follows the visitor's system setting and swaps the roles. The page
 becomes Ink (#1C1917), text becomes #F5F5F4, cards are #292524, borders are
-#44403C, the pointer brightens to #0091FF and Done green to #30D158. Every
+#44403C, the pointer brightens to #0091FF, Done green to #30D158 and Error red
+to #F87171. Every
 light token has a `-dark` twin in the front matter.
 
 **Why blue.** It holds at least 3.8 to 1 against both pages, so one hue works
@@ -305,24 +311,45 @@ window and the demo starts there, so it must never be cut off. Screens under
 the demo.
 
 The home page is, in order: a slim navigation bar, the hero with its demo
-window, three feature cards, the FAQ, and a footer with Privacy, Terms and the
-contact address. Each feature card makes one claim in a title of a few words,
-with the text on the left and a small live demo on the right in a Border grey
-panel. Below 1024px the card stacks, text above the demo, so a demo is never
+window, three feature cards, pricing, the FAQ, and a footer with Privacy, Terms
+and the contact address. Each feature card makes one claim in a title of a few words,
+with the text on the left and a small live demo on the right. The demo's white
+window sits straight on the card's Muted fill, with no panel of its own behind
+it. Below 1024px the card stacks, text above the demo, so a demo is never
 squeezed. The
 FAQ is two columns on desktop, with the title on the left and the accordion in
 the right half. Each row is 20px padding around a 24px line with a 1px divider.
+
+Pricing opens with its title alone. Under it sit the plans, one card each on
+the same Muted surface as a feature card, four across on desktop, two across
+from 640px and one below that. A card holds the plan's name, its price at the
+24px headline size, what the price includes, and who it is for in a few Muted
+words. Those four line up across the cards in a row, so each starts at the
+same height in every card. Text in a card is wrapped so a line does not end on
+a single word (`text-pretty`, where the browser supports it). The price is the
+largest thing in the card and no larger than a feature card's title. No plan
+is marked as the popular one, and a card has no button, because the site has
+one call to action. Two short sentences of 14px Muted text under the cards say
+what is charged for, on one line from 820px up. The plans and those sentences live in `web/lib/site.ts`.
 
 The request access page is two columns. The pitch sits on the left, as a
 headline over a card. The form sits on the right in a second card, with its
 inputs in Card white. Below 768px everything is one column.
 
+The form is two short steps in the same card. The first asks for a work email
+and a company, and its button says Continue. The second asks for a first and
+last name, side by side, and has a box for details that may be left empty,
+with Back and Request access under it. Nothing is sent until the second step. Once it is
+sent, the card holds a two line thank you in the feature card type, a Medium
+title over Muted text, and no icon.
+
 There is one call to action on the whole site, "Request access". It sits in
 the navigation, top right on every page and every screen size, and leads to
 that page. The hero carries no second copy of it, so the demo follows the
-sub-copy directly. There is no
-"Contact sales", because Haptic is in early access and has no sales team or
-price list to point to.
+sub-copy directly, and the plan cards under Pricing carry no buttons of their
+own. There is no "Contact sales", because Haptic is in early access and has no
+sales team. The Enterprise plan says Custom and leaves the way in to Request
+access.
 
 Surfaces nest the same way on every page. The page is Paper. A card on the
 page is Muted with a 1px border. Anything inside a card that needs to stand out
@@ -360,6 +387,11 @@ in its back edge, tilted so the tip points up and to the left. It is drawn on a
 24px grid, with the tip at (3.81, 3.14). The source is `assets/pointer.svg`, and
 every pointer in the product and on the site is that one path. It is also the
 logo mark and the favicon, where it is Ink with a white border.
+
+**The link preview.** When a link to the site is shared in a message, the
+picture is the pointer and the name Haptic on Paper, and nothing else. The
+pointer there is the live one, Pointer blue with its white border and shadow.
+The line under the picture is "The AI guide that lives in your product".
 
 The pointer's tip sits in the lower right corner of whatever it points at, so
 the pointer hangs off the control and never covers its label.
@@ -401,8 +433,15 @@ Components are shadcn/ui, restyled only through tokens and variants.
   with a lighter shade sweeping across it, shadcn's `shimmer`, with no icon.
   While it points it reads "Showing you how". When it finishes it is the green
   tick and "Done".
-- **Form:** Labels above 44px inputs and one primary button. Success and error
-  use shadcn's alert, with an icon, a short title and one line of detail.
+- **Form:** Labels above 44px inputs and one primary button. A required field
+  has an Error red star after its label, and a field with no star may be left
+  empty. A step that has a way back puts a secondary Back button to the left of
+  the primary one. Each field is checked when its step is submitted. A field
+  that fails gets an Error red outline and one 13px line under it saying what
+  to type, the first such field takes the focus, and the line goes as soon as
+  the person starts typing. A failure that is not one field's fault uses
+  shadcn's alert, with an icon, a short title and one line of detail. Success
+  replaces the form with a thank you.
 - **Accordion:** FAQ rows with a plus that turns to a cross. One row open at a
   time.
 
@@ -415,6 +454,10 @@ out. Nothing grows from nothing: things arrive from within a few percent of
 their final size. A click is acknowledged like a pressed button, with the mark
 dipping to 97 percent and back in a quarter of a second, and no ripple. With reduced motion on, the pointer jumps
 to its target and each demo holds one still frame.
+
+Scrolling never changes what a demo shows. A demo waits on its first frame,
+starts once about a third of it is on screen, and keeps playing until it has
+left the screen completely. Nothing switches while any of it can be seen.
 
 ## Interaction
 
@@ -440,10 +483,19 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
   carries no buttons.
 - **Keep the conversation and the exit in view.** The chat stays open for the
   whole guide, with the question at the top and a stop button in the ask box.
-- **A wrong click is not an error.** Haptic reads the new page and carries on
-  from there without comment.
+- **A wrong click is not an error, and Haptic says so.** The ask box shows
+  "Finding the way from here" at once. The next caption opens with "Not that
+  one." and names the step that gets the person back. It is plain text in the
+  usual caption: no Error red, no alert. If the click also leads to the goal,
+  Haptic carries on without comment.
 - **Finish plainly.** Haptic confirms in a sentence, shows the green tick, and
   reopens the ask box.
+- **Say it is an AI.** One line of 12px Muted text sits under the ask box,
+  "Haptic is an AI guide and can be wrong." It looks like plain text, with no
+  underline. Its last words are a link to the page that says what Haptic reads
+  and keeps, and the underline shows only under the mouse or keyboard focus.
+  The launcher carries no tag. A customer can change the launcher's word, and
+  cannot remove the line.
 
 ## Do's and Don'ts
 

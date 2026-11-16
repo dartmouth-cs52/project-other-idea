@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "haptic-widget",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-11-01",
+  // Bundles the widget into dist/ before the Worker is built, so the two never drift apart.
+  "build": { "command": "npm run build" },
+  // Each site's context, under its id. Written by `npm run site:publish`.
+  "kv_namespaces": [{ "binding": "SITES", "id": "b481eb9c6ba24efe9889ef52a4f17e8a" }],
+  // One visitor on one site gets 30 steps a minute.
+  "ratelimits": [{ "name": "TURN_LIMIT", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }],
+  // What each site has spent on the model this hour and today, so a site can be stopped at its budget.
+  // One object per site, in worker/budget.ts.
+  "durable_objects": { "bindings": [{ "name": "BUDGET", "class_name": "BudgetMeter" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BudgetMeter"] }],
+  "vars": {
+    // US dollars one site may spend on the model in an hour and in a day, unless the site sets its own.
+    // Past either, its visitors get a fixed "resting" sentence until the hour or the day turns.
+    // Alerts at 50%, 80% and 100% go to the log, and to the HAPTIC_ALERT_WEBHOOK secret if there is one.
+    "HAPTIC_BUDGET_HOUR": "2",
+    "HAPTIC_BUDGET_DAY": "10",
+    // The model that answers each step, chosen by the benchmark (see eval/README.md, "Results").
+    // It needs the ANTHROPIC_API_KEY secret on the Worker, which the deploy workflow puts there.
+    // "mock" is the keyword stand-in, which needs no key.
+    "HAPTIC_MODEL": "claude-sonnet-5-5"
+  },
+  "workers_dev": true,
+  // The address in every customer's script tag. It must never change.
+  "routes": [{ "pattern": "widget.joinhaptic.com", "custom_domain": true }]
+}

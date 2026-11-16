@@ -23,6 +23,12 @@ const LANDMARKS: Record<string, string> = {
 };
 const TEXT_TAGS = new Set(["P", "LI", "DD", "DT", "SPAN", "DIV", "SMALL", "STRONG", "LABEL", "TD", "FIGCAPTION"]);
 const MAYBE_CLICKABLE = new Set(["DIV", "SPAN", "LI", "IMG", "TD", "TR", "P"]);
+/**
+ * Roles that say what an element is, a row or an item, and not whether it can
+ * be clicked. Table and list libraries often make a whole row clickable with
+ * nothing in it that is a control, so a row like this is looked at on its own.
+ */
+const ROW_ROLES = new Set(["row", "gridcell", "cell", "listitem", "article"]);
 const ICON_CLASS = /(?:^|\s)(?:lucide|tabler-icon|bi|ri|fa|icon)-(?!solid|regular|brands|fw|lg|sm|xs|spin|btn|button)([a-z][a-z0-9-]+)/;
 
 export interface PageSnapshot {
@@ -34,11 +40,43 @@ export interface PageSnapshot {
 interface Candidate extends SnapElement {
   el: Element;
   nav: boolean;
+  /** A whole row added because nothing inside it is listed. It comes after everything else when the list is cut. */
+  row?: true;
 }
 
 interface Scope {
   region: string;
   heading: string;
+}
+
+/**
+ * Whether an element is somewhere the visitor writes: a rich-text box, as the
+ * browser itself decides (so contenteditable="False" or "inherit" outside an
+ * editor is not one), or anything the page calls a text field.
+ */
+function isWritingArea(el: Element): boolean {
+  return (el as HTMLElement).isContentEditable || el.getAttribute("role") === "textbox";
+}
+
+/** Whether a node is in a writing area or is one, looking up through shadow roots to the elements that hold them. */
+function inWritingArea(node: Node): boolean {
+  for (let at: Node | null = node; at; ) {
+    if (at instanceof Element && isWritingArea(at)) return true;
+    const parent: Node | null = at.parentNode;
+    at = parent instanceof ShadowRoot ? parent.host : parent;
+  }
+  return false;
+}
+
+/** A heading's words, leaving out any part of it the visitor writes in: "Notes for <span contenteditable>Jane</span>" reads "Notes for". */
+function headingText(el: Element): string {
+  let text = "";
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
+    else if (node instanceof Element && !isWritingArea(node)) for (const child of node.childNodes) walk(child);
+  };
+  for (const child of el.childNodes) walk(child);
+  return text;
 }
 
 export function takeSnapshot(ignore: Element): PageSnapshot {
@@ -52,12 +90,20 @@ export function takeSnapshot(ignore: Element): PageSnapshot {
   const modal = findOpenModal(ignore);
   const root = modal ?? document.body;
 
-  const visit = (el: Element, scope: Scope, parentPointer: boolean, insideControl: boolean) => {
-    if (visited++ > MAX_VISITED || el === ignore || SKIP_TAGS.has(el.tagName)) return;
+  /**
+   * `insideWriting` is true below an area the visitor writes in. What is in
+   * there is their own writing, so nothing of it is read: the area itself is
+   * listed as a field, and its children, its shadow root and any island in it
+   * the editor marks as not editable are all left out. It is passed down
+   * rather than looked up, so it costs nothing per element.
+   */
+  const visit = (el: Element, scope: Scope, parentPointer: boolean, insideControl: boolean, insideWriting: boolean) => {
+    if (insideWriting || visited++ > MAX_VISITED || el === ignore || SKIP_TAGS.has(el.tagName)) return;
     if (el.hasAttribute("inert") || el.hasAttribute("data-haptic-ignore") || el.getAttribute("aria-hidden") === "true") return;
+    const writing = isWritingArea(el);
     if (!isRendered(el)) {
       // display:contents has no box of its own, but its children do.
-      if (getComputedStyle(el).display === "contents") for (const child of el.children) visit(child, scope, parentPointer, insideControl);
+      if (getComputedStyle(el).display === "contents") for (const child of el.children) visit(child, scope, parentPointer, insideControl, writing);
       return;
     }
 
@@ -65,8 +111,8 @@ export function takeSnapshot(ignore: Element): PageSnapshot {
     const landmark = LANDMARKS[explicitRole] ?? LANDMARKS[el.tagName];
     const childScope = landmark && el !== root ? { region: landmark, heading: "" } : scope;
 
-    if (/^H[1-3]$/.test(el.tagName) || explicitRole === "heading") {
-      const text = cleanText(el.textContent ?? "", 80);
+    if (!writing && (/^H[1-3]$/.test(el.tagName) || explicitRole === "heading")) {
+      const text = cleanText(headingText(el), 80);
       if (text) {
         scope.heading = text;
         if (headings.length < 12) headings.push(text);
@@ -104,27 +150,40 @@ export function takeSnapshot(ignore: Element): PageSnapshot {
 
     const before = candidates.length;
     const inside = insideControl || role !== "";
-    for (const child of el.children) visit(child, childScope, pointerHere, inside);
-    if (el.shadowRoot) for (const child of el.shadowRoot.children) visit(child, childScope, pointerHere, inside);
+    for (const child of el.children) visit(child, childScope, pointerHere, inside, writing);
+    if (el.shadowRoot) for (const child of el.shadowRoot.children) visit(child, childScope, pointerHere, inside, writing);
 
     // A clickable wrapper around real buttons or links is just a container.
     if (added?.role === "clickable" && candidates.slice(before).some((c) => c.role !== "clickable")) {
       candidates.splice(candidates.indexOf(added), 1);
     }
+
+    // A row the visitor clicks as a whole, where nothing inside it was listed: a table row
+    // with only text in its cells, the way SAP and other grid libraries draw them. The
+    // pointer cursor says it can be clicked. Only rows that would otherwise be missing
+    // are added, so nothing listed above changes.
+    if (!role && !insideControl && candidates.length === before && (ROW_ROLES.has(explicitRole) || (!explicitRole && el.tagName.includes("-")))) {
+      const row = clickableRow(el, viewportHeight);
+      if (row) {
+        const context = [scope.region === "page" ? "" : scope.region, scope.heading].filter(Boolean).join(" › ");
+        candidates.push({ el, id: "", role: "clickable", label: row.label, nav: false, row: true, ...(context ? { context } : {}), ...(row.offscreen ? { offscreen: row.offscreen } : {}) });
+      }
+    }
   };
 
-  if (root) visit(root, { region: modal ? "dialog" : "page", heading: "" }, false, false);
+  if (root) visit(root, { region: modal ? "dialog" : "page", heading: "" }, false, false, false);
 
   // Over the cap, keep what's on screen first, then navigation, then the rest, in page order.
   let chosen = candidates;
   if (candidates.length > MAX_ELEMENTS) {
-    const rank = (c: Candidate) => (!c.offscreen ? 0 : c.nav ? 1 : 2);
+    // A row added above comes after everything else, so it can never push out a control.
+    const rank = (c: Candidate) => (c.row ? 3 : !c.offscreen ? 0 : c.nav ? 1 : 2);
     const keep = new Set([...candidates].sort((a, b) => rank(a) - rank(b)).slice(0, MAX_ELEMENTS));
     chosen = candidates.filter((c) => keep.has(c));
   }
 
   const elements = new Map<string, Element>();
-  const listed = chosen.map(({ el, nav: _nav, ...element }, index) => {
+  const listed = chosen.map(({ el, nav: _nav, row: _row, ...element }, index) => {
     element.id = `e${index + 1}`;
     elements.set(element.id, el);
     return element;
@@ -239,6 +298,23 @@ function ownText(el: Element): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * A row as one clickable thing, when the pointer cursor starts on it (and not on
+ * what holds it), it has words of its own, and it is not a header row or something
+ * the size of half the screen. Its label is those words.
+ */
+function clickableRow(el: Element, viewportHeight: number): { label: string; offscreen?: "above" | "below" } | undefined {
+  if (getComputedStyle(el).cursor !== "pointer") return undefined;
+  const holder = el.parentElement ?? (el.getRootNode() as ShadowRoot).host;
+  if (holder && getComputedStyle(holder).cursor === "pointer") return undefined;
+  if (el.querySelector('th, [role="columnheader"], [role="rowheader"]')) return undefined;
+  const rect = el.getBoundingClientRect();
+  if ((rect.width === 0 && rect.height === 0) || rect.height > viewportHeight / 2) return undefined;
+  const label = cleanText(visibleText(el), 80);
+  if (!label) return undefined;
+  return { label, ...(rect.bottom <= 0 ? { offscreen: "above" as const } : rect.top >= viewportHeight ? { offscreen: "below" as const } : {}) };
+}
+
 function isRendered(el: Element): boolean {
   // Opacity isn't checked on purpose: row actions that fade in on hover are real controls.
   if (typeof el.checkVisibility === "function") return el.checkVisibility({ visibilityProperty: true });
@@ -268,19 +344,42 @@ export function isField(el: Element): boolean {
   return (el as HTMLElement).isContentEditable;
 }
 
+/**
+ * A label's own words. When the label wraps its field, the field's options or
+ * contents are part of the label's text, and those must not end up in its name.
+ * Neither must decoration hidden from screen readers, like the star on a required field.
+ */
+function labelWords(label: Element): string {
+  let text = "";
+  for (const node of label.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
+    else if (node instanceof Element && !isWritingArea(node) && !node.matches('select, textarea, input, button, datalist, output, [aria-hidden="true"]')) text += labelWords(node);
+  }
+  return text;
+}
+
 function labelOf(el: Element, role: string): string {
   const root = el.getRootNode() as Document | ShadowRoot;
-  const byIds = (ids: string) => ids.split(/\s+/).map((id) => root.getElementById?.(id)?.textContent ?? "").join(" ").trim();
+  // An element the label points to by id is skipped when it is somewhere the visitor writes, like an editable subject line.
+  const byIds = (ids: string) =>
+    ids
+      .split(/\s+/)
+      .map((id) => root.getElementById?.(id))
+      .map((named) => (named && !inWritingArea(named) ? named.textContent ?? "" : ""))
+      .join(" ")
+      .trim();
   let raw = el.getAttribute("data-haptic-label") || byIds(el.getAttribute("aria-labelledby") ?? "") || el.getAttribute("aria-label")?.trim() || "";
   if (!raw && (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
-    raw = Array.from(el.labels ?? []).map((label) => label.textContent ?? "").join(" ").trim();
+    raw = Array.from(el.labels ?? []).map(labelWords).join(" ").trim();
     // A button's value is its caption, not user data.
     if (!raw && el instanceof HTMLInputElement && role === "button") raw = el.value || el.type;
     raw ||= el.getAttribute("placeholder") || el.getAttribute("title") || el.getAttribute("name") || "";
   }
   // Never use a field's contents as its label.
   if (!raw && role !== "textbox" && role !== "select") raw = visibleText(el);
-  raw ||= el.getAttribute("title") || (el instanceof HTMLImageElement ? el.alt : el.querySelector("img[alt]")?.getAttribute("alt")) || el.querySelector("svg title")?.textContent || "";
+  raw ||= el.getAttribute("title") || "";
+  // A picture inside a field is something the visitor put there, so it does not name the field.
+  if (!raw && role !== "textbox") raw = (el instanceof HTMLImageElement ? el.alt : el.querySelector("img[alt]")?.getAttribute("alt")) || el.querySelector("svg title")?.textContent || "";
   return cleanText(raw, 80);
 }
 
@@ -290,7 +389,7 @@ function visibleText(el: Element): string {
     if (text.length > 160) return;
     if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
     if (!(node instanceof Element)) return;
-    if (node.getAttribute("aria-hidden") === "true" || ["SCRIPT", "STYLE", "svg", "INPUT", "TEXTAREA", "SELECT"].includes(node.tagName)) return;
+    if (node.getAttribute("aria-hidden") === "true" || isWritingArea(node) || ["SCRIPT", "STYLE", "svg", "INPUT", "TEXTAREA", "SELECT"].includes(node.tagName)) return;
     for (const child of node.childNodes) walk(child);
     text += " ";
   };
@@ -300,7 +399,8 @@ function visibleText(el: Element): string {
 
 /** Icon-only buttons are common in dashboards. The icon's class name is often the only clue. */
 function iconOf(el: Element): string | undefined {
-  for (const candidate of [el, ...Array.from(el.querySelectorAll("svg, i, [class*='icon']")).slice(0, 4)]) {
+  const inside = Array.from(el.querySelectorAll("svg, i, [class*='icon']")).filter((candidate) => !inWritingArea(candidate));
+  for (const candidate of [el, ...inside.slice(0, 4)]) {
     const dataIcon = candidate.getAttribute("data-icon");
     if (dataIcon) return dataIcon;
     const match = ICON_CLASS.exec(candidate.getAttribute("class") ?? "");
@@ -352,10 +452,9 @@ function findOpenModal(ignore: Element): Element | undefined {
 
 function dialogLabel(el: Element): string {
   const labelledBy = el.getAttribute("aria-labelledby");
-  const raw =
-    el.getAttribute("aria-label") ||
-    (labelledBy && document.getElementById(labelledBy)?.textContent) ||
-    el.querySelector("h1, h2, h3, [role='heading']")?.textContent ||
-    "";
+  const named = labelledBy ? document.getElementById(labelledBy) : null;
+  // A heading or a label the visitor writes in, like a draft's subject, does not name the dialog.
+  const heading = Array.from(el.querySelectorAll("h1, h2, h3, [role='heading']")).find((found) => !inWritingArea(found));
+  const raw = el.getAttribute("aria-label") || (named && !inWritingArea(named) && named.textContent) || (heading && headingText(heading)) || "";
   return cleanText(raw, 60);
 }

@@ -11,23 +11,86 @@ npm run lint
 
 ## What's here
 
-- `app/page.tsx`: the landing page (hero, demo, FAQ).
+- `app/page.tsx`: the landing page (hero, demo, feature cards, pricing, FAQ).
 - `app/request-access/`: the request access page, the one call to action on the site.
 - `app/privacy/`, `app/terms/`: plain text pages.
-- `components/demo/`: the scripted demos. `hero-demo.tsx` is the looping demo at the top of the page, `feature-demos.tsx` the smaller one for each feature, and `kit.tsx` the shared pieces they are built from.
+- `components/demo.tsx`: the scripted demo. One task on a loop, driven by a list of steps at the top of the file.
 - `components/pointer.tsx`: the Haptic pointer. Same path as `../assets/pointer.svg` and the widget in `../src/widget/ui.ts`.
-- `lib/site.ts`: the name, contact address, links and FAQ copy.
+- `lib/site.ts`: the name, contact address, links, FAQ copy and the pricing plans. A price is changed there and nowhere else. Nothing is charged yet: there is no checkout and no billing.
+- `public/sitemap.xml` and `public/robots.txt`: the list of pages for search engines. Add a line to the sitemap when a page is added.
 - `app/globals.css`: the colour, radius and motion tokens from `../DESIGN.md`.
 
 ## The request access form
 
-The form posts JSON (`email`, `company`) to `/api/request-access`. On Cloudflare that is answered by the Worker in `worker/index.ts`, which checks the email address and saves the request in a KV namespace. Nothing else about the visitor is kept.
+The form has two steps and is sent once, at the end. It posts JSON (`email`, `company`, `firstName`, `lastName`, `details`) to `/api/request-access`. On Cloudflare that is answered by the Worker, in `worker/handler.ts`. The Worker checks the entry, saves it in a KV namespace, then emails the team a copy. Nothing else about the visitor is kept.
+
+Every field but `details` is required. The rules live in one file, `lib/access-request.ts`, which the page and the Worker both use, so a request that skips the page is held to the same standard. The Worker adds one check the page cannot make: it asks DNS whether the email's domain can receive mail, which catches mistyped and made up addresses. Personal mailboxes such as Gmail are accepted, and marked as such in the copy the team gets.
+
+The email copy goes to the address in the Worker's `NOTIFY_TO` secret, which is not in this repository. Cloudflare only delivers to an inbox that is verified under Email Routing, as a destination address. To change it:
+
+```bash
+npx wrangler secret put NOTIFY_TO
+```
+
+Replying to one of those emails answers the person who sent the request. If the email fails, the request is still saved. Two things keep the inbox from being flooded: one address gets 5 tries a minute, and a hidden field that people never see catches programs that fill in everything.
 
 `npm run dev` runs the pages only, so the form shows its fallback message there. To try the form locally, use `npm run preview`.
+
+## Sign-in, approval and the dashboard
+
+Companies sign up by invitation. The pages are `app/sign-in/`, `app/dashboard/`, `app/approve/` and `app/install/`. They are static and fetch everything from the Worker, whose code is in `worker/`:
+
+- `worker/auth.ts` passes `/api/auth/*` through to Neon Auth, so the session cookie is joinhaptic.com's own and Safari keeps it. Sign-in is an emailed link or Google. Both come back to `/dashboard/` with a one-time verifier that the browser client in `lib/auth-client.ts` exchanges through this proxy. Each sign-in try can send an email, and Neon sees every caller as this Worker, so the Worker limits them itself, to 10 a minute per address.
+- `worker/app-api.ts` answers `/api/app/*`: who is signed in, their company's sites, install health, the dashboard and each guide's steps. Every site is looked up with the caller's organization.
+- `worker/reader.ts` reads a new site's public pages a few at a time, in a real browser through Cloudflare Browser Rendering, or as plain HTML when that is not available. It follows links, tabs, menus and accordions only, and in the browser every request other than GET is refused, so it cannot change anything on the customer's site. It starts from the address pasted, then the links on that page, then the pages the site's sitemap lists. If the address redirects to the same site's other name, acme.com to www.acme.com or http to https, that becomes the site's origin and is allowed too. A redirect anywhere else, such as to a sign-in service, is not followed, and the dashboard then says the site could not be read and offers to try again.
+- `worker/insights.ts` is the dashboard's queries.
+- `worker/docs.ts` reads a help doc from its address, keeping the article and leaving out navigation, headers, footers and scripts, as `npm run tag -- --docs` does. Each site's Settings tab in the dashboard sets the widget's colour, corner and button label, the company's notes, and its help docs, all of which the widget server reads within a minute. Whole docs go into the prompt in the order they were added, up to 60,000 characters, and the page shows which are left out. Deleting a site there, after typing its address, deletes its guides, steps and origins with it.
+
+**Approving a company.** Each access request email now ends with an Approve link. It opens a page that shows the request and changes nothing until a button is pressed, so a mail scanner following the link approves no one. The team approves the one address, or everyone at the company's domain (never a free mailbox domain such as gmail.com). Approving emails the person a sign-in link. Their first sign-in creates the company's organization, and later sign-ins from an approved domain join it. Anyone else who signs in is told they are not approved yet. The list is the `approvals` table, from `../db/migrations`.
+
+Being a member of an organization is not enough to get in. Neon Auth lets any signed-in person create an organization through its own API, so only an organization that an approval points at counts (`organizationOf` in `worker/db.ts`). An address can be covered by its own approval and its domain's. Whichever order they were made in, the person joins the organization that already exists, so a company has one.
+
+**Setting it up.** The Worker needs four secrets, and Neon Auth needs to trust the site's address:
+
+```bash
+npx wrangler secret put DATABASE_URL              # Neon's connection string for the haptic project's main branch
+npx wrangler secret put NEON_AUTH_COOKIE_SECRET   # 32 or more random characters: openssl rand -base64 32
+npx wrangler secret put APPROVE_SECRET            # 32 or more random characters, a different one
+npx wrangler secret put RESEND_API_KEY            # sends the sign-in email, see below
+```
+
+`NEON_AUTH_URL` and `WIDGET_URL` are plain settings in `wrangler.jsonc`. In Neon Auth for the main branch, add `https://joinhaptic.com` as a trusted domain, turn on Magic Link with a 1440 minute expiry, and turn off email and password. Until the secrets are set, the sign-in pages load but say sign-in is not set up.
+
+**Trying it locally.** Copy the values above into `.dev.vars`, pointing at a Neon branch for testing, with `NEON_AUTH_URL` set to that branch's auth address and `WIDGET_URL=http://localhost:4000`. Add `http://localhost:8787` to that branch's trusted domains. Then:
+
+```bash
+NEXT_PUBLIC_WIDGET_URL=http://localhost:4000 npx next build
+npx wrangler dev --port 8787 --local-upstream localhost:8787
+```
+
+`--local-upstream` matters: without it, the site's address looks like joinhaptic.com over plain http and every page redirects to https. Run the widget server next to it with `npm run dev` at the top of the repository and `DATABASE_URL` in its `.env`.
+
+**The sign-in email** is Haptic's own, sent through Resend. Neon Auth hands each sign-in link to the Worker through its `send.magic_link` webhook, at `/api/neon-auth-hook` (`worker/neon-hook.ts`), and while that webhook is on, Neon sends no email of its own. The Worker checks Neon's signature against the keys Neon publishes under `NEON_AUTH_URL`, turns away anything signed more than 5 minutes ago, and sends the email in `worker/sign-in-email.ts` from sign-in@joinhaptic.com, with replies going to hello@joinhaptic.com. Neon tries 3 times within 15 seconds, sending the same event id each time, and the Worker passes it to Resend as the idempotency key, so a retry never sends a second email. If every try fails, the person's sign-in fails, so the order to switch it on matters:
+
+1. In Resend, add joinhaptic.com as a sending domain, add the DNS records it lists in Cloudflare, and wait for it to say verified.
+2. Make a Resend API key with sending access only, and set it on the Worker: `npx wrangler secret put RESEND_API_KEY`.
+3. Deploy, so `/api/neon-auth-hook` is live.
+4. In Neon, under Auth, Configuration, Webhooks for the main branch, turn webhooks on with the URL `https://joinhaptic.com/api/neon-auth-hook` and the event `send.magic_link` only.
+
+To go back to Neon's own email, turn the webhook off. Neon's webhook URL must be public HTTPS, so this cannot be tried against `wrangler dev`. `test/neon-hook.test.ts` at the top of the repository signs requests the way Neon does instead.
 
 ## Deploying
 
 The site runs on Cloudflare as one Worker: the static pages from `out/`, plus the form handler. The settings are in `wrangler.jsonc`.
+
+**From GitHub.** Merging a change to the site into `main` publishes it. The workflow in `.github/workflows/deploy-site.yml` installs, lints, builds and deploys, then checks that joinhaptic.com answers. A change to the docs alone does not deploy. It can also be started by hand, from the Actions tab, under Deploy site. Pull requests never deploy.
+
+The workflow reads two repository secrets, set under Settings, Secrets and variables, Actions:
+
+- `CLOUDFLARE_API_TOKEN`: a Cloudflare API token made from the "Edit Cloudflare Workers" template.
+- `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account the Worker lives in.
+
+**By hand.** The same thing from a terminal:
 
 ```bash
 npm run preview   # builds, then serves the site and the Worker at http://localhost:8787

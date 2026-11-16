@@ -1,56 +1,65 @@
 # Haptic
 
+[![Website](https://img.shields.io/badge/web-joinhaptic.com-1E6EF4)](https://joinhaptic.com)
 [![CI](https://github.com/dartmouth-cs52/project-other-idea/actions/workflows/ci.yml/badge.svg)](https://github.com/dartmouth-cs52/project-other-idea/actions/workflows/ci.yml)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)
-![Node](https://img.shields.io/badge/node-%3E%3D20-339933)
-[![Website](https://img.shields.io/badge/web-joinhaptic.com-1E6EF4)](https://joinhaptic.com)
 
 **An AI guide that lives inside any web app.** A software company adds one script tag to their product. When a user asks *"how do I invite a teammate?"*, Haptic doesn't answer with a wall of help-center text. It moves a pointer to the right button, waits for the user to click it, reads the new page, and points at the next one, across menus, dialogs and full page loads, until the task is done.
 
 ![Haptic pointing a user to the Team page in the demo app](docs/demo.png)
 
-**Website:** [joinhaptic.com](https://joinhaptic.com)
+**Live:** the website and dashboard at [joinhaptic.com](https://joinhaptic.com), and the widget server at `widget.joinhaptic.com`.
 
 ## Why
 
-Help docs go stale and users don't read them. Product tours are scripted by hand and break whenever the UI changes. Haptic reads the live page on every step, so it follows whatever the UI is today, and it learns the product from what the company already has: the site itself, its help docs, and a few notes.
+Help docs go stale and nobody reads them. Product tours are scripted by hand and break whenever the UI changes. Haptic reads the live page on every step, so it follows whatever the UI is today. It learns the product from what the company already has: the site itself, its help docs, and a few notes.
+
+## What's in this repo
+
+| Part | Path | What it is |
+|---|---|---|
+| **Widget** | `src/widget` | The script customers embed (about 30 KB minified, no dependencies). It renders in a shadow root so it can't clash with the host page, snapshots the page, draws the pointer and caption, and watches for the user's action. |
+| **Server** | `src/server`, `worker` | One request handler (`src/server/app.ts`) that runs both as a local Node server and as a Cloudflare Worker in production. It validates input, enforces per-site spend limits, makes one streamed Claude call per step, and records each guide in Postgres (Neon). |
+| **Intake** | `src/intake` | A CLI that crawls a site into a page graph, loads help docs from files, folders or URLs, and publishes the site. Companies can also add sites themselves from the dashboard. |
+| **Website and dashboard** | `web` | [joinhaptic.com](https://joinhaptic.com): Next.js, Tailwind and shadcn/ui on Cloudflare. Invite-only sign-in (emailed link or Google, via Neon Auth), site setup and install health, per-site settings, and every guide with its steps. See [`web/README.md`](web/README.md). |
+| **Benchmark** | `eval` | 74 frozen guide steps with known right answers, run against any model and scored for accuracy, latency and output quality. It picked the production model. See [`eval/README.md`](eval/README.md). |
+| **Test app** | `testbed` | Northpine, a made-up spend-management dashboard with about 60 routes, 10,000 transactions and 179 tasks, built to contain every UI pattern known to break a pointing guide. See [`testbed/README.md`](testbed/README.md). |
+| **Design system** | `DESIGN.md` | Colour, type, radii and motion shared by the widget and the website. |
 
 ## How it works
 
 ```
-npm run tag ──▶ data/sites/<id>.json ──▶ server ◀── widget.js on the customer's site
- (crawl + docs)   (the site's context)     │   POST /v1/turn: the page as a list of elements
-                                           ▼
-                                        Claude: { target: "e12", say: "Click Team.", status: "continue" }
+ site + help docs ──▶ intake / dashboard ──▶ Neon (site context)
+                                                   │
+ widget.js on the customer's page ── POST a turn ──▶ server ──▶ Claude
+          ▲                                          │   streamed: { target: "e12", say: "Click Team.", status }
+          └──────────── point, wait, observe ◀───────┘
 ```
-
-There are three parts to the product, plus the website:
-
-| Part | Path | What it does |
-|---|---|---|
-| **Widget** | `src/widget` | The script customers embed (about 22 KB minified, no dependencies). It renders in a shadow root so it can't clash with the host page's styles. It snapshots the page, draws the pointer and caption, and watches for the user's action. |
-| **Server** | `src/server` | Plain Node `http` with no framework. It serves the widget, checks each request's origin against the site's allowlist, rate-limits, validates and caps the input, and makes one Claude call per step. |
-| **Intake** | `src/intake` | A CLI that crawls the customer's site into a page graph, loads their help docs from files, folders or URLs, saves the result, and prints the script tag. |
-| **Website** | `web` | The landing page at [joinhaptic.com](https://joinhaptic.com): Next.js, Tailwind and shadcn/ui, exported as a static site and served by a Cloudflare Worker that also handles the request-access form. See [`web/README.md`](web/README.md). |
-
-The widget and the website share one design system, defined in [`DESIGN.md`](DESIGN.md). The pointer is [`assets/pointer.svg`](assets/pointer.svg).
 
 ### One step of a guide
 
-1. **Snapshot.** The widget walks the DOM once and lists every interactive control with a short id (`e12`), its role, label, state (`checked`, `collapsed`, `disabled`) and where it sits on the page (`nav`, `main › Billing`). When a dialog is open, only the dialog's controls are listed.
-2. **Decide.** The server sends that snapshot, the goal and the conversation so far to Claude. The reply must match a strict schema (`target`, `say`, `status`, validated with Zod), and a `target` that isn't on the current page is dropped. The model can only point at things the user can actually see.
-3. **Point.** The widget scrolls to the element, rings it, and shows the caption.
-4. **Observe.** It waits for the user to click, or to stop typing, then waits for the DOM to settle and sends the new page with a summary of what changed. The next step builds on that.
-5. **Survive navigation.** Guide state lives in `sessionStorage`, so a click that loads a new page picks the guide back up where it left off.
+1. **Snapshot.** The widget walks the DOM and lists every interactive control with a short id (`e12`), its role, label, state and where it sits (`nav`, `main › Billing`). When a dialog is open, only the dialog's controls are listed.
+2. **Decide.** The server sends the snapshot, the goal and the progress so far to Claude. The reply is checked against a strict schema, and a target that isn't on the current page is dropped, so the model can only point at what the user can actually see.
+3. **Point.** The reply is streamed, so the pointer moves as soon as the id arrives, before the sentence is finished. The widget scrolls to the element, rings it, and shows the caption.
+4. **Observe.** It waits for the user to act, lets the page settle, and sends the new page with a summary of what changed. If the user clicks something else, Haptic says so and gives the step that gets them back.
+5. **Survive navigation.** Guide state lives in `sessionStorage`, so a click that loads a new page picks the guide back up.
+
+### What Haptic knows about a site
+
+| Field | Where it comes from |
+|---|---|
+| `pages` | The crawl. For each page: title, headings, button and field labels, and which page each link leads to. Pages are nodes and links are edges, so this is a graph of the site the model can plan routes through. |
+| `notes`, `docs` | The company: free-form notes and help docs. |
+| `appearance`, `allowedOrigins` | The company: the widget's colour, corner and label, and which origins it may run on. |
 
 ### Engineering details
 
-- **Prompt caching.** The rules, site map and help docs are identical for every turn on a site, so they form a cached system prompt. Only the live page and progress go in the per-turn message, which keeps latency and cost per step low.
-- **The site as a graph.** The crawler collapses dynamic routes (`/orders/123` becomes `/orders/:id`), records which page each link leads to, and lists navigation shared by most pages only once. The model gets a compact map it can use to plan paths to pages the user isn't on yet.
-- **Privacy.** The widget never reads what users type into fields. It reads labels only, and masks emails and long numbers before anything leaves the browser.
-- **Untrusted input.** Customer pages are treated as hostile. Every field of a turn request is type-checked and length-capped on the server, and page content is fenced off in the prompt as data the model must not take instructions from.
-- **Help docs fit whole or not at all.** A 60K-character budget decides which docs go in the prompt. A doc that doesn't fit is left out entirely, never cut off mid-sentence.
-- **Mock mode.** `HAPTIC_MODEL=mock` swaps Claude for a keyword matcher, so the whole loop can run and be tested with no API key.
+- **Privacy by construction.** The widget never reads what users type, or anything inside an area they write in. Emails, phone numbers and long numbers are masked in the browser, in the question and in the page's address, and again on the server before anything is stored. The privacy page on the website is kept in line with the code.
+- **Prompt caching.** The rules and site knowledge are identical on every step, so they form a cached prompt that is read at a fraction of the price. Every step logs its cache reads and writes, and its cost.
+- **Bounded spend.** Each site has hourly and daily dollar budgets, enforced per step with the step's maximum cost reserved up front. A public demo can also limit each visitor, counted against a daily-salted hash of their address. One command switches Haptic off for a site, or for every site, without a deploy.
+- **Untrusted input.** Customer pages are treated as hostile. Every field of a request is type-checked and length-capped, and page content is fenced off in the prompt as data the model must not take instructions from.
+- **Billing that can be audited.** Pricing charges only for finished guides, and "finished" has one definition shared by the widget, the database and the dashboard, which lists each finished guide by month with a download.
+- **Measured, not guessed.** The production model was chosen by the benchmark. Claude Sonnet named the right control in 73 of 74 cases, about half a second sooner than Opus and at about half the cost per step ([results](eval/README.md#results)).
 
 ## Quick start
 
@@ -58,7 +67,7 @@ Requires Node 20 or later.
 
 ```bash
 npm install
-cp .env.example .env   # add ANTHROPIC_API_KEY, or set HAPTIC_MODEL=mock
+cp .env.example .env   # add ANTHROPIC_API_KEY, or set HAPTIC_MODEL=mock to run without one
 npm run dev            # http://localhost:4000, with a demo app at /demo/
 ```
 
@@ -69,84 +78,34 @@ npm run tag -- --url http://localhost:4000/demo/ --id site_demo --name "Acme Con
   --notes demo/notes.md --docs demo/help
 ```
 
-Open http://localhost:4000/demo/, click **Ask**, and try *"how do I change my billing info"*. Billing sits behind the account menu, so Haptic first has to open the menu and then follow the path to the billing page.
+Open http://localhost:4000/demo/, click **Ask**, and try *"how do I change my billing info"*. Billing sits behind the account menu, so Haptic has to open the menu first. With `HAPTIC_MODEL=mock`, a keyword matcher stands in for the model, which is only good for testing the plumbing.
 
-## Adding Haptic to a real site
-
-```bash
-npm run tag -- --url https://app.example.com --name Example \
-  --notes notes.md --docs help/ --docs https://example.com/faq
-```
-
-The command prints a tag to paste before `</body>`:
-
-```html
-<script src="https://<your-haptic-host>/widget.js" data-site="site_ab12cd34ef" async></script>
-```
-
-`npm run tag -- --help` lists every option, including the accent color, launcher position and label, and extra allowed origins such as staging. To keep a site's knowledge current, schedule `npm run tag -- refresh --all`. The server picks up changed site files without a restart.
-
-## Configuration
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | none | Required unless `HAPTIC_MODEL=mock`. |
-| `HAPTIC_MODEL` | `claude-opus-5-5` | Any Claude model ID, or `mock`. |
-| `HAPTIC_PUBLIC_URL` | `http://localhost:4000` | Where browsers reach the server. Goes into the generated script tag. |
-| `PORT` | `4000` | Port the server listens on. |
-| `NODE_ENV` | none | Set to `production` to let browsers cache `widget.js` for five minutes. |
-
-## Deployment
-
-### Website
-
-The site in `web/` is live at [joinhaptic.com](https://joinhaptic.com) on Cloudflare. `npm run deploy` from `web/` builds it and publishes it. It needs `CLOUDFLARE_API_TOKEN`. [`web/README.md`](web/README.md#deploying) covers local preview and the form's storage.
-
-### Widget server
-
-The widget server isn't hosted yet. It is a single long-running Node process, so any host that runs Node 20 works (Render, Fly.io, Railway, a VM):
-
-```bash
-npm ci
-NODE_ENV=production HAPTIC_PUBLIC_URL=https://haptic.example.com npm start
-```
-
-The widget is bundled on startup. Site contexts are JSON files in `data/sites/`, so that directory needs persistent storage, and the `npm run tag` CLI must write to the same place the server reads from.
+To build a context for any site, run `npm run tag -- --url https://app.example.com --name Example --notes notes.md --docs help/`. It prints the script tag to paste before `</body>`. `npm run tag -- --help` lists every option.
 
 ## Development
 
 ```bash
-npm test            # unit tests (node:test)
-npm run typecheck   # tsc in strict mode
-npm run build       # bundle the widget to dist/widget.js
+npm test                          # unit tests (node:test)
+npm run typecheck                 # tsc in strict mode
+npm run build                     # bundle the widget to dist/widget.js
+npm run eval -- --models mock     # the benchmark, with no API key
 ```
 
-The website has its own commands in `web/` (`npm run dev`, `npm run lint`, `npm run build`). CI typechecks, tests and builds the widget server, and lints and builds the website, on every push and pull request.
+`web/` and `testbed/` are separate packages with their own `npm run dev` and `npm run build`. CI typechecks, tests and builds the server, and lints and builds the website, on every push and pull request. Pushes to `main` deploy both.
 
-```
-src/
-  widget/   snapshot.ts (DOM → element list) · guide.ts (step loop) · ui.ts (pointer, caption, launcher)
-  server/   index.ts (HTTP + validation) · model.ts (Claude call) · prompt.ts · sites.ts
-  intake/   cli.ts · crawl.ts · docs.ts
-  shared/   types.ts (the contract between widget, server and intake)
-web/        the website (Next.js, deployed to Cloudflare)
-demo/       a small multi-page app to try the widget on
-test/       unit tests
-assets/     the Haptic pointer
-DESIGN.md   the design system: colours, type, radii and motion for the widget and the website
-```
+## Deployment and operations
 
-## Limitations and roadmap
+The website and the widget server both run on Cloudflare, with Postgres on Neon. [`docs/operations.md`](docs/operations.md) covers deploying, the database, exactly what is recorded about visitors, how finished guides are defined, the off switch, and spend limits and alerts.
 
-- The crawler reads server-rendered HTML. Single-page apps and pages behind a login come back nearly empty, and the CLI flags them. The widget still reads every page live, so on those sites guidance leans on notes and docs. A headless-browser crawl is next.
-- Site contexts are JSON files. A database, accounts and a dashboard for companies to manage their sites come with the hosted version.
-- Rate limiting is in memory and per process.
+## Limitations
 
-An earlier prototype is kept on the [`v1`](https://github.com/dartmouth-cs52/project-other-idea/tree/v1) branch for reference.
+- The command-line crawler reads server-rendered HTML, so pages drawn by JavaScript or behind a login come back nearly empty. The dashboard's reader uses a real browser for public pages. Either way, the widget reads every page live, so sites behind a login lean on notes and docs.
+- Nothing inside a rich-text editor can be pointed at, because the widget deliberately reads nothing inside an area the user writes in.
+- The benchmark is 74 cases on two public sites. It needs cases from apps behind a login before smaller models are trusted in production.
 
 ## Team
 
-Built for Dartmouth's CS 52 (Full-Stack Web Development) by:
+Built at Dartmouth in CS 52 (Full-Stack Web Development) by:
 
 - Theodore Chan ([@TheoC26](https://github.com/TheoC26))
 - Charlie Peers ([@charliepeers](https://github.com/charliepeers))

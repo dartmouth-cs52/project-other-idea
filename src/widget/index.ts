@@ -1,5 +1,5 @@
-import { DEFAULT_APPEARANCE, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
-import { Guide } from "./guide.ts";
+import { DEFAULT_APPEARANCE, STREAM_TYPE, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { Guide, type Reporter } from "./guide.ts";
 import { Ui } from "./ui.ts";
 
 // Entry point of the script customers paste into their site:
@@ -23,22 +23,59 @@ async function boot() {
   } catch (error) {
     console.warn("[Haptic] Couldn't load the site's settings.", error);
   }
+  // Switched off for this site. Nothing is drawn, and nothing is said about it on the customer's page.
+  if (config.off) return;
 
-  const sendTurn = async (request: Omit<TurnRequest, "site">): Promise<TurnReply> => {
+  // The reply comes as lines of JSON. The first names the control to point at,
+  // as soon as the model has decided. The last is the whole reply.
+  const sendTurn = async (request: Omit<TurnRequest, "site">, onTarget?: (id: string) => void): Promise<TurnReply> => {
     const response = await fetch(`${api}/v1/turn`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Accept: STREAM_TYPE },
       body: JSON.stringify({ ...request, site }),
     });
     if (!response.ok) throw new Error(`Turn failed with ${response.status}: ${await response.text()}`);
-    return response.json();
+    if (!response.body || !(response.headers.get("Content-Type") ?? "").includes(STREAM_TYPE)) return response.json();
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffered = "";
+    let reply: TurnReply | undefined;
+    for (;;) {
+      const { done, value } = await reader.read();
+      buffered += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+      const lines = buffered.split("\n");
+      buffered = done ? "" : (lines.pop() ?? "");
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const message = JSON.parse(line) as Partial<TurnReply> & { error?: string; code?: number };
+        if (message.error) throw new Error(`Turn failed with ${message.code}: ${message.error}`);
+        if (typeof message.say === "string") reply = message as TurnReply;
+        else if (typeof message.target === "string") onTarget?.(message.target);
+      }
+      if (done) break;
+    }
+    if (!reply) throw new Error("The reply ended before it was complete.");
+    return reply;
+  };
+
+  // Sent as text/plain, which needs no preflight, and with keepalive, so a
+  // report made as the visitor leaves the page still arrives. It never matters
+  // to the visitor whether it does.
+  const report: Reporter = (guide, body) => {
+    void fetch(`${api}/v1/guides/${guide}/report`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({ ...body, site }),
+      keepalive: true,
+    }).catch(() => {});
   };
 
   const ui: Ui = new Ui(config.appearance, {
     onAsk: (question) => guide.start(question),
     onStop: () => guide.stop(),
   });
-  const guide = new Guide(ui, sendTurn);
+  const guide = new Guide(ui, sendTurn, report);
   guide.resume();
 }
 

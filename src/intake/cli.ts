@@ -27,6 +27,9 @@ Options:
   --accent <hex>       Color of the pointer and its highlight. Default ${DEFAULT_APPEARANCE.accent}.
   --position <side>    bottom-right or bottom-left. Default bottom-right.
   --label <text>       Text on the launcher button. Default "${DEFAULT_APPEARANCE.launcherLabel}".
+  --budget-hour <usd>  The most the site may spend on the model in an hour, in US dollars. Default: the server's.
+  --budget-day <usd>   The same for a day.
+  --visitor-steps <n>  Steps one visitor may take in a day. For a public demo. Default: no limit.
   --id <site id>       Use this id, or rebuild the site that has it, keeping what isn't given again.
   --host <url>         Where the Haptic server is reachable. Default $HAPTIC_PUBLIC_URL or http://localhost:4000.`;
 
@@ -42,6 +45,9 @@ const { values, positionals } = parseArgs({
     accent: { type: "string" },
     position: { type: "string" },
     label: { type: "string" },
+    "budget-hour": { type: "string" },
+    "budget-day": { type: "string" },
+    "visitor-steps": { type: "string" },
     id: { type: "string" },
     host: { type: "string" },
     all: { type: "boolean" },
@@ -97,6 +103,9 @@ async function main() {
   if (positionals[0] === "refresh") {
     const ids = values.all ? await listSiteIds() : positionals.slice(1);
     if (!ids.length) fail("Say which site to refresh: a site id, or --all.");
+    // Refreshing re-reads a site as it is. A setting passed with it would be dropped without a word.
+    const settings = Object.keys(values).filter((flag) => flag !== "all" && flag !== "host");
+    if (settings.length) fail(`refresh changes no settings, so --${settings[0]} would be ignored. To change it: npm run tag -- --id <site id> --${settings[0]} …`);
     let failures = 0;
     for (const id of ids) {
       const site = await loadSite(id);
@@ -123,6 +132,14 @@ async function main() {
   const maxPages = Number(values["max-pages"] ?? existing?.source.maxPages ?? 30);
   if (!Number.isInteger(maxPages) || maxPages < 1) fail("--max-pages has to be a whole number, 1 or more.");
 
+  const budget = { ...existing?.budget };
+  for (const [flag, field] of [["budget-hour", "hour"], ["budget-day", "day"], ["visitor-steps", "perCaller"]] as const) {
+    if (values[flag] === undefined) continue;
+    const amount = Number(values[flag]);
+    if (!(amount > 0) || (field === "perCaller" && !Number.isInteger(amount))) fail(`--${flag} has to be ${field === "perCaller" ? "a whole number" : "an amount"} above 0, not "${values[flag]}".`);
+    budget[field] = amount;
+  }
+
   const origin = new URL(url).origin;
   const source: SiteSource = { url, maxPages, docs: values.docs ?? existing?.source.docs ?? [] };
   const notesFile = values.notes ?? existing?.source.notesFile;
@@ -143,6 +160,8 @@ async function main() {
     docs: [],
     pages: [],
     source,
+    ...(existing?.off ? { off: true } : {}),
+    ...(Object.keys(budget).length ? { budget } : {}),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };

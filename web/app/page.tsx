@@ -1,13 +1,22 @@
+import type { Metadata } from "next";
 import { HeroDemo } from "@/components/demo/hero-demo";
 import { Faq } from "@/components/faq";
 import { Features } from "@/components/features";
 import { Pointer } from "@/components/pointer";
+import { Pricing } from "@/components/pricing";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
+import { site } from "@/lib/site";
+
+export const metadata: Metadata = { alternates: { canonical: "/" } };
+
+/** Tells search engines the site's name, so a result is headed "Haptic" and not the bare address. */
+const siteName = { "@context": "https://schema.org", "@type": "WebSite", name: site.name, url: `${site.url}/` };
 
 export default function Home() {
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(siteName).replace(/</g, "\\u003c") }} />
       <SiteNav />
       <main>
         <section className="mx-auto flex w-full max-w-5xl flex-col items-center px-6 py-12 text-center">
@@ -23,6 +32,7 @@ export default function Home() {
         </section>
         <HeroDemo />
         <Features />
+        <Pricing />
         <Faq />
       </main>
       <SiteFooter />

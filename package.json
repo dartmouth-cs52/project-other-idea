@@ -10,11 +10,19 @@
     "start": "tsx --env-file-if-exists=.env src/server/index.ts",
     "tag": "tsx --env-file-if-exists=.env src/intake/cli.ts",
     "build": "tsx src/widget/build.ts",
+    "deploy": "wrangler deploy",
+    "site:publish": "tsx --env-file-if-exists=.env src/intake/publish.ts",
+    "site:off": "tsx src/intake/switch.ts off",
+    "site:on": "tsx src/intake/switch.ts on",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/*.test.ts"
+    "test": "tsx --test test/*.test.ts",
+    "eval": "tsx --env-file-if-exists=.env eval/run.ts",
+    "eval:record": "tsx eval/record.ts",
+    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
+    "@neondatabase/serverless": "^1.2.1",
     "cheerio": "^1.2.0",
     "zod": "^4.6.7"
   },
@@ -22,6 +30,7 @@
     "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "wrangler": "^4.162.0"
   }
 }

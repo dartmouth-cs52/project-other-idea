@@ -3,7 +3,7 @@ import { AccessForm } from "@/components/access-form";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 
-export const metadata: Metadata = { title: "Request access" };
+export const metadata: Metadata = { title: "Request access", alternates: { canonical: "/request-access/" } };
 
 export default function RequestAccess() {
   return (
