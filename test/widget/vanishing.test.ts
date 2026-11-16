@@ -222,13 +222,17 @@ test("a menu that closes by itself when the mouse leaves it, hidden and not remo
 });
 
 /** A list the page draws again: with the same rows, or filtered by a saved view loading, with no press of the visitor's. */
-const LIST = `<main><h1>Invoices</h1><ul id="list"></ul></main>
+const LIST = `<main><h1>Invoices</h1><input id="search" aria-label="Search invoices"><ul id="list"></ul></main>
   <script>
     const rows = [['INV-1001', 'Paid'], ['INV-1002', 'Overdue'], ['INV-1003', 'Draft']];
     const draw = (only) => { document.getElementById('list').innerHTML = rows.filter((row) => !only || row[1] === only).map((row) => '<li>' + row[0] + ' (' + row[1] + ') <button type="button">Open ' + row[0] + '</button></li>').join(''); };
     draw();
     window.redraw = () => draw();
     window.overdueOnly = () => draw('Overdue');
+    document.getElementById('search').addEventListener('input', (event) => {
+      const words = event.target.value.toLowerCase();
+      document.getElementById('list').innerHTML = rows.filter((row) => (row[0] + ' ' + row[1]).toLowerCase().includes(words)).map((row) => '<li>' + row[0] + ' (' + row[1] + ') <button type="button">Open ' + row[0] + '</button></li>').join('');
+    });
   </script>`;
 
 test("a control the page drew again is found on its new node at once, with no question", async () => {
@@ -260,6 +264,21 @@ test("a control the page drew the list again without is noticed within a second,
     const second = await session.untilAsked(2, 2500);
     assert.equal(second.event, 'button "Open INV-1003" is no longer on the page.');
     await session.untilState("pointing");
+  } finally {
+    await session.close();
+  }
+});
+
+test("a list the visitor filters by typing in a search box, which takes the control away, is noticed, and the field is named but not what was typed", async () => {
+  const session = await start(LIST, (request, index) => (index === 0 ? point(request, "Open INV-1003", "Open the draft.") : index === 1 ? point(request, "Search invoices", "Clear the search to see the draft again.") : words("Done.")));
+  try {
+    await session.ask("open the draft invoice");
+    await session.untilState("pointing");
+    await session.page.locator("#search").pressSequentially("overdue", { delay: 60 });
+    await letGo(session, "Open the draft.", "the search took it out of the list");
+    const second = await session.untilAsked(2, 3000);
+    assert.equal(second.event, 'The user typed in textbox "Search invoices", and button "Open INV-1003" is no longer on the page.');
+    assert.ok(!JSON.stringify(second).toLowerCase().includes('"overdue"'), "what was typed was sent");
   } finally {
     await session.close();
   }
