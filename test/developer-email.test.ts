@@ -1,8 +1,5 @@
-// The Worker runs on Cloudflare, whose HTMLRewriter the reader uses. Declared for the Worker in its own folder.
-/// <reference path="../web/worker/runtime.d.ts" />
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { appApi } from "../web/worker/app-api.ts";
 import { developerEmail, INSTALL_FROM } from "../web/worker/developer-email.ts";
 import { EMAILS_PER_ADDRESS, EMAILS_PER_SITE, setupRoutes, type SetupRequest } from "../web/worker/setup-api.ts";
 import { exec, freshDatabase, psqlSql, TEST_DATABASE_URL, testDatabase } from "./psql.ts";
@@ -86,26 +83,9 @@ function call(sql: unknown, body: unknown, options: { org?: typeof ORG; fetcher?
 
 const site = (): Row => ({ id: SITE, company_id: ORG.id, origin: "https://app.example.com", context: {} });
 
+// Signed out (401) and from another site (403) are answered by app-api.ts before this route is reached,
+// and are tested with the site, in web/test/worker.test.ts.
 describe("who may send", () => {
-  const appEnv = {
-    DATABASE_URL: "postgresql://user:password@ep-test.us-east-1.aws.neon.tech/neondb",
-    ACCESS_REQUESTS: { put: async () => {}, get: async () => null },
-    RESEND_API_KEY: "re_test",
-  };
-  const post = (origin: string) =>
-    new Request(`https://joinhaptic.com/api/app/sites/${SITE}/developer-email`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ to: "dev@example.com", key: "k".repeat(16) }) });
-
-  test("nobody signed in is turned away before anything is looked up", async () => {
-    const response = await appApi(post("https://joinhaptic.com"), appEnv, new URL(post("https://joinhaptic.com").url));
-    assert.equal(response.status, 401);
-    assert.deepEqual(await response.json(), { error: "Sign in first." });
-  });
-
-  test("a request from another site is turned away", async () => {
-    const response = await appApi(post("https://evil.example"), appEnv, new URL(post("https://evil.example").url));
-    assert.equal(response.status, 403);
-  });
-
   test("someone signed in to another company can't send for this site, and learns nothing about it", async () => {
     const { sent, fetcher } = resend();
     const answer = await call(fakeSql([site()]), { to: "dev@example.com", key: "a".repeat(16) }, { org: OTHER_ORG, fetcher });

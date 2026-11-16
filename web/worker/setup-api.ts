@@ -13,12 +13,28 @@
 
 import { checkEmail, isSetupStep, NEEDS_SIGN_IN, pageControls, riskyControls, type SetupState } from "../lib/setup";
 import type { PageNode, SiteContext } from "../../src/shared/types";
-import type { SignedInUser } from "./auth";
 import type { Organization, Sql } from "./db";
 import { developerEmail } from "./developer-email";
 import { headline } from "./insights";
-import type { Reading } from "./reader";
 import { sendEmail, type SendEnv } from "./sign-in-email";
+
+// This file imports nothing that needs web/'s own packages (auth.ts needs
+// @neon/auth, reader.ts needs @cloudflare/puppeteer), so the tests at the top
+// of the repository can load it with the root install alone, as CI does. The
+// two shapes it needs from those files are named here instead.
+
+/** Who is signed in, as worker/auth.ts's SignedInUser gives it. */
+interface Caller {
+  id: string;
+  email: string;
+  name: string;
+}
+
+/** The parts of a reading (worker/reader.ts) that readingExtras looks at. */
+interface ReadingSoFar {
+  thin: string[];
+  failed: { url: string; reason: string }[];
+}
 
 /** At most this many install emails per site in any 24 hours. */
 export const EMAILS_PER_SITE = 10;
@@ -36,7 +52,7 @@ export interface SetupRequest {
   env: SetupEnv;
   sql: Sql;
   org: Organization;
-  user: SignedInUser;
+  user: Caller;
   /** The path after /api/app, such as /sites/site_abc/setup. */
   path: string;
   url: URL;
@@ -132,7 +148,7 @@ export function setupOf(context: SiteContext): SetupState | null {
  * how many controls, how many pages seem to need signing in, and the controls
  * that look like they delete, pay or hand something over.
  */
-export function readingExtras(reading: Reading, pages: PageNode[]) {
+export function readingExtras(reading: ReadingSoFar, pages: PageNode[]) {
   return {
     controls: pages.reduce((sum, page) => sum + pageControls(page), 0),
     signIn: reading.thin.length + reading.failed.filter((failure) => NEEDS_SIGN_IN.test(failure.reason)).length,

@@ -1,5 +1,3 @@
-// The Worker runs on Cloudflare, whose HTMLRewriter the reader uses. Declared for the Worker in its own folder.
-/// <reference path="../web/worker/runtime.d.ts" />
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { AGENTS, truncatePrompt } from "../web/lib/agents.ts";
@@ -25,7 +23,7 @@ import {
   WAITING_AFTER_MS,
   type ReadPage,
 } from "../web/lib/setup.ts";
-import { handle } from "../web/worker/handler.ts";
+import { isPlaybookPath, playbook } from "../web/worker/playbook.ts";
 import { readingExtras } from "../web/worker/setup-api.ts";
 
 // Adding a site one question per screen: where a reload lands, what the
@@ -141,11 +139,14 @@ test("the install steps hold the tag exactly, say where it goes and how to check
   assert.match(steps, /allowed in the Haptic dashboard/);
 });
 
-const env = { ACCESS_REQUESTS: { put: async () => {}, get: async () => null }, WIDGET_URL: "https://widget.joinhaptic.com" };
-const assets = { fetch: () => new Response("static page", { status: 200 }) };
+const env = { WIDGET_URL: "https://widget.joinhaptic.com" };
+const get = (path: string, method = "GET") => playbook(new Request(`https://joinhaptic.com${path}`, { method }), env, new URL(`https://joinhaptic.com${path}`));
 
-test("the Worker serves the install steps as Markdown at /install/<site>.md, before the static pages, with no sign-in", async () => {
-  const response = await handle(new Request("https://joinhaptic.com/install/site_a1b2c3d4e5f6.md"), env, assets);
+// That the Worker hands these addresses over before the static pages is tested with the site, in web/test/worker.test.ts.
+test("the install steps are served as Markdown at /install/<site>.md, with no sign-in", async () => {
+  assert.equal(isPlaybookPath("/install/site_a1b2c3d4e5f6.md"), true);
+  assert.equal(isPlaybookPath("/install/"), false);
+  const response = get("/install/site_a1b2c3d4e5f6.md");
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "text/markdown; charset=utf-8");
   assert.equal(response.headers.get("access-control-allow-origin"), "*");
@@ -154,14 +155,11 @@ test("the Worker serves the install steps as Markdown at /install/<site>.md, bef
   assert.ok(text.includes('data-site="site_a1b2c3d4e5f6"'));
   assert.ok(!/joinhaptic\.com\/install|example|company/i.test(text.replace(/widget\.joinhaptic\.com/g, "")), "nothing about the site beyond its id");
 
-  const head = await handle(new Request("https://joinhaptic.com/install/site_a1b2c3d4e5f6.md", { method: "HEAD" }), env, assets);
+  const head = get("/install/site_a1b2c3d4e5f6.md", "HEAD");
   assert.equal(head.status, 200);
   assert.equal(await head.text(), "");
-  assert.equal((await handle(new Request("https://joinhaptic.com/install/site_a1b2c3d4e5f6.md", { method: "POST" }), env, assets)).status, 405);
-  for (const bad of ["/install/site_A.md", "/install/nope.md", "/install/site_a1b2c3d4e5f6/x.md", "/install/.md"]) {
-    assert.equal((await handle(new Request(`https://joinhaptic.com${bad}`), env, assets)).status, 404, bad);
-  }
-  assert.equal(await (await handle(new Request("https://joinhaptic.com/install/?site=site_a1b2c3d4e5f6"), env, assets)).text(), "static page", "the install page itself is still the static one");
+  assert.equal(get("/install/site_a1b2c3d4e5f6.md", "POST").status, 405);
+  for (const bad of ["/install/site_A.md", "/install/nope.md", "/install/site_a1b2c3d4e5f6/x.md", "/install/.md"]) assert.equal(get(bad).status, 404, bad);
 });
 
 const page = (path: string, buttons: string[], links: string[] = [], opens: ReadPage["opens"] = undefined): ReadPage => ({
