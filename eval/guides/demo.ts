@@ -18,6 +18,7 @@ const guides: Guide[] = [
       { expect: [button("Save payment method")], act: { click: 'button[value="save"]' } },
       DONE,
     ],
+    reached: { text: "Payment method updated." },
   },
   {
     id: "invite",
@@ -29,6 +30,7 @@ const guides: Guide[] = [
       { expect: [button("Send invite")], act: { click: "#invite button" } },
       DONE,
     ],
+    reached: { text: "Invite sent." },
   },
   {
     id: "invite-here",
@@ -39,6 +41,7 @@ const guides: Guide[] = [
       { expect: [button("Send invite")], act: { click: "#invite button" } },
       DONE,
     ],
+    reached: { text: "Invite sent." },
   },
   {
     id: "invite-wrong-click",
@@ -52,6 +55,7 @@ const guides: Guide[] = [
       { expect: [button("Send invite")], act: { click: "#invite button" } },
       DONE,
     ],
+    reached: { text: "Invite sent." },
   },
   {
     id: "new-project",
@@ -64,6 +68,7 @@ const guides: Guide[] = [
       { expect: [button("Create project"), any("Region")], act: { click: 'button[value="create"]' } },
       DONE,
     ],
+    reached: { selector: '#projects li:text-is("billing-service")' },
   },
   {
     id: "api-key",
@@ -76,6 +81,7 @@ const guides: Guide[] = [
       { expect: [button("Create API key")], act: { click: "#new-key" } },
       DONE,
     ],
+    reached: { text: "API key created." },
   },
   {
     id: "two-factor",
@@ -88,6 +94,7 @@ const guides: Guide[] = [
       { expect: [any("Require two-factor authentication")], act: { check: "#two-factor" }, say: "Tick Require two-factor authentication." },
       DONE,
     ],
+    reached: { text: "Two-factor authentication is now required." },
   },
   {
     id: "rename-workspace",
@@ -100,6 +107,7 @@ const guides: Guide[] = [
       { expect: [button("Save changes")], act: { click: "#general button" } },
       DONE,
     ],
+    reached: { text: "Settings saved." },
   },
   {
     id: "time-zone",
@@ -111,6 +119,7 @@ const guides: Guide[] = [
       { expect: [button("Save changes")], act: { click: "#general button" } },
       DONE,
     ],
+    reached: { text: "Settings saved." },
   },
   {
     id: "invoice",
@@ -119,8 +128,8 @@ const guides: Guide[] = [
     steps: [
       ACCOUNT,
       { expect: [any("Plan and billing")], act: { click: '#account-menu a[href="/demo/settings-billing"]' } },
-      { expect: [any("Download latest invoice")], act: { click: 'main a[href="/demo/settings-billing"]:not([role])' } },
-      DONE,
+      // The link leads back to the same page, so nothing would show it had been used. The guide ends on it.
+      { expect: [any("Download latest invoice")] },
     ],
   },
   {
@@ -133,21 +142,31 @@ const guides: Guide[] = [
       { expect: [button("Change plan")], act: { click: "#change-plan" } },
       DONE,
     ],
+    reached: { text: "Plan changes are switched off in this demo." },
   },
   {
     id: "sign-out",
     start: "/demo/team",
     goal: "sign out",
     steps: [ACCOUNT, { expect: [any("Sign out")], act: { click: '#account-menu a[href="/demo/"]' } }, DONE],
+    reached: { url: "/demo/$" },
   },
   {
     id: "usage",
     start: "/demo/team",
     goal: "where can I see my usage this month?",
     steps: [{ expect: [any("Overview"), any("Acme Console")], act: { click: 'nav a[href="/demo/"]' } }, DONE],
+    reached: { url: "/demo/$", text: "Usage this month" },
   },
   // The demo has no way to delete a project, so the right answer points at nothing.
   { id: "no-such-feature", start: "/demo/projects", goal: "How do I delete a project?", steps: [DONE] },
 ];
 
-export default { siteId: "site_demo", origin: process.env.HAPTIC_PUBLIC_URL || "http://localhost:4000", hasTag: true, guides } satisfies GuideSet;
+export default {
+  siteId: "site_demo",
+  origin: process.env.HAPTIC_PUBLIC_URL || "http://localhost:4000",
+  hasTag: true,
+  about: "Haptic's own demo app: a small, tidy console. Scores here are a ceiling, not a forecast.",
+  sandbox: true,
+  guides,
+} satisfies GuideSet;

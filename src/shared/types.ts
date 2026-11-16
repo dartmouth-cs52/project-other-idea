@@ -12,6 +12,8 @@ export interface SiteContext {
   /** Origins the widget may call the API from. */
   allowedOrigins: string[];
   appearance: Appearance;
+  /** "Do it with me": whether Haptic may use the page's controls itself. Absent: it may not. */
+  acting?: ActingSettings;
   /** Free-form notes from the company about their product. */
   notes: string;
   /** Help docs the company supplied. */
@@ -43,6 +45,16 @@ export interface SiteSource {
   notesFile?: string;
   /** File paths, directories or URLs. */
   docs: string[];
+  /** How the intake read the pages: in a browser, or as the HTML the server sends. Absent on sites built before there was a choice. */
+  reader?: "browser" | "text";
+  /** How many links away from the start the browser reader goes. */
+  maxDepth?: number;
+  /** Patterns for addresses or link labels the reader leaves alone. */
+  skip?: string[];
+  /** Path prefixes the reader stays inside. */
+  within?: string[];
+  /** More pages to start reading from. */
+  also?: string[];
 }
 
 export interface Appearance {
@@ -80,7 +92,118 @@ export interface PublicSiteConfig {
   appearance: Appearance;
   /** Set when Haptic is switched off here. The widget then draws nothing. */
   off?: true;
+  /** Present only when the site has acting on. The widget shows the Do it button only then. */
+  acting?: Omit<ActingSettings, "enabled">;
 }
+
+// Acting ("do it with me") ----------------------------------------------------
+
+/**
+ * A company's settings for "do it with me", where Haptic uses the page's
+ * controls itself while the visitor watches and always leaves the click that
+ * commits to them. Off unless the company turns it on.
+ */
+export interface ActingSettings {
+  enabled: boolean;
+  /** Path prefixes where Haptic may act, like "/cards". Empty or absent: anywhere on the site's allowed origins. */
+  paths?: string[];
+  /** The company's own words for controls that commit, added to the built-in list: "Book", "Lodge claim". */
+  commitWords?: string[];
+  /** Most actions in one request. Default `ACTING_LIMITS.actions`; never more than `ACTING_LIMITS.actionsCeiling`. */
+  maxActions?: number;
+  /** Show the one-line explanation the first time a visitor uses Do it. Default true. */
+  confirmFirst?: boolean;
+}
+
+/** The limits on acting, shared by the widget and the server. */
+export const ACTING_LIMITS = {
+  /** Actions in one request when the site sets none. */
+  actions: 25,
+  /** The most actions in one request any site may allow. */
+  actionsCeiling: 40,
+  /** Model turns in one acting request. Guides keep their own limit. */
+  turns: 30,
+  /** In act mode the server answers "done" once `step` passes the site's actions plus this. */
+  stepAllowance: 10,
+  /** Characters Haptic types in one request, all fields together. */
+  typedChars: 400,
+  /** Actions on one control with no change to the page in between. */
+  sameControl: 2,
+  /** "I couldn't do this one" hand-backs in a row before acting ends and the guide goes on as a guide. */
+  failuresInARow: 3,
+} as const;
+
+/** How many actions a site allows in one request: its own number, kept between 1 and the ceiling, or the default. */
+export function actionsAllowed(acting: Pick<ActingSettings, "maxActions"> | undefined): number {
+  const asked = acting?.maxActions;
+  if (typeof asked !== "number" || !Number.isFinite(asked)) return ACTING_LIMITS.actions;
+  return Math.min(Math.max(Math.floor(asked), 1), ACTING_LIMITS.actionsCeiling);
+}
+
+/** Whether a page's path is one where the site lets Haptic act. No paths, or an empty list, means anywhere. */
+export function actingAllowedAt(acting: Pick<ActingSettings, "paths"> | undefined, path: string): boolean {
+  const prefixes = (acting?.paths ?? []).filter((prefix) => typeof prefix === "string" && prefix.trim());
+  if (!prefixes.length) return true;
+  return prefixes.some((prefix) => {
+    const clean = "/" + prefix.trim().replace(/^\/+|\/+$/g, "");
+    return clean === "/" || path === clean || path.startsWith(clean + "/") || path.startsWith(clean + "#") || path.startsWith(clean + "?");
+  });
+}
+
+/** What Haptic does to the target itself, in act mode. `press_enter` is only for a search box that has no button. */
+export const ACTS = ["click", "type", "choose", "check", "uncheck", "press_enter"] as const;
+export type Act = (typeof ACTS)[number];
+
+/**
+ * Why Haptic did not do a step it was asked to do. The widget's gate gives one
+ * with every step it declines, and the server counts the ones its own check
+ * removed. Each is one rule of the gate (DESIGN section 4).
+ */
+export type Refusal =
+  /** Rule 0: a press would land on something other than the control, its label or its own part. */
+  | "covered"
+  /** Rule 1: the company marked it `data-haptic-commit`, or its name holds one of the site's `commitWords`. */
+  | "marked"
+  /** Rule 1: inside `data-haptic-act="off"`. */
+  | "off"
+  /** Rule 2: a password, payment, one-time code, secret, file or type-to-confirm field, or a field in a confirmation. */
+  | "secret"
+  /** Rule 3: another origin, another tab or window, a download, or an address that is not a web page. */
+  | "leaves"
+  /** Rule 4: a native form submit, or a control the page marks as sending a write (`data-method`, `hx-post`, `data-confirm`, ...). */
+  | "writes"
+  /** Rule 5: a confirmation dialog is open. */
+  | "confirmation"
+  /** Rule 6: its words say it commits: delete, pay, sign out, send, save, export, reveal, ... */
+  | "words"
+  /** Rule 7: it is styled as destructive: red, or a toolkit's danger class. */
+  | "styled"
+  /** Rule 10: nothing says it is safe, so it is not acted on. */
+  | "unknown"
+  /** A field that may save the moment it changes: nothing around it waits for a later click. */
+  | "live"
+  /** The text to type, or the choice to pick, is not in the visitor's own words. */
+  | "ungrounded"
+  /** Enter, outside a search box and outside a list Haptic opened. */
+  | "enter"
+  /** The act does not fit the control, or is one Haptic does not do in this version (sliders, uploads, editors). */
+  | "unfit"
+  /** It picks a date: a day in a calendar, or a field the browser gives a date picker. Dates are not picked in this version. */
+  | "date"
+  /** The reply gave a `do` together with `commits: true`. Treated as a hand-over. */
+  | "contradiction"
+  /** 4.5: the commit deletes, spends, signs in or out, or reveals a secret, and the visitor asked for nothing of that kind. */
+  | "class"
+  /** The control is gone, or is no longer the one the reply named. The widget asks again. */
+  | "changed"
+  /** 4.2: a cap on actions, turns, typing or repeats was reached. */
+  | "cap"
+  /** The site, the page or the path does not allow acting, or the reply did not carry `mode: "act"`. */
+  | "acting-off"
+  /** After Haptic set a field, the page sent a request or showed a status at once: it may have saved. */
+  | "tripwire"
+  /** The engine did the step but could not see that it took, or could not do it at all. */
+  | "failed";
 
 export interface SnapElement {
   /** Short handle like "e12", valid for one snapshot only. */
@@ -98,6 +221,8 @@ export interface SnapElement {
   context?: string;
   /** Set when the element is scrolled out of view. */
   offscreen?: "above" | "below";
+  /** The choices of a dropdown, as the page words them. Which one is chosen is never sent. */
+  options?: string[];
 }
 
 export interface Snapshot {
@@ -117,10 +242,26 @@ export interface HistoryTurn {
   text: string;
 }
 
+/**
+ * Which shape of turn request a widget sends. A widget from before the number
+ * existed sends none, and counts as version 1. Version 2 is the first that
+ * asks a closing question (`closing`) and sends the visitor's date (`today`).
+ * Version 3 is the first that understands act replies (`ACT_VERSION`).
+ * Raise it whenever a server would have to know what the widget in front of it
+ * can do.
+ */
+export const TURN_VERSION = 3;
+/** The first `TURN_VERSION` that understands act replies. A server reads `mode: "act"` only from a widget at this version or later. */
+export const ACT_VERSION = 3;
+
 export interface TurnRequest {
   site: string;
   /** Made by the widget when the question is asked, and kept across page loads, so a guide's steps can be tied together. */
   guide?: string;
+  /** The widget's `TURN_VERSION`. Absent from a widget older than version 2. */
+  version?: number;
+  /** The date where the visitor is, as their own device has it, like "2026-11-15". The model is told it, so it need not guess the year. */
+  today?: string;
   goal: string;
   /** Steps already given in this guide. 0 for the first question. */
   step: number;
@@ -131,6 +272,14 @@ export interface TurnRequest {
   change?: string;
   /** True when what the user just did was something other than the step they were shown. */
   offTrack?: boolean;
+  /** Set when the visitor has done what was called the last step, and this question is the look at what came of it. */
+  closing?: true;
+  /**
+   * "act": the visitor pressed Do it, and Haptic may use the controls itself.
+   * Read by a server only as this exact string, from a widget at `ACT_VERSION`
+   * or later, on a site with acting on at this path. Absent: a guide.
+   */
+  mode?: "act";
   snapshot: Snapshot;
 }
 
@@ -182,9 +331,31 @@ export function questionKey(question: string): string {
 /** The format a step is streamed in: one JSON value per line. The widget asks for it in its Accept header. */
 export const STREAM_TYPE = "application/x-ndjson";
 
+/**
+ * One step. In a guide only `target`, `status` and `say` are used. In act mode
+ * (the reply carries `mode: "act"`) the rest say what Haptic does:
+ *
+ * | Reply                                              | In act mode                                                       |
+ * |----------------------------------------------------|-------------------------------------------------------------------|
+ * | `continue` + target + `do`                         | Haptic does it, then asks again.                                  |
+ * | `continue` + target, no `do`                       | The visitor does this one; acting resumes when they have.         |
+ * | `done` + target + `commits: true`, no `do`         | The hand-over: the visitor makes the click that commits.          |
+ * | `done`, no target                                  | Finished.                                                         |
+ * | `stuck`, no target                                 | Nothing can be done: acting ends, as a stuck guide does.          |
+ * | `do` together with `commits: true`                 | A contradiction, treated as the hand-over.                        |
+ *
+ * The model writes the fields in this order: target, do, enter, commits,
+ * status, say. `target` stays first so the pointer can start early.
+ */
 export interface TurnReply {
   /** Element id from the snapshot to point at, or null. */
   target: string | null;
+  /** Act mode: what Haptic does to the target. Absent or null: the visitor uses the target, as in a guide. */
+  do?: Act | null;
+  /** The exact text to type or the choice to pick, written as the visitor wrote it. Null when there is nothing to enter. */
+  enter?: string | null;
+  /** Using the target saves, sends, submits, pays, approves, deletes, signs in or out, invites, issues or publishes. */
+  commits?: boolean;
   /**
    * "continue": the user must act on the target, then we go again.
    * "done": nothing left to do, because the goal is reached or the question only needed an answer.
@@ -199,16 +370,31 @@ export interface TurnReply {
    * not finish, and there is nothing to ask the visitor about.
    */
   paused?: true;
+  /** Set by a server that answered in act mode. The widget acts only on a reply that carries it. */
+  mode?: "act";
+  /**
+   * Set by the server when its own check (`checkAction`) removed the `do` the
+   * model gave: why. `say` then describes an action that was not taken, so the
+   * widget speaks for that step in its own words instead.
+   */
+  withheld?: Refusal;
+  /** Set with `withheld`: the `do` that was removed. A name from `ACTS`, never anything from the page, so it can be logged and shown in a test run. */
+  removed?: Act;
 }
 
 // Paths ---------------------------------------------------------------------
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Collapse ids so every user's /orders/8812 counts as the same page, /orders/:id. */
+/**
+ * Collapse ids so every user's /orders/8812 counts as the same page, /orders/:id.
+ * Path parameters, the ";name=value" a server can add to a segment, are dropped:
+ * one that adds the session to every link (";jsessionid=…") would otherwise give
+ * one page a new address for every visitor.
+ */
 export function normalizePath(input: string): string {
   const withoutOrigin = input.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, "");
-  const pathOnly = withoutOrigin.split(/[?#]/)[0] ?? "";
+  const pathOnly = (withoutOrigin.split(/[?#]/)[0] ?? "").replace(/;[^/;=]+=[^/;]*/g, "");
   const segments = pathOnly
     .split("/")
     .filter(Boolean)
@@ -238,16 +424,85 @@ function safeDecode(segment: string): string {
   }
 }
 
+// Dates ---------------------------------------------------------------------
+
+/** The date on this device's own clock and in its own time zone, as "2026-11-15". */
+export function localDate(now: Date = new Date()): string {
+  const two = (part: number) => String(part).padStart(2, "0");
+  return `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`;
+}
+
 // Text ----------------------------------------------------------------------
 
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+/** Digits written with the spaces and marks a phone number has. Whether it is one is decided in `maskNumbers`. */
 const PHONE = /\+?\d[\d\s().-]{7,}\d/g;
 const LONG_DIGITS = /\d{5,}/g;
+/** A date in figures, standing on its own among such digits: 2026-11-15, 15.11.2026, 11-15-26. */
+const DATE = /(^|[\s(])(\d{4}[-.]\d{1,2}[-.]\d{1,2}|\d{1,2}[-.]\d{1,2}[-.](?:\d{4}|\d{2}))(?=$|[\s)])/g;
+/** Fewer digits than this is a price, a size or a model number, not a phone number. */
+const MIN_PHONE_DIGITS = 9;
+/** A question names one or two things. More than this is not a question. */
+const MAX_OWN = 8;
 
-/** Collapse whitespace, mask emails and long numbers, cap the length. */
-export function cleanText(text: string, max = 80): string {
-  const masked = text.replace(/\s+/g, " ").trim().replace(EMAIL, "[email]").replace(PHONE, "[number]").replace(LONG_DIGITS, "[number]");
-  return masked.length > max ? masked.slice(0, max - 1).trimEnd() + "…" : masked;
+/**
+ * What a visitor named in their own question that would otherwise be masked:
+ * an email address, or a run of five or more digits such as an account or an
+ * order number. The visitor wrote it, so the same thing on the page tells the
+ * model nothing it was not already told, and is left readable. Only a whole
+ * match counts: a number that merely ends or begins the same stays masked.
+ */
+export function namedIn(question: string): Set<string> {
+  const found = new Set<string>();
+  for (const email of question.match(EMAIL) ?? []) if (found.size < MAX_OWN) found.add(email.toLowerCase());
+  for (const digits of question.replace(EMAIL, " ").match(LONG_DIGITS) ?? []) if (found.size < MAX_OWN) found.add(digits);
+  return found;
+}
+
+/**
+ * Masks phone numbers and long runs of digits. A date is left alone, and so
+ * is a run of digits that is one of `own`, the things the visitor named.
+ */
+function maskNumbers(text: string, own?: ReadonlySet<string>): string {
+  const whole = (piece: string): string => piece.replace(/\+?\d(?:[\d\s().-]*\d)?/, "[number]");
+  // Digits set apart by spaces can be several numbers, like a row's account numbers. Each piece that is
+  // one of the visitor's numbers stays, and every other piece goes. Digits joined by a dash, a dot or a
+  // bracket are one number, so "13344-5566" goes whole: part of a number is never left readable.
+  const around = (piece: string): string =>
+    piece.replace(/\S+/g, (token) => (own?.has(token.replace(/^[(+]+|[),.;:]+$/g, "")) ? token : /\d/.test(token) ? whole(token) : token));
+  const maskRun = (piece: string): string => {
+    if (piece.replace(/\D/g, "").length < MIN_PHONE_DIGITS) return piece;
+    return own?.size ? around(piece) : whole(piece);
+  };
+  return text
+    .replace(PHONE, (candidate) => {
+      let out = "";
+      let from = 0;
+      for (const date of candidate.matchAll(DATE)) {
+        const start = date.index + (date[1] ?? "").length;
+        out += maskRun(candidate.slice(from, start)) + (date[2] ?? "");
+        from = start + (date[2] ?? "").length;
+      }
+      return out + maskRun(candidate.slice(from));
+    })
+    .replace(LONG_DIGITS, (digits) => (own?.has(digits) ? digits : "[number]"));
+}
+
+/** Collapse whitespace, mask emails and long numbers, cap the length. `own` is what must stay readable: see `namedIn`. */
+export function cleanText(text: string, max = 80, own?: ReadonlySet<string>): string {
+  const spaced = text.replace(/\s+/g, " ").trim();
+  let masked = "";
+  let from = 0;
+  for (const email of spaced.matchAll(EMAIL)) {
+    masked += maskNumbers(spaced.slice(from, email.index), own) + (own?.has(email[0].toLowerCase()) ? email[0] : "[email]");
+    from = email.index + email[0].length;
+  }
+  masked += maskNumbers(spaced.slice(from), own);
+  if (masked.length <= max) return masked;
+  // Cut at a word, unless that would lose much: "Out of stock", not "Out o…".
+  const cut = masked.slice(0, max - 1);
+  const space = cut.lastIndexOf(" ");
+  return (space >= max * 0.6 ? cut.slice(0, space) : cut).trimEnd() + "…";
 }
 
 /** How an element is named in events, history and change summaries. */

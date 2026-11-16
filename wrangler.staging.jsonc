@@ -1,0 +1,26 @@
+{
+  // A second copy of the widget server, for trying a change to the prompt or the
+  // server against the real model before it reaches visitors. It answers at its
+  // workers.dev address only. No customer's script tag points at it.
+  //
+  //   npx wrangler deploy -c wrangler.staging.jsonc
+  //   npm run eval -- --server https://haptic-widget-staging.joinhaptic.workers.dev --yes
+  //
+  // Its model key is put there once by .github/workflows/deploy-staging.yml and
+  // stays across deploys.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "haptic-widget-staging",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-11-01",
+  "build": { "command": "npm run build" },
+  // The same sites as the live server, read only.
+  "kv_namespaces": [{ "binding": "SITES", "id": "b481eb9c6ba24efe9889ef52a4f17e8a" }],
+  // A benchmark asks faster than a visitor does, so four times the live limit
+  // for each site and caller. It is still a limit: the server spends the same
+  // model key as the live one.
+  "ratelimits": [{ "name": "TURN_LIMIT", "namespace_id": "1003", "simple": { "limit": 120, "period": 60 } }],
+  "vars": {
+    "HAPTIC_MODEL": "claude-sonnet-5-5"
+  },
+  "workers_dev": true
+}

@@ -1,4 +1,4 @@
-import { createApp, type AppParts } from "../src/server/app.ts";
+import { createApp, turnCounts, type AppParts } from "../src/server/app.ts";
 import { describeAlert, limitsFor, type Admission, type Ceiling, type Gate, type Limits, type Report } from "../src/server/budget.ts";
 import { Store } from "../src/server/db.ts";
 import { configure } from "../src/server/model.ts";
@@ -46,6 +46,8 @@ export interface Env {
   HAPTIC_EFFORT?: string;
   HAPTIC_THINKING?: string;
   HAPTIC_CACHE?: string;
+  /** "log", "ask" or "off": what is done with a reply that tells the visitor to use a control and points at nothing. See src/server/check.ts. */
+  HAPTIC_RECHECK?: string;
   HAPTIC_MOCK_PAUSE_MS?: string;
   HAPTIC_MOCK_USD?: string;
   /** "1" switches every site off. It takes a deploy to change, so the keys in SITES are the quicker switch. */
@@ -184,6 +186,7 @@ export default {
       HAPTIC_EFFORT: env.HAPTIC_EFFORT,
       HAPTIC_THINKING: env.HAPTIC_THINKING,
       HAPTIC_CACHE: env.HAPTIC_CACHE,
+      HAPTIC_RECHECK: env.HAPTIC_RECHECK,
       HAPTIC_MOCK_PAUSE_MS: env.HAPTIC_MOCK_PAUSE_MS,
       HAPTIC_MOCK_USD: env.HAPTIC_MOCK_USD,
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
@@ -201,7 +204,16 @@ export default {
       background: (work) => ctx.waitUntil(work),
       onSeen: (site, origin, allowed) => later(db?.seenAt(site, origin, allowed)),
       onAsk: (turn, _site, origin) => later(db?.startGuide(turn, origin)),
-      onTurn: (turn, measure, _site, origin) => later(db?.recordStep(turn, measure, origin)),
+      onTurn: (turn, measure, _site, origin) => {
+        // One line of counts per step, with nothing from the visitor or their page, so that how guides and acting go on a site can be seen.
+        try {
+          console.log(JSON.stringify(turnCounts(turn, measure)));
+        } catch {
+          // A line that cannot be written must not cost the visitor their step.
+        }
+        // And the step on the guide's record, as the dashboard shows it (src/server/db.ts).
+        later(db?.recordStep(turn, measure, origin));
+      },
       onReport: (site, guide, report) => later(db?.report(site, guide, report)),
     });
     try {

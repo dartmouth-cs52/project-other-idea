@@ -1,0 +1,806 @@
+{
+  "version": 1,
+  "id": "site_bench_parabank",
+  "name": "ParaBank",
+  "origin": "https://parabank.parasoft.com",
+  "allowedOrigins": [
+    "https://parabank.parasoft.com"
+  ],
+  "appearance": {
+    "accent": "#1E6EF4",
+    "position": "bottom-right",
+    "launcherLabel": "Ask"
+  },
+  "notes": "",
+  "docs": [],
+  "pages": [
+    {
+      "path": "/parabank/about.htm",
+      "title": "ParaBank | About Us",
+      "headings": [
+        "Account Services",
+        "ParaSoft Demo Website"
+      ],
+      "links": [
+        {
+          "label": "Services",
+          "to": "/parabank/services.htm"
+        },
+        {
+          "label": "Admin Page",
+          "to": "/parabank/admin.htm"
+        },
+        {
+          "label": "home",
+          "to": "/parabank/index.htm"
+        },
+        {
+          "label": "contact",
+          "to": "/parabank/contact.htm"
+        },
+        {
+          "label": "Open New Account",
+          "to": "/parabank/openaccount.htm"
+        },
+        {
+          "label": "Accounts Overview",
+          "to": "/parabank/overview.htm"
+        },
+        {
+          "label": "Transfer Funds",
+          "to": "/parabank/transfer.htm"
+        },
+        {
+          "label": "Bill Pay",
+          "to": "/parabank/billpay.htm"
+        },
+        {
+          "label": "Find Transactions",
+          "to": "/parabank/findtrans.htm"
+        },
+        {
+          "label": "Update Contact Info",
+          "to": "/parabank/updateprofile.htm"
+        }
+      ],
+      "buttons": [
+        "About Us",
+        "about"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/parabank/activity.htm",
+      "title": "ParaBank | Account Activity",
+      "headings": [
+        "Account Services",
+        "Account Details",
+        "Account Activity"
+      ],
+      "links": [
+        {
+          "label": "About Us",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "Services",
+          "to": "/parabank/services.htm"
+        },
+        {
+          "label": "Admin Page",
+          "to": "/parabank/admin.htm"
+        },
+        {
+          "label": "home",
+          "to": "/parabank/index.htm"
+        },
+        {
+          "label": "about",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "contact",
+          "to": "/parabank/contact.htm"
+        },
+        {
+          "label": "Open New Account",
+          "to": "/parabank/openaccount.htm"
+        },
+        {
+          "label": "Accounts Overview",
+          "to": "/parabank/overview.htm"
+        },
+        {
+          "label": "Transfer Funds",
+          "to": "/parabank/transfer.htm"
+        },
+        {
+          "label": "Bill Pay",
+          "to": "/parabank/billpay.htm"
+        }
+      ],
+      "buttons": [],
+      "fields": []
+    },
+    {
+      "path": "/parabank/billpay.htm",
+      "title": "ParaBank | Bill Pay",
+      "headings": [
+        "Account Services",
+        "Bill Payment Service"
+      ],
+      "links": [
+        {
+          "label": "About Us",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "Services",
+          "to": "/parabank/services.htm"
+        },
+        {
+          "label": "Admin Page",
+          "to": "/parabank/admin.htm"
+        },
+        {
+          "label": "home",
+          "to": "/parabank/index.htm"
+        },
+        {
+          "label": "about",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "contact",
+          "to": "/parabank/contact.htm"
+        },
+        {
+          "label": "Open New Account",
+          "to": "/parabank/openaccount.htm"
+        },
+        {
+          "label": "Accounts Overview",
+          "to": "/parabank/overview.htm"
+        },
+        {
+          "label": "Transfer Funds",
+          "to": "/parabank/transfer.htm"
+        },
+        {
+          "label": "Find Transactions",
+          "to": "/parabank/findtrans.htm"
+        }
+      ],
+      "buttons": [
+        "Bill Pay"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/parabank/contact.htm",
+      "title": "ParaBank | Customer Care",
+      "headings": [
+        "Account Services",
+        "Customer Care"
+      ],
+      "links": [
+        {
+          "label": "About Us",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "Services",
+          "to": "/parabank/services.htm"
+        },
+        {
+          "label": "Admin Page",
+          "to": "/parabank/admin.htm"
+        },
+        {
+          "label": "home",
+          "to": "/parabank/index.htm"
+        },
+        {
+          "label": "about",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "Open New Account",
+          "to": "/parabank/openaccount.htm"
+        },
+        {
+          "label": "Accounts Overview",
+          "to": "/parabank/overview.htm"
+        },
+        {
+          "label": "Transfer Funds",
+          "to": "/parabank/transfer.htm"
+        },
+        {
+          "label": "Bill Pay",
+          "to": "/parabank/billpay.htm"
+        },
+        {
+          "label": "Find Transactions",
+          "to": "/parabank/findtrans.htm"
+        }
+      ],
+      "buttons": [
+        "contact",
+        "Contact Us"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/parabank/findtrans.htm",
+      "title": "ParaBank | Find Transactions",
+      "headings": [
+        "Account Services",
+        "Find Transactions"
+      ],
+      "links": [
+        {
+          "label": "About Us",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "Services",
+          "to": "/parabank/services.htm"
+        },
+        {
+          "label": "Admin Page",
+          "to": "/parabank/admin.htm"
+        },
+        {
+          "label": "home",
+          "to": "/parabank/index.htm"
+        },
+        {
+          "label": "about",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "contact",
+          "to": "/parabank/contact.htm"
+        },
+        {
+          "label": "Open New Account",
+          "to": "/parabank/openaccount.htm"
+        },
+        {
+          "label": "Accounts Overview",
+          "to": "/parabank/overview.htm"
+        },
+        {
+          "label": "Transfer Funds",
+          "to": "/parabank/transfer.htm"
+        },
+        {
+          "label": "Bill Pay",
+          "to": "/parabank/billpay.htm"
+        }
+      ],
+      "buttons": [
+        "Find Transactions"
+      ],
+      "fields": [
+        "Select an account",
+        "Find by Transaction ID",
+        "Find by Date",
+        "Between",
+        "Find by Amount"
+      ]
+    },
+    {
+      "path": "/parabank/index.htm",
+      "title": "ParaBank | Welcome | Online Banking",
+      "headings": [
+        "Account Services",
+        "Latest News"
+      ],
+      "links": [
+        {
+          "label": "About Us",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "Services",
+          "to": "/parabank/services.htm"
+        },
+        {
+          "label": "Admin Page",
+          "to": "/parabank/admin.htm"
+        },
+        {
+          "label": "about",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "contact",
+          "to": "/parabank/contact.htm"
+        },
+        {
+          "label": "Open New Account",
+          "to": "/parabank/openaccount.htm"
+        },
+        {
+          "label": "Accounts Overview",
+          "to": "/parabank/overview.htm"
+        },
+        {
+          "label": "Transfer Funds",
+          "to": "/parabank/transfer.htm"
+        },
+        {
+          "label": "Bill Pay",
+          "to": "/parabank/billpay.htm"
+        },
+        {
+          "label": "Find Transactions",
+          "to": "/parabank/findtrans.htm"
+        }
+      ],
+      "buttons": [
+        "home",
+        "Home"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/parabank/news.htm",
+      "title": "ParaBank | News",
+      "headings": [
+        "Account Services",
+        "ParaBank News",
+        "11/15/2026",
+        "10/16/2026",
+        "10/09/2026",
+        "01/01/2026"
+      ],
+      "links": [
+        {
+          "label": "About Us",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "Services",
+          "to": "/parabank/services.htm"
+        },
+        {
+          "label": "Admin Page",
+          "to": "/parabank/admin.htm"
+        },
+        {
+          "label": "home",
+          "to": "/parabank/index.htm"
+        },
+        {
+          "label": "about",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "contact",
+          "to": "/parabank/contact.htm"
+        },
+        {
+          "label": "Open New Account",
+          "to": "/parabank/openaccount.htm"
+        },
+        {
+          "label": "Accounts Overview",
+          "to": "/parabank/overview.htm"
+        },
+        {
+          "label": "Transfer Funds",
+          "to": "/parabank/transfer.htm"
+        },
+        {
+          "label": "Bill Pay",
+          "to": "/parabank/billpay.htm"
+        }
+      ],
+      "buttons": [],
+      "fields": []
+    },
+    {
+      "path": "/parabank/openaccount.htm",
+      "title": "ParaBank | Open Account",
+      "headings": [
+        "Account Services",
+        "Open New Account"
+      ],
+      "links": [
+        {
+          "label": "About Us",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "Services",
+          "to": "/parabank/services.htm"
+        },
+        {
+          "label": "Admin Page",
+          "to": "/parabank/admin.htm"
+        },
+        {
+          "label": "home",
+          "to": "/parabank/index.htm"
+        },
+        {
+          "label": "about",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "contact",
+          "to": "/parabank/contact.htm"
+        },
+        {
+          "label": "Accounts Overview",
+          "to": "/parabank/overview.htm"
+        },
+        {
+          "label": "Transfer Funds",
+          "to": "/parabank/transfer.htm"
+        },
+        {
+          "label": "Bill Pay",
+          "to": "/parabank/billpay.htm"
+        },
+        {
+          "label": "Find Transactions",
+          "to": "/parabank/findtrans.htm"
+        }
+      ],
+      "buttons": [
+        "Open New Account"
+      ],
+      "fields": [
+        "What type of Account would you like to open?"
+      ]
+    },
+    {
+      "path": "/parabank/overview.htm",
+      "title": "ParaBank | Accounts Overview",
+      "headings": [
+        "Account Services",
+        "Accounts Overview"
+      ],
+      "links": [
+        {
+          "label": "About Us",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "Services",
+          "to": "/parabank/services.htm"
+        },
+        {
+          "label": "Admin Page",
+          "to": "/parabank/admin.htm"
+        },
+        {
+          "label": "home",
+          "to": "/parabank/index.htm"
+        },
+        {
+          "label": "about",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "contact",
+          "to": "/parabank/contact.htm"
+        },
+        {
+          "label": "Open New Account",
+          "to": "/parabank/openaccount.htm"
+        },
+        {
+          "label": "Transfer Funds",
+          "to": "/parabank/transfer.htm"
+        },
+        {
+          "label": "Bill Pay",
+          "to": "/parabank/billpay.htm"
+        },
+        {
+          "label": "Find Transactions",
+          "to": "/parabank/findtrans.htm"
+        }
+      ],
+      "buttons": [
+        "Accounts Overview"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/parabank/requestloan.htm",
+      "title": "ParaBank | Loan Request",
+      "headings": [
+        "Account Services",
+        "Apply for a Loan"
+      ],
+      "links": [
+        {
+          "label": "About Us",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "Services",
+          "to": "/parabank/services.htm"
+        },
+        {
+          "label": "Admin Page",
+          "to": "/parabank/admin.htm"
+        },
+        {
+          "label": "home",
+          "to": "/parabank/index.htm"
+        },
+        {
+          "label": "about",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "contact",
+          "to": "/parabank/contact.htm"
+        },
+        {
+          "label": "Open New Account",
+          "to": "/parabank/openaccount.htm"
+        },
+        {
+          "label": "Accounts Overview",
+          "to": "/parabank/overview.htm"
+        },
+        {
+          "label": "Transfer Funds",
+          "to": "/parabank/transfer.htm"
+        },
+        {
+          "label": "Bill Pay",
+          "to": "/parabank/billpay.htm"
+        }
+      ],
+      "buttons": [
+        "Request Loan"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/parabank/services.htm",
+      "title": "ParaBank | Services",
+      "headings": [
+        "Account Services"
+      ],
+      "links": [
+        {
+          "label": "About Us",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "Admin Page",
+          "to": "/parabank/admin.htm"
+        },
+        {
+          "label": "home",
+          "to": "/parabank/index.htm"
+        },
+        {
+          "label": "about",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "contact",
+          "to": "/parabank/contact.htm"
+        },
+        {
+          "label": "Open New Account",
+          "to": "/parabank/openaccount.htm"
+        },
+        {
+          "label": "Accounts Overview",
+          "to": "/parabank/overview.htm"
+        },
+        {
+          "label": "Transfer Funds",
+          "to": "/parabank/transfer.htm"
+        },
+        {
+          "label": "Bill Pay",
+          "to": "/parabank/billpay.htm"
+        },
+        {
+          "label": "Find Transactions",
+          "to": "/parabank/findtrans.htm"
+        }
+      ],
+      "buttons": [
+        "Services"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/parabank/sitemap.htm",
+      "title": "ParaBank | Site Map",
+      "headings": [
+        "Account Services"
+      ],
+      "links": [
+        {
+          "label": "About Us",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "Services",
+          "to": "/parabank/services.htm"
+        },
+        {
+          "label": "Admin Page",
+          "to": "/parabank/admin.htm"
+        },
+        {
+          "label": "home",
+          "to": "/parabank/index.htm"
+        },
+        {
+          "label": "about",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "contact",
+          "to": "/parabank/contact.htm"
+        },
+        {
+          "label": "Open New Account",
+          "to": "/parabank/openaccount.htm"
+        },
+        {
+          "label": "Accounts Overview",
+          "to": "/parabank/overview.htm"
+        },
+        {
+          "label": "Transfer Funds",
+          "to": "/parabank/transfer.htm"
+        },
+        {
+          "label": "Bill Pay",
+          "to": "/parabank/billpay.htm"
+        }
+      ],
+      "buttons": [
+        "Site Map"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/parabank/transfer.htm",
+      "title": "ParaBank | Transfer Funds",
+      "headings": [
+        "Account Services",
+        "Transfer Funds"
+      ],
+      "links": [
+        {
+          "label": "About Us",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "Services",
+          "to": "/parabank/services.htm"
+        },
+        {
+          "label": "Admin Page",
+          "to": "/parabank/admin.htm"
+        },
+        {
+          "label": "home",
+          "to": "/parabank/index.htm"
+        },
+        {
+          "label": "about",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "contact",
+          "to": "/parabank/contact.htm"
+        },
+        {
+          "label": "Open New Account",
+          "to": "/parabank/openaccount.htm"
+        },
+        {
+          "label": "Accounts Overview",
+          "to": "/parabank/overview.htm"
+        },
+        {
+          "label": "Bill Pay",
+          "to": "/parabank/billpay.htm"
+        },
+        {
+          "label": "Find Transactions",
+          "to": "/parabank/findtrans.htm"
+        }
+      ],
+      "buttons": [
+        "Transfer Funds",
+        "Transfer"
+      ],
+      "fields": [
+        "Amount",
+        "From account #",
+        "[number]"
+      ]
+    },
+    {
+      "path": "/parabank/updateprofile.htm",
+      "title": "ParaBank | Update Profile",
+      "headings": [
+        "Account Services",
+        "Update Profile"
+      ],
+      "links": [
+        {
+          "label": "About Us",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "Services",
+          "to": "/parabank/services.htm"
+        },
+        {
+          "label": "Admin Page",
+          "to": "/parabank/admin.htm"
+        },
+        {
+          "label": "home",
+          "to": "/parabank/index.htm"
+        },
+        {
+          "label": "about",
+          "to": "/parabank/about.htm"
+        },
+        {
+          "label": "contact",
+          "to": "/parabank/contact.htm"
+        },
+        {
+          "label": "Open New Account",
+          "to": "/parabank/openaccount.htm"
+        },
+        {
+          "label": "Accounts Overview",
+          "to": "/parabank/overview.htm"
+        },
+        {
+          "label": "Transfer Funds",
+          "to": "/parabank/transfer.htm"
+        },
+        {
+          "label": "Bill Pay",
+          "to": "/parabank/billpay.htm"
+        }
+      ],
+      "buttons": [
+        "Update Contact Info"
+      ],
+      "fields": []
+    }
+  ],
+  "source": {
+    "url": "https://parabank.parasoft.com/parabank/overview.htm",
+    "maxPages": 30,
+    "docs": [],
+    "maxDepth": 3,
+    "skip": [
+      "admin",
+      "/services/",
+      "api-docs"
+    ],
+    "within": [
+      "/parabank/"
+    ],
+    "reader": "browser"
+  },
+  "createdAt": "2026-11-15T06:40:57.111Z",
+  "updatedAt": "2026-11-15T22:53:16.723Z"
+}

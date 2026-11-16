@@ -62,6 +62,15 @@ jobs:
 
       - run: npm test
 
+      # How the widget reads a page, and that nothing a visitor typed leaves it, is
+      # tested in a real browser. Playwright is not one of the project's packages, so
+      # it is added for this step only.
+      - name: Test the widget in a browser
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+          npm run test:browser
+
       # Builds the widget, packs it into the Worker and publishes it.
       - name: Build and publish
         run: npm run deploy
