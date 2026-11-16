@@ -184,6 +184,10 @@ test("what the visitor reads is tidied, whatever the model wrote", async () => {
   assert.equal(tidySay("Type your last name.\n\n"), "Type your last name.");
   assert.equal(tidySay("Click Component to switch the kind.</br>"), "Click Component to switch the kind.");
   assert.equal(tidySay("  Click Save.\n}\n"), "Click Save.");
+  // A digit stuck to the last full stop, as the model wrote once on staging. A number of its own stays.
+  assert.equal(tidySay("Type your teammate's email address in the Email address field.2"), "Type your teammate's email address in the Email address field.");
+  assert.equal(tidySay("See section 4.2"), "See section 4.2");
+  assert.equal(tidySay("It needs version v1.2"), "It needs version v1.2");
   // A sentence that is already clean is left alone, brackets inside it included.
   assert.equal(tidySay('Click the link that reads "[email]".'), 'Click the link that reads "[email]".');
 });

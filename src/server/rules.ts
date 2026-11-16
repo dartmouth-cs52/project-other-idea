@@ -671,6 +671,9 @@ function withoutLeftovers(text: string): string {
       const word = /\S+$/.exec(text)?.[0] ?? "";
       const stuck = /^.*?\p{L}[.!?](?=\D)/su.exec(word)?.[0];
       if (stuck && word.length - stuck.length > 1 && SCRAP.test(word.slice(stuck.length))) text = text.slice(0, text.length - word.length + stuck.length);
+      // A digit or two stuck to the last full stop, like a footnote mark: "in the Email address field.2" (seen on staging,
+      // 16 November 2026). A number of its own, "section 4.2", has no letter before its stop and is left alone.
+      else if (/\p{L}[.!?]\d{1,2}$/u.test(word)) text = text.replace(/\d{1,2}$/, "");
     }
     if (text === before) return text;
   }

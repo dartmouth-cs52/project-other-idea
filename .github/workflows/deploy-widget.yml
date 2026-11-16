@@ -75,7 +75,7 @@ jobs:
         run: npm run test:browser
 
       # "Do it with me" must never press what saves, sends, pays or deletes, nor type
-      # what it must not: the gate's tests and the red-team pages. About ten minutes.
+      # what it must not: the gate's tests and the red-team pages. About two minutes.
       - name: Test that acting stays safe
         run: npx tsx --test --test-concurrency=1 test/widget/gate.test.ts test/widget/acting-redteam.test.ts
 
