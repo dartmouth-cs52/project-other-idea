@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { developerEmail, INSTALL_FROM } from "../web/worker/developer-email.ts";
+import { emailText, INSTALL_FROM, UnsafeText } from "../web/worker/developer-email.ts";
 import {
   EMAILS_PER_ADDRESS,
   EMAILS_PER_COMPANY,
@@ -146,24 +146,14 @@ describe("before anything is counted", () => {
   });
 });
 
-test("the email says who asked, links the install page, and carries the agent prompt and the tag, all escaped", () => {
-  const email = developerEmail({
-    to: "dev@example.com",
-    sender: { email: "dana@example.com", name: 'Dana <script>"x"</script>\nBcc: evil@example.com' },
-    siteOrigin: "https://app.example.com",
-    siteId: SITE,
-    installOrigin: "https://joinhaptic.com",
-    scriptUrl: "https://widget.joinhaptic.com/widget.js",
-  });
-  assert.equal(email.from, "Haptic <install@joinhaptic.com>");
-  assert.equal(email.replyTo, "dana@example.com");
-  assert.ok(!/[\n\r]/.test(email.subject), "a subject is one line");
-  assert.ok(!email.html.includes("<script>"), "the name is escaped");
-  assert.ok(email.html.includes(`href="https://joinhaptic.com/install/?site=${SITE}"`));
-  assert.ok(email.html.includes(`Add Haptic to this app. Fetch https://joinhaptic.com/install/${SITE}.md and follow it.`));
-  assert.ok(email.html.includes("&#60;script src=&#34;https://widget.joinhaptic.com/widget.js&#34; data-site=&#34;site_a1b2c3d4e5f6&#34; async&#62;&#60;/script&#62;"));
-  assert.ok(email.text.includes(`https://joinhaptic.com/install/?site=${SITE}`));
-  assert.ok(email.text.includes(`<script src="https://widget.joinhaptic.com/widget.js" data-site="${SITE}" async></script>`));
+test("nothing that can carry a web address, an @ or an invisible character reaches an email from the site's own fields", () => {
+  assert.equal(emailText("app.example.com"), "app.example.com");
+  assert.equal(emailText("app\u202eexample.com\u200b"), "appexample.com", "right-to-left overrides and zero-width characters are taken out");
+  assert.equal(emailText("dana@example.com", { at: true }), "dana@example.com");
+  assert.throws(() => emailText("https://evil.example/h"), UnsafeText);
+  assert.throws(() => emailText("evil@example.com"), UnsafeText, "an @ where none belongs");
+  assert.throws(() => emailText("a@b.com@c.com", { at: true }), UnsafeText);
+  assert.throws(() => emailText("dana@example.com", { at: false }), UnsafeText);
 });
 
 test("where the setup is: one step at a time, Finish later, done, and only for the company's own site", async () => {
@@ -214,6 +204,51 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     assert.match(row!.recipient, /^[0-9a-f]{32}$/);
     assert.ok(!JSON.stringify(await rows()).includes("example.com"), "the address itself is not kept");
     assert.deepEqual((await context()).pages, [{ path: "/" }], "the site is untouched");
+  });
+
+  /** The review's six hostile cases: whatever name the sender gave themselves, and whatever site they added. */
+  const hostile: [string, { name: string; email?: string; origin?: string }][] = [
+    ["plain", { name: "Dana Reyes" }],
+    ["html", { name: `"><img src=x onerror=alert(1)><a href='https://evil.example'>click</a>` }],
+    ["header", { name: "Dana\r\nBcc: evil@example.com\r\n\r\n<b>body</b> X\u0085Y\u202egnp.exe" }],
+    ["phish", { name: "Haptic Security: your account is locked. Verify now at https://evil.example/h", email: "attacker@evil.example", origin: "https://accounts.google.com" }],
+    ["no name", { name: "   " }],
+    ["long host", { name: "D", origin: `https://${"a".repeat(60)}.${"b".repeat(60)}.${"c".repeat(60)}.example.com:8443` }],
+  ];
+  for (const [name, input] of hostile) {
+    test(`the email carries no text the sender chose, only their sign-in address and the site's host: ${name}`, async () => {
+      reset();
+      const origin = input.origin ?? "https://app.example.com";
+      exec(DB, `update sites set origin = '${origin}' where id = '${SITE}'`);
+      const sender = { ...USER, name: input.name, email: input.email ?? USER.email };
+      const { sent, fetcher } = resend();
+      assert.equal((await call(sql(), { to: "dev@example.com", key: press() }, { fetcher, user: sender }))?.status, 200);
+      const { body } = sent[0]!;
+      const host = new URL(origin).host;
+      assert.equal(body.subject, `${sender.email} asked you to add Haptic to ${host}`);
+      assert.equal(body.reply_to, sender.email);
+      for (const part of [body.subject, body.html, body.text]) {
+        if (input.name.trim().length > 1) assert.ok(!part.includes(input.name.trim()), "the name never appears");
+        assert.ok(!/evil\.example\/h|onerror|<b>body|Bcc:/i.test(part), "nothing from the name gets in");
+        assert.ok(!/[\u0085\u200b-\u200f\u202a-\u202e\u2066-\u2069]/.test(part), "no invisible or direction-changing characters");
+      }
+      assert.ok(!/[\u0000-\u001f]/.test(body.subject), "the subject is one line");
+      assert.ok(body.text.includes(`If you don't know ${sender.email}, ignore this email.`));
+      assert.ok(body.html.includes(`If you don&#39;t know ${sender.email}, ignore this email.`));
+      const hrefs = [...body.html.matchAll(/href="([^"]*)"/g)].map((match) => match[1]);
+      assert.deepEqual(hrefs, [`https://joinhaptic.com/install/?site=${SITE}`, "https://joinhaptic.com"], "the only links are Haptic's");
+    });
+  }
+
+  test("the email links the install page and carries the agent prompt and the tag, escaped", async () => {
+    reset();
+    const { sent, fetcher } = resend();
+    await call(sql(), { to: "dev@example.com", key: press() }, { fetcher });
+    const { html, text } = sent[0]!.body;
+    assert.ok(html.includes(`Add Haptic to this app. Fetch https://joinhaptic.com/install/${SITE}.md and follow it.`));
+    assert.ok(html.includes("&#60;script src=&#34;https://widget.joinhaptic.com/widget.js&#34; data-site=&#34;site_a1b2c3d4e5f6&#34; async&#62;&#60;/script&#62;"));
+    assert.ok(text.includes(`https://joinhaptic.com/install/?site=${SITE}`));
+    assert.ok(text.includes(`<script src="https://widget.joinhaptic.com/widget.js" data-site="${SITE}" async></script>`));
   });
 
   test("a retry of the same press sends the same request to Resend, which sends once, and counts once", async () => {

@@ -14,7 +14,7 @@
 import { checkEmail, isSetupStep, mailboxOf, NEEDS_SIGN_IN, pageControls, riskyControls, type SetupState } from "../lib/setup";
 import type { PageNode, SiteContext } from "../../src/shared/types";
 import type { Organization, Sql } from "./db";
-import { developerEmail } from "./developer-email";
+import { developerEmail, UnsafeText } from "./developer-email";
 import { headline } from "./insights";
 import { sendEmail, type SendEnv } from "./sign-in-email";
 
@@ -220,6 +220,17 @@ async function emailDeveloper(call: SetupRequest, id: string, input: Record<stri
   if (!site) return refuse(404, "No such site.");
   if (!env.RESEND_API_KEY) return refuse(503, NOT_SET_UP);
 
+  // Made before anything is counted. It names the sender by their sign-in address, never a name they typed.
+  const widget = (env.WIDGET_URL ?? "https://widget.joinhaptic.com").replace(/\/$/, "");
+  let email: ReturnType<typeof developerEmail>;
+  try {
+    email = developerEmail({ to: checked.email, sender: { email: user.email }, siteOrigin: site.origin, siteId: site.id, installOrigin: call.url.origin, scriptUrl: `${widget}/widget.js` });
+  } catch (error) {
+    if (!(error instanceof UnsafeText)) throw error;
+    console.error("Refused to send an install email:", error.message);
+    return refuse(400, `This email can't be sent from here. ${COPY_INSTEAD}`);
+  }
+
   const mailbox = mailboxOf(checked.email);
   const recipient = await hashOf(`mailbox ${mailbox}`);
   const key = await hashOf(`press ${input.key} ${site.id} ${mailbox}`);
@@ -251,15 +262,6 @@ async function emailDeveloper(call: SetupRequest, id: string, input: Record<stri
     return refuse(503, NOT_SET_UP);
   }
 
-  const widget = (env.WIDGET_URL ?? "https://widget.joinhaptic.com").replace(/\/$/, "");
-  const email = developerEmail({
-    to: checked.email,
-    sender: { email: user.email, name: user.name },
-    siteOrigin: site.origin,
-    siteId: site.id,
-    installOrigin: call.url.origin,
-    scriptUrl: `${widget}/widget.js`,
-  });
   const sent = await sendEmail(env, email, `developer-email/${site.id}/${key}`, call.fetcher ?? ((input, init) => fetch(input, init)));
   // 409: Resend has a request with this key already, which only an email already handed over can have made.
   // Bound to the address as the key is, that was this email, so it went: it stays counted and is said to have gone.
