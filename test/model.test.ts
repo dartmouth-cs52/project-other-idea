@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import Anthropic from "@anthropic-ai/sdk";
 import { namedButNotDone, namedButNotPointed, pressLeftToVisitor } from "../src/server/check.ts";
-import { configure, measureTurn } from "../src/server/model.ts";
+import { ceilingFor, configure, measureTurn, SETTINGS } from "../src/server/model.ts";
 import { checkAction } from "../src/shared/act-rules.ts";
 import { DEFAULT_APPEARANCE, type SiteContext, type Snapshot, type TurnReply, type TurnRequest } from "../src/shared/types.ts";
 
@@ -160,6 +160,35 @@ test("when asking again fails, the first reply still reaches the visitor", async
   use([{ reply: namesFaq }, { fails: refused }], "ask");
   const measure = await measureTurn(site, request);
   assert.equal(measure.reply.say, namesFaq.say);
+});
+
+// What a step costs when the model is asked twice: both calls are paid for, and the budget sets aside room for both.
+
+test("a step that asks the model again costs both calls, and a second call that fails still counts", async () => {
+  use([{ reply: pointsAtFaq }], "ask");
+  const once = await measureTurn(site, request);
+  assert.ok(once.usd > 0, "a call to a real model costs something");
+  use([{ reply: namesFaq }, { reply: pointsAtFaq }], "ask");
+  const twice = await measureTurn(site, request);
+  assert.equal(twice.recheck?.asked, true);
+  assert.ok(Math.abs(twice.usd - 2 * once.usd) < 1e-12, `two calls cost ${twice.usd}, one ${once.usd}`);
+  const refused = new Anthropic.BadRequestError(400, { type: "error", error: { type: "invalid_request_error", message: "bad" } }, undefined, new Headers());
+  use([{ reply: namesFaq }, { fails: refused }], "ask");
+  assert.equal((await measureTurn(site, request)).usd, once.usd);
+});
+
+test("the budget sets aside two calls for a step that may ask again, and one where it cannot", () => {
+  use([], "ask");
+  const first = ceilingFor(site, request);
+  const later = ceilingFor(site, { ...request, step: 2, event: 'The user clicked link "FAQ".' });
+  use([], "off");
+  const unchecked = ceilingFor(site, request);
+  // The first question may be asked again; a later one in a guide is not.
+  assert.ok(first.cold > unchecked.cold && first.warm > unchecked.warm);
+  assert.ok(later.warm < first.warm);
+  // A read of the cached prompt costs less than writing it, so the second call adds less than the first.
+  assert.ok(first.cold - unchecked.cold < unchecked.cold);
+  assert.equal(SETTINGS.recheck, "off");
 });
 
 // Act mode: "Do it with me". A reply of "continue" that points at nothing leaves the visitor waiting on nothing, at any step.

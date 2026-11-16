@@ -368,6 +368,16 @@ test("the server's check takes out a do the reply should not have, and says why"
   // A reply that is fine passes as it is: the check never adds anything.
   const fine = await ask({ target: "e2", do: "click", enter: null, commits: false, status: "continue", say: "Opening Team." }, "open the team page");
   assert.deepEqual(fine, { target: "e2", do: "click", enter: null, commits: false, status: "continue", say: "Opening Team.", mode: "act" });
+  // A reply that is stuck does nothing, whatever it asked to do.
+  const stuck = await ask({ target: "e3", do: "type", enter: "Ads", commits: false, status: "stuck", say: "I can't find the limit." }, "name the card Ads");
+  assert.deepEqual([stuck.do, stuck.enter, stuck.status], [null, null, "stuck"]);
+});
+
+test("a switched-off site says nothing about acting, and a site with acting on that is switched off is off", async () => {
+  const { app } = makeApp(false, { isOff: () => true }, [actingSite]);
+  const config = await (await app(new Request(`https://widget.test/v1/sites/${actingSite.id}`, { headers: { Origin: "https://app.test" } }), "1.1.1.1"))?.json();
+  assert.deepEqual(config, { name: actingSite.name, appearance: actingSite.appearance, off: true });
+  assert.deepEqual(await answer(app, stepBody({ version: 3, mode: "act" })), { target: null, status: "stuck", say: FIXED_SAY.off, paused: true });
 });
 
 test("the model cannot put the echo or a reason on a reply itself", async () => {

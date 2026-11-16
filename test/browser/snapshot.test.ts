@@ -739,3 +739,23 @@ test("a link in an app that keeps its place after '#/' keeps its route, and the 
     'link "Reviews" [nav]',
   ]);
 });
+
+// Rows a visitor clicks as a whole ---------------------------------------------
+
+test("a clickable row with nothing inside it to point at is listed by its words, and a header row is not", { skip }, async () => {
+  const snapshot = await read(`<style>.go{cursor:pointer}</style>
+    <h1>Orders</h1>
+    <div role="table">
+      <div role="row"><div role="columnheader">Order</div><div role="columnheader">State</div></div>
+      <div role="row" class="go"><div role="cell">Order A100</div><div role="cell">Shipped</div></div>
+    </div>
+    <x-list-item class="go">Custom element row</x-list-item>
+    <x-list-item class="go"><button>Open</button> Row with a button</x-list-item>
+    <x-list-item>No pointer, no row</x-list-item>`);
+  const listed = snapshot.elements.map((element) => `${element.role} ${element.label}`);
+  assert.ok(listed.includes("clickable Order A100 Shipped"), listed.join(" | "));
+  assert.ok(listed.includes("clickable Custom element row"), listed.join(" | "));
+  // A row with a control in it is that control; one with no pointer is no control; a header row is never one.
+  assert.ok(listed.includes("button Open"), listed.join(" | "));
+  assert.ok(!listed.some((line) => /Row with a button|No pointer|columnheader|Order State/.test(line)), listed.join(" | "));
+});
