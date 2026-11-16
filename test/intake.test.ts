@@ -17,6 +17,16 @@ test("paths collapse ids and drop the query string", () => {
   assert.equal(normalizePath("/settings/step-3"), "/settings/step-3");
 });
 
+test("a path parameter such as a session id is dropped, so one page has one address", () => {
+  // ParaBank adds the session to every link. A long one made the whole segment look like an id, a short one stayed.
+  assert.equal(normalizePath("/parabank/overview.htm;jsessionid=8E1F0C2B6A4D9E7F3B5C1A0D2E4F6B8C"), "/parabank/overview.htm");
+  assert.equal(normalizePath("/parabank/activity.htm;jsessionid=ABCDEFabcdefAB?id=12345"), "/parabank/activity.htm");
+  assert.equal(normalizePath("/shop;jsessionid=1A2B3C/cart"), "/shop/cart");
+  assert.equal(normalizePath("/catalog;color=red;size=10/items/8812"), "/catalog/items/:id");
+  // A semicolon that is not a parameter is part of the name.
+  assert.equal(normalizePath("/notes/a;b"), "/notes/a;b");
+});
+
 test("emails and long numbers are masked", () => {
   assert.equal(cleanText("Mail  sam@acme.com about order 4421987"), "Mail [email] about order [number]");
 });

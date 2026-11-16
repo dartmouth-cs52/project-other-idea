@@ -158,10 +158,15 @@ export interface TurnReply {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Collapse ids so every user's /orders/8812 counts as the same page, /orders/:id. */
+/**
+ * Collapse ids so every user's /orders/8812 counts as the same page, /orders/:id.
+ * Path parameters, the ";name=value" a server can add to a segment, are dropped:
+ * one that adds the session to every link (";jsessionid=…") would otherwise give
+ * one page a new address for every visitor.
+ */
 export function normalizePath(input: string): string {
   const withoutOrigin = input.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, "");
-  const pathOnly = withoutOrigin.split(/[?#]/)[0] ?? "";
+  const pathOnly = (withoutOrigin.split(/[?#]/)[0] ?? "").replace(/;[^/;=]+=[^/;]*/g, "");
   const segments = pathOnly
     .split("/")
     .filter(Boolean)
