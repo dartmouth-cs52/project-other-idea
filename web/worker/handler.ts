@@ -7,6 +7,7 @@ import { proxyAuth } from "./auth";
 import { database } from "./db";
 import { sendHealthAlerts } from "./health";
 import { HOOK_PATH, neonHook, type HookEnv } from "./neon-hook";
+import { forgetOldEmails } from "./setup-api";
 import { isPlaybookPath, playbook } from "./playbook";
 
 export interface Assets {
@@ -38,6 +39,8 @@ export async function daily(env: Env): Promise<void> {
   } catch (error) {
     console.error("Guide health check failed:", error);
   }
+  // Each install email sent deletes the records older than a day. This catches a site that sends no more.
+  await forgetOldEmails(database(env.DATABASE_URL)).catch((error: Error) => console.error("Could not delete old install email records:", error.message));
 }
 
 export async function handle(request: Request, env: Env, assets: Assets): Promise<Response> {

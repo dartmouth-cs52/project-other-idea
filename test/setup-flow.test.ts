@@ -10,6 +10,7 @@ import {
   duration,
   durationChange,
   installStatus,
+  mailboxOf,
   neverTouchSuggestions,
   nextStep,
   pageControls,
@@ -73,6 +74,12 @@ test("an address is checked the way the Worker checks it", () => {
   assert.match((checkAddress("acme") as { message: string }).message, /missing its domain/);
   assert.match((checkAddress("app example.com") as { message: string }).message, /no spaces/);
   assert.match((checkAddress("ftp://example.com") as { message: string }).message, /https/);
+});
+
+test("one mailbox is written one way however its address is: case, a +tag anywhere, dots on Gmail", () => {
+  for (const spelling of ["victim@gmail.com", "VICTIM@Gmail.com", "victim+1@gmail.com", "v.i.c.t.i.m@gmail.com", "vic.tim+x@googlemail.com"]) assert.equal(mailboxOf(spelling), "victim@gmail.com", spelling);
+  assert.equal(mailboxOf("Jane+news@Example.org"), "jane@example.org");
+  assert.equal(mailboxOf("ja.ne@example.org"), "ja.ne@example.org", "dots count everywhere but Gmail");
 });
 
 test("a developer's email is cleaned up, or the person is told what to type", () => {

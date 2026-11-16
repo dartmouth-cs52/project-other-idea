@@ -7,11 +7,11 @@
 //   POST /api/app/sites/:id/developer-email  email the install steps to the company's developer
 //   GET  /api/app/sites/:id/metrics?days=    finished guides, finish rate, couldn't guide, time to finish, by day
 //
-// What the setup and the emails sent need to remember lives in the site's
-// context, as `setup` and `developerEmails`, so no table has to be added first.
-// The widget server reads neither.
+// Where the setup is lives in the site's context, as `setup`, which the widget
+// server doesn't read. The emails sent are counted in their own table,
+// developer_emails (db/migrations/0013), so deleting a site doesn't reset them.
 
-import { checkEmail, isSetupStep, NEEDS_SIGN_IN, pageControls, riskyControls, type SetupState } from "../lib/setup";
+import { checkEmail, isSetupStep, mailboxOf, NEEDS_SIGN_IN, pageControls, riskyControls, type SetupState } from "../lib/setup";
 import type { PageNode, SiteContext } from "../../src/shared/types";
 import type { Organization, Sql } from "./db";
 import { developerEmail } from "./developer-email";
@@ -36,10 +36,14 @@ interface ReadingSoFar {
   failed: { url: string; reason: string }[];
 }
 
-/** At most this many install emails per site in any 24 hours. */
-export const EMAILS_PER_SITE = 10;
-/** And at most this many to one address. */
+/** The most install emails in any 24 hours: to one mailbox, however its address is written, */
 export const EMAILS_PER_ADDRESS = 3;
+/** from one site, */
+export const EMAILS_PER_SITE = 10;
+/** from one company, across its sites, */
+export const EMAILS_PER_COMPANY = 20;
+/** and from one person. */
+export const EMAILS_PER_PERSON = 10;
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -62,14 +66,7 @@ export interface SetupRequest {
 
 export type Answer = { status: number; body: unknown };
 
-/** One email sent from a site, as kept in its context. `to` is a hash: the address itself is not kept. */
-interface SentEmail {
-  at: string;
-  to: string;
-  key: string;
-}
-
-type SetupContext = SiteContext & { setup?: SetupState; developerEmails?: SentEmail[] };
+type SetupContext = SiteContext & { setup?: SetupState };
 
 interface SiteRow {
   id: string;
@@ -163,23 +160,56 @@ async function hashOf(text: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("").slice(0, 32);
 }
 
-/** The emails a site sent in the last 24 hours. */
-function recentEmails(context: SetupContext, now: number): SentEmail[] {
-  const sent = Array.isArray(context.developerEmails) ? context.developerEmails : [];
-  return sent.filter((item) => typeof item?.at === "string" && now - Date.parse(item.at) < 86_400_000);
+const COPY_INSTEAD = "Copy the link and send it yourself.";
+const NOT_SET_UP = `Email isn't set up on this server yet. ${COPY_INSTEAD}`;
+
+/** True for Postgres saying a table or column is missing: a Worker deployed before db/migrations/0013 was applied. */
+function notMigrated(error: unknown): boolean {
+  const code = (error as { code?: string }).code;
+  return code === "42P01" || code === "42703";
 }
+
+/** Deletes the records of emails sent more than a day ago. Each send does it, and so does the Worker's daily schedule. */
+export async function forgetOldEmails(sql: Sql): Promise<void> {
+  await sql.query(`delete from developer_emails where sent_at < now() - interval '1 day'`);
+}
+
+interface Counts {
+  mailbox: number;
+  site: number;
+  company: number;
+  person: number;
+}
+
+/** The limit an email would go past, if any, as the sentence to show. The mailbox's is said under the address field. */
+function overLimit(counts: Counts): { error: string; field?: string } | undefined {
+  if (counts.mailbox >= EMAILS_PER_ADDRESS) return { error: `That address can't be sent more install emails today. ${COPY_INSTEAD}`, field: "to" };
+  if (counts.site >= EMAILS_PER_SITE) return { error: `This site has sent ${EMAILS_PER_SITE} install emails today, which is the most for a day. ${COPY_INSTEAD}` };
+  if (counts.company >= EMAILS_PER_COMPANY) return { error: `Your company has sent ${EMAILS_PER_COMPANY} install emails today, which is the most for a day. ${COPY_INSTEAD}` };
+  if (counts.person >= EMAILS_PER_PERSON) return { error: `You have sent ${EMAILS_PER_PERSON} install emails today, which is the most for a day. ${COPY_INSTEAD}` };
+  return undefined;
+}
+
+/** The day's counts for one email, worked out in the database. $1 mailbox, $2 site, $3 company, $4 person. */
+const COUNTS = `
+  count(*) filter (where e.recipient = $1)::int as mailbox,
+  count(*) filter (where e.site_id = $2)::int as site,
+  count(*) filter (where e.company_id = $3)::int as company,
+  count(*) filter (where e.sender = $4)::int as person
+  from developer_emails e
+  where e.sent_at > now() - interval '1 day' and (e.recipient = $1 or e.company_id = $3 or e.sender = $4)`;
 
 /**
  * Emails the install steps to a developer. Only someone signed in to the
- * company that owns the site gets here. Each site may send 10 a day, and 3 to
- * one address. The browser makes a key for each press of Send, so a retry of
- * the same press never sends twice: the key is kept with the email, and Resend
- * holds it for a day too.
+ * company that owns the site gets here. In any 24 hours one mailbox gets at
+ * most 3, a site sends 10, a company 20 and one person 10, counted in their
+ * own table so deleting a site doesn't reset them.
  *
- * The key is bound to the site and the address, hashed together, so a key sent
- * again with another address is a new email with its own key, held to every
- * limit. Only a true retry, the same press to the same address, is let past
- * them, and Resend answers that as it did the first time.
+ * The browser makes a key for each press of Send. It is hashed with the site
+ * and the mailbox, so a key sent again with another address is a new email,
+ * held to every limit, and only a true retry, the same press to the same
+ * address, is let past them. Resend holds the key for a day, so a retry is
+ * answered as the first try was, without a second email.
  */
 async function emailDeveloper(call: SetupRequest, id: string, input: Record<string, unknown>): Promise<Answer> {
   const { sql, org, user, env } = call;
@@ -188,33 +218,37 @@ async function emailDeveloper(call: SetupRequest, id: string, input: Record<stri
   if (typeof input.key !== "string" || !KEY.test(input.key)) return refuse(400, "Send a key for this email.");
   const site = await siteOf(sql, org, id);
   if (!site) return refuse(404, "No such site.");
-  if (!env.RESEND_API_KEY) return refuse(503, "Email isn't set up on this server yet. Copy the link and send it yourself.");
+  if (!env.RESEND_API_KEY) return refuse(503, NOT_SET_UP);
 
-  const to = await hashOf(`${site.id} ${checked.email}`);
-  const key = await hashOf(`press ${input.key} ${site.id} ${checked.email}`);
-  const recent = recentEmails(site.context, Date.now());
-  const again = recent.some((item) => item.key === key);
-  if (!again) {
-    if (recent.length >= EMAILS_PER_SITE) return refuse(429, `This site has sent ${EMAILS_PER_SITE} install emails today, which is the most for a day. Copy the link and send it yourself.`);
-    if (recent.filter((item) => item.to === to).length >= EMAILS_PER_ADDRESS) {
-      return refuse(429, `${checked.email} has had ${EMAILS_PER_ADDRESS} emails about this site today. Copy the link and send it yourself.`, "to");
+  const mailbox = mailboxOf(checked.email);
+  const recipient = await hashOf(`mailbox ${mailbox}`);
+  const key = await hashOf(`press ${input.key} ${site.id} ${mailbox}`);
+  try {
+    const seen = await sql.query(`select 1 from developer_emails where key = $1`, [key]);
+    if (!seen.length) {
+      // Said plainly first. Then checked again as the row is written, after taking the locks for this
+      // company and this mailbox, so presses at the same moment, here or at another company, take turns.
+      const counts = ((await sql.query(`select ${COUNTS}`, [recipient, site.id, org.id, user.id]))[0] ?? {}) as Counts;
+      const over = overLimit(counts);
+      if (over) return refuse(429, over.error, over.field);
+      const [, , kept] = await sql.transaction([
+        sql.query(`select pg_advisory_xact_lock(hashtext('developer-email company ' || $1)), pg_advisory_xact_lock(hashtext('developer-email mailbox ' || $2))`, [org.id, recipient]),
+        sql.query(`delete from developer_emails where sent_at < now() - interval '1 day'`),
+        sql.query(
+          `insert into developer_emails (key, company_id, site_id, sender, recipient)
+          select $5, $3, $2, $4, $1 from (select ${COUNTS}) counts
+          where counts.mailbox < $6 and counts.site < $7 and counts.company < $8 and counts.person < $9
+          on conflict (key) do nothing
+          returning key`,
+          [recipient, site.id, org.id, user.id, key, EMAILS_PER_ADDRESS, EMAILS_PER_SITE, EMAILS_PER_COMPANY, EMAILS_PER_PERSON],
+        ),
+      ]);
+      if (!(kept as unknown[]).length) return refuse(429, "Too many emails at once. Wait a moment and try again.");
     }
-    // The limits are checked again as the row is written, so two presses at once can't both slip under them.
-    const kept = await sql.query(
-      `update sites set context = jsonb_set(context, '{developerEmails}',
-        coalesce((select jsonb_agg(e) from jsonb_array_elements(coalesce(context->'developerEmails', '[]'::jsonb)) e
-          where (e->>'at')::timestamptz > now() - interval '1 day'), '[]'::jsonb)
-        || jsonb_build_array(jsonb_build_object('at', now(), 'to', $3::text, 'key', $4::text)))
-      where id = $1 and company_id = $2
-        and (select count(*) from jsonb_array_elements(coalesce(context->'developerEmails', '[]'::jsonb)) e
-          where (e->>'at')::timestamptz > now() - interval '1 day') < $5
-        and (select count(*) from jsonb_array_elements(coalesce(context->'developerEmails', '[]'::jsonb)) e
-          where (e->>'at')::timestamptz > now() - interval '1 day' and e->>'to' = $3::text) < $6
-        and not exists (select 1 from jsonb_array_elements(coalesce(context->'developerEmails', '[]'::jsonb)) e where e->>'key' = $4::text)
-      returning id`,
-      [site.id, org.id, to, key, EMAILS_PER_SITE, EMAILS_PER_ADDRESS],
-    );
-    if (!kept.length) return refuse(429, "Too many emails at once. Wait a moment and try again.");
+  } catch (error) {
+    if (!notMigrated(error)) throw error;
+    console.error("Install emails need db/migrations/0013, which isn't applied yet.");
+    return refuse(503, NOT_SET_UP);
   }
 
   const widget = (env.WIDGET_URL ?? "https://widget.joinhaptic.com").replace(/\/$/, "");
@@ -233,16 +267,9 @@ async function emailDeveloper(call: SetupRequest, id: string, input: Record<stri
   else if (!sent.ok) {
     console.error("The install email was not sent:", sent.status, sent.detail);
     // Nothing went out, so it doesn't count against the day's emails.
-    await sql
-      .query(
-        `update sites set context = jsonb_set(context, '{developerEmails}',
-          coalesce((select jsonb_agg(e) from jsonb_array_elements(context->'developerEmails') e where e->>'key' <> $3::text), '[]'::jsonb))
-        where id = $1 and company_id = $2 and jsonb_typeof(context->'developerEmails') = 'array'`,
-        [site.id, org.id, key],
-      )
-      .catch((error: Error) => console.error("Could not take back the unsent email:", error.message));
+    await sql.query(`delete from developer_emails where key = $1`, [key]).catch((error: Error) => console.error("Could not take back the unsent email:", error.message));
     const why = sent.status === 0 ? "The email service could not be reached." : `The email service turned it down, with status ${sent.status}.`;
-    return refuse(502, `${why} Copy the link and send it yourself.`);
+    return refuse(502, `${why} ${COPY_INSTEAD}`);
   }
   if (sent.ok) console.log("Sent an install email.", sent.id);
   return { status: 200, body: { sent: true, to: checked.email } };

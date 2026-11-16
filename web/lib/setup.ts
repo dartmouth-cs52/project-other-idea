@@ -104,6 +104,23 @@ export function checkEmail(input: unknown): { ok: true; email: string } | { ok: 
   return { ok: true, email };
 }
 
+/**
+ * The mailbox an address reaches, written one way, so the limit on emails to
+ * one person can't be got round by spelling it differently: lower case, with
+ * any +tag taken off, and on Gmail with the dots taken out too.
+ */
+export function mailboxOf(email: string): string {
+  const at = email.lastIndexOf("@");
+  let local = email.slice(0, at).trim().toLowerCase();
+  let domain = email.slice(at + 1).trim().toLowerCase();
+  local = local.split("+")[0] ?? local;
+  if (domain === "gmail.com" || domain === "googlemail.com") {
+    local = local.replace(/\./g, "");
+    domain = "gmail.com";
+  }
+  return `${local}@${domain}`;
+}
+
 // What the reading found -------------------------------------------------------
 
 /** The parts of a page the reader keeps that count as something to click or fill in. */
