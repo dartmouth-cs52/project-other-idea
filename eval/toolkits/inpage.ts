@@ -9,7 +9,7 @@ import type { Snapshot } from "../../src/shared/types.ts";
 // element can be named across calls.
 
 interface Probe {
-  takeSnapshot(ignore: Element): { snapshot: Snapshot; elements: Map<string, Element> };
+  takeSnapshot(ignore: Element, question: string): { snapshot: Snapshot; elements: Map<string, Element> };
 }
 
 declare global {
@@ -198,7 +198,8 @@ const toolkit = {
     const probe = all ? window.__hapticProbeAll : window.__hapticProbe;
     const ignore = host();
     if (!probe || !ignore) throw new Error("The widget is not on the page.");
-    const { snapshot, elements: listed } = probe.takeSnapshot(ignore);
+    // No question is asked here, so nothing on the page is the visitor's own words.
+    const { snapshot, elements: listed } = probe.takeSnapshot(ignore, "");
     const ids: Record<string, number> = {};
     const inDemo: Record<string, boolean> = {};
     for (const [id, el] of listed) {
