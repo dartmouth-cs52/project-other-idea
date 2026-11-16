@@ -10,6 +10,10 @@ import { Ui } from "./ui.ts";
 // A site with "do it with me" on shows a Do it button beside the ask box. A
 // page can switch that off for itself, never on, with data-acting="off" on
 // the script tag: a company may want it for some of its pages only.
+//
+// A page shown on a projector or a shared screen can ask for presentation
+// mode with data-present="1" on the script tag: a larger pointer, caption and
+// ring, and the question kept on show. It is never on otherwise.
 
 const script = document.currentScript as HTMLScriptElement | null;
 
@@ -91,6 +95,7 @@ async function boot() {
   // Acting is on only where the site turned it on, and the page did not turn it off.
   const pageOff = (script.dataset.acting ?? "").trim().toLowerCase() === "off";
   const acting = config.acting && typeof config.acting === "object" && !pageOff ? config.acting : undefined;
+  const present = /^(?:1|true|on|yes)$/i.test((script.dataset.present ?? "").trim());
   const ui: Ui = new Ui(
     config.appearance,
     {
@@ -99,6 +104,7 @@ async function boot() {
       onCarryOn: () => guide.carryOn(),
     },
     acting ? { site, confirmFirst: acting.confirmFirst !== false, allowedHere: () => actingAllowedAt(acting, currentPath()) } : undefined,
+    { present },
   );
   const guide = new Guide(ui, sendTurn, { ...(acting ? { acting } : {}), ...(pageOff ? { pageOff } : {}) });
   guide.resume();

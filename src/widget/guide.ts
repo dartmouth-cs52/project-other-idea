@@ -245,6 +245,7 @@ export class Guide {
   start(goal: string, act = false) {
     this.reset();
     this.goal = goal;
+    this.ui.showQuestion(goal);
     if (act && this.config.acting && !this.config.pageOff) this.beginActing();
     this.watchPage(true);
     this.ui.setState("asking");
@@ -434,6 +435,7 @@ export class Guide {
     if (!saved) return;
     this.reset();
     this.goal = saved.goal;
+    this.ui.showQuestion(saved.goal);
     this.history = saved.history;
     this.step = saved.step;
     this.strayed = saved.strayed === true;

@@ -77,9 +77,13 @@ export async function start(
   pages: string | Record<string, string>,
   script: Script,
   path = "/",
-  settings: { acting?: PublicSiteConfig["acting"]; appearance?: Partial<PublicSiteConfig["appearance"]> } = {},
+  settings: { acting?: PublicSiteConfig["acting"]; appearance?: Partial<PublicSiteConfig["appearance"]>; present?: boolean } = {},
 ): Promise<Session> {
   const served = typeof pages === "string" ? { "/": pages } : pages;
+  // The tag as a page that asks for presentation mode writes it: data-present="1", there before the widget's script runs.
+  const presenting = settings.present
+    ? `<script>new MutationObserver((records) => { for (const record of records) for (const node of record.addedNodes) if (node.dataset && node.dataset.site) node.dataset.present = "1"; }).observe(document.body, { childList: true });</script>`
+    : "";
   const server: Server = createServer((request, response) => {
     const asked = (request.url ?? "/").split(/[?#]/)[0] ?? "/";
     // "/data/<ms>" answers after that many milliseconds, for pages that fetch what they show.
@@ -93,7 +97,7 @@ export async function start(
       response.writeHead(404).end("Not found");
       return;
     }
-    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(html.startsWith("<!doctype") ? html : page(html));
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(html.startsWith("<!doctype") ? html : page(presenting + html));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
