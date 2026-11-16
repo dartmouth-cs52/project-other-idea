@@ -1,0 +1,3 @@
+
+# Written by scripts/pack-site.mjs before a deploy.
+worker/site.generated.json

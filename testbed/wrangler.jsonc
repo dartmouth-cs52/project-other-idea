@@ -1,0 +1,16 @@
+{
+  "$schema": "../web/node_modules/wrangler/config-schema.json",
+  // Northpine online, as the app to try Haptic on. The data is made in the
+  // browser, so every visitor gets their own copy and nothing is kept here.
+  //
+  // Build against the live widget, pack the files into the Worker, then deploy, from this folder:
+  //   VITE_HAPTIC_SRC=https://widget.joinhaptic.com/widget.js VITE_HAPTIC_SITE=<site id from the dashboard> npm run build
+  //   node scripts/pack-site.mjs
+  //   npx wrangler deploy
+  // With VITE_HAPTIC_SITE empty, Haptic stays off until a page is opened with ?lab.widgetSite=<site id>.
+  "name": "northpine",
+  "compatibility_date": "2026-11-01",
+  "main": "./worker/index.js",
+  "workers_dev": false,
+  "routes": [{ "pattern": "demo.joinhaptic.com", "custom_domain": true }]
+}
