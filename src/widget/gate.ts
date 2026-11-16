@@ -1,4 +1,4 @@
-import { ASKED_CLASSES, checkAction, CLASS_DOES, classAsked, fold, grounded, isForwardName, isSearchName, isSecretField, isTypeToConfirm, readName, type CommitClass } from "../shared/act-rules.ts";
+import { ASKED_CLASSES, checkAction, CLASS_DOES, classAsked, fold, grounded, isDismissName, isForwardName, isSearchName, isSecretField, isTypeToConfirm, readName, type CommitClass } from "../shared/act-rules.ts";
 import { actingAllowedAt, actionsAllowed, ACTING_LIMITS, describeElement, type Act, type ActingSettings, type Refusal, type SnapElement, type Snapshot, type TurnReply } from "../shared/types.ts";
 import { currentPath, findOpenModal } from "./snapshot.ts";
 
@@ -247,7 +247,9 @@ function liveName(el: Element): string {
     .join(" ");
   const own = el instanceof HTMLInputElement && ["button", "submit", "reset"].includes(el.type) ? el.value || el.type : wordsIn(el);
   const image = el.querySelector("img[alt]")?.getAttribute("alt") ?? (el instanceof HTMLImageElement ? el.alt : "");
-  return [labelled, el.getAttribute("aria-label") ?? "", own, el.getAttribute("title") ?? "", image, iconOf(el)].filter(Boolean).join(" ").replace(/\s+/g, " ").trim().slice(0, 300);
+  const words = [labelled, el.getAttribute("aria-label") ?? "", own, el.getAttribute("title") ?? "", image].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  // An icon names a control only when nothing else does: beside words it is decoration. A dialog's "Close" with an X icon is not "Close x".
+  return (words || iconOf(el)).slice(0, 300);
 }
 
 /** The words that describe a field, for knowing what it asks for. Its labels, names and hints, never its value. */
@@ -326,6 +328,27 @@ function isControl(el: Element): boolean {
 function isOpener(el: Element): boolean {
   const popup = (el.getAttribute("aria-haspopup") ?? "").toLowerCase();
   return (popup !== "" && popup !== "false") || el.hasAttribute("aria-expanded") || el.tagName === "SUMMARY";
+}
+
+/**
+ * What the dialog a control sits in says its buttons do, when its own name
+ * holds words of a kind the visitor has to ask for: "Show card details?" with
+ * a "Show details" button, "Delete workspace?" with "Continue". A button that
+ * only puts the dialog away is not judged by it.
+ */
+function dialogAsks(el: Element, session: GateSession): CommitClass | undefined {
+  const dialog = el.closest("dialog, [role='dialog'], [role='alertdialog']");
+  if (!dialog || within(session.host, dialog) || isDismissName(liveName(el))) return undefined;
+  const root = dialog.getRootNode() as Document | ShadowRoot;
+  const labelled = (dialog.getAttribute("aria-labelledby") ?? "")
+    .split(/\s+/)
+    .map((id) => (id ? root.getElementById?.(id) : null))
+    .map((named) => (named ? wordsIn(named, 160) : ""))
+    .join(" ");
+  const heading = dialog.querySelector("h1, h2, h3, [role='heading']");
+  const name = dialog.getAttribute("aria-label") || labelled.trim() || (heading ? wordsIn(heading, 160) : "");
+  const commit = name ? readName(name).commit : undefined;
+  return commit && ASKED_CLASSES.includes(commit) ? commit : undefined;
 }
 
 /** Whether it sits in a dialog, where "OK", "Yes", "Done" and "Continue" commit. */
@@ -832,6 +855,8 @@ function judgePress(el: Element, control: ControlKind, listedName: string, sessi
   const choice = control === "option";
   const verdict = readName([listedName, liveName(el)].join(" "), { link: link || choice, dialog: inDialog(el, session.host), opener: isOpener(el), extra: config.acting?.commitWords });
   if (verdict.commit) return { refused: { reason: verdict.marked ? "marked" : "words", commit: verdict.commit, at: el } };
+  const asks = dialogAsks(el, session);
+  if (asks) return { refused: { reason: "words", commit: asks, at: el } };
   if (styledDestructive(el)) return { refused: { reason: "styled", at: el } };
   // Rule 8: safe because of what it is. A choice is judged further where it is planned.
   if (link || choice || control === "tab" || control === "combobox" || isOpener(el)) return {};

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   checkAction,
+  isDismissName,
   classAsked,
   dateLike,
   grounded,
@@ -121,6 +122,18 @@ test("dialog words commit only in a dialog", () => {
   // "Weiter" is German for Next outside a dialog, and Continue inside one.
   assert.equal(readName("Weiter").safe, true);
   assert.equal(readName("Weiter", { dialog: true }).commit, "dialog");
+});
+
+test("the names of a button that only puts a dialog away, in the shipped languages", () => {
+  for (const name of ["Cancel", "Close", "Dismiss", "Not now", "Cerrar", "Annuler", "Schließen", "Fechar", "Chiudi", "Sluiten", "キャンセル", "关闭", "×"]) assert.equal(isDismissName(name), true, name);
+  for (const name of ["Show details", "Continue", "Delete", "Cancel card", "Close account", "OK"]) assert.equal(isDismissName(name), false, name);
+});
+
+test("an icon names a control only when it has no words: a labelled Close with an X icon may be pressed, an icon-only trash may not", () => {
+  const snapshot = (element: SnapElement) => ({ path: "/", title: "", headings: [], text: [], elements: [element], truncated: false });
+  const reply = (target: string): TurnReply => ({ target, do: "click", commits: false, status: "continue", say: "Closing it.", mode: "act" });
+  assert.equal(checkAction(reply("e1"), { goal: "close this", snapshot: snapshot({ id: "e1", role: "button", label: "Close", icon: "x" }) }).withheld, undefined);
+  assert.equal(checkAction(reply("e1"), { goal: "tidy up", snapshot: snapshot({ id: "e1", role: "button", label: "", icon: "trash-2" }) }).withheld, "words");
 });
 
 test("icon names count: trash, log-out, power, send, save, download", () => {

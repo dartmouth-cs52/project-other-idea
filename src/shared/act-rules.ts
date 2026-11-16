@@ -386,6 +386,24 @@ export function isForwardName(name: string): boolean {
   return FORWARD_ENTRIES.some((entry) => (entry.cjk ? cjk === entry.cjk && !words.length : !cjk && words.join(" ") === entry.words.join(" ")));
 }
 
+/** The whole names of a button that only puts a dialog away, in every shipped language. */
+const DISMISS_ENTRIES = entries(`${CANCEL_CLOSE}|dismiss|not now|no thanks|go back|back|x`);
+/** A close drawn as a mark rather than written. */
+const CLOSE_MARKS = /^[×✕✖✗╳]$/u;
+
+/**
+ * Whether a button's whole name only puts a dialog away: "Cancel", "Close",
+ * "Cerrar", "閉じる". Used where a dialog's own title says what its other
+ * buttons do.
+ */
+export function isDismissName(name: string): boolean {
+  if (CLOSE_MARKS.test(name.trim())) return true;
+  const folded = fold(name);
+  const words = wordsOf(folded).filter((word) => !FILLER_WORDS.has(word) && !STOP_WORDS.has(word));
+  const cjk = cjkOf(folded);
+  return DISMISS_ENTRIES.some((entry) => (entry.cjk ? cjk === entry.cjk && !words.length : !cjk && words.length > 0 && words.join(" ") === entry.words.join(" ")));
+}
+
 /** Words a visitor uses for asking a class of thing, besides the class's own verbs: "my subscription", "the payment". */
 const ASKED_TOO: Partial<Record<CommitClass, string>> = {
   destroy: `${CANCEL_CLOSE}|deletion|removal|get rid|borrado|baja|suppression|loschung|exclusao|eliminazione|verwijdering`,
@@ -726,13 +744,14 @@ export function checkAction(reply: TurnReply, request: Pick<TurnRequest, "goal" 
     if (isSecretField(element.label)) return withhold("secret");
   }
   if (act === "click" && !PICKED.has(element.role)) {
-    const name = [element.label, element.icon ?? ""].join(" ");
+    // An icon names a control only when it has no words of its own: a dialog's "Close" with an X icon is not "Close x".
+    const name = element.label || element.icon || "";
     const verdict = readName(name, { link: element.role === "link", dialog: !!request.snapshot.dialog, opener: opensSomething(element), extra: acting.commitWords });
     if (verdict.commit) return withhold(verdict.marked ? "marked" : "words");
   }
   if (act === "click" && PICKED.has(element.role) && ["option", "menuitemradio", "treeitem"].includes(element.role)) {
     // An option is the page's own choice. It stops only on words that would stop a link: "Delete", "Sign out".
-    const verdict = readName([element.label, element.icon ?? ""].join(" "), { link: true, extra: acting.commitWords });
+    const verdict = readName(element.label || element.icon || "", { link: true, extra: acting.commitWords });
     if (verdict.commit) return withhold(verdict.marked ? "marked" : "words");
   }
 
