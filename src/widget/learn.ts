@@ -36,6 +36,8 @@ const FIELDISH = 'input, textarea, select, [role="combobox"], [role="searchbox"]
 /** More new controls than this after opening something means the whole view changed, not that something opened. */
 const MAX_OPENED = 40;
 const MAX_OPENED_SENT = 30;
+/** When to look after a press, each wait after the one before: about 1.5 s in all. */
+const LOOKS_MS = [120, 180, 300, 400, 500];
 
 /** The labels of the links and buttons on screen now, dialog included, outside table cells. */
 function shownNow(host: Element): { links: Map<string, { label: string; to: string }>; buttons: Set<string> } {
@@ -153,11 +155,13 @@ export function startLearning(send: (report: Omit<OutlineReport, "site">) => voi
     }
   };
 
-  // Opening a menu, tab or accordion: what was on screen as it was pressed, against what is there once it settles.
-  let opening = false;
+  // Opening a menu, tab or accordion: what was on screen as it was pressed, against what shows up after.
+  // Some people pick from a menu within a few hundred milliseconds, so it is looked at several times
+  // until the next press, and whatever appeared in any look counts.
+  let presses = 0;
   const onPress = (event: Event) => {
-    if (opening) return;
     if (event instanceof KeyboardEvent && event.key !== "Enter" && event.key !== " " && event.key !== "ArrowDown") return;
+    const pressed = ++presses;
     try {
       const control = openerOf(event, host);
       if (!control) return;
@@ -165,29 +169,29 @@ export function startLearning(send: (report: Omit<OutlineReport, "site">) => voi
       const key = `${from} opens ${control.name}`;
       if (sent.has(key)) return;
       const before = shownNow(host);
-      opening = true;
-      void settle(host, 300, 2000)
-        .then(() => {
-          if (normalizePath(location.pathname) !== from) return;
+      const links = new Map<string, { label: string; to: string }>();
+      const buttons = new Set<string>();
+      void (async () => {
+        for (const wait of LOOKS_MS) {
+          await new Promise((resolve) => setTimeout(resolve, wait));
+          if (presses !== pressed || normalizePath(location.pathname) !== from) break;
           const after = shownNow(host);
-          const links = [...after.links].filter(([id]) => !before.links.has(id)).map(([, link]) => link);
-          const buttons = [...after.buttons].filter((label) => !before.buttons.has(label) && label !== control.name);
-          if (!links.length && !buttons.length) return;
-          if (links.length + buttons.length > MAX_OPENED) return;
-          remember(sent, key);
-          post({
-            path: from,
-            title: "",
-            headings: [],
-            links: [],
-            buttons: [],
-            opens: [{ control: control.name, links: links.slice(0, MAX_OPENED_SENT), buttons: buttons.slice(0, MAX_OPENED_SENT) }],
-          });
-        })
-        .catch((error) => console.warn("[Haptic]", error))
-        .finally(() => (opening = false));
+          for (const [id, link] of after.links) if (!before.links.has(id)) links.set(id, link);
+          for (const label of after.buttons) if (!before.buttons.has(label) && label !== control.name) buttons.add(label);
+        }
+        if (!links.size && !buttons.size) return;
+        if (links.size + buttons.size > MAX_OPENED || sent.has(key)) return;
+        remember(sent, key);
+        post({
+          path: from,
+          title: "",
+          headings: [],
+          links: [],
+          buttons: [],
+          opens: [{ control: control.name, links: [...links.values()].slice(0, MAX_OPENED_SENT), buttons: [...buttons].slice(0, MAX_OPENED_SENT) }],
+        });
+      })().catch((error) => console.warn("[Haptic]", error));
     } catch (error) {
-      opening = false;
       console.warn("[Haptic]", error);
     }
   };

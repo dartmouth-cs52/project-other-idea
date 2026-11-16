@@ -11,6 +11,7 @@ import { BROWSERS, launch, page, startHarness, type Harness } from "./harness.ts
 const APP = page(`
   <header>
     <button id="help" aria-haspopup="menu" aria-expanded="false">Help</button>
+    <button id="new" aria-haspopup="menu" aria-expanded="false">New</button>
   </header>
   <main>
     <h1>Settings</h1>
@@ -29,6 +30,14 @@ const APP = page(`
       const menu = document.createElement("div");
       menu.setAttribute("role", "menu");
       menu.innerHTML = '<a role="menuitem" href="/help">Help center</a><div role="menuitem" tabindex="-1">Keyboard shortcuts</div><div role="menuitem" tabindex="-1">Contact support</div>';
+      document.body.append(menu);
+    });
+    // A menu that closes as soon as an item is picked.
+    document.getElementById("new").addEventListener("pointerdown", () => {
+      const menu = document.createElement("div");
+      menu.setAttribute("role", "menu");
+      menu.innerHTML = '<div role="menuitem" id="bill">Bill</div><div role="menuitem">Vendor</div>';
+      menu.addEventListener("pointerdown", () => setTimeout(() => menu.remove(), 0));
       document.body.append(menu);
     });
     document.getElementById("security").addEventListener("click", () => {
@@ -81,6 +90,14 @@ for (const name of BROWSERS) {
         opened(harness).find((item) => item.control === "Help"),
         { control: "Help", links: [{ label: "Help center", to: "/help" }], buttons: ["Keyboard shortcuts", "Contact support"] },
       );
+    });
+
+    test("a menu picked from at once is still sent, without what the pick did", async () => {
+      await tab.click("#new");
+      await tab.waitForTimeout(150);
+      await tab.click("#bill");
+      await until(() => opened(harness).some((item) => item.control === "New"));
+      assert.deepEqual(opened(harness).find((item) => item.control === "New")?.buttons, ["Bill", "Vendor"]);
     });
 
     test("a tab is sent with what its panel showed", async () => {
