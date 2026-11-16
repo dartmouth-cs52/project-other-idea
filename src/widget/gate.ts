@@ -297,6 +297,21 @@ const isLinkLike = (el: Element) => isAnchor(el) || roleOf(el) === "link";
 /** Attributes through which a page's script answers a click, so a link that has one may not go where its address says. */
 const CLICK_HANDLER = /^(?:on(?:click|auxclick|mousedown|mouseup|pointerdown|pointerup|touchstart|touchend)|ng-click|v-on:click|@click|x-on:click|wire:click|phx-click|data-action)(?:[.:].*)?$/i;
 
+/**
+ * Whether a click handler set on an element does nothing at all: a function with an empty body. React sets one on
+ * every element it gives a click handler (`node.onclick = noop`, for a Safari bug) and listens at the root instead,
+ * so every link a React router draws carries it: on Northpine each reads "function Sn(){}". Taken for a script that
+ * answers the click, it made every link of a React app a button, pressed only when its words were known to be safe.
+ */
+function doesNothing(handler: unknown): boolean {
+  if (typeof handler !== "function") return false;
+  try {
+    return /^(?:async\s+)?(?:function\b[^(]*\([^)]*\)|\([^)]*\)\s*=>)\s*\{\s*\}$/.test(Function.prototype.toString.call(handler).trim());
+  } catch {
+    return false;
+  }
+}
+
 /** A link's address, or undefined when it cannot be read. */
 function addressOf(el: Element): URL | undefined {
   try {
@@ -312,16 +327,17 @@ const routeOf = (hash: string) => (/^#!?\//.test(hash) ? hash : "");
 /**
  * Whether a press on `el` is a visit to another page of this site: the one
  * kind of link pressed for what it is (rule 8). An `<a href>` or `<area
- * href>` with no role but link, no click handler written on it, and an
- * address on this site whose path, query or "#/" route differ from this
- * page's. "#", "#top", "javascript:", `role="link"` without an address, and
+ * href>` with no role but link, no click handler written on it (one that
+ * does nothing, as React leaves on its links, is none), and an address on
+ * this site whose path, query or "#/" route differ from this page's. "#", "#top", "javascript:", `role="link"` without an address, and
  * a link a script answers are not visits: each is judged as a button.
  */
 function visitsAnotherPage(el: Element): boolean {
   if (!isAnchor(el)) return false;
   const role = roleOf(el);
   if (role && role !== "link") return false;
-  if ((el as HTMLElement).onclick || Array.from(el.attributes).some((attribute) => CLICK_HANDLER.test(attribute.name))) return false;
+  const handler = (el as HTMLElement).onclick;
+  if ((handler && !doesNothing(handler)) || Array.from(el.attributes).some((attribute) => CLICK_HANDLER.test(attribute.name))) return false;
   const url = addressOf(el);
   if (!url || (url.protocol !== "http:" && url.protocol !== "https:") || url.origin !== location.origin) return false;
   return url.pathname !== location.pathname || url.search !== location.search || routeOf(url.hash) !== routeOf(location.hash);

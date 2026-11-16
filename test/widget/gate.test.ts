@@ -498,13 +498,30 @@ test("only a visit to another page of the site is pressed as a link: '#', 'javas
     <span role="link" tabindex="0" id="span-details" data-watch>Details</span>
     <a href="/cards" id="answered" data-watch onclick="return false">Details</a>
     <a href="/cards" role="button" id="as-button" data-watch>Details</a>
-    <a href="#" id="edit" data-watch>Edit limits</a></main>`);
+    <a href="#" id="edit" data-watch>Edit limits</a>
+    <a href="/cards" id="react" data-watch>Team offsite</a>
+    <a href="/team/cards/new" id="react-issue" data-watch>Issue card</a>
+    <a href="/cards" id="handled" data-watch>Team offsite</a>
+    <script>
+      // What React leaves on every element it gives a click handler, a router's links among them: a function that does nothing.
+      function Sn() {}
+      document.getElementById("react").onclick = Sn;
+      document.getElementById("react-issue").onclick = () => {};
+      // A handler set from a script that does something is still a script answering the click.
+      document.getElementById("handled").onclick = function () { fetch("/save", { method: "POST" }); return false; };
+    </script></main>`);
   try {
     const seen = async (selector: string) => {
       const plan = await page.plan(selector, { do: "click" }, "show me more cards");
       return [selector, plan.kind, plan.control, plan.navigates, plan.tripwire];
     };
     assert.deepEqual(await seen("#cards"), ["#cards", "act", "link", true, true]);
+    // A link of a React app is a visit like any other: found on Northpine, where every link was taken for a button
+    // and one named "Team offsite" for a control nobody could tell the purpose of.
+    assert.deepEqual(await seen("#react"), ["#react", "act", "link", true, true]);
+    assert.deepEqual(await seen("#react-issue"), ["#react-issue", "act", "link", true, true]);
+    const handled = await page.plan("#handled", { do: "click" }, "show me more cards");
+    assert.deepEqual([handled.kind, handled.reason], ["visitor", "unknown"]);
     // A route of an app that keeps its place after "#/" is a visit too.
     assert.deepEqual(await seen("#route"), ["#route", "act", "link", true, true]);
     // Safe by its words, or opening something by its name, as a button would be; watched all the same.
