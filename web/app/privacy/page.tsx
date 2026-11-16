@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Privacy", alternates: { canonical: "
 
 export default function Privacy() {
   return (
-    <LegalPage title="Privacy" updated="November 15, 2026">
+    <LegalPage title="Privacy" updated="November 16, 2026">
       <p>
         {site.company} makes Haptic. This page says what we collect on this website, and what Haptic reads when it runs
         inside a product.
@@ -52,14 +52,30 @@ export default function Privacy() {
         text that shows on the page can still hold personal details.
       </p>
       <p>
+        One exception: when someone writes an email address, or a number of five or more digits, in their question,
+        that exact value is left readable wherever it stands on its own on the page, so Haptic can find the order or
+        account they asked about. It is still masked in the question itself.
+      </p>
+      <p>
+        With each question the widget also sends the person&apos;s date, as their device shows it, so the AI knows what
+        day it is. It does not send their time zone or location.
+      </p>
+      <p>
         Haptic is an AI guide and can be wrong, so check anything that matters before relying on it. To work out the
         next step, the question, that description of the page and what has happened so far in the guide are sent to
         our server and to Anthropic, which provides the AI model.
       </p>
       <p>
+        A company can turn on Do it with me, which is off unless it does. Then a person can ask Haptic to do the steps
+        with them: it clicks, types and chooses on the page while they watch, and the final click is always theirs. It
+        types only what the person wrote in their question. It never presses anything that saves, sends, pays or
+        deletes, and never types passwords or payment details. To check that its own typing took, it reads that
+        field&apos;s value inside the person&apos;s browser, and never sends it.
+      </p>
+      <p>
         We keep the question that was asked, what Haptic said, the names of the controls it pointed at and where on
         the page they sit, which page of the product each step was on, the product&apos;s web address, what was
-        clicked along the way, when each step happened and how long it took, which AI model answered and what the step
+        clicked along the way, what Haptic typed in Do it with me (only ever words from the question), when each step happened and how long it took, which AI model answered and what the step
         cost, how the guide ended, and whether the person said it helped. The company whose product it is can see the
         questions, the steps and their timings in its Haptic dashboard, so it can tell what people ask and where a
         guide fell short. We do not keep the rest of the description of the page. This record is stored in a database
