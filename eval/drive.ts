@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { buildUserMessage } from "../src/server/prompt.ts";
@@ -48,6 +49,8 @@ const RESULTS_DIR = fileURLToPath(new URL("./results/", import.meta.url));
 const EXTRA_STEPS = 4;
 /** How long the widget may take to ask for the next step after the visitor acts: the page settling, a page load. */
 const NEXT_STEP_MS = 40_000;
+/** How long a page that a click loaded may take to show the widget again. */
+const WIDGET_BACK_MS = 20_000;
 /** How long the widget may keep a sentence up with no pointer, watching for the visitor to do what it says. */
 const WATCHING_MS = 100_000;
 /** When the widget has not asked this long after a control was clicked open, the visitor picks from what is showing. */
@@ -58,7 +61,7 @@ const QUIET_MS = 4500;
  */
 const RISKY = /\b(delete|remove|discard|pay|buy|purchase|place order|order now|send|submit|publish|save|create|add|apply|confirm|register|sign up|invite|approve|reject|merge|close|archive|transfer|export|download|subscribe|log ?in|sign ?in|log ?out|sign ?out)\b/i;
 
-type End =
+export type End =
   /** The visitor ended up where they wanted to be. */
   | "reached"
   /** The model said it was done, or had nothing to point at, somewhere else. */
@@ -90,7 +93,7 @@ interface StepLog {
   repeated?: boolean;
 }
 
-interface GuideRun {
+export interface GuideRun {
   site: string;
   guide: string;
   /** "answer" for a question that asks for a fact (a guide with `says`), and otherwise the guide's own kind. */
@@ -136,7 +139,7 @@ interface Traced {
   did: string;
 }
 
-interface Options {
+export interface Options {
   visitor: "new" | "old";
   trace: boolean;
 }
@@ -158,7 +161,7 @@ function selectorOf(step: Step): string {
   return selector.split(" >> then >> ")[0] ?? "";
 }
 
-async function drive(browser: Browser, set: GuideSet, guide: Guide, site: SiteContext, asker: Asker, options: Options): Promise<{ run: GuideRun; traced: Traced[] }> {
+export async function drive(browser: Browser, set: GuideSet, guide: Guide, site: SiteContext, asker: Asker, options: Options): Promise<{ run: GuideRun; traced: Traced[] }> {
   const trail: StepLog[] = [];
   const traced: Traced[] = [];
   /** Every answer given, in order. `stepNo` is how many steps the widget said it had been given when it asked. */
@@ -251,7 +254,9 @@ async function drive(browser: Browser, set: GuideSet, guide: Guide, site: SiteCo
   /** The answer to a question that asks for a fact, where it is read from the page the guide starts on. */
   let atStart: Read = {};
 
-  /** What the widget is showing, and what it says its state is. The state is undefined on a widget that does not report one yet. */
+  /** Whether the widget has said what state it is in at any time in this run. One that has is a widget that reports its state. */
+  let reportsState = false;
+  /** What the widget is showing, and what it says its state is. The state is undefined on a widget that does not report one, and while there is no widget on the page. */
   const widgetNow = () =>
     page
       .evaluate(
@@ -268,7 +273,24 @@ async function drive(browser: Browser, set: GuideSet, guide: Guide, site: SiteCo
           };
         })()`,
       )
+      .then((now: { state?: string } | undefined) => {
+        if (now?.state) reportsState = true;
+        return now;
+      })
       .catch(() => undefined) as Promise<{ state?: string; caption: string; captionShown: boolean; status: string } | undefined>;
+  /**
+   * The widget's state once the visitor has used a control. Straight after a
+   * click that loads a new page there is no widget on it yet, or no page to
+   * read at all. For a widget that has reported its state before, that means
+   * the widget is still to come, not that it reports none, so it is waited for,
+   * up to a limit. Undefined when it reports none, or did not come back in time.
+   */
+  const stateAfterUse = async (): Promise<string | undefined> => {
+    for (const until = Date.now() + WIDGET_BACK_MS; ; await page.waitForTimeout(200)) {
+      const state = (await widgetNow())?.state;
+      if (state || !reportsState || Date.now() >= until) return state;
+    }
+  };
   const showingNow = async () => {
     const now = await widgetNow();
     if (!now) return "nothing that could be read: the page was loading or gone";
@@ -516,8 +538,9 @@ async function drive(browser: Browser, set: GuideSet, guide: Guide, site: SiteCo
         };
       }
 
-      if (reply.status === "done" && (await widgetNow())?.state === undefined) {
+      if (reply.status === "done" && (await stateAfterUse()) === undefined) {
         // This widget ends the guide on "done": it showed where, the visitor used it, and nothing more is coming.
+        // Or the page the control loaded never showed the widget again, so nothing more can come.
         // A list it opened is still showing, and a person picks from it what the sentence says.
         if (whenQuiet) {
           await page.waitForTimeout(600);
@@ -711,7 +734,10 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+// Run as a command. A test imports `drive` alone.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}
