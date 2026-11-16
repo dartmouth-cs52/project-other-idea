@@ -22,6 +22,12 @@ A field's name stays as it was, and only fields get marks: a button with a star 
 
 None of this looks inside a field. An empty required field and a filled one are listed the same, and the browser's own validity check, which would say whether a value is missing, is never asked. So the marks say what a form asks for, not how far along the visitor is.
 
+The model uses them to decide what a form needs before its submit button (`FORM_RULES` in `src/server/prompt.ts`): every required field, and, where a form marks only its optional fields, as most products do, every unmarked one that is not a select, checkbox, radio or switch, since those already hold a choice. It takes the visitor to each one they have not filled in during the guide, then to the button. Three things follow from its not seeing into fields:
+
+- A needed field the visitor filled in before they asked is pointed at all the same. Pressing the form's button instead moves the guide on.
+- A form that already holds saved values, like a settings page, is not walked through. Asked to change one thing in it, the model points at that field and then at save.
+- After a submit, a field now marked invalid, or an error message that appeared, means the form was turned back. The guide goes to the field the message is about and does not end.
+
 ## Route changes
 
 Single-page apps change the address without loading a page, so the widget watches for it itself: through the browser's Navigation API, or by looking at the address every tenth of a second in a browser without it, and never by changing the page's own `history` (`src/widget/navigation.ts`). If the address changes while the model is answering, the answer is about a page the visitor has left, like the page they were on when they clicked something that took a moment to load. The widget hangs up at once and asks again from the new page, and the server stops the model call and counts the dropped step on the guide (`cancelled_steps`). An app that changes the address first and draws the page a moment later is waited for: a new address over the same controls as before has not been drawn yet.

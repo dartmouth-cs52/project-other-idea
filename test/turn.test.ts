@@ -87,6 +87,22 @@ test("finding nothing on the first reply is stuck, and nothing left after some s
   assert.equal(later.status, "done");
 });
 
+test("the model is told what a form needs before its button, with Answers on or off", () => {
+  for (const prompt of [buildSystemPrompt(site), buildSystemPrompt({ ...site, answers: { enabled: true } })]) {
+    // Required fields, and the unmarked ones where a form marks only its optional fields.
+    assert.match(prompt, /A field listed as required is needed\. So is an unmarked field in a form that lists others as optional/);
+    // Only what the visitor filled in during the guide counts as done: the model cannot see into a field.
+    assert.match(prompt, /each needed field they haven't filled in during this guide, one a step/);
+    // A form that already holds saved values is not walked through.
+    assert.match(prompt, /a form that already holds saved values, like renaming something: point at that field, then at save/);
+    // A form turned back is not a finished guide.
+    assert.match(prompt, /A field listed as invalid, or an error message that appears after the visitor submits, means the form was turned back/);
+    assert.match(prompt, /The goal isn't complete until the form goes through/);
+    // The rule this replaces sent the visitor to the button after any one field.
+    assert.doesNotMatch(prompt, /usually the save or submit button/);
+  }
+});
+
 test("the model is told that stuck is its own status, apart from done", () => {
   const prompt = buildSystemPrompt(site);
   assert.match(prompt, /"stuck" when you can't find a way forward/);
