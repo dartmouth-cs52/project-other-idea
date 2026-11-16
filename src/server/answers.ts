@@ -1,4 +1,5 @@
 import { MODES, REASONS, type Act, type Mode, type Reason, type SiteContext, type Snapshot, type Source, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { wantsTheWay } from "./check.ts";
 import { articlesOf, type Article } from "./prompt.ts";
 import { checkSay, SAY_WITHOUT_WORDS, tidySay, type Rule } from "./rules.ts";
 
@@ -120,9 +121,13 @@ export function finishAnswer(site: SiteContext, request: TurnRequest, raw: Model
     if (!cited.length) return cannotHelp("not_covered", "no_source");
     if (!say) return cannotHelp("not_covered", "no_words");
     const missing = missingControls(site, request.snapshot, raw.controls ?? []);
+    // With nothing to act on there is nothing to wait for. With a pointer, "done" ends the guide on the answer with
+    // the pointer left up, which is right when it only shows where the thing is: "what does freezing a card do". When
+    // the visitor asked for a way ("how do I freeze this card"), the pointer is its first step and the guide goes on
+    // from it, so that they are taken through it and not only told: the widget asks again once they have used it.
+    const status = !target ? "done" : raw.status === "done" && wantsTheWay(request.goal) ? "continue" : raw.status;
     return {
-      // With nothing to act on there is nothing to wait for.
-      reply: { target, status: target ? raw.status : "done", say, mode, sources: cited.map((article) => asSource(article, site, now)), ...(missing.length ? { missing } : {}) },
+      reply: { target, status, say, mode, sources: cited.map((article) => asSource(article, site, now)), ...(missing.length ? { missing } : {}) },
       cited: cited.map((article) => article.doc.source),
       broke,
       ...(missing.length ? { unseen: missing } : {}),

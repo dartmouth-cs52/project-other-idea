@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { asksForAFact, judgeNamed, namedButNotPointed, namedButNotPointedNote } from "../src/server/check.ts";
+import { asksForAFact, judgeNamed, namedButNotPointed, namedButNotPointedNote, wantsTheWay } from "../src/server/check.ts";
 import type { SnapElement, Snapshot, TurnReply, TurnRequest } from "../src/shared/types.ts";
 
 // A guide's reply that tells the visitor to use a listed control and points
@@ -90,6 +90,15 @@ test("a question about what the site has, answered in words after the first step
   assert.equal(asksForAFact("Does Wikipedia have some kind of disclaimer about medical advice? Where would I find it?"), false);
   assert.equal(asksForAFact("how do I add a budget"), false);
   assert.equal(asksForAFact("add a budget"), false);
+});
+
+test("a goal wants the way unless it asks a fact or how something works", () => {
+  for (const goal of ["how do I add a budget", "add a budget", "where do I get an API key", "I lost the receipt for this, what do I do", "what should I click to add one", "set a budget for marketing, $50,000 a month", "freeze card"]) {
+    assert.equal(wantsTheWay(goal), true, goal);
+  }
+  for (const goal of ["what does freezing a card do", "which budgets are over", "who approves meals over $150?", "how does freezing work", "how do approvals work", "how is mileage paid back", "explain per diems", "can I add a budget?", "why was this declined"]) {
+    assert.equal(wantsTheWay(goal), false, goal);
+  }
 });
 
 test("a sentence that does not tell the visitor to use the control is not caught at all", () => {

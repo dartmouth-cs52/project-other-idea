@@ -20,9 +20,15 @@ What matters most is decided by the server after the model has replied, in `src/
 - An answer is held to the same rules as any sentence: plain text, with no web address, email address or number to call.
 - A control an answer names is looked for on the page. Help docs go out of date, and a bot that only reads docs cannot know when an article names a button the product no longer has. Haptic has the page in hand when it answers. The model lists the controls its answer tells the visitor to use, and the server looks for each on the page the visitor is on and on the pages the site map knows. One that is on none of them is said so under the answer ("I can't see "Archive project" on this page or the others I know, so this may no longer be right"), and recorded with the step, which is how a company learns which of its articles no longer match its product. It only speaks when it can know: not while a dialog is open, and not for a product whose pages the crawl could not read, where a control that isn't on this page is most likely just on another.
 
+A how-to question is guided to the end, whether or not an article describes the same thing. Three things in `src/server/model.ts` and `src/server/answers.ts` hold that, each only for a question that asks for a way and never for one of fact or explanation (`wantsTheWay` in `src/server/check.ts`: "how do I add a budget" and "add a budget" ask for a way; "what does freezing a card do", "can I…" and "how do approvals work" do not):
+
+- A reply in guide mode that tells the visitor to use a control on the page and points at nothing is judged as on a site without Answers: the control is pointed at, or the model is asked once more, or it was an aside and stands. This holds for a step and for the sentence that ends a guide.
+- An answer in words that names a control on the page without pointing at it is judged the same way, and keeps its words and its articles.
+- An answer that points and calls that the end ("done") goes on from the pointer instead: it is the first step, and the widget asks again once the visitor has used it. For a question of fact, "done" with a pointer still only shows where the thing is.
+
 In the widget, an answer is read in the panel: the question, the answer, and under it each article's title, link and date. If the answer is about a control on the page, the pointer goes to it as well. A step's sentence stays beside the pointer. Questions answered in words are remembered until the visitor presses Stop, so "and who can remove them?" is read with what came before.
 
-It is off unless a site switches it on, and a site without it is asked exactly as before: the same prompt, and the same three fields in each reply. A test holds the old prompt to a fingerprint, so it cannot change by accident.
+It is on for a site with help docs unless the site switches it off, and off for a site without any (`answersOn` in `src/shared/types.ts`). A site without it is asked exactly as before: the same prompt, and the same three fields in each reply. A test holds the old prompt to a fingerprint, so it cannot change by accident.
 
 ```bash
 npm run tag -- --id site_ab12cd34ef --answers on --stale-days 365

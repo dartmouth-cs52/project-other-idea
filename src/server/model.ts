@@ -7,7 +7,7 @@ import { ACTING_LIMITS, ACTS, actionsAllowed, MODES, REASONS, type Act, type Mod
 import { actingFor, type NotActing } from "./acting.ts";
 import { declinedReply, finishAnswer, neverDecided, type Finished, type ModelReply, type Overruled } from "./answers.ts";
 import type { Ceiling } from "./budget.ts";
-import { judgeNamed, namedButNotDone, namedButNotDoneNote, namedButNotPointed, namedButNotPointedNote, pressLeftToVisitor, type NamedVerdict } from "./check.ts";
+import { judgeNamed, namedButNotDone, namedButNotDoneNote, namedButNotPointed, namedButNotPointedNote, pressLeftToVisitor, wantsTheWay, type NamedVerdict } from "./check.ts";
 import { costOf } from "./prices.ts";
 import { answersOn, articlesOf, buildSystemPrompt, buildUserMessage } from "./prompt.ts";
 import { checkSay, SAY_MAX_CHARS, SAY_MAX_SENTENCES, SAY_WITHOUT_WORDS, tidySay, type Rule } from "./rules.ts";
@@ -53,6 +53,12 @@ type CacheLife = "5m" | "1h";
  * After the first step only the log was written, until Northpine's owner asked
  * to add a budget and the guide ended on Budgets with "To add one, use New
  * budget at the top.": what judgeNamed adds is measured in check.ts.
+ *
+ * A site with Answers on, which since main's #49 is every site with help
+ * docs, was left out of all of this, on the ground that an answer names
+ * controls without pointing by design. But most replies there are a guide's
+ * (mode "guide"), and those are now judged the same. An answer in words is
+ * looked at only for a goal that wants the way (check.ts, wantsTheWay).
  *
  * In act mode "ask" also asks once more at any step when a reply of
  * "continue" points at nothing and its sentence names a control Haptic could
@@ -298,8 +304,8 @@ export function ceilingFor(site: SiteContext, request: TurnRequest, settings: Tu
   const prompt = (known[mode] ??= size(buildSystemPrompt(site, act ? "act" : undefined)));
   const input = size(buildUserMessage(request, site)) + request.history.reduce((sum, turn) => sum + size(turn.text), 0);
   const cost = (cacheWrite: number, cacheRead: number) => costOf(settings.model, { input, cacheRead, cacheWrite, output: MAX_TOKENS }, settings.cache);
-  // A guide's step on a site with Answers on is never asked twice (see measureTurn). Any other step may be.
-  const twice = settings.recheck === "ask" && (act || !answersOn(site));
+  // Any step may be asked twice: a guide's, on a site with Answers on too, and an act step (see measureTurn).
+  const twice = settings.recheck === "ask";
   const again = twice ? cost(0, prompt) : 0;
   return { cold: cost(prompt, 0) + again, warm: cost(0, prompt) + again };
 }
@@ -388,9 +394,14 @@ export async function measureTurn(
   // The model can only point at what's on the page it was shown.
   if (!onPage(answer.reply.target)) answer.reply.target = null;
 
-  // The second look is for a guide's steps and for acting. On a site with Answers on, an answer that names a control
-  // without pointing at it is how an answer is written, so it is not asked about again. Nor is a reply the provider declined.
-  const checking = settings.model !== "mock" && settings.recheck !== "off" && !answers && !answer.declined;
+  // The second look is for a guide's steps and for acting, and never for a reply the provider declined. On a site with
+  // Answers on, a reply in guide mode (a step, or the sentence that ends a guide) is a guide's like any other and is
+  // judged the same. An answer in words from a help article names controls without pointing by design, so it is looked
+  // at only when the visitor asked for a way (check.ts, wantsTheWay): the owner's rule is that they are taken through
+  // it, not told about it. A question of fact or explanation keeps its answer as it is, and "cannot_help" is a fixed sentence.
+  const kind: Mode = answers && MODES.includes(answer.reply.mode as Mode) ? (answer.reply.mode as Mode) : "guide";
+  const looked = kind === "guide" || (kind === "answer" && wantsTheWay(request.goal));
+  const checking = settings.model !== "mock" && settings.recheck !== "off" && looked && !answer.declined;
   // In act mode at any step: a "continue" that points at nothing stops the run, so a control it names that Haptic could press is asked about.
   const stalled = checking && acting.act ? namedButNotDone(request, asStep(answer.reply), acting.settings.commitWords) : undefined;
   const named = checking && !stalled ? namedButNotPointed(request.snapshot, asStep(answer.reply)) : undefined;
@@ -418,7 +429,8 @@ export async function measureTurn(
     if (ask) {
       try {
         const note = stalled ? namedButNotDoneNote(stalled) : namedButNotPointedNote(found, answer.reply.status);
-        const again = await claudeTurn(site, request, settings, answers, modeKnown, targetKnown, signal, { reply: asStep(answer.reply), note });
+        // The model is shown its own reply as it wrote it: on a site with Answers on, with its mode, sources and controls.
+        const again = await claudeTurn(site, request, settings, answers, modeKnown, targetKnown, signal, { reply: answers ? answer.reply : asStep(answer.reply), note });
         if (!onPage(again.reply.target)) again.reply.target = null;
         answer = { ...again, tokens: added(answer.tokens, again.tokens), usd: answer.usd + again.usd, recheck: answer.recheck };
       } catch (error) {
@@ -539,7 +551,7 @@ async function claudeTurn(
   targetKnown: (id: string | null) => void,
   signal?: AbortSignal,
   /** The reply to ask about again, and what to tell the model about it. */
-  followUp?: { reply: TurnReply; note: string },
+  followUp?: { reply: TurnReply | ModelReply; note: string },
 ): Promise<Answer> {
   const model = given ?? (client ??= new Anthropic(apiKey ? { apiKey } : {}));
   const messages: Anthropic.Beta.BetaMessageParam[] = request.history.map((turn) => ({ role: turn.role, content: turn.text }));

@@ -189,6 +189,32 @@ export function asksForAFact(goal: string): boolean {
   return ASKS_A_FACT.test(goal) && !ASKS_FOR_A_WAY.test(goal);
 }
 
+// On a site with Answers on the model may also answer in words from a help
+// article (mode "answer"). That is right for a question of fact or
+// explanation, and the owner's rule for everything else is that the visitor
+// is taken through it, not told about it: "how do I add a budget" is guided
+// to the end whether or not an article describes budgets. So an answer is
+// looked at only for a goal that wants the way.
+
+/** A goal that asks how something works or what it is: "how does freezing work", "how do approvals work", "explain per diems". */
+const ASKS_HOW_IT_WORKS = /^\s*(?:how\s+(?:does|is|are|did|come)\b|how\s+do\s+(?!(?:i|we|you)\b)|explain\b|describe\b)/i;
+/** A question in form that wants a way: "I lost the receipt, what do I do", "what should I click to add one". */
+const ASKS_WHAT_TO_DO = /\bwhat\s+(?:do|should|can|could|must)\s+(?:i|we)\s+(?:do|click|press|use|need to do)\b/i;
+
+/**
+ * Whether the goal asks to do something, get somewhere or find where
+ * something is, so that the visitor is to be taken through it: anything that
+ * is not a question of fact (asksForAFact) or a question about how something
+ * works. "Add a budget" and "how do I add a budget" do, "what does freezing a
+ * card do" and "how do approvals work" do not. When in doubt it is a way, as
+ * the Answers rules have it: "when you can't tell whether they want to do a
+ * thing or understand it, give the step".
+ */
+export function wantsTheWay(goal: string): boolean {
+  if (ASKS_WHAT_TO_DO.test(goal)) return true;
+  return !asksForAFact(goal) && !ASKS_HOW_IT_WORKS.test(goal);
+}
+
 /** Every listed control the sentence tells the visitor to use, in the order the sentence names them. */
 function toldToUse(snapshot: Snapshot, say: string): { element: SnapElement; at: number }[] {
   const found: { element: SnapElement; at: number; end: number }[] = [];

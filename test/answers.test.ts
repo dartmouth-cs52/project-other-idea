@@ -146,6 +146,18 @@ test("an answer can point as well, and then waits on the control only if the mod
   assert.equal(nowhere.reply.status, "done");
 });
 
+test("an answer that points, to a visitor who asked for a way, is the first step of it and not the end", () => {
+  const done = wrote({ target: "e2", status: "done", say: "An invite emails the person a link to join. Click Send invite.", sources: ["a1"] });
+  // They asked how: the guide goes on from the pointer, so they are taken through it.
+  for (const goal of ["how do I invite a teammate", "invite a teammate", "where do I invite people", "I need to invite someone, what do I do"]) {
+    assert.equal(finishAnswer(site, ask(goal), done).reply.status, "continue", goal);
+  }
+  // They asked what it is or how it works: the pointer shows where the thing is, and the answer is the end.
+  for (const goal of ["What does Send invite do?", "how does inviting work", "can I invite someone outside the company?"]) {
+    assert.equal(finishAnswer(site, ask(goal), done).reply.status, "done", goal);
+  }
+});
+
 test("an answer that names none of this site's articles is not shown as an answer", () => {
   for (const sources of [[], ["a9"], ["Inviting teammates"], ["a1; drop table"]]) {
     const { reply, overruled } = finishAnswer(site, ask("How long does an invite link last?"), wrote({ say: "The link works for 30 days.", sources }));
