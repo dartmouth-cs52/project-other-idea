@@ -110,7 +110,8 @@ jobs:
       - name: Check the live server answers
         run: |
           for attempt in 1 2 3 4 5; do
-            if curl --fail --silent --show-error --output /dev/null https://widget.joinhaptic.com/widget.js; then
+            # Both of the widget's files: the second is the code that acts, loaded on sites with acting on.
+            if curl --fail --silent --show-error --output /dev/null https://widget.joinhaptic.com/widget.js && curl --fail --silent --show-error --output /dev/null https://widget.joinhaptic.com/widget-act.js; then
               echo "widget.joinhaptic.com is up."
               exit 0
             fi

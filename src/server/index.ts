@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { extname, normalize } from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { buildWidget, WIDGET_FILE } from "../widget/build.ts";
+import { ACTING_FILE, buildWidget, WIDGET_FILE } from "../widget/build.ts";
 import { createApp } from "./app.ts";
 import { describeAlert, MemoryBudget } from "./budget.ts";
 import { Store } from "./db.ts";
@@ -48,6 +48,7 @@ const app = createApp({
     return site && withLearned(site, learned.labels(id), threshold);
   },
   widget: () => readFile(WIDGET_FILE, "utf8"),
+  widgetActing: () => readFile(ACTING_FILE, "utf8"),
   widgetMaxAge: process.env.NODE_ENV === "production" ? 300 : 0,
   overLimit,
   isOff: () => process.env.HAPTIC_OFF === "1",
@@ -123,5 +124,6 @@ function json(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
-console.log(`Built the widget (${((await buildWidget()) / 1024).toFixed(1)} KB)`);
+const sizes = await buildWidget();
+console.log(`Built the widget (${(sizes.widget / 1024).toFixed(1)} KB, and ${(sizes.acting / 1024).toFixed(1)} KB for acting)`);
 server.listen(PORT, () => console.log(`Haptic is running on http://localhost:${PORT} with model ${SETTINGS.model}. Demo: http://localhost:${PORT}/demo/`));

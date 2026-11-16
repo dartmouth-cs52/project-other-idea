@@ -1,4 +1,5 @@
 import { actingAllowedAt, DEFAULT_APPEARANCE, localDate, MODES, STREAM_TYPE, TURN_VERSION, type Mode, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { loadActing, type GateConfig } from "./acting-code.ts";
 import { Guide, type HandoffWay, type Reporter, type Watch } from "./guide.ts";
 import { startLearning, visitorId } from "./learn.ts";
 import { currentPath } from "./snapshot.ts";
@@ -11,6 +12,10 @@ import { Ui } from "./ui.ts";
 // A site with "do it with me" on shows a Do it button beside the ask box. A
 // page can switch that off for itself, never on, with data-acting="off" on
 // the script tag: a company may want it for some of its pages only.
+//
+// The code that acts is a second file, widget-act.js, beside this one. Only a
+// site with acting on loads it, as the widget starts (acting-code.ts). If it
+// does not come, the site is guided by pointer, as one with acting off is.
 //
 // A page shown on a projector or a shared screen can ask for presentation
 // mode with data-present="1" on the script tag: a larger pointer, caption and
@@ -122,15 +127,26 @@ async function boot() {
   // Acting is on only where the site turned it on, and the page did not turn it off.
   const pageOff = (script.dataset.acting ?? "").trim().toLowerCase() === "off";
   const acting = config.acting && typeof config.acting === "object" && !pageOff ? config.acting : undefined;
+  // What the guide and its gate are told of acting. The setting is set aside if the code that acts cannot be loaded.
+  const gateConfig: GateConfig = { ...(acting ? { acting } : {}), ...(pageOff ? { pageOff } : {}) };
+  let actingLoaded: boolean | undefined;
+  const actingReady = acting
+    ? loadActing(script).then((ok) => {
+        actingLoaded = ok;
+        if (!ok) delete gateConfig.acting;
+        return ok;
+      })
+    : undefined;
   const present = /^(?:1|true|on|yes)$/i.test((script.dataset.present ?? "").trim());
   const ui: Ui = new Ui(
     config.appearance,
     {
-      onAsk: (question, act) => guide.start(question, act),
+      // Do it pressed before the code that acts is in waits for it, and guides by pointer if it never comes.
+      onAsk: (question, act) => (act && actingReady && actingLoaded === undefined ? void actingReady.then(() => guide.start(question, act)) : guide.start(question, act)),
       onStop: () => guide.stop(),
       onCarryOn: () => guide.carryOn(),
     },
-    acting ? { site, confirmFirst: acting.confirmFirst !== false, allowedHere: () => actingAllowedAt(acting, currentPath()) } : undefined,
+    acting ? { site, confirmFirst: acting.confirmFirst !== false, allowedHere: () => actingLoaded !== false && actingAllowedAt(acting, currentPath()) } : undefined,
     { present },
   );
   // The way to a person, when the site has one. The form goes to the server, which passes it on to the company.
@@ -146,8 +162,10 @@ async function boot() {
     },
   };
   const blocked = Array.isArray(config.blocked) ? config.blocked : [];
-  const guide = new Guide(ui, sendTurn, { ...(acting ? { acting } : {}), ...(pageOff ? { pageOff } : {}) }, report, handoff, blocked);
-  guide.resume();
+  const guide = new Guide(ui, sendTurn, gateConfig, report, handoff, blocked);
+  // A guide that was acting when the last page went carries on only once the code that acts is in.
+  if (actingReady) void actingReady.then(() => guide.resume());
+  else guide.resume();
 
   // Each page's outline, so the site map keeps up with the product (learn.ts). Sent as text/plain, which needs no
   // preflight, and it never matters to the visitor whether it arrives. A site can turn it off.

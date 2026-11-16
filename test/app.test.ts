@@ -28,6 +28,7 @@ function makeApp(limit = false, extra: Partial<AppParts> = {}, sites: SiteContex
   const app = createApp({
     loadSite: async (id) => sites.find((known) => known.id === id),
     widget: async () => "/* widget */",
+    widgetActing: async () => "/* acting */",
     widgetMaxAge: 300,
     overLimit: () => limit,
     onTurn: (request) => void turns.push(request.goal),
@@ -53,6 +54,14 @@ test("the widget file is served as a script that browsers may keep for a while",
   assert.match(response?.headers.get("Content-Type") ?? "", /javascript/);
   assert.equal(response?.headers.get("Cache-Control"), "public, max-age=300");
   assert.equal(await response?.text(), "/* widget */");
+});
+
+test("the code that acts is served beside the widget, from the same host, kept as long", async () => {
+  const response = await makeApp().app(new Request("https://widget.test/widget-act.js?v=0123456789ab"), "1.1.1.1");
+  assert.equal(response?.status, 200);
+  assert.match(response?.headers.get("Content-Type") ?? "", /javascript/);
+  assert.equal(response?.headers.get("Cache-Control"), "public, max-age=300");
+  assert.equal(await response?.text(), "/* acting */");
 });
 
 test("a site's settings go only to the origins it lists", async () => {

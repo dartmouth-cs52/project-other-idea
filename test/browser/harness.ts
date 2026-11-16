@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { chromium, firefox, webkit, type Browser, type BrowserType, type Page } from "playwright";
+import { widgetBundles } from "../../src/widget/build.ts";
 import { DEFAULT_APPEARANCE, STREAM_TYPE, type PublicSiteConfig, type SnapElement, type TurnReply, type TurnRequest } from "../../src/shared/types.ts";
 
 // Runs the real widget in real browsers, against a small server that serves
@@ -21,12 +22,10 @@ const ENGINES: Record<string, BrowserType> = { chromium, firefox, webkit };
 /** The engines this run covers. */
 export const BROWSERS = (process.env.BROWSERS ?? "chromium,firefox,webkit").split(",").map((name) => name.trim()).filter((name) => name in ENGINES);
 
-let bundle: Promise<string> | undefined;
-/** The widget as the script tag loads it, built once per run. Not minified, so a failure points at a readable line. */
-export function widgetBundle(): Promise<string> {
-  bundle ??= build({ entryPoints: [`${root}src/widget/index.ts`], bundle: true, format: "iife", target: "es2020", write: false }).then(
-    (result) => result.outputFiles[0]!.text,
-  );
+let bundle: Promise<{ widget: string; acting: string }> | undefined;
+/** The widget's two files, widget.js and the code that acts, as the server serves them, built once per run. Not minified, so a failure points at a readable line. */
+export function widgetBundle(): Promise<{ widget: string; acting: string }> {
+  bundle ??= widgetBundles({ minify: false });
   return bundle;
 }
 
@@ -81,7 +80,7 @@ export interface Harness {
 }
 
 export async function startHarness(): Promise<Harness> {
-  const widget = await widgetBundle();
+  const { widget, acting } = await widgetBundle();
   const harness: Harness = {
     url: "",
     pages: new Map(),
@@ -95,6 +94,7 @@ export async function startHarness(): Promise<Harness> {
   const server: Server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/widget.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(widget);
+    if (url.pathname === "/widget-act.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(acting);
     if (url.pathname.startsWith("/v1/sites/")) return res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(harness.config));
     if (req.method === "POST" && url.pathname === "/v1/turn") {
       const request = JSON.parse(await readBody(req)) as TurnRequest;

@@ -37,6 +37,8 @@ export interface AppParts {
   loadSite(id: string, hurry?: boolean): Promise<SiteContext | undefined>;
   /** The widget bundle, as the text of one script. */
   widget(): Promise<string>;
+  /** The code that acts, widget-act.js, which the widget loads from beside itself on a site with acting on. Without it, such a site is guided by pointer. */
+  widgetActing?(): Promise<string>;
   /** How long browsers may keep the widget before asking again, in seconds. 0 for never. */
   widgetMaxAge: number;
   /** True when this caller has asked for too many steps lately. */
@@ -120,9 +122,10 @@ export function createApp(parts: AppParts) {
       });
     }
 
-    if (request.method === "GET" && url.pathname === "/widget.js") {
+    if (request.method === "GET" && (url.pathname === "/widget.js" || (url.pathname === "/widget-act.js" && parts.widgetActing))) {
       const cache = parts.widgetMaxAge > 0 ? `public, max-age=${parts.widgetMaxAge}` : "no-store";
-      return new Response(await parts.widget(), { headers: { ...cors, "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": cache } });
+      const script = url.pathname === "/widget.js" ? await parts.widget() : await parts.widgetActing!();
+      return new Response(script, { headers: { ...cors, "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": cache } });
     }
 
     const siteMatch = /^\/v1\/sites\/([^/]+)$/.exec(url.pathname);

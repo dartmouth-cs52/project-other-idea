@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { loadSite, SITES_DIR } from "../src/server/sites.ts";
 import { publicActing } from "../src/server/acting.ts";
 import { DEFAULT_APPEARANCE, STREAM_TYPE, type PublicSiteConfig, type SiteContext, type TurnReply, type TurnRequest } from "../src/shared/types.ts";
-import { bundleWidget } from "../src/widget/build.ts";
+import { widgetBundles } from "../src/widget/build.ts";
 import { CASES_DIR, type CaseFile } from "./cases.ts";
 import { faults, reachedList, type Act, type GuideSet, type Reached, type ReadAnswer, type Says } from "./guide.ts";
 import { watch, type Net } from "./net.ts";
@@ -151,11 +151,13 @@ export async function open(browser: Browser, set: GuideSet, path: string, answer
   const api = set.hasTag ? set.origin : WIDGET_ORIGIN;
   if (!set.hasTag) await context.addInitScript(addTag(`${api}/widget.js`, set.siteId));
 
-  const widget = await widgetSource();
+  const { widget, acting: actingCode } = await widgetSource();
   // Anything else the widget posts to its server, like the outline of a page it learns from or a visitor's note to a
   // person, is answered here too, so a run never reaches a real server's records. Added first, so the routes below come before it.
   await context.route(`${api}/v1/**`, (route: Page) => route.fulfill({ status: 200, contentType: "application/json", headers: CORS, body: JSON.stringify({ ok: true }) }));
   await context.route(`${api}/widget.js`, (route: Page) => route.fulfill({ status: 200, contentType: "text/javascript", headers: CORS, body: widget }));
+  // The code that acts, which the widget loads from beside itself on a site with acting on, with its build in the query.
+  await context.route((url: URL) => url.href.startsWith(`${api}/widget-act.js`), (route: Page) => route.fulfill({ status: 200, contentType: "text/javascript", headers: CORS, body: actingCode }));
   const acting = site ? publicActing(site) : undefined;
   const served: PublicSiteConfig = { name: site?.name ?? "", appearance: site?.appearance ?? DEFAULT_APPEARANCE, ...(acting ? { acting } : {}), ...config };
   await context.route(`${api}/v1/sites/**`, (route: Page) => route.fulfill({ status: 200, contentType: "application/json", headers: CORS, body: JSON.stringify(served) }));
@@ -436,9 +438,9 @@ export async function ask(page: Page, goal: string): Promise<void> {
   await page.locator("haptic-root .ask input").press("Enter");
 }
 
-let bundled: Promise<string> | undefined;
-/** The widget in the page is always this checkout's, built in memory, so a change to it shows up without a separate build. */
-function widgetSource(): Promise<string> {
-  bundled ??= bundleWidget();
+let bundled: Promise<{ widget: string; acting: string }> | undefined;
+/** The widget in the page is always this checkout's, both its files built in memory, so a change to it shows up without a separate build. */
+function widgetSource(): Promise<{ widget: string; acting: string }> {
+  bundled ??= widgetBundles();
   return bundled;
 }

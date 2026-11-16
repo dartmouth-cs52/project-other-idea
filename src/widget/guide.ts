@@ -18,8 +18,8 @@ import {
   type TurnReply,
   type TurnRequest,
 } from "../shared/types.ts";
-import { perform, type DidLine, type Heard as HeardStep, type Listening } from "./act.ts";
-import { confirmationAction, planFor, SAYS, type ActPlan, type GateConfig, type GateSession, type Plan, type StopPlan, type VisitorPlan } from "./gate.ts";
+import type { DidLine, Heard as HeardStep, Listening } from "./act.ts";
+import { confirmationAction, perform, planFor, SAYS, type ActPlan, type GateConfig, type GateSession, type Plan, type StopPlan, type VisitorPlan } from "./acting-code.ts";
 import { hear, isOwn, keyName, keysAsked, nothingHeard, OWN_TYPING_PAUSE_MS, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "./observe.ts";
 import { onAddressChange } from "./navigation.ts";
 import { isDrawn, POPUP_ROLES, watchPopups } from "./popups.ts";

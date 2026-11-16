@@ -63,7 +63,7 @@ sequenceDiagram
     end
 ```
 
-1. **Snapshot.** The widget (about 240 KB, 82 KB gzipped, no dependencies, isolated in a shadow root) lists every interactive control on the page with a short id, its role, label, state and position (`nav`, `main › Billing`). When a dialog is open, only the dialog is listed.
+1. **Snapshot.** The widget (about 155 KB, 53 KB gzipped, no dependencies, isolated in a shadow root; the code for Do it with me, another 96 KB, 34 KB gzipped, loads only on a site with it on) lists every interactive control on the page with a short id, its role, label, state and position (`nav`, `main › Billing`). When a dialog is open, only the dialog is listed.
 2. **Decide.** The server sends the snapshot, the goal and the progress so far to Claude. The site's knowledge is a cached prompt, so each step pays full price only for what changed. The reply has a strict schema, and a target that isn't on the page is dropped, so Haptic can only point at what the user can actually see.
 3. **Point.** The pointer moves the moment the target id arrives, before the caption has finished streaming.
 4. **Observe.** Once the user acts, the widget waits for the page to settle and reports what changed. If they click something else, Haptic notices and gives them the step that gets them back.
@@ -169,7 +169,7 @@ To build a context for any site, run `npm run tag -- --url https://app.example.c
 ```bash
 npm test                          # unit tests (node:test)
 npm run typecheck                 # tsc, strict
-npm run build                     # bundle the widget to dist/widget.js
+npm run build                     # bundle the widget to dist/widget.js, and the code that acts to dist/widget-act.js
 npm run eval -- --models mock     # the guide benchmark, no API key needed
 npm run eval:guides -- demo       # whole guides in a browser (needs the local server running)
 npm run test:browser              # page reading in Chromium, and the widget in Chromium, Firefox and WebKit
