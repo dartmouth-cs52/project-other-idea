@@ -217,7 +217,7 @@ export function renderSiteMap(pages: PageNode[]): string {
  * the question. A site without any is asked exactly as before.
  */
 export function buildUserMessage(request: TurnRequest, site?: SiteContext): string {
-  const parts = [`<page>\n${renderSnapshot(request.snapshot)}\n</page>`];
+  const parts = [`<page>\n${renderSnapshot(request.snapshot, knownOpenings(site, request.snapshot.path))}\n</page>`];
   const corrections = correctionsFor(site?.corrections, request.snapshot.path, request.goal);
   if (corrections.length) {
     const lines = corrections.map(
@@ -237,12 +237,53 @@ export function buildUserMessage(request: TurnRequest, site?: SiteContext): stri
   return parts.join("\n\n");
 }
 
-export function renderSnapshot(snapshot: Snapshot): string {
+/** Items listed after a closed control, at most. */
+const MAX_OPENS_LISTED = 12;
+/** Regions on every page, where a control that opens the same thing everywhere it was seen is taken to do so here too. */
+const CHROME = new Set(["header", "nav", "aside"]);
+
+/**
+ * What each closed control on this page is known to show, from the site map:
+ * what the crawl or enough visitors saw when it was opened. On this page's own
+ * entry first. A control in the header, the navigation or a sidebar also gets
+ * what it showed on other pages, as long as that was the same everywhere, which
+ * is how an account or help menu seen on one page is known on all of them. A
+ * control named "More actions" in the main part of two pages can open
+ * different things, so it gets only its own page's.
+ */
+export function knownOpenings(site: SiteContext | undefined, path: string): (element: SnapElement) => string | undefined {
+  if (!site?.pages.some((page) => page.opens?.length)) return () => undefined;
+  const text = (opening: PageOpening) =>
+    [...opening.links.map((link) => `${link.label} → ${link.to}`), ...opening.buttons].slice(0, MAX_OPENS_LISTED).join("; ");
+  const here = new Map((site.pages.find((page) => page.path === path)?.opens ?? []).map((opening) => [opening.control, text(opening)]));
+  const elsewhere = new Map<string, Set<string>>();
+  for (const page of site.pages) {
+    for (const opening of page.opens ?? []) elsewhere.set(opening.control, (elsewhere.get(opening.control) ?? new Set()).add(text(opening)));
+  }
+  return (element) => {
+    if (element.state?.includes("expanded")) return undefined;
+    const name = element.label || (element.icon ? `icon:${element.icon}` : "");
+    if (!name) return undefined;
+    const own = here.get(name);
+    if (own) return own;
+    const seen = elsewhere.get(name);
+    const region = element.context?.split(" › ")[0] ?? "";
+    return seen?.size === 1 && CHROME.has(region) ? [...seen][0] : undefined;
+  };
+}
+
+export function renderSnapshot(snapshot: Snapshot, opens: (element: SnapElement) => string | undefined = () => undefined): string {
   const lines = [`Path: ${snapshot.path}`, `Title: ${snapshot.title}`];
   if (snapshot.dialog !== undefined) lines.push(`Open dialog: ${snapshot.dialog || "(untitled)"}. Only its elements are listed.`);
   if (snapshot.headings.length) lines.push(`Headings: ${snapshot.headings.join(" | ")}`);
   if (snapshot.text.length) lines.push(`Text on the page:\n${snapshot.text.map((text) => `- ${text}`).join("\n")}`);
-  lines.push("Elements:", ...snapshot.elements.map(renderElement));
+  lines.push(
+    "Elements:",
+    ...snapshot.elements.map((element) => {
+      const behind = opens(element);
+      return behind ? `${renderElement(element)} opens: ${behind}` : renderElement(element);
+    }),
+  );
   if (snapshot.truncated) lines.push("(more elements exist than are listed)");
   return lines.join("\n");
 }

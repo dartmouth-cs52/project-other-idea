@@ -71,7 +71,7 @@ sequenceDiagram
 
 ### What Haptic knows about a site
 
-A crawl turns the site into a **graph**. Each page's title, headings, buttons and field labels make a node, and the links between pages are the edges. The intake CLI reads server-rendered HTML, and the dashboard's reader uses a headless browser. That reader also opens each menu, tab and accordion and records what it showed, so the map knows which control a link sits behind. Real visits fill in what a crawl can't reach: the widget sends the labels on each page it loads on, and a label joins the map once three different visitors have seen it ([how](docs/widget.md#learning-the-site-from-visits)). Together with the company's notes and help docs, this gives the model a map it can plan routes through, to pages the user hasn't reached yet.
+A crawl turns the site into a **graph**. Each page's title, headings, buttons and field labels make a node, and the links between pages are the edges. The intake CLI reads server-rendered HTML, and the dashboard's reader uses a headless browser. That reader also opens each menu, tab and accordion and records what it showed, so the map knows which control a link sits behind. Real visits fill in what a crawl can't reach: the widget sends the labels on each page it loads on, and what each menu, tab and accordion shows when a visitor opens it, and a label joins the map once three different visitors have seen it ([how](docs/widget.md#learning-the-site-from-visits)). Together with the company's notes and help docs, this gives the model a map it can plan routes through, to pages the user hasn't reached yet.
 
 ### Beyond pointing
 

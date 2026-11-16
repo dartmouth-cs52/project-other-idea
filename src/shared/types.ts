@@ -268,6 +268,8 @@ export interface PageOutline {
   links: { label: string; to: string }[];
   /** Buttons, tabs and menu items. An icon-only one is named by its icon, like "icon:share-2". */
   buttons: string[];
+  /** What a menu, tab or accordion showed when a visitor opened it, in the same shape the crawl uses. */
+  opens?: PageOpening[];
 }
 
 /** What the widget posts to /v1/outline. */
