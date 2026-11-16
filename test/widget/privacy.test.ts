@@ -81,6 +81,65 @@ test("what the page shows back of what was typed is not sent with the next quest
   }
 });
 
+// A list that narrows as the visitor types, as Northpine's people search and its cardholder picker do. The visitor
+// asked about someone by name, types part of the name, and the row or option to point at carries it. With every
+// repeat of a field's value left out, that row read "[typed] Johnston" and the option "[typed] Cummerata".
+const FILTERS = `
+  <h1>People</h1>
+  <p><label for="q">Search people</label> <input id="q" type="text"></p>
+  <ul id="rows"></ul>
+  <p><label for="note">Note</label> <input id="note" type="text"></p>
+  <p id="echo"></p>
+  <script>
+    const people = ["Roma Johnston", "Roman Okafor", "Lilly O'Keefe"];
+    document.getElementById("q").addEventListener("input", (e) => {
+      const typed = e.target.value.toLowerCase();
+      document.getElementById("rows").innerHTML = people.filter((name) => typed && name.toLowerCase().includes(typed)).map((name) => '<li><button type="button">' + name + '</button></li>').join("");
+    });
+    document.getElementById("note").addEventListener("input", (e) => { document.getElementById("echo").textContent = "Note: " + e.target.value; });
+  </script>`;
+
+test("words the visitor wrote in their own question stay readable where a field repeats them, and anything else they type is still left out", async () => {
+  const session = await start(FILTERS, (request, index) => (index === 0 ? point(request, "Search people", "Type Roma in the search box.") : words("Click Roma Johnston.", "done")));
+  try {
+    await session.ask("make Roma Johnston a manager");
+    await session.untilState("pointing");
+    await session.page.locator("#q").click();
+    await session.page.keyboard.type("Roma");
+    await session.page.locator("#note").click();
+    await session.page.keyboard.type("ask Lilly first");
+    await session.page.locator("h1").click();
+    const second = await session.untilAsked(2);
+    const labels = second.snapshot.elements.map((element) => element.label);
+    // The row they asked about can be read, and pointed at.
+    assert.ok(labels.includes("Roma Johnston"), JSON.stringify(labels));
+    // "Roma" is a whole word of the question. It is not one in "Roman", which is another person's name and is sent as the page's own.
+    assert.ok(labels.includes("Roman Okafor"), JSON.stringify(labels));
+    // What they typed and did not ask about is not sent, in the page's text or anywhere else.
+    const sent = JSON.stringify(session.requests);
+    for (const typed of ["ask Lilly first", "Lilly first"]) assert.ok(!sent.includes(typed), `"${typed}" was sent: ${JSON.stringify(second.snapshot)}`);
+  } finally {
+    await session.close();
+  }
+});
+
+test("a name typed in a search that the visitor did not write in their question is still left out of the results", async () => {
+  const session = await start(FILTERS, (request, index) => (index === 0 ? point(request, "Search people", "Type their name in the search box.") : words("Click their row.", "done")));
+  try {
+    await session.ask("change someone's role");
+    await session.untilState("pointing");
+    await session.page.locator("#q").click();
+    await session.page.keyboard.type("Lilly");
+    await session.page.locator("h1").click();
+    const second = await session.untilAsked(2);
+    const labels = second.snapshot.elements.map((element) => element.label);
+    assert.ok(labels.includes("[typed] O'Keefe"), JSON.stringify(labels));
+    assert.ok(!JSON.stringify(session.requests).includes("Lilly"), JSON.stringify(second.snapshot));
+  } finally {
+    await session.close();
+  }
+});
+
 // From the second review: a page that repeats what is typed in places other than its text. A heading greets the
 // name being typed, the button to save says it, the title says it, and the search box's list offers a search for
 // what is typed in it. Each reached the model.

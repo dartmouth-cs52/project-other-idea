@@ -641,6 +641,19 @@ let choiceBoxes: WeakSet<Element> = new WeakSet();
  * and is never sent or kept: see `echoesTyping`.
  */
 let typed: string[] = [];
+/**
+ * The visitor's own question, as one lower-case line, for as long as one page
+ * is being read. Words of it are theirs to send, and the server has them: a
+ * field that holds some of them repeats nothing new (see `typedValues`).
+ */
+let asked = "";
+
+/** Whether `line` holds `value` whole, with no letter or digit run on to it: "settings" does not hold "set". Both lower case. */
+function holdsWhole(line: string, value: string): boolean {
+  const runsOn = (at: number) => at >= 0 && at < line.length && /[\p{L}\p{N}]/u.test(line[at] ?? "");
+  for (let at = line.indexOf(value); at >= 0; at = line.indexOf(value, at + 1)) if (!runsOn(at - 1) && !runsOn(at + value.length)) return true;
+  return false;
+}
 
 /** Input types a visitor writes in. A tick box, a button, a file or a hidden field holds nothing typed. */
 const NOT_TYPED_IN = new Set(["checkbox", "radio", "button", "submit", "reset", "image", "file", "hidden", "color", "range"]);
@@ -674,7 +687,17 @@ function documentsOfPage(): Document[] {
 /** The documents being read: the page's, and its frames' from its own origin. Set for one reading. */
 let pageDocuments: Document[] = [];
 
-/** What the fields and editors on the page hold now, each as one lower-case line of words. */
+/**
+ * What the fields and editors on the page hold now, each as one lower-case
+ * line of words. Not what the visitor also wrote, whole, in their own
+ * question: asked to "make Roma Johnston a manager", they type Roma in the
+ * search box, and the row to point at is "Roma Johnston". Their question is
+ * sent as it is, so that name tells the server nothing it was not told. With
+ * it left out, the row read "[typed] Johnston", an option "[typed]
+ * Cummerata", and a card's own page "[typed]" for its heading. Everything
+ * else a field holds is left out as before, and an email or a long number is
+ * still masked by its own rule (`own`).
+ */
 function typedValues(): string[] {
   const values: string[] = [];
   const fields = pageDocuments.flatMap((doc) => Array.from(doc.querySelectorAll("input, textarea, [contenteditable]")));
@@ -684,7 +707,7 @@ function typedValues(): string[] {
     else if (isTag(field, "textarea")) value = field.value;
     else if ((field as HTMLElement).isContentEditable && !insideEditor(field.parentElement ?? field.ownerDocument.body)) value = field.textContent ?? "";
     value = value.replace(/\s+/g, " ").trim().toLowerCase();
-    if (value.length >= MIN_ECHO) values.push(value);
+    if (value.length >= MIN_ECHO && !holdsWhole(asked, value)) values.push(value);
     if (values.length >= MAX_TYPED_FIELDS) break;
   }
   return values;
@@ -702,11 +725,7 @@ function typedValues(): string[] {
 function echoesTyping(words: string): boolean {
   if (!typed.length || words.length < MIN_ECHO) return false;
   const line = words.replace(/\s+/g, " ").toLowerCase();
-  const runsOn = (at: number) => at >= 0 && at < line.length && /[\p{L}\p{N}]/u.test(line[at] ?? "");
-  return typed.some((value) => {
-    for (let at = line.indexOf(value); at >= 0; at = line.indexOf(value, at + 1)) if (!runsOn(at - 1) && !runsOn(at + value.length)) return true;
-    return false;
-  });
+  return typed.some((value) => holdsWhole(line, value));
 }
 
 /** Fields that open a list and show what was picked from it beside themselves, not in themselves. */
@@ -763,6 +782,7 @@ const cleanText = (text: string, max = 80): string => maskAndTrim(withoutTyping(
  */
 export function takeSnapshot(ignore: Element, question = "", near = (ignore as Element & { pointedAt?: Element }).pointedAt): PageSnapshot {
   own = namedIn(question);
+  asked = question.replace(/\s+/g, " ").trim().toLowerCase();
   pageDocuments = documentsOfPage();
   untiedLabels = pageDocuments.some((doc) => Array.from(doc.querySelectorAll("label")).some((label) => !label.hasAttribute("for") && !(label as HTMLLabelElement).control));
   choiceBoxes = choiceBoxesOf();
@@ -1173,8 +1193,9 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   if (modal) snapshot.dialog = dialogLabel(modal);
   else if (reach.layer) snapshot.dialog = layerLabel(reach.layer);
   uncut.set(snapshot, { elements: everything.elements.map(strip), text: everything.text, headings: everything.headings });
-  // What the fields held is let go with the reading.
+  // What the fields held is let go with the reading, and the question with it.
   typed = [];
+  asked = "";
   return { snapshot, elements };
 }
 

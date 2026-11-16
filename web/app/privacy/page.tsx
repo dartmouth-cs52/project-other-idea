@@ -47,7 +47,9 @@ export default function Privacy() {
         Haptic does not send what people type into fields, or anything inside an area the page marks as one they
         write in, and it takes no pictures of the page. It looks at what fields hold only inside the browser, to leave
         it out wherever the page repeats it while it is there, in the page&apos;s text, headings, title, buttons, links
-        and lists. Three kinds of page can still show it typed words. A product may show what someone typed on a later
+        and lists. The one exception is words a person also wrote in their question to Haptic. The question is sent as
+        they wrote it, so where the page repeats those same words, as a list of search results does with a name they
+        asked about, Haptic can read them. Three kinds of page can still show it typed words. A product may show what someone typed on a later
         page, such as in a confirmation, and Haptic reads it there. A page may write a search into an address, its own or a
         link&apos;s, which Haptic sends with ids and numbers masked. And some code editors draw what is typed as
         ordinary text beside a hidden field, which Haptic cannot tell from the rest of the page.

@@ -35,8 +35,9 @@ test("a reply that asks for a key press, with nothing to point at, waits for the
     await session.page.locator("#q").press("Enter");
     const third = await session.untilAsked(3);
     assert.match(third.event ?? "", /^The user pressed Enter\./);
-    // The page repeats the name the visitor typed in the search box: what they typed is not sent, wherever the page shows it.
-    assert.match(third.change ?? "", /New: button "Order 7 for \[typed\]"/);
+    // The page repeats the name the visitor typed in the search box. They wrote that name in their question too, so it is
+    // no news to the server and the result can be read. A name they did not ask about is left out: see privacy.test.ts.
+    assert.match(third.change ?? "", /New: button "Order 7 for Priya"/);
     await session.untilState("finished");
   } finally {
     await session.close();
