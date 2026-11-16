@@ -320,21 +320,17 @@ squeezed. The
 FAQ is two columns on desktop, with the title on the left and the accordion in
 the right half. Each row is 20px padding around a 24px line with a 1px divider.
 
-Pricing opens the way the FAQ does, with the title on the left and one
-sentence of Muted sub-copy in the right half, saying what is charged for. Under
-it sit the plans, one card each on the same Muted surface as a feature card,
-four across on desktop, two across from 640px and one below that. The
-sub-copy and the cards share a 16px gap, so on desktop the sentence starts where the third
-card does. A card holds the plan's name, its price at the 24px headline size,
-what the price includes, and who it is for in Muted text. Those four line up
-across the cards in a row, so each starts at the same height in every card.
-Text in a card is wrapped so a line does not end on a single word
-(`text-pretty`, where the browser supports it). The price is the largest thing in the card and
-no larger than a feature card's title. No plan is marked as the popular one,
-and a card has no button, because the site has one call to action. One short
-paragraph of 14px Muted text under the cards says when a guide counts as
-finished, that billing has not started, and that prices may change. The plans
-and that copy live in `web/lib/site.ts`.
+Pricing opens with its title alone. Under it sit the plans, one card each on
+the same Muted surface as a feature card, four across on desktop, two across
+from 640px and one below that. A card holds the plan's name, its price at the
+24px headline size, what the price includes, and who it is for in a few Muted
+words. Those four line up across the cards in a row, so each starts at the
+same height in every card. Text in a card is wrapped so a line does not end on
+a single word (`text-pretty`, where the browser supports it). The price is the
+largest thing in the card and no larger than a feature card's title. No plan
+is marked as the popular one, and a card has no button, because the site has
+one call to action. Two short sentences of 14px Muted text under the cards say
+what is charged for. The plans and those sentences live in `web/lib/site.ts`.
 
 The request access page is two columns. The pitch sits on the left, as a
 headline over a card. The form sits on the right in a second card, with its

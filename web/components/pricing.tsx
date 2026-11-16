@@ -23,11 +23,7 @@ function includes(plan: Plan): string {
 export function Pricing() {
   return (
     <section id="pricing" className="mx-auto w-full max-w-5xl scroll-mt-8 px-6 pt-20 md:pt-32">
-      {/* The same 16px gap as the cards, so the sentence starts exactly where the third card does. */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <h2 className="text-4xl font-medium tracking-[-0.03em]">Pricing</h2>
-        <p className="text-lg text-balance text-muted-foreground">{pricing.lead}</p>
-      </div>
+      <h2 className="text-4xl font-medium tracking-[-0.03em]">Pricing</h2>
       {/*
         Each card takes four rows of the list's grid and shares them with the cards beside it, so the
         names, the prices, what each includes and who it is for start at the same height across a row.
@@ -46,7 +42,7 @@ export function Pricing() {
           </li>
         ))}
       </ul>
-      <p className="mt-6 max-w-[65ch] text-sm text-pretty text-muted-foreground">{pricing.notes.join(" ")}</p>
+      <p className="mt-6 max-w-[65ch] text-sm text-pretty text-muted-foreground">{pricing.lead}</p>
     </section>
   );
 }
