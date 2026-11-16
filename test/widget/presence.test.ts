@@ -194,3 +194,86 @@ test("Haptic's buttons work with the mouse and with the keyboard, and a question
     await session.close();
   }
 });
+
+const parentOfHaptic = (session: Session) => session.page.evaluate(() => {
+  const parent = document.querySelector("haptic-root")?.parentElement ?? (document.querySelector("*:not(html) haptic-root") as Element | null)?.parentElement;
+  return parent ? parent.id || parent.tagName.toLowerCase() : "";
+});
+
+test("a calendar drawn as a dialog over part of the page, which shuts nothing out, is not where the widget goes", async () => {
+  // Material UI's and Fluent UI's date pickers: role "dialog", no aria-modal, no backdrop, often in the middle of the window.
+  const page = `<h1>Booking</h1><button id="pick" type="button">Choose date</button>
+    <div id="calendar" role="dialog" aria-label="Choose date" hidden style="position:fixed;left:25%;top:20%;width:50%;height:60%;background:#fff;border:1px solid #999">
+      ${Array.from({ length: 28 }, (_, day) => `<button type="button">${day + 1}</button>`).join("")}
+    </div>
+    <script>document.getElementById('pick').addEventListener('click', () => { document.getElementById('calendar').hidden = false; });</script>`;
+  const session = await start(page, () => words("Click 15."));
+  try {
+    await session.page.locator("#pick").click();
+    await askByHand(session, "which day is free");
+    await session.page.waitForTimeout(700);
+    assert.equal(await parentOfHaptic(session), "html", "the widget moved into the calendar");
+    await session.page.keyboard.press("Enter");
+    const first = await session.untilAsked(1, 5000);
+    assert.equal(first.goal, "which day is free");
+  } finally {
+    await session.close();
+  }
+});
+
+test("a question being typed is not lost when the list the widget moved into goes away", async () => {
+  // A list that keeps the keyboard to itself takes the widget in. The page then takes the list away while the visitor types.
+  const page = `<h1>Filters</h1><button id="open" type="button">Status</button>
+    <div id="pop" hidden style="position:fixed;inset:0">
+      <ul id="menu" role="listbox" tabindex="-1" style="position:absolute;top:60px;left:24px;margin:0;padding:4px;list-style:none;background:#fff;border:1px solid #999"><li role="option">Open</li><li role="option">Closed</li></ul>
+    </div>
+    <script>
+      const pop = document.getElementById('pop'), menu = document.getElementById('menu');
+      document.getElementById('open').addEventListener('click', () => { pop.hidden = false; menu.focus(); });
+      document.addEventListener('focus', () => { if (pop.isConnected && !pop.hidden && !pop.contains(document.activeElement)) menu.focus(); }, true);
+      window.takeAway = () => pop.remove();
+    </script>`;
+  const session = await start(page, () => words("Choose Open."));
+  try {
+    await session.page.locator("#open").click();
+    await askByHand(session, "which status ");
+    assert.ok(await session.page.evaluate(() => !!document.querySelector("#pop haptic-root")), "the widget did not move into the list that keeps the keyboard");
+    await session.page.evaluate(() => (window as unknown as { takeAway: () => void }).takeAway());
+    await session.page.keyboard.type("is open", { delay: 15 });
+    await session.page.keyboard.press("Enter");
+    const first = await session.untilAsked(1, 5000).catch(() => undefined);
+    assert.ok(first, "the question was lost");
+    assert.equal(first.goal, "which status is open");
+    assert.equal(await parentOfHaptic(session), "html");
+  } finally {
+    await session.close();
+  }
+});
+
+test("a dialog the page puts on the top layer after the widget does not cover the widget while it is in use", async () => {
+  // UI5's dialog: a popover of its own, shown over everything with a layer that blocks the page behind it.
+  const page = `<h1>Orders</h1><button id="open" type="button">Open dialog</button>
+    <div id="dialog" popover="manual" style="position:fixed;inset:0;margin:0;width:100vw;height:100vh;max-width:none;max-height:none;border:0;background:rgba(0,0,0,.4)">
+      <div role="dialog" aria-label="Order" style="position:absolute;left:30%;top:30%;width:40%;background:#fff;padding:16px"><button type="button">Close</button></div>
+    </div>
+    <script>document.getElementById('open').addEventListener('click', () => setTimeout(() => document.getElementById('dialog').showPopover(), 300));</script>`;
+  const session = await start(page, () => words("Click Close."));
+  try {
+    await session.page.locator("#open").click();
+    // The box is opened before the dialog shows, so the widget is in use when the page covers it.
+    const launcher = await session.page.evaluate(() => {
+      const rect = document.querySelector("haptic-root")!.shadowRoot!.querySelector(".launcher")!.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+    await session.page.mouse.click(launcher.x, launcher.y);
+    await session.page.waitForTimeout(1200);
+    const hit = await session.page.evaluate(({ x, y }: { x: number; y: number }) => document.elementFromPoint(x, y)?.tagName.toLowerCase(), launcher);
+    assert.equal(hit, "haptic-root", "the page's dialog covers the widget");
+    await session.page.keyboard.type("how do I close this", { delay: 15 });
+    await session.page.keyboard.press("Enter");
+    const first = await session.untilAsked(1, 5000);
+    assert.equal(first.goal, "how do I close this");
+  } finally {
+    await session.close();
+  }
+});

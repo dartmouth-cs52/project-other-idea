@@ -1,5 +1,4 @@
 import type { Appearance } from "../shared/types.ts";
-import { findOpenModal } from "./snapshot.ts";
 
 // Everything Haptic draws: the launcher, the ask box, the pointer, the
 // highlight ring and the caption. It all lives in one shadow root on one host
@@ -107,6 +106,10 @@ export class Ui {
   private buttons!: Record<"launcher" | "send" | "stop" | "close", () => void>;
   /** The timer that keeps our element placed, while it is in use. */
   private placing?: ReturnType<typeof setInterval>;
+  /** Watches what our element is inside, when that is something of the page's. */
+  private homeWatch?: MutationObserver;
+  /** When the ask box last lost the keyboard to nothing: our element was moved, or taken away with what it was in. */
+  private lostAt = -Infinity;
   /** Where the pointer last was, so each move starts from there. */
   private at: { x: number; y: number };
 
@@ -144,10 +147,10 @@ export class Ui {
     // What each of our buttons does. A press on one is acted on in keepPressesOurs.
     this.buttons = {
       launcher: () => {
-        // Nothing kept our element in place while it was not in use. A dialog may have opened since.
-        this.place();
         this.panel.hidden = !this.panel.hidden;
         this.keepPlaced();
+        // Nothing kept our element in place while it was not in use. A dialog may have opened since.
+        this.place();
         if (!this.panel.hidden) this.input.focus();
       },
       send: () => this.form.requestSubmit(),
@@ -189,37 +192,97 @@ export class Ui {
    * neither is the case, so the timer stops then.
    */
   private keepPlaced() {
-    const inUse = !this.panel.hidden || this.state === "asking" || this.state === "pointing" || this.state === "watching";
+    const inUse = this.inUse();
     if (inUse && this.placing === undefined) this.placing = setInterval(this.place, 500);
     else if (!inUse && this.placing !== undefined) {
       clearInterval(this.placing);
       this.placing = undefined;
+      // Back to its own place, out of anything of the page's that could be taken away with it while nothing watches.
+      this.place();
     }
   }
 
+  /** The visitor is using the widget: the ask box is open, or a guide runs. */
+  private inUse(): boolean {
+    return !this.panel.hidden || this.state === "asking" || this.state === "pointing" || this.state === "watching";
+  }
+
   /**
-   * Keeps our element on top and usable. A dialog shuts out everything
-   * outside it: the browser's own <dialog> makes the rest of the page inert,
-   * and the ones apps build pull the keyboard back whenever it leaves them,
-   * or mark the rest of the page inert themselves. So while a dialog is open
-   * we move inside it, where a visitor can still type a question, and move
-   * back out when it closes.
+   * Keeps our element on top and usable. A dialog that shuts out the rest of
+   * the page does so in one of two ways: the browser's own modal <dialog>
+   * makes the rest of the page inert, and the ones apps build pull the
+   * keyboard back whenever it leaves them. So while the widget is in use and
+   * such a dialog is open, or something has pulled the keyboard from the ask
+   * box, we move inside it, where a visitor can still type a question, and
+   * move back out when it closes. A box that shuts nothing out, like a
+   * calendar drawn as a dialog over part of the page, is left alone. And
+   * something the page shows in the top layer after us is not left on top of
+   * us.
    */
   place = () => {
-    if (this.captor && !(this.captor.isConnected && this.captor.getClientRects().length > 0)) this.captor = undefined;
-    const home = this.captor ?? findOpenModal(this.host) ?? document.documentElement;
-    if (this.host.parentNode === home) return;
-    // Moving takes the keyboard from whatever of ours had it, so it is given back.
-    const focused = this.host.shadowRoot?.activeElement as HTMLElement | null | undefined;
-    home.appendChild(this.host);
+    if (this.captor && !shown(this.captor)) this.captor = undefined;
+    const home = (this.inUse() && (this.captor ?? blockingDialog(this.host))) || document.documentElement;
+    if (this.host.parentNode === home) this.raise();
+    else {
+      // Moving takes the keyboard from whatever of ours had it, so it is given back. So does the page taking away what we were in.
+      const focused = (this.host.shadowRoot?.activeElement as HTMLElement | null) ?? (performance.now() - this.lostAt < 100 ? this.input : null);
+      home.appendChild(this.host);
+      this.show();
+      focused?.focus();
+    }
+    this.watchHome(home);
+  };
+
+  private show() {
     try {
       // Being a popover puts us in the top layer too, above anything the page stacks with z-index.
       this.host.showPopover();
     } catch {
-      // No popover support. The fixed position and z-index still apply.
+      // No popover support, or shown already. The fixed position and z-index still apply.
     }
+  }
+
+  /**
+   * Shows our element again if something the page put in the top layer after
+   * it lies on the launcher: a dialog drawn as a popover with a layer that
+   * blocks the page behind it. Shown again, ours is the latest, and on top.
+   */
+  private raise() {
+    if (!this.inUse() || !this.host.isConnected) return;
+    const box = this.dock.getBoundingClientRect();
+    const x = box.left + box.width / 2;
+    const y = box.top + box.height / 2;
+    if (!(x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight)) return;
+    const hit = document.elementFromPoint(x, y);
+    if (!hit || hit === this.host) return;
+    const focused = this.host.shadowRoot?.activeElement as HTMLElement | null;
+    try {
+      this.host.hidePopover();
+    } catch {
+      return;
+    }
+    this.show();
     focused?.focus();
-  };
+  }
+
+  /**
+   * While our element is inside something of the page's, watches that
+   * something and everything around it: the page can take it away, or hide
+   * it, at any moment, and would take a half-typed question with it. Our
+   * element is put back at once, before the next key arrives.
+   */
+  private watchHome(home: Element) {
+    this.homeWatch?.disconnect();
+    this.homeWatch = undefined;
+    if (home === document.documentElement) return;
+    this.homeWatch = new MutationObserver(() => {
+      const at = this.host.parentElement;
+      if (!this.host.isConnected || !at || !shown(at)) this.place();
+    });
+    for (let at: Element | null = home; at; at = at.parentElement) {
+      this.homeWatch.observe(at, { childList: true, attributes: true, attributeFilter: ["hidden", "style", "class", "open", "popover"] });
+    }
+  }
 
   /**
    * A press on anything of ours is not a press outside the page's open list,
@@ -292,6 +355,9 @@ export class Ui {
     this.host.addEventListener("pointerdown", () => (wanted = performance.now()));
     this.input.addEventListener("keydown", (event) => {
       if (event.key === "Tab") tabbed = performance.now();
+    });
+    this.input.addEventListener("blur", (event) => {
+      if (!event.relatedTarget) this.lostAt = performance.now();
     });
     this.input.addEventListener("focusout", (event) => {
       const to = event.relatedTarget;
@@ -510,6 +576,42 @@ export class Ui {
     this.dock.classList.remove("left", "right");
     this.dock.classList.add(side);
   }
+}
+
+/** Whether an element is in the page and drawn. */
+function shown(el: Element): boolean {
+  if (!el.isConnected || !el.getClientRects().length) return false;
+  return typeof el.checkVisibility !== "function" || el.checkVisibility({ visibilityProperty: true });
+}
+
+/**
+ * The open dialog that shuts out the rest of the page, if there is one: the
+ * browser's own modal dialog, a dialog that says it is modal, or one drawn
+ * with a backdrop over the whole window. The innermost of several wins.
+ */
+function blockingDialog(ignore: Element): Element | undefined {
+  let native: Element | undefined;
+  try {
+    document.querySelectorAll("dialog:modal").forEach((el) => (native = el));
+  } catch {
+    // :modal unsupported. ARIA modals below still work.
+  }
+  let found = native;
+  document.querySelectorAll('[role="dialog"], [role="alertdialog"]').forEach((el) => {
+    // Outside the browser's own modal dialog, everything is inert anyway.
+    if (ignore.contains(el) || !shown(el) || (native && !native.contains(el))) return;
+    if (el.getAttribute("aria-modal") === "true" || hasBackdrop(el, ignore)) found = el;
+  });
+  return found;
+}
+
+/** Whether a dialog is drawn over a backdrop that covers the window: what lies at its middle, if not the dialog, is a layer as big as the window, beside the dialog or pinned round it. */
+function hasBackdrop(dialog: Element, ignore: Element): boolean {
+  const top = document.elementsFromPoint(window.innerWidth / 2, window.innerHeight / 2).find((el) => !ignore.contains(el) && el !== ignore);
+  if (!top || dialog.contains(top) || top === document.body || top === document.documentElement) return false;
+  const cover = top.getBoundingClientRect();
+  if (cover.width < window.innerWidth * 0.95 || cover.height < window.innerHeight * 0.95) return false;
+  return !top.contains(dialog) || getComputedStyle(top).position === "fixed";
 }
 
 interface Box {
