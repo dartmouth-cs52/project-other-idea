@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import type { SiteContext, TurnReply, TurnRequest } from "../shared/types.ts";
+import { namedButNotPointed, namedButNotPointedNote } from "./check.ts";
 import { buildSystemPrompt, buildUserMessage } from "./prompt.ts";
 
 // One model call per step. HAPTIC_MODEL picks the model, or "mock" for a
@@ -10,6 +11,23 @@ import { buildSystemPrompt, buildUserMessage } from "./prompt.ts";
 
 type Effort = "low" | "medium" | "high";
 
+/**
+ * What is done with a reply whose sentence tells the visitor to use a listed
+ * control while it points at nothing (check.ts). "ask" asks the model once
+ * more when it is the guide's first question, and only says so in the
+ * server's log after that. "log" only logs, "off" does neither.
+ *
+ * Measured on 16 November 2026 over four runs of the 469 tuned single steps
+ * (1,870 replies): on every step it caught 34 replies (1.8%), of which 14 were
+ * scored wrong. Nearly all the other 20 came after the goal was reached and
+ * named an optional extra ("Click Close when you're finished"), and asking
+ * again made the model point at the extra in 3 of 27 tries. On first
+ * questions it caught 9 replies (0.5%), all 9 wrong, such as "Click FAQ in the
+ * top bar to read it" with nothing pointed at. Nothing can have been reached
+ * before the first step, so there a control the sentence names is the step.
+ */
+export type Recheck = "off" | "log" | "ask";
+
 /** How a step is asked for. The server reads these from the environment, and the benchmark tries several. */
 export interface TurnSettings {
   /** Any Claude model ID, or "mock". */
@@ -17,12 +35,14 @@ export interface TurnSettings {
   effort: Effort;
   /** "off" asks for no thinking before the answer, on the models that allow it. */
   thinking: "default" | "off";
+  recheck?: Recheck;
 }
 
-/** The names the settings are read from: HAPTIC_MODEL, HAPTIC_EFFORT, HAPTIC_THINKING and ANTHROPIC_API_KEY. */
+/** The names the settings are read from: HAPTIC_MODEL, HAPTIC_EFFORT, HAPTIC_THINKING, HAPTIC_RECHECK and ANTHROPIC_API_KEY. */
 export type ModelEnv = Record<string, string | undefined>;
 
 const EFFORTS: readonly string[] = ["low", "medium", "high"];
+const RECHECKS: readonly string[] = ["off", "log", "ask"];
 
 function settingsFrom(env: ModelEnv): TurnSettings {
   return {
@@ -30,6 +50,7 @@ function settingsFrom(env: ModelEnv): TurnSettings {
     // Each step is a small decision and the visitor is waiting on it, so the least effort is the default.
     effort: EFFORTS.includes(env.HAPTIC_EFFORT ?? "") ? (env.HAPTIC_EFFORT as Effort) : "low",
     thinking: env.HAPTIC_THINKING === "off" ? "off" : "default",
+    recheck: RECHECKS.includes(env.HAPTIC_RECHECK ?? "") ? (env.HAPTIC_RECHECK as Recheck) : "ask",
   };
 }
 
@@ -43,13 +64,18 @@ let mockPauseMs = Number(startEnv.HAPTIC_MOCK_PAUSE_MS) || 0;
 let apiKey: string | undefined;
 let client: Anthropic | undefined;
 
-export function configure(env: ModelEnv) {
+/** The calls this file makes to the model. Tests give a stand-in that answers from a script. */
+type ModelClient = Pick<Anthropic, "beta">;
+let given: ModelClient | undefined;
+
+export function configure(env: ModelEnv, stand?: ModelClient) {
   SETTINGS = settingsFrom(env);
   mockPauseMs = Number(env.HAPTIC_MOCK_PAUSE_MS) || 0;
   if (env.ANTHROPIC_API_KEY !== apiKey) {
     apiKey = env.ANTHROPIC_API_KEY;
     client = undefined;
   }
+  given = stand;
 }
 
 /** A step's reply, with what it took to get. */
@@ -64,6 +90,8 @@ export interface TurnMeasure {
   /** The sentence exactly as the model wrote it, before tidySay. The benchmark compares the two. */
   wrote: string;
   tokens?: { input: number; cacheRead: number; cacheWrite: number; output: number };
+  /** The listed control the first reply's sentence told the visitor to use while it pointed at nothing, and whether the model was asked again. */
+  recheck?: { named: string; asked: boolean };
 }
 
 const Reply = z.object({
@@ -209,14 +237,18 @@ export async function measureTurn(
 ): Promise<TurnMeasure> {
   const started = Date.now();
   let msToTarget: number | undefined;
+  let pointed = false;
   const onPage = (id: string | null): id is string => id !== null && request.snapshot.elements.some((element) => element.id === id);
+  // A reply that names nothing may be followed by one that does, when the model is asked again, and that one is sent early too.
   const targetKnown = (id: string | null) => {
-    if (msToTarget !== undefined) return;
-    msToTarget = Date.now() - started;
-    if (onPage(id)) onTarget?.(id);
+    if (pointed) return;
+    if (msToTarget === undefined || onPage(id)) msToTarget = Date.now() - started;
+    if (!onPage(id)) return;
+    pointed = true;
+    onTarget?.(id);
   };
 
-  let answer: Omit<TurnMeasure, "ms" | "msToTarget" | "wrote">;
+  let answer: Answer;
   if (settings.model === "mock") {
     const reply = mockTurn(request);
     if (mockPauseMs > 0) {
@@ -227,10 +259,35 @@ export async function measureTurn(
   } else answer = await claudeTurn(site, request, settings, targetKnown);
   // The model can only point at what's on the page it was shown.
   if (!onPage(answer.reply.target)) answer.reply.target = null;
+
+  const named = settings.model === "mock" || settings.recheck === "off" ? undefined : namedButNotPointed(request.snapshot, answer.reply);
+  if (named) {
+    const ask = settings.recheck === "ask" && request.step === 0 && !request.event;
+    // Ids only: the server's log holds nothing from the visitor's page.
+    console.log(`recheck ${site.id} step ${request.step}: the sentence tells the visitor to use ${named.id} and nothing is pointed at${ask ? ", asking again" : ""}`);
+    answer.recheck = { named: named.id, asked: ask };
+    if (ask) {
+      try {
+        const again = await claudeTurn(site, request, settings, targetKnown, { reply: answer.reply, note: namedButNotPointedNote(named) });
+        if (!onPage(again.reply.target)) again.reply.target = null;
+        answer = { ...again, tokens: added(answer.tokens, again.tokens), recheck: answer.recheck };
+      } catch (error) {
+        // The first reply is still one the visitor can be shown.
+        console.warn(`recheck ${site.id} step ${request.step}: asking again failed, so the first reply stands:`, error instanceof Error ? error.message : error);
+      }
+    }
+  }
   targetKnown(answer.reply.target);
   const wrote = answer.reply.say;
   answer.reply.say = tidySay(wrote);
   return { ...answer, ms: Date.now() - started, msToTarget: msToTarget ?? Date.now() - started, wrote };
+}
+
+type Answer = Omit<TurnMeasure, "ms" | "msToTarget" | "wrote">;
+
+function added(one: TurnMeasure["tokens"], two: TurnMeasure["tokens"]): TurnMeasure["tokens"] {
+  if (!one || !two) return one ?? two;
+  return { input: one.input + two.input, cacheRead: one.cacheRead + two.cacheRead, cacheWrite: one.cacheWrite + two.cacheWrite, output: one.output + two.output };
 }
 
 /**
@@ -248,12 +305,15 @@ async function claudeTurn(
   request: TurnRequest,
   settings: TurnSettings,
   targetKnown: (id: string | null) => void,
-): Promise<Omit<TurnMeasure, "ms" | "msToTarget" | "wrote">> {
-  client ??= new Anthropic(apiKey ? { apiKey } : {});
+  /** The reply to ask about again, and what to tell the model about it. */
+  followUp?: { reply: TurnReply; note: string },
+): Promise<Answer> {
+  const model = given ?? (client ??= new Anthropic(apiKey ? { apiKey } : {}));
   const messages: Anthropic.Beta.BetaMessageParam[] = request.history.map((turn) => ({ role: turn.role, content: turn.text }));
   // The conversation has to start with a user message.
   while (messages[0]?.role === "assistant") messages.shift();
   messages.push({ role: "user", content: buildUserMessage(request) });
+  if (followUp) messages.push({ role: "assistant", content: JSON.stringify(followUp.reply) }, { role: "user", content: followUp.note });
 
   // If the model declines a request on policy grounds, the API retries it on a
   // fallback model inside the same call. Haiku has no server-side fallback.
@@ -262,7 +322,7 @@ async function claudeTurn(
   const started = Date.now();
   let response;
   try {
-    const stream = client.beta.messages.stream({
+    const stream = model.beta.messages.stream({
       model: settings.model,
       max_tokens: 4000,
       ...fallback,

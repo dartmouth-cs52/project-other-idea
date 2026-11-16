@@ -17,6 +17,8 @@ export interface Env {
   HAPTIC_MODEL?: string;
   HAPTIC_EFFORT?: string;
   HAPTIC_THINKING?: string;
+  /** "log", "ask" or "off": what is done with a reply that tells the visitor to use a control and points at nothing. See src/server/check.ts. */
+  HAPTIC_RECHECK?: string;
   HAPTIC_MOCK_PAUSE_MS?: string;
   /** A secret, set with `wrangler secret put`. Not needed while HAPTIC_MODEL is "mock". */
   ANTHROPIC_API_KEY?: string;
@@ -45,6 +47,7 @@ export default {
       HAPTIC_MODEL: env.HAPTIC_MODEL,
       HAPTIC_EFFORT: env.HAPTIC_EFFORT,
       HAPTIC_THINKING: env.HAPTIC_THINKING,
+      HAPTIC_RECHECK: env.HAPTIC_RECHECK,
       HAPTIC_MOCK_PAUSE_MS: env.HAPTIC_MOCK_PAUSE_MS,
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
     });
