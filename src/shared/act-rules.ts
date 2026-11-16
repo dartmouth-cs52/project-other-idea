@@ -369,6 +369,23 @@ export function readName(name: string, how: Naming = {}): NameVerdict {
   return { safe: wholeSafe(text) };
 }
 
+/** The words of a button that moves a form on to its next part, in every shipped language. */
+const FORWARD_ENTRIES = entries(
+  "next|next step|continue|siguiente|continuar|suivant|continuer|weiter|fortfahren|proximo|seguinte|avanti|successivo|continua|volgende|doorgaan|次へ|次|続行|下一步|继续|繼續",
+);
+
+/**
+ * Whether a button's whole name moves a form on: "Next", "Continue",
+ * "Siguiente", "次へ". Fields beside such a button wait for it, so changing
+ * them saves nothing yet.
+ */
+export function isForwardName(name: string): boolean {
+  const folded = fold(name);
+  const words = wordsOf(folded).filter((word) => !FILLER_WORDS.has(word) && !STOP_WORDS.has(word));
+  const cjk = cjkOf(folded);
+  return FORWARD_ENTRIES.some((entry) => (entry.cjk ? cjk === entry.cjk && !words.length : !cjk && words.join(" ") === entry.words.join(" ")));
+}
+
 /** Words a visitor uses for asking a class of thing, besides the class's own verbs: "my subscription", "the payment". */
 const ASKED_TOO: Partial<Record<CommitClass, string>> = {
   destroy: `${CANCEL_CLOSE}|deletion|removal|get rid|borrado|baja|suppression|loschung|exclusao|eliminazione|verwijdering`,
