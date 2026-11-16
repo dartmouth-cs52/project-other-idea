@@ -83,3 +83,24 @@ test("a box the keyboard reaches around a control that can be used is not folded
   const snapshot = await read(`<main><h1>Reports</h1><span tabindex="0" title="Exports everything" style="display:inline-flex"><button>Export</button><button disabled>Print</button></span></main>`);
   assert.deepEqual(lines(snapshot), ['clickable "Export Print" [main › Reports]', 'button "Export" [main › Reports]', 'button "Print" (disabled) [main › Reports]']);
 });
+
+// A region with nothing in it ----------------------------------------------------
+
+test("an empty region named for screen readers, like a toaster's, is not the surroundings of what comes after it", { skip }, async () => {
+  const snapshot = await read(`<div id="root"><main><h1>Home</h1><button>Inside main</button></main></div>
+    <section aria-label="Notifications alt+T" tabindex="-1" aria-live="polite"></section>
+    <div style="position:fixed;bottom:10px;left:10px"><button>Open test panel</button></div>`);
+  assert.deepEqual(lines(snapshot), ['button "Inside main" [main › Home]', 'button "Open test panel"']);
+});
+
+test("a toaster's region showing a message is still not the surroundings of what comes after it", { skip }, async () => {
+  const snapshot = await read(`<main><h1>Home</h1></main>
+    <section aria-label="Notifications alt+T"><ol><li>Bill paid</li></ol></section>
+    <button>Open test panel</button>`);
+  assert.deepEqual(lines(snapshot), ['button "Open test panel"']);
+});
+
+test("a section of words with a title of its own still introduces what comes after it", { skip }, async () => {
+  const snapshot = await read(`<section aria-label="Intro"><h2>Billing</h2><p>Pay your bills on time.</p></section><button>Pay a bill</button>`);
+  assert.deepEqual(lines(snapshot), ['button "Pay a bill" [Billing]']);
+});

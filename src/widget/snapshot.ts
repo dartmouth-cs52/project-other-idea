@@ -494,6 +494,11 @@ function nameOfBox(el: Element): string {
   return cleanText(el.getAttribute("aria-label") ?? "", 80);
 }
 
+/** Whether a box is named only for screen readers: by its aria-label, with no element named as what names it. */
+function namedForScreenReaders(el: Element): boolean {
+  return !!el.getAttribute("aria-label")?.trim() && !el.getAttribute("aria-labelledby")?.trim();
+}
+
 /**
  * The heading of a box that sets a part of the page apart: its name, its
  * legend, or a heading in the first few boxes inside it, where a panel keeps
@@ -787,8 +792,11 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
       // Its words were held back as a control's own. It is no control, so they are the page's.
       if (mine?.length) (held ?? texts).push(...mine);
     }
-    // A section that is only words, like a title and a line under it, introduces what comes after it.
-    if (section && !added && candidates.length === before) scope.heading = childScope.heading;
+    // A section that is only words, like a title and a line under it, introduces what comes after it. One that shows
+    // no words, or whose only title is a name heard by a screen reader alone, introduces nothing: a toaster's region,
+    // named "Notifications alt+T" and empty until a message comes, is not the surroundings of what the page puts after it.
+    const heardOnly = childScope.heading === boxName && namedForScreenReaders(el);
+    if (section && !added && candidates.length === before && !heardOnly && wordsIn(el, 40)) scope.heading = childScope.heading;
   };
 
   if (root) visit(root, { region: "page", heading: "" }, false, false);
