@@ -120,6 +120,8 @@ export interface GuideDetail {
   origin: string | null;
   helped: boolean | null;
   outcome: Outcome;
+  /** Steps asked again because the page changed while the model was answering. */
+  cancelled_steps: number;
   steps: {
     n: number;
     path: string;

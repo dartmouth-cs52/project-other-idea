@@ -29,9 +29,11 @@ async function boot() {
   // The reply comes as lines of JSON. The first lines say what kind of reply
   // it is (on a site with Answers on) and name the control to point at, each as
   // soon as the model has decided. The last is the whole reply.
-  const sendTurn = async (request: Omit<TurnRequest, "site">, watch: Watch = {}): Promise<TurnReply> => {
+  const sendTurn = async (request: Omit<TurnRequest, "site">, watch: Watch = {}, signal?: AbortSignal): Promise<TurnReply> => {
+    // Aborting hangs up on the server, which stops asking the model and records the step as dropped.
     const response = await fetch(`${api}/v1/turn`, {
       method: "POST",
+      signal,
       headers: { "Content-Type": "application/json", Accept: STREAM_TYPE },
       body: JSON.stringify({ ...request, site }),
     });

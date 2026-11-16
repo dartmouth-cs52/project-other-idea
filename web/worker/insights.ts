@@ -123,7 +123,7 @@ export function finishedCsv(list: Awaited<ReturnType<typeof finishedGuides>>): s
 export async function guideSteps(sql: Sql, site: string, guide: string) {
   if (!/^[0-9a-f-]{36}$/.test(guide)) return undefined;
   const rows = await sql.query(
-    `select g.id, g.question, g.started_at, g.ended_at, g.started_path, g.origin, g.helped, ${OUTCOME} as outcome from guides g where g.id = $1 and g.site_id = $2`,
+    `select g.id, g.question, g.started_at, g.ended_at, g.started_path, g.origin, g.helped, g.cancelled_steps, ${OUTCOME} as outcome from guides g where g.id = $1 and g.site_id = $2`,
     [guide, site],
   );
   if (!rows[0]) return undefined;

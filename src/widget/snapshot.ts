@@ -241,6 +241,12 @@ export function describeChange(before: Snapshot, after: Snapshot): string {
 
 export const NOTHING_CHANGED = "Nothing visible on the page changed.";
 
+/** True when two snapshots show the same controls and headings, whatever their addresses say. */
+export function sameView(a: Snapshot, b: Snapshot): boolean {
+  const view = (snapshot: Snapshot) => [snapshot.dialog ?? "", ...snapshot.headings, ...snapshot.elements.map(elementKey)].join("\n");
+  return view(a) === view(b);
+}
+
 function listSome(items: string[]): string {
   return items.length > 8 ? `${items.slice(0, 8).join(", ")} and ${items.length - 8} more` : items.join(", ");
 }

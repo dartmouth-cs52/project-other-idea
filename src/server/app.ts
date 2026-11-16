@@ -14,7 +14,7 @@ import {
 } from "../shared/types.ts";
 import type { Alert, Budget, Gate } from "./budget.ts";
 import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
-import { ceilingFor, measureTurn, TurnError } from "./model.ts";
+import { ceilingFor, measureTurn, TurnCancelled, TurnError } from "./model.ts";
 import type { TurnMeasure } from "./model.ts";
 
 // What the Haptic server answers: the widget file, each site's public
@@ -53,6 +53,12 @@ export interface AppParts {
   background?(work: Promise<unknown>): void;
   /** Told about each finished step, for logging. Must not throw. */
   onTurn?(request: TurnRequest, measure: TurnMeasure, site: SiteContext, origin: string | undefined): void;
+  /**
+   * Told when the widget hung up before a step was ready, because the page
+   * changed while the model was answering. The widget asks for the step again
+   * from the new page, so the dropped one is only counted. Must not throw.
+   */
+  onCancel?(request: TurnRequest, site: SiteContext): void;
   /**
    * Told each time the script calls from a page, allowed or not. This is how
    * an install is seen to be live, and why it looks dead when the origin is not
@@ -137,17 +143,17 @@ export function createApp(parts: AppParts) {
       // A page that was open before the switch was thrown still has its launcher, so a step can arrive.
       if (await switchedOff(parts, site)) {
         const reply = fixedReply(FIXED_SAY.off);
-        return streamed ? lines(cors, async (line) => line(reply)) : json(200, reply);
+        return streamed ? lines(cors, undefined, async (line) => line(reply)) : json(200, reply);
       }
 
       const admitted = await askBudget(parts, site, caller, turn);
       if (!admitted.gate.open) {
         const reply = fixedReply(admitted.gate.why === "caller" ? FIXED_SAY.visitorLimit : FIXED_SAY.resting);
-        return streamed ? lines(cors, async (line) => line(reply)) : json(200, reply);
+        return streamed ? lines(cors, undefined, async (line) => line(reply)) : json(200, reply);
       }
 
       // A widget that asks for it gets the step as it forms: the control to point at first, then the whole reply.
-      if (streamed) return streamTurn(parts, site, turn, caller, admitted, cors, origin);
+      if (streamed) return streamTurn(parts, site, turn, caller, admitted, cors, origin, request.signal);
 
       try {
         const measure = await measureTurn(site, turn);
@@ -225,15 +231,21 @@ function streamTurn(
   admitted: Admitted,
   cors: Record<string, string>,
   origin: string | undefined,
+  /** The request's own signal. A Worker aborts it when the caller goes away. */
+  gone?: AbortSignal,
 ): Response {
-  return lines(cors, async (line) => {
+  return lines(cors, gone, async (line, signal) => {
     try {
-      const measure = await measureTurn(site, turn, undefined, { onMode: (mode) => line({ mode }), onTarget: (id) => line({ target: id }) });
+      const measure = await measureTurn(site, turn, undefined, { onMode: (mode) => line({ mode }), onTarget: (id) => line({ target: id }) }, signal);
       charge(parts, site, caller, admitted, measure.usd, 1);
       parts.onTurn?.(turn, measure, site, origin);
       line(measure.reply);
     } catch (error) {
       charge(parts, site, caller, admitted, paidFor(error), 0);
+      if (error instanceof TurnCancelled) {
+        console.log(`turn ${site.id} step ${turn.step}: dropped, the widget hung up.`);
+        return parts.onCancel?.(turn, site);
+      }
       const known = error instanceof TurnError;
       console.error(`turn ${site.id}:`, known ? error.message : error);
       line({ error: known ? error.message : "Something went wrong.", code: known ? error.status : 500 });
@@ -241,13 +253,25 @@ function streamTurn(
   });
 }
 
-/** A response in the streamed format. `write` is handed the function that sends one line. */
-function lines(cors: Record<string, string>, write: (line: (value: unknown) => void) => Promise<void>): Response {
+/**
+ * A response in the streamed format. `write` is handed the function that
+ * sends one line, and a signal that is aborted if the caller hangs up first.
+ * After that, lines go nowhere.
+ */
+function lines(cors: Record<string, string>, gone: AbortSignal | undefined, write: (line: (value: unknown) => void, signal: AbortSignal) => Promise<void>): Response {
   const encoder = new TextEncoder();
+  const hungUp = new AbortController();
+  // Node cancels the response when the caller goes away. A Worker aborts the request's signal instead.
+  gone?.addEventListener("abort", () => hungUp.abort());
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
-      await write((value) => controller.enqueue(encoder.encode(JSON.stringify(value) + "\n")));
-      controller.close();
+      await write((value) => {
+        if (!hungUp.signal.aborted) controller.enqueue(encoder.encode(JSON.stringify(value) + "\n"));
+      }, hungUp.signal);
+      if (!hungUp.signal.aborted) controller.close();
+    },
+    cancel() {
+      hungUp.abort();
     },
   });
   return new Response(body, { headers: { ...cors, "Content-Type": STREAM_TYPE, "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });

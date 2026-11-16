@@ -48,6 +48,7 @@ const app = createApp({
     void recordTurn(request, measure);
     void store?.recordStep(request, measure, origin);
   },
+  onCancel: (request) => void store?.cancelStep(request),
   onSeen: (site, origin, allowed) => void store?.seenAt(site, origin, allowed),
   onAsk: (request, _site, origin) => void store?.startGuide(request, origin),
   onReport: (site, guide, report) => void store?.report(site, guide, report),
@@ -73,8 +74,18 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   const response = await app(request, req.socket.remoteAddress ?? "");
   if (response) {
     res.writeHead(response.status, Object.fromEntries(response.headers));
+    if (!response.body) return res.end();
     // Written piece by piece, so a streamed step reaches the widget as it forms.
-    if (response.body) for await (const chunk of response.body) res.write(chunk);
+    // If the widget hangs up first, the response is cancelled, which stops the model call.
+    const reader = response.body.getReader();
+    res.on("close", () => {
+      if (!res.writableFinished) void reader.cancel().catch(() => {});
+    });
+    for (;;) {
+      const { done, value } = await reader.read().catch(() => ({ done: true, value: undefined }));
+      if (done) break;
+      res.write(value);
+    }
     return res.end();
   }
 

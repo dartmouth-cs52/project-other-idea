@@ -203,6 +203,7 @@ export default {
       onAsk: (turn, _site, origin) => later(db?.startGuide(turn, origin)),
       onTurn: (turn, measure, _site, origin) => later(db?.recordStep(turn, measure, origin)),
       onReport: (site, guide, report) => later(db?.report(site, guide, report)),
+      onCancel: (turn) => later(db?.cancelStep(turn)),
     });
     try {
       const response = await app(request, request.headers.get("CF-Connecting-IP") ?? "");
