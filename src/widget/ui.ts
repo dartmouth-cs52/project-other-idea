@@ -312,6 +312,8 @@ export class Ui {
   private held?: { x: number; y: number };
   /** The caption is on show with nothing to point at (`say`). */
   private saying = false;
+  /** The pointer and its caption are put away because what they point at has left the page, until it comes back. */
+  private lost = false;
   /** The timer that keeps our element placed, while it is in use. */
   private placing?: ReturnType<typeof setInterval>;
   /** Watches what our element is inside, when that is something of the page's. */
@@ -1057,6 +1059,7 @@ export class Ui {
   /** Move the pointer to an element and show the caption beside it. With no text yet, the pointer goes alone. */
   pointAt(el: Element, text: string) {
     this.saying = false;
+    this.lost = false;
     if (el !== this.pointed) {
       // A control the page drew again, in the same place, is the same control: the caption stays off what it opened.
       const same = !!this.pointedBox && sameBox(this.pointedBox, el.getBoundingClientRect());
@@ -1142,6 +1145,7 @@ export class Ui {
 
   clearPointer() {
     this.saying = false;
+    this.lost = false;
     this.pointed = undefined;
     this.pointedBox = undefined;
     this.captionAvoid = [];
@@ -1230,9 +1234,19 @@ export class Ui {
   };
 
   private follow(el: Element) {
-    if (!el.isConnected) {
+    // A control that has left the page, or is no longer laid out, has nothing to point at: the pointer and its sentence
+    // go with it, and nothing is left floating where it was. They come back if the page puts it back.
+    if (!el.isConnected || !el.getClientRects().length) {
       this.ring.hidden = true;
+      this.cursor.hidden = true;
+      this.caption.hidden = true;
+      this.lost = true;
       return;
+    }
+    if (this.lost) {
+      this.lost = false;
+      this.cursor.hidden = false;
+      this.caption.hidden = this.captionText.textContent === "";
     }
     let rect = el.getBoundingClientRect();
     const onScreen = rect.bottom > 0 && rect.top < window.innerHeight && rect.width + rect.height > 0;
