@@ -249,8 +249,9 @@ looks stark.
 - **Muted (#F5F5F4):** The fill of every card, and of the ask box.
 - **Muted text (#78716C):** Sub-copy and secondary labels. 4.6 to 1 on Paper.
 - **Border (#E7E5E4):** Hairlines and the secondary button.
-- **Pointer blue (#1E6EF4):** The pointer, the mark around its target and the
-  keyboard focus ring. Nothing else.
+- **Pointer blue (#1E6EF4):** The pointer, the mark around its target, the
+  ring around the window while Haptic is working, and the keyboard focus ring.
+  Nothing else.
 - **Done green (#008932):** The small round tick that says a task is finished.
   Blue means in progress and green means done, so the two never share a screen.
   Not for buttons, text or bubbles.
@@ -510,6 +511,13 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
   visitor's mail program, whichever the company set. When the form is sent the
   chat says "Sent to the team. A person will reply by email.", so nobody
   thinks the AI is still the one answering.
+- **Show that it is working.** While Haptic works out the next step, a soft
+  ring in Pointer blue lines the edges of the window and breathes, so the
+  visitor knows to wait instead of clicking around. It comes on only once the
+  wait passes 150ms, so a quick step never flashes it, and it goes the moment
+  the pointer moves or a sentence shows. With reduced motion it holds still.
+  It is a line and a glow at the edges only: the page is never dimmed or
+  blurred.
 - **Close where you opened.** While the ask box is open, the launcher under it
   becomes its close button: an × and the word "Close". Escape closes it too.
 - **Say it is an AI.** One line of 12px Muted text sits under the ask box,
@@ -521,7 +529,7 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
 
 ## Do's and Don'ts
 
-- Do keep Pointer blue for the pointer, its target mark and focus.
+- Do keep Pointer blue for the pointer, its target mark, the working ring and focus.
   Never for text, buttons or links.
 - Do give the pointer its white border and shadow everywhere.
 - Do use sizes, radii and spacing from the scales above. No one-off values.

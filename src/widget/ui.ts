@@ -81,7 +81,13 @@ button { font: inherit; cursor: pointer; }
 .note { margin: 0; padding: 8px 12px 4px; font-size: 12px; line-height: 16px; color: #78716c; }
 .note a { color: inherit; text-decoration: none; }
 .note a:hover, .note a:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .cursor { transition: none; } }
+.edge { position: fixed; inset: 0; opacity: 0; transition: opacity .25s ease-out; }
+.edge::before { content: ""; position: absolute; inset: 0;
+  box-shadow: inset 0 0 0 3px var(--accent), inset 0 0 56px 8px color-mix(in srgb, var(--accent) 45%, transparent); }
+.edge.on { opacity: 1; transition: opacity .3s ease-in .15s; }
+.edge.on::before { animation: haptic-breathe 1.6s ease-in-out infinite; }
+@keyframes haptic-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .6; } }
+@media (prefers-reduced-motion: reduce) { .cursor { transition: none; } .edge.on::before { animation: none; } }
 `;
 
 // A visitor is told they are dealing with an AI before they ask it anything,
@@ -99,6 +105,8 @@ export interface UiHandlers {
 export class Ui {
   readonly host: HTMLElement;
   private readonly panel: HTMLElement;
+  /** The ring around the window that says Haptic is working out the next step. */
+  private readonly edge: HTMLElement;
   private readonly form: HTMLFormElement;
   private readonly input: HTMLInputElement;
   private readonly status: HTMLElement;
@@ -122,6 +130,7 @@ export class Ui {
     const root = this.host.attachShadow({ mode: "open" });
     const side = appearance.position === "bottom-left" ? "left" : "right";
     root.innerHTML = `<style>${CSS}</style>
+      <div class="edge" aria-hidden="true"></div>
       <div class="ring" hidden></div>
       <div class="caption" hidden><span></span><button class="close" aria-label="Stop guide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="cursor" hidden><svg viewBox="0 0 24 24" width="24" height="24"><path d="${POINTER_PATH}"/></svg></div>
@@ -151,6 +160,7 @@ export class Ui {
     this.status = pick(".status");
     this.statusText = pick(".status span");
     this.ring = pick(".ring");
+    this.edge = pick(".edge");
     this.cursor = pick(".cursor");
     this.caption = pick(".caption");
     this.captionText = pick(".caption span");
@@ -224,6 +234,7 @@ export class Ui {
 
   /** Show the ask box busy with a message, or back to the input when `text` is empty. */
   setBusy(text: string) {
+    this.working(text !== "");
     this.form.hidden = text !== "";
     this.status.hidden = text === "";
     this.statusText.textContent = text;
@@ -316,6 +327,7 @@ export class Ui {
 
   /** Move the pointer to an element and show the caption beside it. With no text yet, the pointer goes alone. */
   pointAt(el: Element, text: string) {
+    this.working(false);
     this.target = el;
     this.captionText.textContent = text;
     this.caption.hidden = text === "";
@@ -328,6 +340,7 @@ export class Ui {
 
   /** Show text with nothing to point at, above the launcher. */
   say(text: string) {
+    this.working(false);
     this.clearPointer();
     this.captionText.textContent = text;
     this.caption.hidden = false;
@@ -372,6 +385,16 @@ export class Ui {
     const top = (dock?.getBoundingClientRect().top ?? window.innerHeight - 60) - box.height - 12;
     this.caption.style.left = `${Math.max(12, left)}px`;
     this.caption.style.top = `${Math.max(12, top)}px`;
+  }
+
+  /**
+   * Lines the window with a soft ring while Haptic works out the next step, so
+   * the visitor can see it is busy and wait. It comes on only once a wait has
+   * lasted 150ms, so a quick step never flashes it, and it goes the moment the
+   * pointer moves or a sentence shows.
+   */
+  private working(on: boolean) {
+    this.edge.classList.toggle("on", on);
   }
 
   clearPointer() {
