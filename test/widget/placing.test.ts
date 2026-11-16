@@ -155,3 +155,20 @@ test("the launcher moves out of the way of a control in its corner, and back whe
     await session.close();
   }
 });
+
+test("the space around the launcher and the ask box takes no clicks: a page button beside the launcher can still be pressed", async () => {
+  // UI5's dialog puts its Close button in the window's lower right corner, beside where the launcher sits below the open box.
+  const page = `<h1>Order</h1><button id="close" type="button" style="position:fixed;right:150px;bottom:24px">Close</button><p id="out"></p>
+    <script>document.getElementById('close').addEventListener('click', () => { document.getElementById('out').textContent = 'Closed'; });</script>`;
+  const session = await start(page, () => words("Click Close."));
+  try {
+    await session.page.locator("haptic-root .launcher").click();
+    await session.page.waitForTimeout(200);
+    const close = (await session.page.locator("#close").boundingBox())!;
+    const panel = await ours(session, ".panel");
+    assert.ok(close.x + close.width / 2 > panel.left && close.y > panel.bottom, "the test page's button is not beside the launcher, under the open box");
+    assert.equal(await hitAt(session, { left: close.x, right: close.x + close.width, top: close.y, bottom: close.y + close.height }), "close", "the empty space beside the launcher took the click");
+  } finally {
+    await session.close();
+  }
+});

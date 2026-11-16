@@ -17,7 +17,8 @@ const CSS = `
   font: 14px/20px system-ui, -apple-system, "Segoe UI", sans-serif; color: #1c1917; }
 * { box-sizing: border-box; }
 button { font: inherit; cursor: pointer; }
-.dock { position: fixed; bottom: 20px; display: flex; flex-direction: column; gap: 10px; pointer-events: auto; }
+.dock { position: fixed; bottom: 20px; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+.dock > * { pointer-events: auto; }
 .dock.right { right: 20px; align-items: flex-end; }
 .dock.left { left: 20px; align-items: flex-start; }
 .launcher { display: inline-flex; align-items: center; gap: 8px; height: 40px; border: 0; border-radius: 999px; padding: 0 16px 0 14px;
@@ -248,8 +249,9 @@ export class Ui {
    * blocks the page behind it. Shown again, ours is the latest, and on top.
    */
   private raise() {
-    if (!this.inUse() || !this.host.isConnected) return;
-    const box = this.dock.getBoundingClientRect();
+    const launcher = this.dock.querySelector(".launcher");
+    if (!this.inUse() || !this.host.isConnected || !launcher) return;
+    const box = launcher.getBoundingClientRect();
     const x = box.left + box.width / 2;
     const y = box.top + box.height / 2;
     if (!(x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight)) return;
