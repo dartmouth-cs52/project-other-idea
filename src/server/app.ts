@@ -5,6 +5,7 @@ import {
   STREAM_TYPE,
   type GuideOutcome,
   type GuideReport,
+  type PageOutline,
   type PublicSiteConfig,
   type SiteContext,
   type SnapElement,
@@ -14,6 +15,7 @@ import {
 } from "../shared/types.ts";
 import type { Alert, Budget, Gate } from "./budget.ts";
 import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
+import { parseOutlineReport, visitorHash } from "./learned.ts";
 import { ceilingFor, measureTurn, TurnCancelled, TurnError } from "./model.ts";
 import type { TurnMeasure } from "./model.ts";
 
@@ -65,6 +67,11 @@ export interface AppParts {
    * on the list. Must not throw.
    */
   onSeen?(site: SiteContext, origin: string, allowed: boolean): void;
+  /**
+   * Told about an outline of a page a visitor saw, for learning the site.
+   * `visitor` is already hashed with the site's id. Must not throw.
+   */
+  onOutline?(site: SiteContext, visitor: string, outline: PageOutline): void;
   /** Told how a guide ended, whether it helped, or that the visitor asked for a person. Must not throw. */
   onReport?(site: SiteContext, guide: string, report: GuideReport): void;
   /** How the handoff form is posted to a company's webhook. The web's own fetch unless a test says otherwise. */
@@ -125,6 +132,7 @@ export function createApp(parts: AppParts) {
       if (!allowed) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
       const config: PublicSiteConfig = { name: site.name, appearance: site.appearance };
       if (await switchedOff(parts, site)) config.off = true;
+      if (site.learn === false) config.learn = false;
       const handoff = publicHandoff(site.handoff);
       if (handoff) config.handoff = handoff;
       return json(200, config);
@@ -181,6 +189,22 @@ export function createApp(parts: AppParts) {
       if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
       if (await parts.overLimit(`${site.id} ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
       parts.onReport?.(site, guide, report);
+      return json(200, { ok: true });
+    }
+
+    // An outline of a page a visitor saw, for learning the site. Sent as
+    // text/plain, which needs no preflight. Answered at once: what is learned
+    // is written after the response, and never on a step's path.
+    if (request.method === "POST" && url.pathname === "/v1/outline") {
+      const report = parseOutlineReport(await readJson(request));
+      if (!report) return json(400, { error: "That isn't a valid outline." });
+      const site = await parts.loadSite(report.site, true);
+      if (!site) return json(404, { error: "No site with that id." });
+      if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      if (await parts.overLimit(`${site.id} outline ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
+      // Without the widget's random id there is no way to count this visitor once, so the outline isn't used.
+      if (site.learn === false || !report.visitor) return json(200, { ok: false });
+      parts.onOutline?.(site, await visitorHash(site.id, report.visitor), report.outline);
       return json(200, { ok: true });
     }
 

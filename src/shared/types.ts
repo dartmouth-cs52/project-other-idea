@@ -37,6 +37,8 @@ export interface SiteContext {
   answers?: AnswersConfig;
   /** Where a visitor is sent when Haptic can't help. Without it the widget offers nothing. */
   handoff?: Handoff;
+  /** False stops the widget sending outlines of the pages it sees, so the site map is the crawl's alone. On unless set. */
+  learn?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -127,6 +129,8 @@ export interface PublicSiteConfig {
   appearance: Appearance;
   /** Set when Haptic is switched off here. The widget then draws nothing. */
   off?: true;
+  /** Set when the site has asked not to be learned from its visits. The widget then sends no outlines. */
+  learn?: false;
   handoff?: PublicHandoff;
 }
 
@@ -206,6 +210,43 @@ export type GuideOutcome = (typeof GUIDE_OUTCOMES)[number];
 
 /** A guide id, as the widget makes it with crypto.randomUUID(). */
 export const GUIDE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+/**
+ * What the widget sends about a page it has seen, once per page per tab, so
+ * Haptic learns the site from real visits as well as from the crawl. Labels
+ * only: never what is typed into a field, never what is in a table's cells,
+ * and with emails and numbers masked. A label reaches the prompt only once
+ * several different visitors have sent it (see src/server/learned.ts).
+ */
+export interface PageOutline {
+  /** Normalized, like /orders/:id. */
+  path: string;
+  title: string;
+  headings: string[];
+  /** Same-site links, and controls a click on which led to another page, like "View, in a dialog". */
+  links: { label: string; to: string }[];
+  /** Buttons, tabs and menu items. An icon-only one is named by its icon, like "icon:share-2". */
+  buttons: string[];
+}
+
+/** What the widget posts to /v1/outline. */
+export interface OutlineReport {
+  site: string;
+  /** A random id the widget keeps in the site's localStorage. The server keeps only a hash of it, made per site. */
+  visitor?: string;
+  outline: PageOutline;
+}
+
+/**
+ * True for a label worth learning: short, with a letter in it, and with
+ * nothing masked. A label that held an email address or a long number was
+ * about one person, so it is dropped whole rather than kept with a hole in it.
+ */
+export function isLearnableLabel(label: string): boolean {
+  if (!label || label.length > 60) return false;
+  if (/\[(?:email|number)\]/.test(label)) return false;
+  return /\p{L}/u.test(label);
+}
 
 /** What the widget sends when a guide ends, again if the visitor says whether it helped, and again if they ask for a person. */
 export interface GuideReport {

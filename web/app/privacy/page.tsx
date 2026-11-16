@@ -74,8 +74,25 @@ export default function Privacy() {
         be in what we keep, along with the time of each step, so the company may be able to tell who asked.
       </p>
       <p>
-        From a visit where nobody asks Haptic anything, we keep nothing about the visitor. For each web address the
-        script loads on, we keep when it was first and last seen there and a rough count.
+        To learn the product as it is used, and not only from its public pages, Haptic also sends an outline of each
+        page of the product it loads on, once per page in each browser tab, whether or not anyone asks it anything.
+        The outline is the page&apos;s title and headings, the names of its links and buttons, and where each link
+        leads. When a click leads straight to another page, it also sends the name of what was clicked and where it
+        led. It never includes what people type, what is inside a table&apos;s cells, or the rest of the text on the
+        page. A name that holds anything that looks like an email address, a phone number or a long number is left
+        out whole.
+      </p>
+      <p>
+        To count how many different people have seen a name, the browser keeps a random id for that product, made by
+        Haptic and tied to nothing else. Our server keeps only a scrambled form of it, made differently for each
+        product, and at most ten of those for each name. A name is used to guide anyone only once several different
+        people have seen it, so a name that only one person sees, like the title of their own document, is never
+        used. The names, with when each was first and last seen and how often, are kept until the company asks us to
+        delete them. The company can switch this off.
+      </p>
+      <p>
+        From a visit where nobody asks Haptic anything, we keep nothing else about the visitor. For each web address
+        the script loads on, we keep when it was first and last seen there and a rough count.
       </p>
       <p>
         Our server uses a visitor&apos;s network address to limit how fast they can ask. Where a company also limits
@@ -93,7 +110,10 @@ export default function Privacy() {
         We keep the record of each guide until the company asks us to delete it. Nothing deletes it on a schedule yet:
         a person at {site.company} does it on request. We do not use it to train AI models.
       </p>
-      <p>Progress through a guide is kept in the browser for that tab, and is cleared when the tab closes.</p>
+      <p>
+        Progress through a guide, and which pages have been outlined, is kept in the browser for that tab, and is
+        cleared when the tab closes. The random id stays in the browser until its storage for that product is cleared.
+      </p>
 
       <h2>Contact</h2>
       <p>

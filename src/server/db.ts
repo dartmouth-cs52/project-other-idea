@@ -1,5 +1,6 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import { cleanText, normalizePath, questionKey, type GuideReport, type SiteContext, type TurnRequest } from "../shared/types.ts";
+import { cleanText, normalizePath, questionKey, type GuideReport, type PageOutline, type SiteContext, type TurnRequest } from "../shared/types.ts";
+import { MAX_VISITORS, outlineRows, withLearned, type LearnedLabel } from "./learned.ts";
 import type { TurnMeasure } from "./model.ts";
 
 // What the widget server keeps in Neon: each site, which origins the script has
@@ -34,6 +35,11 @@ const SEEN_EVERY_MS = 60_000;
  * means a burst of made-up ones cannot stop a real one being noted for good.
  */
 const MAX_REFUSED_ORIGINS = 20;
+/** Learned labels kept for one site. Past this, labels already known are still counted and new ones are not added. */
+const MAX_LABELS = 5000;
+/** The most learned labels read with a site, the most seen first. */
+const LABELS_READ = 1500;
+
 /** How long a report waits before each look for its guide's row. A Worker may keep working this long after it has answered. */
 const REPORT_RETRIES_MS = [0, 1000, 3000, 6000];
 
@@ -45,14 +51,74 @@ export class Store {
   /** Each guide's step write still under way in this process, so a report about it can wait for it. */
   private readonly writing = new Map<string, Promise<void>>();
 
-  /** `connection` is Neon's connection string. A test hands in a stand-in for the query function instead. */
-  constructor(connection: string | NeonQueryFunction<false, false>) {
+  /**
+   * `connection` is Neon's connection string. A test hands in a stand-in for
+   * the query function instead. `labelThreshold` is how many different
+   * visitors must have seen a learned label before the prompt gets it.
+   */
+  constructor(
+    connection: string | NeonQueryFunction<false, false>,
+    private readonly labelThreshold = 3,
+  ) {
     this.sql = typeof connection === "string" ? neon(connection) : connection;
   }
 
+  /**
+   * A site, with what traffic has taught Haptic about its pages merged into
+   * the crawl's. Callers keep it in memory (src/server/site-cache.ts), so a
+   * step never waits on this.
+   */
   async loadSite(id: string): Promise<SiteContext | undefined> {
-    const rows = (await this.sql`select id, name, origin, allowed_origins, context from sites where id = ${id}`) as SiteRow[];
-    return rows[0] ? siteFromRow(rows[0]) : undefined;
+    const [rows, labels] = await Promise.all([
+      this.sql`select id, name, origin, allowed_origins, context from sites where id = ${id}` as unknown as Promise<SiteRow[]>,
+      this.learnedLabels(id),
+    ]);
+    return rows[0] ? withLearned(siteFromRow(rows[0]), labels, this.labelThreshold) : undefined;
+  }
+
+  /** The labels enough visitors have seen on this site. None, rather than a failed site, when the table is missing (db/migrations/0009). */
+  private async learnedLabels(id: string): Promise<LearnedLabel[]> {
+    try {
+      const rows = await this.sql`
+        select route, kind, label, href, visitor_count as visitors, seen_count::int as seen from outline_labels
+        where site_id = ${id} and visitor_count >= ${this.labelThreshold}
+        order by visitor_count desc, seen_count desc limit ${LABELS_READ}`;
+      return rows as LearnedLabel[];
+    } catch (error) {
+      console.error("Couldn't read what was learned (has db/migrations/0009 been applied?):", error instanceof Error ? error.message : error);
+      return [];
+    }
+  }
+
+  /**
+   * Counts the labels of a page a visitor saw. `visitor` is already hashed
+   * with the site's id. Each label keeps up to ten visitors, and a visitor
+   * already counted for a label isn't counted again.
+   */
+  recordOutline(site: SiteContext, visitor: string, outline: PageOutline): Promise<void> {
+    const rows = outlineRows(outline);
+    if (!rows.length) return Promise.resolve();
+    return this.quietly("learn from a page (has db/migrations/0009 been applied?)", async () => {
+      const [counted] = (await this.sql`select count(*)::int as count from outline_labels where site_id = ${site.id}`) as { count: number }[];
+      const count = counted?.count ?? 0;
+      const json = JSON.stringify(rows);
+      if (count >= MAX_LABELS) {
+        await this.sql`
+          update outline_labels o set seen_count = o.seen_count + 1, last_seen_at = now(),
+            visitors = case when ${visitor} = any(o.visitors) or cardinality(o.visitors) >= ${MAX_VISITORS} then o.visitors else o.visitors || ${visitor}::text end
+          from jsonb_to_recordset(${json}::jsonb) as r(route text, kind text, label text, href text)
+          where o.site_id = ${site.id} and o.route = r.route and o.kind = r.kind and o.label = r.label and o.href = r.href`;
+        return;
+      }
+      await this.sql`
+        insert into outline_labels (site_id, route, kind, label, href, visitors)
+        select ${site.id}, r.route, r.kind, r.label, r.href, array[${visitor}::text]
+        from jsonb_to_recordset(${json}::jsonb) as r(route text, kind text, label text, href text)
+        on conflict (site_id, route, kind, label, href) do update set
+          seen_count = outline_labels.seen_count + 1, last_seen_at = now(),
+          visitors = case when ${visitor} = any(outline_labels.visitors) or cardinality(outline_labels.visitors) >= ${MAX_VISITORS}
+            then outline_labels.visitors else outline_labels.visitors || ${visitor}::text end`;
+    });
   }
 
   /** Saves a site built by `npm run tag`. A site the team made by hand has no company until one claims it. */

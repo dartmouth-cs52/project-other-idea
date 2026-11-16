@@ -158,10 +158,14 @@ function renderArticle({ id, doc }: Article): string {
   return `<article id="${id}" title="${title}"${doc.updated ? ` updated="${doc.updated}"` : ""}>\n${shut(doc.text)}\n</article>`;
 }
 
+/** Buttons listed for one page, after those on most pages. A page with more is usually a list of the visitor's own things. */
+const MAX_PAGE_BUTTONS = 24;
+
 /**
  * One line per page. Links and buttons that repeat on most pages (the main
  * navigation) are listed once at the top, which leaves each page's line for
- * what's specific to it.
+ * what's specific to it. The pages are the crawl's, with what traffic has
+ * taught Haptic merged in (src/server/learned.ts).
  */
 export function renderSiteMap(pages: PageNode[]): string {
   const link = (l: { label: string; to: string }) => `${l.label} → ${l.to}`;
@@ -175,15 +179,16 @@ export function renderSiteMap(pages: PageNode[]): string {
   const lines: string[] = [];
   if (shared.size) lines.push(`On most pages: ${[...shared].join("; ")}`);
   for (const page of pages) {
-    const parts = [`"${page.title}"`];
+    // A page only traffic knows may not have a title that enough visitors shared.
+    const parts = page.title ? [`"${page.title}"`] : [];
     if (page.description) parts.push(page.description);
     if (page.headings.length) parts.push(`headings: ${page.headings.join(", ")}`);
     const links = page.links.map(link).filter((item) => !shared.has(item));
     if (links.length) parts.push(`links: ${links.join("; ")}`);
-    const buttons = page.buttons.filter((item) => !shared.has(item));
+    const buttons = page.buttons.filter((item) => !shared.has(item)).slice(0, MAX_PAGE_BUTTONS);
     if (buttons.length) parts.push(`buttons: ${buttons.join(", ")}`);
     if (page.fields.length) parts.push(`fields: ${page.fields.join(", ")}`);
-    lines.push(`${page.path}: ${parts.join(" | ")}`);
+    if (parts.length) lines.push(`${page.path}: ${parts.join(" | ")}`);
   }
   return lines.join("\n");
 }
