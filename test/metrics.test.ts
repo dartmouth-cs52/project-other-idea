@@ -62,6 +62,26 @@ describe("the dashboard's top numbers", { skip: TEST_DATABASE_URL ? false : "set
     assert.equal(result.daily.reduce((sum, day) => sum + day.finished, 0), 4);
   });
 
+  test("the tiles and the chart count the same days, so the bars add up to the tiles", async () => {
+    // One guide between the start of a rolling 7 x 24 hours and the start of the chart's first UTC day, which
+    // the tiles used to count and the chart didn't, and one today.
+    exec(
+      DB,
+      `insert into sites (id, name, origin, allowed_origins, context) values ('site_metrics04', 'D', 'https://d.test', '{https://d.test}', '{}');
+      insert into guides (id, site_id, question, question_key, started_path, started_at, ended_at, outcome) values
+        ('00000000-0000-4000-8000-000000000101', 'site_metrics04', 'q', 'q', '/',
+          now() - interval '7 days' + ((date_trunc('day', now() at time zone 'utc') at time zone 'utc' - interval '6 days') - (now() - interval '7 days')) / 2,
+          now() - interval '7 days' + ((date_trunc('day', now() at time zone 'utc') at time zone 'utc' - interval '6 days') - (now() - interval '7 days')) / 2 + interval '1 second', 'finished'),
+        ('00000000-0000-4000-8000-000000000102', 'site_metrics04', 'q', 'q', '/', now() - interval '1 second', now(), 'finished');`,
+    );
+    const sql = psqlSql(DB) as unknown as Parameters<typeof headline>[0];
+    const result = await headline(sql, "site_metrics04", 7);
+    assert.equal(result.daily.reduce((sum, day) => sum + day.started, 0), result.now.started);
+    assert.equal(result.daily.reduce((sum, day) => sum + day.finished, 0), result.now.finished);
+    assert.equal(result.now.started, 1);
+    assert.equal(result.before.started, 1, "the earlier one counts in the days before");
+  });
+
   test("a site no one has asked anything yet says so, with zeros and empty days, not made-up numbers", async () => {
     const sql = psqlSql(DB) as unknown as Parameters<typeof headline>[0];
     const result = await headline(sql, EMPTY, 30);

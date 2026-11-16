@@ -196,11 +196,15 @@ function periodColumns(suffix: string, from: string, to: string | null): string 
  * The four numbers at the top of a site's dashboard for the last `days` days,
  * the same four for the days before, and a count of guides started and finished
  * for each day. Two queries, both limited to one site and the two ranges.
+ *
+ * A range is whole UTC days, today being the last and so far, the same days
+ * the chart has a bar for, so the bars add up to the numbers above them.
  */
 export async function headline(sql: Sql, site: string, days: number): Promise<Headline> {
-  const now = Date.now();
-  const since = new Date(now - days * DAY_MS).toISOString();
-  const before = new Date(now - 2 * days * DAY_MS).toISOString();
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const since = new Date(today - (days - 1) * DAY_MS).toISOString();
+  const before = new Date(today - (2 * days - 1) * DAY_MS).toISOString();
   const [totals, daily] = await Promise.all([
     sql.query(
       `select ${periodColumns("", "$2::timestamptz", null)},
@@ -215,17 +219,17 @@ export async function headline(sql: Sql, site: string, days: number): Promise<He
       ),
       started as (
         select date_trunc('day', g.started_at at time zone 'utc') as day, count(*)::int as n
-        from guides g where g.site_id = $1 and g.started_at >= now() - make_interval(days => $2::int) group by 1
+        from guides g where g.site_id = $1 and g.started_at >= $3::timestamptz group by 1
       ),
       finished as (
         select date_trunc('day', g.ended_at at time zone 'utc') as day, count(*)::int as n
-        from guides g where g.site_id = $1 and g.outcome = 'finished' and g.ended_at >= now() - make_interval(days => $2::int)
-          and g.started_at >= now() - make_interval(days => $2::int + 1) group by 1
+        from guides g where g.site_id = $1 and g.outcome = 'finished' and g.ended_at >= $3::timestamptz
+          and g.started_at >= $3::timestamptz - interval '1 day' group by 1
       )
       select to_char(days.day, 'YYYY-MM-DD') as day, coalesce(started.n, 0) as started, coalesce(finished.n, 0) as finished
       from days left join started on started.day = days.day left join finished on finished.day = days.day
       order by days.day`,
-      [site, days],
+      [site, days, since],
     ),
   ]);
   const row = (totals[0] ?? {}) as Record<string, number | boolean | null>;
