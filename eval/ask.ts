@@ -60,9 +60,11 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
  * Answers from a running Haptic server, like "https://widget.joinhaptic.com".
  * The site has to be on that server already (npm run site:publish). Timings
- * include the trip from this machine to the server.
+ * include the trip from this machine to the server. `onAnswered` hears the
+ * status of every request sent, retries included, so a caller can count what
+ * reached the model: a 429 is the server's limit, which no model saw.
  */
-export function serverAsker(address: string): Asker {
+export function serverAsker(address: string, onAnswered?: (status: number) => void): Asker {
   const base = address.replace(/\/$/, "");
   const lastAsked = new Map<string, number>();
   return async (site, request) => {
@@ -77,6 +79,7 @@ export function serverAsker(address: string): Asker {
         headers: { "Content-Type": "application/json", Accept: STREAM_TYPE },
         body: JSON.stringify({ ...request, site: site.id }),
       });
+      onAnswered?.(response.status);
       if ((response.status === 429 || response.status === 503) && attempt < 6) {
         await sleep(15_000);
         continue;
