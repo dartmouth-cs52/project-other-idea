@@ -224,3 +224,60 @@ test("a page that shows several spinners for good is waited for once, not once f
     await session.close();
   }
 });
+
+/**
+ * A shop's deals, as IKEA's front page draws them: placeholders that say
+ * "skeleton" kept in the page where nobody sees them. Six sit under the
+ * pictures that loaded over them, hidden from screen readers; six are in the
+ * part of a carousel scrolled out of its box; six wait in a part of the page
+ * far below the window, which loads only when it is scrolled to.
+ */
+const hiddenPlaceholders = (prefix: string) => `
+  <div style="display:flex;gap:12px">${Array.from({ length: 6 }, (_, n) => `<div style="position:relative;width:120px;height:90px"><div class="${prefix}-skeleton" aria-hidden="true" style="position:absolute;inset:0;background:#eee"></div><div style="position:absolute;inset:0;background:#c96" title="Deal ${n + 1}"></div></div>`).join("")}</div>
+  <div style="width:556px;overflow:hidden"><div style="display:flex;gap:12px;width:max-content">
+    ${Array.from({ length: 4 }, (_, n) => `<a href="#deal${n}" style="flex:none;display:block;width:130px;height:60px;background:#9bc">Deal ${n + 1}</a>`).join("")}
+    ${Array.from({ length: 6 }, () => `<div class="${prefix}-skeleton" style="flex:none;width:130px;height:60px;background:#eee"></div>`).join("")}
+  </div></div>
+  <div style="height:1600px"></div>
+  <section aria-label="More deals">${Array.from({ length: 6 }, () => `<div class="${prefix}-skeleton" style="width:200px;height:40px;margin:8px;background:#eee"></div>`).join("")}</section>`;
+
+test("loading marks nobody can see do not hold back the first question: under a picture and hidden from screen readers, clipped away, or far below the window", async () => {
+  const page = `<header><a href="#products">Products</a> <a href="#rooms">Rooms</a></header><main><h1>Today's best deals</h1>
+    <div role="tablist"><button type="button" role="tab" aria-selected="true">Family offers</button><button type="button" role="tab" aria-selected="false">In-store offer only</button></div>
+    ${hiddenPlaceholders("hri")}</main>`;
+  const session = await start(page, () => words("Pick a deal from the list."));
+  try {
+    const began = Date.now();
+    await session.ask("show me the deals");
+    await session.untilAsked(1, 30_000);
+    const waited = Date.now() - began;
+    assert.ok(waited < 4000, `the first question waited ${waited} ms`);
+  } finally {
+    await session.close();
+  }
+});
+
+test("a tab that puts in placeholders nobody can see is heard used, and the next question goes without waiting for them", async () => {
+  const page = `<header><a href="#products">Products</a></header><main><h1>Today's best deals</h1>
+    <div role="tablist"><button id="family" type="button" role="tab" aria-selected="true">Family offers</button><button id="store" type="button" role="tab" aria-selected="false">In-store offer only</button></div>
+    <div id="panel" role="tabpanel"><p>Family offers this week.</p></div></main>
+    <script>
+      document.getElementById('store').addEventListener('click', () => {
+        document.getElementById('family').setAttribute('aria-selected', 'false');
+        document.getElementById('store').setAttribute('aria-selected', 'true');
+        document.getElementById('panel').innerHTML = '<p>In-store offers this week.</p>' + ${JSON.stringify(hiddenPlaceholders("tab"))};
+      });
+    </script>`;
+  const session = await start(page, (request, index) => (index === 0 ? point(request, "In-store offer only", "Click In-store offer only.") : words("These are the in-store offers.")));
+  try {
+    await session.ask("which deals are only in the store");
+    await session.untilState("pointing");
+    await session.page.locator("#store").click();
+    const clicked = Date.now();
+    await session.untilAsked(2, 30_000);
+    const waited = Date.now() - clicked;
+    assert.ok(waited < 4000, `the question after the click waited ${waited} ms`);
+  } finally {
+    await session.close();
+  }
+});
