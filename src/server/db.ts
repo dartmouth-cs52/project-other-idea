@@ -145,13 +145,17 @@ export class Store {
 
   /**
    * Adds the controls an answer named that are nowhere Haptic can see. With
-   * the step's sources, that says which help articles may be out of date. It
-   * is rare, so nothing is sent for a step without any. The column is from
-   * db/migrations/0007.
+   * the step's sources, that says which help articles may be out of date. The
+   * column is from db/migrations/0007.
+   *
+   * Only a site with Answers on can have any, so a site without sends nothing.
+   * On one with, every step sends it, as nothing when there are none: a step
+   * written again, when the widget asks for it a second time, must not keep
+   * the list from the first answer.
    */
   private recordUnseen(guide: string, step: number, measure: TurnMeasure): Promise<void> {
-    const unseen = measure.unseen;
-    if (!unseen?.length) return Promise.resolve();
+    const unseen = measure.unseen?.length ? measure.unseen : null;
+    if (!unseen && !measure.reply.mode) return Promise.resolve();
     return this.quietly("record controls an answer named that aren't in the product (has db/migrations/0007 been applied?)", async () => {
       await this.sql`update steps set unseen = ${unseen} where guide_id = ${guide} and n = ${step}`;
     });

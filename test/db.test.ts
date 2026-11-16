@@ -93,9 +93,11 @@ test("on a site with Answers, the kind of reply and the docs it rested on are ad
     cited: ["help/inviting.md"],
   };
   await new Store(sql).recordStep(request, answer, undefined);
-  assert.equal(sent.length, 4);
+  assert.equal(sent.length, 5);
   assert.match(sent[3]!.text, /^update steps set mode = \?, reason = \?, sources = \?, overruled = \? where guide_id = \? and n = \?$/);
   assert.deepEqual(sent[3]!.values, ["answer", null, ["help/inviting.md"], null, GUIDE, 2]);
+  // No control it named was missing, which is said too.
+  assert.deepEqual(sent[4]!.values, [null, GUIDE, 2]);
 
   const declined = standIn();
   await new Store(declined.sql).recordStep(request, { ...measure, reply: { target: null, status: "done", say: "The help docs don't cover that.", mode: "cannot_help", reason: "not_covered" }, overruled: "no_source" }, undefined);
@@ -114,4 +116,16 @@ test("a control an answer named that is nowhere in the product is recorded with 
   assert.equal(sent.length, 5);
   assert.match(sent[4]!.text, /^update steps set unseen = \? where guide_id = \? and n = \?$/);
   assert.deepEqual(sent[4]!.values, [["Archive project"], GUIDE, 2]);
+
+  // The same step written again, when the widget asks for it a second time, with an answer that named
+  // nothing missing: the first answer's list goes.
+  const again = standIn();
+  await new Store(again.sql).recordStep(request, { ...stale, reply: { ...stale.reply, missing: undefined }, unseen: undefined }, undefined);
+  assert.match(again.sent[4]!.text, /^update steps set unseen = \? where guide_id = \? and n = \?$/);
+  assert.deepEqual(again.sent[4]!.values, [null, GUIDE, 2]);
+
+  // A site without Answers never has any, and sends nothing for them.
+  const guideOnly = standIn();
+  await new Store(guideOnly.sql).recordStep(request, measure, undefined);
+  assert.ok(guideOnly.sent.every((statement) => !/unseen/.test(statement.text)));
 });
