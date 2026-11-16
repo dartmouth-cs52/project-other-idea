@@ -39,7 +39,7 @@ Haptic reads the live page on every step, so it follows whatever the product loo
 
 - **Accurate.** In our [benchmark](eval/README.md#results) of 565 frozen guide steps, it points at the right control on 97% of the steps on Haptic's own sites, about 85% on twelve real apps, and 86% on apps it was never tuned on.
 - **Fast.** Replies are streamed, so the pointer starts moving as soon as the model names the control, about 0.8 s into a step in the benchmark run.
-- **Private by construction.** It never reads what users type. Email addresses, long numbers and phone and card numbers are masked in the browser, and again on the server. [Exactly what is masked, and what is not.](#privacy)
+- **Private by construction.** It never reads what users type. Email addresses, long numbers and phone and card numbers are masked in the browser, and again on the server before anything is stored. [Exactly what is masked, and what is not.](#privacy)
 - **Safe to put in front of customers.** Spend is capped per site, every sentence is checked against fixed rules on the server, and page content is treated as untrusted input.
 - **In production.** The widget server runs on Cloudflare Workers with Postgres on Neon, behind an invite-only dashboard at [joinhaptic.com](https://joinhaptic.com).
 
@@ -89,7 +89,7 @@ The widget reads the names of controls, never what anyone types into a field or 
 - any run of five or more digits, like an account or order number,
 - any eight or more digits written in groups with spaces, dashes, dots or brackets, like a phone or card number. Digits that follow straight after a letter belong to the word, like the model number I9100, and are not counted.
 
-The server masks the same again, with the same function (`cleanText` in `src/shared/types.ts`). It does not mask dates written in figures, like 2026-03-07 or 07.03.2026: a question like "my latest invoice" needs them, and they say no more about a person than the names a page already shows. Nor does it mask shorter numbers, like prices and quantities, or names and other words, so text on the page can still hold personal details, a date of birth among them.
+The server masks the same again before it stores anything, with the same function (`cleanText` in `src/shared/types.ts`). What reaches the model is what the widget sent, already masked. Neither masks dates written in figures, like 2026-03-07 or 07.03.2026: a question like "my latest invoice" needs them, and they say no more about a person than the names a page already shows. Nor do they mask shorter numbers, like prices and quantities, or names and other words, so text on the page can still hold personal details, a date of birth among them.
 
 One exception, so Haptic can find the order or account someone asked about: an email address, or a number of five or more digits, that the user wrote in their own question is left readable wherever exactly that value stands on its own on the page. In the question itself it is left readable only when the page shows it standing on its own like that, and is masked otherwise (`namedIn`). With each question the widget also sends the user's own date, not their time zone or location, so the model knows what day it is. What is kept is listed in [operations](docs/operations.md#what-is-recorded-about-visitors), and the public [privacy page](web/app/privacy/page.tsx) says the same.
 
@@ -97,7 +97,7 @@ One exception, so Haptic can find the order or account someone asked about: an e
 
 | Area | How |
 |---|---|
-| **Privacy** | Reads labels, never field values or anything inside an area the user writes in. Email addresses, long numbers and phone and card numbers are masked twice, in the browser and on the server ([what exactly](#privacy)). Exactly what is stored is [documented](docs/operations.md#what-is-recorded-about-visitors), and the public privacy page is kept in line with the code. |
+| **Privacy** | Reads labels, never field values or anything inside an area the user writes in. Email addresses, long numbers and phone and card numbers are masked in the browser, and again on the server before anything is stored ([what exactly](#privacy)). Exactly what is stored is [documented](docs/operations.md#what-is-recorded-about-visitors), and the public privacy page is kept in line with the code. |
 | **Safety** | Page content is fenced off in the prompt as untrusted data. Every outgoing sentence passes server-side rules: no links, contact details, payment details or requests for secrets. The Answers benchmark includes 100 adversarial cases, from prompt injection to mixed harmless and hostile requests. |
 | **Cost control** | Per-site knowledge is prompt-cached. Each site has hourly and daily dollar budgets, enforced per step by reserving the step's maximum cost up front. Optional per-visitor limits count against a daily-salted hash of the visitor's address. A kill switch takes Haptic off one site or all of them without a deploy. |
 | **Auditable billing** | Pricing charges only for finished guides. "Finished" has one definition shared by the widget, the database and the dashboard, which lists every billable guide with a download. |

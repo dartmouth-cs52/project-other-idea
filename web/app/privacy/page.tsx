@@ -55,7 +55,7 @@ export default function Privacy() {
         Haptic masks anything that looks like an email address, any run of five or more digits, such as an account or
         order number, and any eight or more digits written in groups with spaces, dashes, dots or brackets between
         them, such as a phone or card number. Digits that follow straight after a letter, like the model number I9100,
-        count as part of that word. Our server masks the same again.
+        count as part of that word. Our server masks the same again before it stores anything.
       </p>
       <p>
         Haptic does not mask dates written in figures, such as 07.03.1984 or 2026-11-16. Questions like &ldquo;my
