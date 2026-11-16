@@ -205,7 +205,7 @@ test("a stopped request the visitor's step set off spoils the run, and says whic
 });
 
 /** The guide sets this project tunes against. The held-out sets are left alone here as everywhere. */
-const TUNED = ["demo", "hard", "joinhaptic", "ui5", "antdpro", "orangehrm", "toolshop", "parabank", "grafana", "backstage", "jira", "wikipedia"];
+const TUNED = ["demo", "hard", "joinhaptic", "ui5", "antdpro", "orangehrm", "toolshop", "parabank", "grafana", "backstage", "jira", "wikipedia", "northpine"];
 
 test("no live guide set lets a request through that saves, sends or deletes", async () => {
   const writes: Record<string, string[]> = {
