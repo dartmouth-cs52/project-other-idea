@@ -169,3 +169,18 @@ test("a button with no name is named by the menu it opens, or by the box around 
     <div aria-label="Workspace switcher"><button type="button" aria-haspopup="menu" style="width:30px;height:30px"><span aria-hidden="true">NP</span></button></div></header>`);
   assert.deepEqual(lines(snapshot), ['button "Your account" (opens a menu, collapsed) [header]', 'button "Workspace switcher" (opens a menu) [header]']);
 });
+
+// Words in boxes of their own ---------------------------------------------------------
+
+test("the words of separate boxes are kept apart, as the accessibility tree keeps them, and words styled within a line are not", { skip }, async () => {
+  const snapshot = await read(`<div role="tablist"><a role="tab" href="/cards?view=mine" style="display:flex;gap:6px">My cards<span style="padding:0 6px">3</span></a>
+    <a role="tab" href="/expenses?review=needs" style="display:flex">Needs review<span style="display:inline-block">2067</span></a></div>
+    <div role="menu"><div role="menuitem" tabindex="-1" style="display:flex">Theme<span style="margin-left:auto">›</span></div></div>
+    <button>Re<b>view</b> all</button>`);
+  assert.deepEqual(lines(snapshot), [
+    'tab "My cards 3" [tabs] → /cards?view=mine',
+    'tab "Needs review 2067" [tabs] → /expenses?review=needs',
+    'menuitem "Theme ›" [menu]',
+    'button "Review all"',
+  ]);
+});

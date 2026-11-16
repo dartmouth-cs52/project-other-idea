@@ -106,11 +106,26 @@ function wordsIn(el: Element, max = 200, skip = "", except?: Element, unseenToo 
     if (!(node instanceof Element) || node === except) return;
     if (NOT_WORDS.has(node.tagName) || holdsTyping(node) || choiceBoxes.has(node) || node.getAttribute("aria-hidden") === "true" || (skip && node.matches(skip))) return;
     if (!unseenToo && unseen(node)) return;
+    // Words in a box of their own are apart from the words before and after it, as the accessibility tree has them:
+    // a tab's "My cards" and the count in its badge are "My cards 3", not "My cards3". Words styled within a line are not.
+    let apart: boolean | undefined;
+    const ownBox = () => (apart ??= boxOfItsOwn(node));
+    if (text && !/\s$/.test(text) && ownBox()) text += " ";
     for (const child of shownChildren(node)) walk(child);
-    if (!WITHIN_A_SENTENCE.has(node.tagName)) text += " ";
+    if (!WITHIN_A_SENTENCE.has(node.tagName) || ownBox()) text += " ";
   };
   for (const child of shownChildren(el)) walk(child);
   return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Whether an element is laid out as a box of its own, apart from the line of
+ * words around it: a block, a flex or grid item, or an inline block like a
+ * badge. A box that only styles a few words, or has no box at all, is not.
+ */
+function boxOfItsOwn(el: Element): boolean {
+  const display = getComputedStyle(el).display;
+  return display !== "inline" && display !== "contents";
 }
 
 /**
