@@ -184,8 +184,18 @@ export class Ui {
   private readonly caption: HTMLElement;
   private readonly captionText: HTMLElement;
   private readonly dock: HTMLElement;
-  /** The side the site put the launcher on. It moves to the other side only while it would cover what is pointed at. */
+  /** The side the site put the launcher on. */
   private readonly side: "left" | "right";
+  /**
+   * Where the launcher sits: the site's corner, or the nearest place to it
+   * that covers none of the page's own controls for good (see `findHome`).
+   * `away` is the nearest such place on the other side, where it goes only
+   * while it would cover what is pointed at.
+   */
+  private home: Spot;
+  private away: Spot;
+  /** A look for the launcher's place, waiting for the next frame after the window was resized. */
+  private homeFrame = 0;
   /** The control the guide pointed at. */
   private pointed?: Element;
   /** What the pointer is on: the control, or the part of it that takes a click. */
@@ -284,6 +294,8 @@ export class Ui {
     this.note = pick(".note");
     this.did = pick(".did");
     this.side = side;
+    this.home = corner(side);
+    this.away = corner(side === "left" ? "right" : "left");
     this.acting = acting;
     pick(".first span").textContent = ACTING_WORDS.first;
     pick(".did h2").textContent = ACTING_WORDS.did;
@@ -354,11 +366,65 @@ export class Ui {
     this.keepPressesOurs();
     this.watchKeyboard();
     this.host.setAttribute("popover", "manual");
-    // The one thing of ours that listens on the page while nothing is in use: see `onToggle`.
+    // What of ours listens on the page while nothing is in use: a dialog opening on the top layer (`onToggle`), and the
+    // window changing size, which can bring a control of the page's into the launcher's corner (`onResize`).
     document.addEventListener("toggle", this.onToggle, true);
+    window.addEventListener("resize", this.onResize, { passive: true });
     this.setState("idle");
     this.place();
+    this.findHome();
+    // A page still loading may put its own buttons in the corner yet. It is looked at once more when it has loaded.
+    if (document.readyState !== "complete") window.addEventListener("load", this.onLoad);
   }
+
+  /** The page has loaded: the one look at the launcher's corner that waited for it. Nothing stays listening. */
+  private onLoad = () => {
+    window.removeEventListener("load", this.onLoad);
+    this.findHome();
+  };
+
+  /** The window was resized: the launcher's corner is looked at again, once, in the next frame. */
+  private onResize = () => {
+    if (this.homeFrame) return;
+    this.homeFrame = requestAnimationFrame(() => {
+      this.homeFrame = 0;
+      this.findHome();
+    });
+  };
+
+  /**
+   * Finds where the launcher sits: in the site's own corner, unless a control
+   * of the page's is there for good. A control is there for good when it
+   * stays put as the page scrolls, like a chat button or a Feedback tab, or
+   * when it is at the foot of the page, where no scrolling brings it out from
+   * under the launcher. Then the launcher goes to the nearest place that is
+   * free, up its side of the window or along the bottom, and to the other
+   * side only when its own has no free place. Looked at when the widget
+   * starts, when the page has loaded, when the window is resized, and when a
+   * guide is put away: never on a timer, and never while the visitor is using
+   * the widget, so it does not move under their hand.
+   */
+  findHome = () => {
+    try {
+      const launcher = this.dock.querySelector(".launcher")?.getBoundingClientRect();
+      if (!launcher?.width || !launcher.height) return;
+      const size = { w: launcher.width, h: launcher.height };
+      const blocked = lastingControls(this.host, size);
+      const other = this.side === "left" ? "right" : "left";
+      const own = nearestFree(this.side, size, blocked);
+      const theirs = nearestFree(other, size, blocked);
+      this.home = own ?? theirs ?? corner(this.side);
+      this.away = this.home.side === this.side ? (theirs ?? corner(other)) : (own ?? corner(this.side));
+      if (this.inUse()) return;
+      this.dockAt(this.home);
+      if (this.cursor.hidden) {
+        const box = this.dock.getBoundingClientRect();
+        this.at = { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
+      }
+    } catch (error) {
+      console.warn("[Haptic]", error);
+    }
+  };
 
   /**
    * A popover or a dialog the page opens goes into the top layer above our
@@ -395,6 +461,8 @@ export class Ui {
       this.placing = undefined;
       // Back to its own place, out of anything of the page's that could be taken away with it while nothing watches.
       this.place();
+      // The page may have put a control of its own in the launcher's corner while the widget was in use.
+      this.findHome();
     }
   }
 
@@ -781,7 +849,7 @@ export class Ui {
     if (!this.saying || this.caption.hidden) return;
     const box = this.caption.getBoundingClientRect();
     const dock = this.dock.getBoundingClientRect();
-    const left = this.host.shadowRoot?.querySelector(".dock.left") ? 20 : window.innerWidth - box.width - 20;
+    const left = this.dock.classList.contains("left") ? dock.left : dock.right - box.width;
     this.caption.style.left = `${Math.max(12, left)}px`;
     this.caption.style.top = `${Math.max(12, Math.min(window.innerHeight - box.height - 76, dock.top - box.height - 16))}px`;
   }
@@ -794,7 +862,7 @@ export class Ui {
     this.tip = undefined;
     this.under = undefined;
     this.captionAbove = false;
-    this.dockOn(this.side);
+    this.dockAt(this.home);
     this.mark(undefined);
     cancelAnimationFrame(this.frame);
     this.ring.hidden = true;
@@ -932,22 +1000,25 @@ export class Ui {
     this.under = { el: null, moved: true };
   }
 
-  /** Keeps the launcher off the control being pointed at and off its caption, by moving it to the other corner while it would cover them. */
+  /** Keeps the launcher off the control being pointed at and off its caption, by moving it to the other side while it would cover them. */
   private keepLauncherOff(rect: DOMRect, caption?: { left: number; top: number; right: number; bottom: number }) {
     const box = this.dock.getBoundingClientRect();
-    const at = (side: "left" | "right") => {
-      const left = side === "left" ? 20 : window.innerWidth - 20 - box.width;
-      return { left, right: left + box.width, top: box.top, bottom: box.bottom };
-    };
-    const covers = (side: "left" | "right") => overlaps(at(side), rect, 8) || (!!caption && overlaps(at(side), caption, 4));
-    const other = this.side === "left" ? "right" : "left";
-    this.dockOn(covers(this.side) && !covers(other) ? other : this.side);
+    const size = { w: box.width, h: box.height };
+    const covers = (spot: Spot) => overlaps(boxAt(spot, size), rect, 8) || (!!caption && overlaps(boxAt(spot, size), caption, 4));
+    this.dockAt(covers(this.home) && !covers(this.away) ? this.away : this.home);
   }
 
-  private dockOn(side: "left" | "right") {
-    if (this.dock.classList.contains(side)) return;
-    this.dock.classList.remove("left", "right");
-    this.dock.classList.add(side);
+  /** Puts the launcher, and the ask box above it, at a place. */
+  private dockAt(spot: Spot) {
+    const other = spot.side === "left" ? "right" : "left";
+    if (!this.dock.classList.contains(spot.side)) {
+      this.dock.classList.remove(other);
+      this.dock.classList.add(spot.side);
+    }
+    // Set through the element's style object, which a page's policy on inline style does not reach.
+    this.dock.style.setProperty(spot.side, `${spot.x}px`);
+    this.dock.style.setProperty(other, "auto");
+    this.dock.style.setProperty("bottom", `${spot.y}px`);
   }
 }
 
@@ -1087,6 +1158,138 @@ function drawnOver(el: Element, within: Element): boolean {
 
 function overlaps(a: Box, b: Box, margin: number): boolean {
   return a.left < b.right + margin && a.right > b.left - margin && a.top < b.bottom + margin && a.bottom > b.top - margin;
+}
+
+/** Where the launcher sits: on which side of the window, how far in from that side, and how far up from the bottom. */
+interface Spot {
+  side: "left" | "right";
+  x: number;
+  y: number;
+}
+
+/** The launcher's own distance from the window's edges, in its corner. */
+const EDGE = 20;
+/** The room kept between the launcher and a control of the page's it moved off. */
+const CLEAR = 12;
+/** The room kept above the launcher for the ask box, which opens above it. */
+const BOX_ROOM = 220;
+
+const corner = (side: "left" | "right"): Spot => ({ side, x: EDGE, y: EDGE });
+
+/** The box the launcher would take at a place, for a launcher of this size. */
+function boxAt(spot: Spot, size: { w: number; h: number }): Box {
+  const left = spot.side === "left" ? spot.x : window.innerWidth - spot.x - size.w;
+  const bottom = window.innerHeight - spot.y;
+  return { left, right: left + size.w, top: bottom - size.h, bottom };
+}
+
+/** The highest the launcher goes up its side, so the ask box above it still fits in the window. */
+const highest = (size: { h: number }) => window.innerHeight - size.h - BOX_ROOM;
+
+/**
+ * The free place on one side nearest that side's corner: the corner itself,
+ * or, step by step, just above or just beside each control in the way. Not
+ * past the middle of the window, and not so high that the ask box would not
+ * fit above it. None when that side has no free place.
+ */
+function nearestFree(side: "left" | "right", size: { w: number; h: number }, blocked: Box[]): Spot | undefined {
+  const top = highest(size);
+  const across = window.innerWidth / 2 - size.w;
+  const queue: Spot[] = [corner(side)];
+  const seen = new Set<string>();
+  for (let tries = 0; queue.length && tries < 40; tries++) {
+    queue.sort((a, b) => a.x + a.y - (b.x + b.y));
+    const spot = queue.shift()!;
+    const key = `${Math.round(spot.x)},${Math.round(spot.y)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const box = boxAt(spot, size);
+    const inWay = blocked.filter((control) => overlaps(box, control, 4));
+    if (!inWay.length) return spot;
+    for (const control of inWay) {
+      const up = Math.ceil(window.innerHeight - control.top + CLEAR);
+      if (up <= top) queue.push({ side, x: spot.x, y: up });
+      const beside = Math.ceil(side === "right" ? window.innerWidth - control.left + CLEAR : control.right + CLEAR);
+      if (beside <= across) queue.push({ side, x: beside, y: spot.y });
+    }
+  }
+  return undefined;
+}
+
+/** The most controls read when the launcher's place is looked for: a few milliseconds' work on the longest pages. */
+const MAX_READ = 3000;
+
+/** What a visitor can use on a page, as far as the launcher's place goes. */
+const USABLE =
+  'a[href], button, input:not([type="hidden"]), select, textarea, summary, iframe, [role="button"], [role="link"], [role="tab"], [role="checkbox"], [role="switch"], [role="radio"], [role="menuitem"], [role="combobox"], [tabindex]:not([tabindex="-1"])';
+
+/**
+ * The boxes of the page's controls that the launcher would cover for good
+ * in the lower part of the window where it can go: those that stay put as
+ * the page scrolls, where they are now, and the others where they will be
+ * once the part they scroll in is at its end. A control that scrolling
+ * takes out from under the launcher is not in the way. Read once, when the
+ * place is looked for, and never watched.
+ */
+function lastingControls(ignore: Element, size: { w: number; h: number }): Box[] {
+  const height = window.innerHeight;
+  const from = height - highest(size) - size.h - CLEAR;
+  const page = document.scrollingElement ?? document.documentElement;
+  const pageLeft = Math.max(0, page.scrollHeight - page.clientHeight - page.scrollTop);
+  const inBand = (top: number, bottom: number) => bottom > from && top < height;
+  const found: Box[] = [];
+  const all = document.querySelectorAll(USABLE);
+  // On a very long page only the last controls are read: the foot of the page, and what scripts add at its end, like a chat button.
+  for (let index = all.length - 1; index >= Math.max(0, all.length - MAX_READ); index--) {
+    const el = all[index]!;
+    if (ignore.contains(el)) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2 || rect.right <= 0 || rect.left >= window.innerWidth) continue;
+    const now = inBand(rect.top, rect.bottom);
+    if (!now && !inBand(rect.top - pageLeft, rect.bottom - pageLeft)) continue;
+    // A box as big as a good part of the window holds controls rather than being one: covering a corner of it hides nothing.
+    if (rect.width * rect.height > (window.innerWidth * height) / 3) continue;
+    if (!seen(el)) continue;
+    if (pinned(el)) {
+      if (now) found.push(rect);
+      continue;
+    }
+    const left = scrollLeftUnder(el, page, pageLeft);
+    if (inBand(rect.top - left, rect.bottom - left)) found.push({ left: rect.left, right: rect.right, top: rect.top - left, bottom: rect.bottom - left });
+  }
+  return found;
+}
+
+/** Whether an element can be seen: drawn, not see-through, not hidden. */
+function seen(el: Element): boolean {
+  if (typeof el.checkVisibility === "function") return el.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+  return el.getClientRects().length > 0;
+}
+
+/** The parent of a node, or the element that holds its shadow root. */
+const up = (node: Node): Node | null => node.parentNode ?? (node as ShadowRoot).host ?? null;
+
+/** Whether an element, or a box it sits in, stays put on screen when the page scrolls. */
+function pinned(el: Element): boolean {
+  for (let at: Node | null = el; at; at = up(at)) {
+    if (!(at instanceof Element)) continue;
+    const position = getComputedStyle(at).position;
+    if (position === "fixed" || position === "sticky") return true;
+  }
+  return false;
+}
+
+/**
+ * How much further up an element goes once the part it scrolls in is
+ * scrolled to its end: the nearest box around it that scrolls, or the page.
+ */
+function scrollLeftUnder(el: Element, page: Element, pageLeft: number): number {
+  for (let at = el.parentElement; at && at !== page && at !== document.body; at = at.parentElement) {
+    if (at.scrollHeight <= at.clientHeight + 1) continue;
+    const overflow = getComputedStyle(at).overflowY;
+    if (overflow === "auto" || overflow === "scroll") return Math.max(0, at.scrollHeight - at.clientHeight - at.scrollTop);
+  }
+  return pageLeft;
 }
 
 /** Whether a click at this point would land on `el`. A point off the screen cannot be tested and counts. */
