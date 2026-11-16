@@ -25,15 +25,51 @@ const SHORTEST = 2;
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/** The roles a visitor types into. */
+const TYPED = new Set(["textbox", "searchbox", "combobox"]);
+/** Words that say to type into a field, a few words before its name: "Try typing Skyline Air in the Search expenses box". Not the key: "press Enter in the Search box". */
+const TYPE_IN = String.raw`(?:type|typing|(?<!\b(?:press|pressing|hit|hitting|tap|tapping)\s+)(?:enter|entering)|search|searching)`;
+
+/**
+ * The fields the sentence tells the visitor to type into, by their name
+ * ("typing Skyline Air in the Search expenses box") or, when the page has
+ * one field whose name says it searches, as "the search box" ("Click the
+ * search box above the table and type Skyline Air"). Both seen on
+ * Northpine's expenses on 16 November, in replies of "stuck".
+ */
+function fieldsTold(snapshot: Snapshot, say: string): { element: SnapElement; at: number; end: number }[] {
+  const found: { element: SnapElement; at: number; end: number }[] = [];
+  const fields = snapshot.elements.filter((element) => TYPED.has(element.role) && element.label.trim().length >= SHORTEST);
+  const add = (element: SnapElement, at: number, end: number, from: number) => {
+    if (!NOT_AN_INSTRUCTION.test(say.slice(0, from))) found.push({ element, at, end });
+  };
+  for (const field of fields) {
+    const name = escape(field.label.trim()).replace(/\s+/g, "\\s+");
+    const into = new RegExp(String.raw`\b${TYPE_IN}\b[^.!?;]{0,40}?\b(?:in|into)\s+(?:the\s+)?["“'‘]?(${name})["”'’]?(?:\s+(?:box|field|bar))?(?=$|[\s.,;:!?)])`, "gi");
+    for (const match of say.matchAll(into)) {
+      const at = match.index + match[0].lastIndexOf(match[1]!);
+      add(field, at, at + match[1]!.length, match.index);
+    }
+  }
+  const searching = fields.filter((field) => /\bsearch/i.test(field.label));
+  if (searching.length === 1) {
+    const box = new RegExp(String.raw`\b(?:${USE}|${TYPE_IN}\s+(?:in|into))\s+(?:on\s+)?(?:the\s+)?search\s+(?:box|field|bar)\b`, "gi");
+    for (const match of say.matchAll(box)) add(searching[0]!, match.index, match.index + match[0].length, match.index);
+  }
+  return found;
+}
+
 /**
  * The control on the page that the sentence tells the visitor to use, when
  * the reply points at nothing. Undefined when the reply points at something,
  * or the sentence names no listed control after a word that says to use it.
  * Whatever the status: "continue" with no pointer means "do this, I'm
- * watching", which is no more right for a control that could be pointed at.
+ * watching", which is no more right for a control that could be pointed at,
+ * and "stuck" points at nothing whatever its target, since the widget shows
+ * no pointer with it.
  */
 export function namedButNotPointed(snapshot: Snapshot, reply: TurnReply): SnapElement | undefined {
-  if (reply.target !== null) return undefined;
+  if (reply.target !== null && reply.status !== "stuck") return undefined;
   const say = reply.say;
   // The longest name first, so that "Request access" is found before "Request" when both are listed.
   const named = snapshot.elements
@@ -47,7 +83,7 @@ export function namedButNotPointed(snapshot: Snapshot, reply: TurnReply): SnapEl
       if (!NOT_AN_INSTRUCTION.test(say.slice(0, match.index))) return element;
     }
   }
-  return undefined;
+  return fieldsTold(snapshot, say)[0]?.element;
 }
 
 /**
@@ -56,9 +92,10 @@ export function namedButNotPointed(snapshot: Snapshot, reply: TurnReply): SnapEl
  * did, and given both ways out: point at the control, or stop telling the
  * visitor to use one.
  */
-export function namedButNotPointedNote(element: SnapElement): string {
+export function namedButNotPointedNote(element: SnapElement, status?: TurnReply["status"]): string {
+  const why = status === "stuck" ? `its status is "stuck"` : "its target is null";
   return (
-    `Your reply tells the visitor to use ${element.role} "${element.label}" (${element.id}), but its target is null, so nothing is pointed at. ` +
+    `Your reply tells the visitor to use ${element.role} "${element.label}" (${element.id}), but ${why}, so nothing is pointed at. ` +
     `If they still have to use it, reply again with ${element.id} as the target and status "continue". ` +
     `If nothing is left for them to use, reply "done" with target null and a sentence that does not tell them to use anything.`
   );
@@ -73,11 +110,11 @@ export function namedButNotPointedNote(element: SnapElement): string {
 // hidden. To bring it back, click Main menu" (grafana), "Click Close when
 // you're finished" (jira). In the replies recorded on the 12 tuned apps
 // (2,433 single steps and 232 whole-guide steps with their pages, 3,455
-// whole-guide steps without), 74 after the first step named a listed control
+// whole-guide steps without), 76 after the first step named a listed control
 // with nothing pointed at. Pointing at it would have been right 7 times and
-// wrong 67: most came once the goal was reached, or while ParaBank was down.
+// wrong 69: most came once the goal was reached, or while ParaBank was down.
 // Judged as below, none is pointed at, 61 are left as they were (59 of them
-// rightly) and 13 are asked about again. So such a reply is judged first:
+// rightly) and 15 are asked about again. So such a reply is judged first:
 // - "point": the control is plainly the goal's next step. It is pointed at,
 //   with the same sentence and "continue", and no model call is made.
 // - "aside": it is named as something optional or for later, or the goal was
@@ -167,6 +204,7 @@ function toldToUse(snapshot: Snapshot, say: string): { element: SnapElement; at:
       found.push({ element, at: match.index, end });
     }
   }
+  for (const field of fieldsTold(snapshot, say)) if (!found.some((other) => field.at < other.end && field.end > other.at)) found.push(field);
   return found.sort((a, b) => a.at - b.at);
 }
 

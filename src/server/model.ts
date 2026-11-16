@@ -417,7 +417,7 @@ export async function measureTurn(
     }
     if (ask) {
       try {
-        const note = stalled ? namedButNotDoneNote(stalled) : namedButNotPointedNote(found);
+        const note = stalled ? namedButNotDoneNote(stalled) : namedButNotPointedNote(found, answer.reply.status);
         const again = await claudeTurn(site, request, settings, answers, modeKnown, targetKnown, signal, { reply: asStep(answer.reply), note });
         if (!onPage(again.reply.target)) again.reply.target = null;
         answer = { ...again, tokens: added(answer.tokens, again.tokens), usd: answer.usd + again.usd, recheck: answer.recheck };

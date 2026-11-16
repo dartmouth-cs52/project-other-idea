@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { asksForAFact, judgeNamed, namedButNotPointed } from "../src/server/check.ts";
+import { asksForAFact, judgeNamed, namedButNotPointed, namedButNotPointedNote } from "../src/server/check.ts";
 import type { SnapElement, Snapshot, TurnReply, TurnRequest } from "../src/shared/types.ts";
 
 // A guide's reply that tells the visitor to use a listed control and points
@@ -121,4 +121,34 @@ test("on the first question nothing is an aside: it is pointed at or asked about
   assert.equal(verdict("What does Haptic see on my page?", home, 'The FAQ on the home page has an entry called "What does Haptic see on the page?". Click FAQ in the top bar to find it.', "done", 0), "ask FAQ");
   assert.equal(verdict("how do I add a budget", budgets, "If you want one, click New budget.", "done", 0), "ask New budget");
   assert.equal(verdict("how do I add a budget", budgets, "Click New budget at the top to add one.", "done", 0), "point New budget");
+});
+
+// Northpine's expenses, 16 November, two runs in three of "where do I upload a receipt for the
+// Skyline Air charge": the first reply was "stuck", told the visitor to type into the search
+// field, and the guide ended. One of them even had a target, on the "All" tab, which a "stuck"
+// reply never shows.
+const expenses = page("/expenses", ["button", "Search… ⌘K"], ["tab", "All"], ["tab", "Missing receipts 1091"], ["textbox", "Search expenses"]);
+const receiptGoal = "where do I upload a receipt for the Skyline Air charge";
+
+test("a field the sentence tells the visitor to type into is found by its name or as the page's one search box, and a stuck reply's target is no pointer", () => {
+  const typing = "I don't see a Skyline Air charge in this list. Try typing Skyline Air in the Search expenses box, then open that charge to find the receipt upload area.";
+  const searchBox = "I don't see a Skyline Air charge in the rows listed here. Click the search box above the table and type Skyline Air to find it, then open it to add the receipt.";
+  assert.equal(namedButNotPointed(expenses, { target: null, status: "stuck", say: typing })?.label, "Search expenses");
+  assert.equal(namedButNotPointed(expenses, { target: "e2", status: "stuck", say: searchBox })?.label, "Search expenses");
+  // On the first question a stuck reply is asked about again, never pointed at in code.
+  assert.equal(verdict(receiptGoal, expenses, typing, "stuck", 0), "ask Search expenses");
+  assert.equal(verdict(receiptGoal, expenses, searchBox, "stuck", 0), "ask Search expenses");
+  // A reply that points, and is not stuck, is not caught.
+  assert.equal(namedButNotPointed(expenses, { target: "e4", status: "continue", say: searchBox }), undefined);
+  // Pressing the key is not typing into the field (ui5: "press Enter in the Search box to apply the search").
+  assert.equal(namedButNotPointed(expenses, { target: null, status: "done", say: "The list still shows all 10 orders, so press Enter in the Search expenses box to apply it." }), undefined);
+  // With two fields whose names say they search, "the search box" is neither.
+  const two = page("/expenses", ["textbox", "Search expenses"], ["searchbox", "Search people"]);
+  assert.equal(namedButNotPointed(two, { target: null, status: "stuck", say: searchBox }), undefined);
+  // Asked again, the model is told why nothing was pointed at.
+  const field = expenses.elements[3]!;
+  assert.match(namedButNotPointedNote(field, "stuck"), /^Your reply tells the visitor to use textbox "Search expenses" \(e4\), but its status is "stuck", so nothing is pointed at\./);
+  assert.match(namedButNotPointedNote(field, "done"), /but its target is null, so nothing is pointed at\./);
+  // Typing as an aside, once something is done, is left as it is.
+  assert.equal(verdict(receiptGoal, expenses, "The receipt is attached. If you need another charge, type its name in the Search expenses box."), "aside Search expenses");
 });
