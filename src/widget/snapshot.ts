@@ -629,7 +629,7 @@ function documentsOfPage(): Document[] {
 }
 
 /** The documents being read: the page's, and its frames' from its own origin. Set for one reading. */
-let pageDocuments: Document[] = [document];
+let pageDocuments: Document[] = [];
 
 /** What the fields and editors on the page hold now, each as one lower-case line of words. */
 function typedValues(): string[] {
