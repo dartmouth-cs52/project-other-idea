@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { cn } from "cn";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { api, OUTCOME_LABEL, type FinishedList, type GuideDetail, type Insights } from "@/lib/app-api";
+import { api, OUTCOME_LABEL, type Correction, type FinishedList, type GuideDetail, type Insights } from "@/lib/app-api";
+import { PointHereInstead } from "./guiding-rules";
 import { Card, CardTitle, DoneMark, seconds, when } from "./parts";
 
 const RANGES = [7, 30, 90];
@@ -13,7 +14,7 @@ const RANGES = [7, 30, 90];
  * questions that keep going unanswered, because those are what the company
  * can fix.
  */
-export function InsightsView({ siteId, refreshKey }: { siteId: string; refreshKey: number }) {
+export function InsightsView({ siteId, refreshKey, onCorrected }: { siteId: string; refreshKey: number; onCorrected?: (corrections: Correction[]) => void }) {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<Insights | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -172,7 +173,7 @@ export function InsightsView({ siteId, refreshKey }: { siteId: string; refreshKe
         </ul>
       </Card>
 
-      {open && <GuideDrawer siteId={siteId} guideId={open} onClose={() => setOpen(null)} />}
+      {open && <GuideDrawer siteId={siteId} guideId={open} onClose={() => setOpen(null)} onCorrected={onCorrected} />}
     </div>
   );
 }
@@ -280,7 +281,7 @@ function Stat({ label, value, note }: { label: string; value: string; note?: str
 }
 
 /** One guide, step by step: what was pointed at, what was said, and what the person did. */
-function GuideDrawer({ siteId, guideId, onClose }: { siteId: string; guideId: string; onClose: () => void }) {
+function GuideDrawer({ siteId, guideId, onClose, onCorrected }: { siteId: string; guideId: string; onClose: () => void; onCorrected?: (corrections: Correction[]) => void }) {
   const [guide, setGuide] = useState<GuideDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -340,6 +341,7 @@ function GuideDrawer({ siteId, guideId, onClose }: { siteId: string; guideId: st
                     )}
                   </p>
                   <p className="w-fit max-w-full rounded-xl bg-primary px-3 py-2 text-sm text-primary-foreground">{step.said}</p>
+                  <PointHereInstead siteId={siteId} guideId={guideId} step={step.n} path={step.path} onSaved={(corrections) => onCorrected?.(corrections)} />
                 </li>
               ))}
             </ol>

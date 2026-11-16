@@ -50,6 +50,22 @@ export interface SeenOrigin {
   requests: number;
 }
 
+/** A control as the dashboard names it. Role empty means any kind. */
+export interface ControlName {
+  role?: string;
+  label: string;
+}
+
+/** "Point here instead", as saved. */
+export interface Correction {
+  id: string;
+  route: string;
+  question: string;
+  wrong?: ControlName;
+  right: ControlName;
+  createdAt: string;
+}
+
 export interface Site {
   id: string;
   name: string;
@@ -66,6 +82,8 @@ export interface Site {
   connected: boolean;
   origins: SeenOrigin[];
   reading: Reading | null;
+  corrections: Correction[];
+  blocked: ControlName[];
 }
 
 export type Outcome =
@@ -81,6 +99,8 @@ export type Outcome =
   | "not_covered"
   | "sensitive"
   | "off_topic"
+  // Haptic was asked for a control the company said never to point at.
+  | "blocked"
   | "abandoned"
   | "under_way";
 
@@ -149,6 +169,7 @@ export const OUTCOME_LABEL: Record<Outcome, string> = {
   not_covered: "Not in the help docs",
   sensitive: "Left for a person",
   off_topic: "Off topic",
+  blocked: "A control you ruled out",
   abandoned: "Abandoned",
   under_way: "Under way",
 };

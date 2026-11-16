@@ -133,6 +133,7 @@ export function createApp(parts: AppParts) {
       const config: PublicSiteConfig = { name: site.name, appearance: site.appearance };
       if (await switchedOff(parts, site)) config.off = true;
       if (site.learn === false) config.learn = false;
+      if (site.blocked?.length) config.blocked = site.blocked;
       const handoff = publicHandoff(site.handoff);
       if (handoff) config.handoff = handoff;
       return json(200, config);

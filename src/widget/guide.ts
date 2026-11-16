@@ -15,6 +15,7 @@ import {
   type TurnReply,
   type TurnRequest,
 } from "../shared/types.ts";
+import { BLOCKED_SAY, isBlocked, type ControlName } from "../shared/corrections.ts";
 import { onAddressChange } from "./navigation.ts";
 import { describeChange, elementKey, isField, NOTHING_CHANGED, sameView, takeSnapshot, type PageSnapshot } from "./snapshot.ts";
 import type { Ui } from "./ui.ts";
@@ -148,6 +149,8 @@ export class Guide {
     private readonly sendTurn: (request: Omit<TurnRequest, "site">, watch?: Watch, signal?: AbortSignal) => Promise<TurnReply>,
     private readonly report: Reporter = () => {},
     private readonly handoff?: HandoffWay,
+    /** Controls the site's owner ruled out. Checked here as well as on the server, so the pointer never goes to one. */
+    private readonly blocked: ControlName[] = [],
   ) {}
 
   /**
@@ -240,6 +243,7 @@ export class Guide {
       const el = page.elements.get(id);
       if (run !== this.run || early || !el?.isConnected || normalizePath(location.pathname) !== page.snapshot.path) return;
       const listed = page.snapshot.elements.find((element) => element.id === id);
+      if (isBlocked(listed, this.blocked)) return;
       if (listed?.offscreen) el.scrollIntoView({ block: "center", behavior: "smooth" });
       ui.pointAt(el, "");
       const waiting: EarlyPointer = {
@@ -333,6 +337,12 @@ export class Guide {
 
     const el = reply.target ? page.elements.get(reply.target) : undefined;
     const listed = reply.target ? page.snapshot.elements.find((element) => element.id === reply.target) : undefined;
+
+    // A control the site's owner ruled out. The server says so, and the widget checks for itself.
+    if (reply.blocked || isBlocked(listed, this.blocked)) {
+      dropEarly();
+      return this.finish(reply.blocked ? reply.say : BLOCKED_SAY, "blocked");
+    }
 
     // Pointing again at what the visitor just used, with the page unchanged,
     // is a loop. Ask once more saying so, then give up rather than repeat.

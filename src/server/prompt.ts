@@ -1,3 +1,4 @@
+import { controlText, correctionsFor } from "../shared/corrections.ts";
 import type { Doc, PageNode, SiteContext, SnapElement, Snapshot, TurnRequest } from "../shared/types.ts";
 
 // Builds what the model reads. The system part (rules and site knowledge) is
@@ -114,6 +115,12 @@ export function buildSystemPrompt(site: SiteContext): string {
   const parts = [(answers ? ANSWER_RULES : RULES).replaceAll("{site_name}", site.name || "this website")];
   if (site.notes.trim()) parts.push(`# About this site, from its owner\n${site.notes.trim()}`);
   if (site.pages.length) parts.push(`# Site map\n<site_map>\n${renderSiteMap(site.pages)}\n</site_map>`);
+  // Only for a site that has such a list, so every other site's prompt is as it was.
+  if (site.blocked?.length) {
+    parts.push(
+      `# Controls never to point at, from its owner\nThe site's owner doesn't want visitors guided to these. Never point at one, wherever it is on the page. If the visitor asks for what one does, set target to null and status "done", and say you can't help with that here.\n${site.blocked.map((control) => `- ${controlText(control)}`).join("\n")}`,
+    );
+  }
   if (answers) {
     const articles = articlesOf(site).map(renderArticle);
     parts.push(`# Help docs, from the site's owner\n<help_docs>\n${articles.length ? articles.join("\n\n") : "(This site has no help articles, so nothing can be answered in words.)"}\n</help_docs>`);
@@ -193,8 +200,21 @@ export function renderSiteMap(pages: PageNode[]): string {
   return lines.join("\n");
 }
 
-export function buildUserMessage(request: TurnRequest): string {
+/**
+ * The part of the prompt that changes with every step. With `site`, the
+ * owner's corrections that fit this question or this page go with it, before
+ * the question. A site without any is asked exactly as before.
+ */
+export function buildUserMessage(request: TurnRequest, site?: SiteContext): string {
   const parts = [`<page>\n${renderSnapshot(request.snapshot)}\n</page>`];
+  const corrections = correctionsFor(site?.corrections, request.snapshot.path, request.goal);
+  if (corrections.length) {
+    const lines = corrections.map(
+      (correction) =>
+        `- On ${correction.route}, asked "${correction.question.replace(/"/g, "'")}": point at ${controlText(correction.right)}${correction.wrong ? `, not ${controlText(correction.wrong)}` : ""}.`,
+    );
+    parts.push(`<corrections>\nThe site's owner corrected earlier guides. Where one is about the same task and its control is in this page's list, point at that control.\n${lines.join("\n")}\n</corrections>`);
+  }
   if (request.step === 0 && !request.event) {
     parts.push(`The visitor asks: ${request.goal}`);
   } else {

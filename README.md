@@ -76,6 +76,7 @@ A crawl turns the site into a **graph**. Each page's title, headings, buttons an
 ### Beyond pointing
 
 - **[Answers](docs/answers.md)** (opt-in): replies in words to questions like "what does this do?", drawn from the site's own help articles, with citations. The server, not the prompt, enforces the rules that matter. An answer must cite a real article. Prices, refunds, legal matters and account specifics are never stated. A button an article names is checked against the live page, so out-of-date docs get flagged instead of repeated.
+- **[Corrections](docs/corrections.md)**: when Haptic points at the wrong thing, the company picks the right control on that step in the dashboard, and the fix applies to similar questions from then on. A company can also list controls Haptic must never point at, which the server and the widget both enforce.
 - **[Hand-off to a person](docs/answers.md#the-way-to-a-person)**: when Haptic can't help, it passes the conversation to the company's existing support, through a webhook (optionally HMAC-signed), a contact page, email, or the site's own chat widget.
 
 ## Engineering
@@ -157,6 +158,7 @@ npm run test:browser              # the widget in Chromium, Firefox and WebKit
 |---|---|
 | [Operations](docs/operations.md) | Deploying, the database, what is recorded about visitors, billing outcomes, the kill switch, spend limits and step costs |
 | [The widget on a live page](docs/widget.md) | Modal dialogs, covered controls, route changes, learning the site from visits, and the browser tests |
+| [Correcting Haptic](docs/corrections.md) | "Point here instead", and controls Haptic must never point at |
 | [Answers and hand-off](docs/answers.md) | Answering from help docs, the server-side rules, and hand-off to a person |
 | [Benchmark](eval/README.md) | How cases work, how to run them, and results |
 | [Website and dashboard](web/README.md) | Sign-in, approvals, the dashboard, and deploying the site |
