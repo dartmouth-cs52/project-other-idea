@@ -45,6 +45,7 @@ const measure: TurnMeasure = {
   msToTarget: 800,
   wrote: "Click Billing.",
   broke: [],
+  cited: [],
   tokens: { input: 600, cacheRead: 24_000, cacheWrite: 0, output: 150 },
   usd: 0.0051,
 };
@@ -83,3 +84,56 @@ test("the stand-in model has no cost to record, and a broken rule is recorded ev
   await new Store(broke.sql).recordStep(request, { ...measure, model: "mock", tokens: undefined, usd: 0, broke: ["link"] }, undefined);
   assert.deepEqual(broke.sent[2]!.values, [null, null, null, null, null, ["link"], GUIDE, 2]);
 });
+
+test("on a site with Answers, the kind of reply and the docs it rested on are added too", async () => {
+  const { sql, sent } = standIn();
+  const answer: TurnMeasure = {
+    ...measure,
+    reply: { target: null, status: "done", say: "The link works for 7 days.", mode: "answer", sources: [{ title: "Inviting teammates" }] },
+    cited: ["help/inviting.md"],
+  };
+  await new Store(sql).recordStep(request, answer, undefined);
+  assert.equal(sent.length, 5);
+  assert.match(sent[3]!.text, /^update steps set mode = \?, reason = \?, sources = \?, overruled = \? where guide_id = \? and n = \?$/);
+  assert.deepEqual(sent[3]!.values, ["answer", null, ["help/inviting.md"], null, GUIDE, 2]);
+  // No control it named was missing, which is said too.
+  assert.deepEqual(sent[4]!.values, [null, GUIDE, 2]);
+
+  const declined = standIn();
+  await new Store(declined.sql).recordStep(request, { ...measure, reply: { target: null, status: "done", say: "The help docs don't cover that.", mode: "cannot_help", reason: "not_covered" }, overruled: "no_source" }, undefined);
+  assert.deepEqual(declined.sent[3]!.values, ["cannot_help", "not_covered", [], "no_source", GUIDE, 2]);
+});
+
+test("a control an answer named that is nowhere in the product is recorded with the step", async () => {
+  const { sql, sent } = standIn();
+  const stale: TurnMeasure = {
+    ...measure,
+    reply: { target: null, status: "done", say: "Open the project and press Archive project.", mode: "answer", sources: [{ title: "Archiving" }], missing: ["Archive project"] },
+    cited: ["help/archiving.md"],
+    unseen: ["Archive project"],
+  };
+  await new Store(sql).recordStep(request, stale, undefined);
+  assert.equal(sent.length, 5);
+  assert.match(sent[4]!.text, /^update steps set unseen = \? where guide_id = \? and n = \?$/);
+  assert.deepEqual(sent[4]!.values, [["Archive project"], GUIDE, 2]);
+
+  // The same step written again, when the widget asks for it a second time, with an answer that named
+  // nothing missing: the first answer's list goes.
+  const again = standIn();
+  await new Store(again.sql).recordStep(request, { ...stale, reply: { ...stale.reply, missing: undefined }, unseen: undefined }, undefined);
+  assert.match(again.sent[4]!.text, /^update steps set unseen = \? where guide_id = \? and n = \?$/);
+  assert.deepEqual(again.sent[4]!.values, [null, GUIDE, 2]);
+
+  // A site without Answers never has any, and sends nothing for them.
+  const guideOnly = standIn();
+  await new Store(guideOnly.sql).recordStep(request, measure, undefined);
+  assert.ok(guideOnly.sent.every((statement) => !/unseen/.test(statement.text)));
+});
+
+test("an act step is recorded as a step, and its mode is not written where a guide's kind of reply goes", async () => {
+  const { sql, sent } = standIn();
+  await new Store(sql).recordStep({ ...request, mode: "act" }, { ...measure, reply: { ...measure.reply, do: "click", enter: null, commits: false, mode: "act" } }, undefined);
+  assert.deepEqual(sent.map((query) => query.text.split(" ").slice(0, 3).join(" ")), ["insert into guides", "insert into steps", "update steps set"]);
+  assert.doesNotMatch(sent.map((query) => query.text).join("\n"), /set mode = |set unseen = /);
+});
+

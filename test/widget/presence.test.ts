@@ -67,7 +67,7 @@ test("the ask box still takes the cursor where it is pressed, and text can be se
   const session = await start(menuClosingOn("mousedown", "window", true), () => words("Choose Archive."));
   try {
     await askByHand(session, "archive it");
-    const input = session.page.locator("haptic-root .panel input");
+    const input = session.page.locator("haptic-root .ask input");
     const box = (await input.boundingBox({ timeout: 5000 }))!;
     // Press near the start of the words, then type: the letter goes where the press was.
     await session.page.mouse.click(box.x + 14, box.y + box.height / 2);
@@ -137,14 +137,17 @@ async function quietCounts(session: Session, during?: () => Promise<void>): Prom
 }
 
 /**
- * The two listeners of Haptic's allowed while nothing is in use: a page's
- * dialog or popover opening on the top layer, heard on the document in the
- * capture phase, and the window changing size, which can bring a control of
- * the page's under the launcher.
+ * The listeners of Haptic's allowed while nothing is in use: a page's dialog
+ * or popover opening on the top layer, heard on the document in the capture
+ * phase, and the window changing size, which can bring a control of the
+ * page's under the launcher. And, while the site learns from visits
+ * (learn.ts), a passive click listener and the address watcher's popstate and
+ * hashchange (navigation.ts, which in Chromium watches through the Navigation
+ * API, with no timer). No timer, frame or observer of Haptic's runs.
  */
-const IDLE = { calls: 0, observers: 0, listeners: ["d:toggle:true", "w:resize:false"] };
+const IDLE = { calls: 0, observers: 0, listeners: ["d:click:true", "d:toggle:true", "w:hashchange:false", "w:popstate:false", "w:resize:false"] };
 
-test("nothing of Haptic's runs on a page where no guide is running: no timer, no frame, no observer, and no listener but those for the top layer and the window's size", async () => {
+test("nothing of Haptic's runs on a page where no guide is running: no timer, no frame, no observer, and no listener but those for the top layer, the window's size and learning the site", async () => {
   const session = await start(COUNTED, () => words("Saving is done with the Save button at the top."));
   try {
     // The widget's own start-up listener for the page to finish loading is gone once it has.

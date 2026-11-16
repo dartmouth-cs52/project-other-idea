@@ -603,10 +603,12 @@ test("a press that would land on a link inside an allowed control is judged as t
 });
 
 test("something laid over the target, or a target off screen with no part to press, is the visitor's", async () => {
-  const page = await open(`<section><input aria-label="Name"><button type="button" id="next" data-watch style="position:relative">Next</button>
-    <div id="veil" style="position:absolute;inset:0;background:transparent;z-index:10"></div></section>`);
+  const page = await open(`<section style="position:relative"><input aria-label="Name"><button type="button" id="next" data-watch style="position:relative">Next</button></section>`);
   try {
     assert.equal((await page.plan("#next", { do: "click" }, "go on")).kind, "act");
+    // Laid over it after the page was read: a control that is covered when the page is read is not listed at all
+    // (keepReachable in snapshot.ts), so the model never names it. This is the page covering it on the way to the press.
+    await page.run(`document.querySelector("section").insertAdjacentHTML("beforeend", '<div id="veil" style="position:absolute;inset:0;background:transparent;z-index:10"></div>')`);
     const pressed = await page.press();
     assert.deepEqual([pressed.reach?.kind, pressed.reach?.reason], ["visitor", "covered"]);
     assert.match(pressed.reach?.say ?? "", /^Something is in the way, so I'll leave this one to you\. Click Next and I'll carry on\.$/);

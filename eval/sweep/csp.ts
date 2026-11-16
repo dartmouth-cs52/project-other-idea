@@ -150,7 +150,7 @@ export async function cspSite(browser: Browser, bundles: Bundles, sweepJs: strin
       try {
         const launcher = page.locator("haptic-root .launcher");
         await launcher.click({ timeout: 3000 });
-        await page.locator("haptic-root .panel input").pressSequentially("Where is the help page?", { delay: 30, timeout: 5000 });
+        await page.locator("haptic-root .ask input").pressSequentially("Where is the help page?", { delay: 30, timeout: 5000 });
         await page.keyboard.press("Enter");
         const sentBefore = ctx.traffic.get(page)?.turns ?? 0;
         for (const until = Date.now() + 20_000; Date.now() < until; ) {

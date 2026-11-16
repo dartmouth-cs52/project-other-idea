@@ -1,6 +1,7 @@
 import { createApp, turnCounts, type AppParts } from "../src/server/app.ts";
 import { describeAlert, limitsFor, type Admission, type Ceiling, type Gate, type Limits, type Report } from "../src/server/budget.ts";
 import { Store } from "../src/server/db.ts";
+import { labelThreshold } from "../src/server/learned.ts";
 import { configure } from "../src/server/model.ts";
 import { createSiteCache } from "../src/server/site-cache.ts";
 import type { SiteContext } from "../src/shared/types.ts";
@@ -52,6 +53,8 @@ export interface Env {
   HAPTIC_MOCK_USD?: string;
   /** "1" switches every site off. It takes a deploy to change, so the keys in SITES are the quicker switch. */
   HAPTIC_OFF?: string;
+  /** How many different visitors must have seen a learned label before the prompt gets it. 3 unless set. */
+  HAPTIC_LABEL_THRESHOLD?: string;
   /** A secret, set with `wrangler secret put`. Not needed while HAPTIC_MODEL is "mock". */
   ANTHROPIC_API_KEY?: string;
 }
@@ -69,7 +72,7 @@ const sites = createSiteCache({ keepMs: 60_000, maxStaleMs: 10 * 60_000 });
 let store: { url: string; store: Store } | undefined;
 function storeFor(env: Env): Store | undefined {
   if (!env.DATABASE_URL) return undefined;
-  if (store?.url !== env.DATABASE_URL) store = { url: env.DATABASE_URL, store: new Store(env.DATABASE_URL) };
+  if (store?.url !== env.DATABASE_URL) store = { url: env.DATABASE_URL, store: new Store(env.DATABASE_URL, labelThreshold({ HAPTIC_LABEL_THRESHOLD: env.HAPTIC_LABEL_THRESHOLD, HAPTIC_PRODUCTION: "1" })) };
   return store.store;
 }
 
@@ -215,6 +218,8 @@ export default {
         later(db?.recordStep(turn, measure, origin));
       },
       onReport: (site, guide, report) => later(db?.report(site, guide, report)),
+      onCancel: (turn) => later(db?.cancelStep(turn)),
+      onOutline: (site, visitor, outline) => later(db?.recordOutline(site, visitor, outline)),
     });
     try {
       const response = await app(request, request.headers.get("CF-Connecting-IP") ?? "");

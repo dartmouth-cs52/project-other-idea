@@ -3,6 +3,8 @@
   "name": "haptic-widget",
   "main": "./worker/index.ts",
   "compatibility_date": "2026-11-01",
+  // Aborts request.signal when the caller goes away, so a step the widget hangs up on stops the model call.
+  "compatibility_flags": ["enable_request_signal"],
   // Bundles the widget into dist/ before the Worker is built, so the two never drift apart.
   "build": { "command": "npm run build" },
   // Each site's context, under its id. Written by `npm run site:publish`.

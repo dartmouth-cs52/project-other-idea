@@ -2,11 +2,17 @@
 // server records. Every query is limited to one site and a time window.
 //
 // What "unanswered" means: a guide that got stuck (nothing to point at, a loop,
-// out of steps, an error), that was abandoned, or that the visitor said did not
-// help. A visitor saying it helped always takes a guide off that list. Whether
-// an answer was right cannot be known directly; this is the nearest honest proxy.
+// out of steps, an error), a question the help docs did not cover, one that was
+// abandoned, or one the visitor said did not help. A visitor saying it helped
+// always takes a guide off that list. Whether an answer was right cannot be
+// known directly; this is the nearest honest proxy.
+//
+// A question left for a person (prices, refunds, the visitor's own account) and
+// one that had nothing to do with the site are not counted: no change to the
+// product or its help docs would have answered them.
 
 import type { Sql } from "./db";
+import { cantFind, guideHealth } from "./health";
 
 /** A guide with no ending reported, and nothing new for this long, was abandoned. */
 const ABANDONED_AFTER = "30 minutes";
@@ -17,12 +23,27 @@ const OUTCOME = `case
   when coalesce(g.last_step_at, g.started_at) < now() - interval '${ABANDONED_AFTER}' then 'abandoned'
   else 'under_way' end`;
 
-const UNANSWERED = `(g.helped is distinct from true and (g.helped = false or (${OUTCOME}) in ('nothing_to_point_at', 'loop', 'step_limit', 'error', 'abandoned')))`;
+const UNANSWERED = `(g.helped is distinct from true and (g.helped = false or (${OUTCOME}) in ('nothing_to_point_at', 'loop', 'step_limit', 'error', 'not_covered', 'abandoned')))`;
+
+/**
+ * The new cards need db/migrations/0011. Until it is applied they come back empty, and the rest of the
+ * dashboard still loads, so a deploy that lands before the migration breaks nothing.
+ */
+async function untilMigrated<T>(what: string, query: Promise<T[]>): Promise<T[]> {
+  try {
+    return await query;
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code !== "42703" && code !== "42P01" && code !== "42883") throw error;
+    console.error(`insights: ${what} needs db/migrations/0011, which isn't applied yet.`);
+    return [];
+  }
+}
 
 export async function insights(sql: Sql, site: string, days: number) {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
 
-  const [summary, outcomes, unanswered, recent, abandonedAt, wrongClicks] = await Promise.all([
+  const [summary, outcomes, recent, abandonedAt, wrongClicks, cannotFind, health, alerts] = await Promise.all([
     sql.query(
       `select count(*)::int as guides,
         count(*) filter (where ${UNANSWERED})::int as unanswered,
@@ -36,16 +57,6 @@ export async function insights(sql: Sql, site: string, days: number) {
       [site, since],
     ),
     sql.query(`select ${OUTCOME} as outcome, count(*)::int as count from guides g where g.site_id = $1 and g.started_at >= $2 group by 1 order by 2 desc`, [site, since]),
-    // The headline: questions asked more than once that keep going unanswered. Each is something the company can fix.
-    sql.query(
-      `select g.question_key as key, (array_agg(g.question order by g.started_at desc))[1] as question,
-        count(*)::int as asked, count(*) filter (where ${UNANSWERED})::int as unanswered, max(g.started_at) as last_asked,
-        (array_agg(g.id order by g.started_at desc) filter (where ${UNANSWERED}))[1] as example
-      from guides g where g.site_id = $1 and g.started_at >= $2
-      group by g.question_key having count(*) filter (where ${UNANSWERED}) >= 2
-      order by unanswered desc, asked desc limit 10`,
-      [site, since],
-    ),
     sql.query(
       `select g.id, g.question, g.started_at, g.started_path, g.origin, g.step_count, g.helped, ${OUTCOME} as outcome,
         (select count(*)::int from steps s where s.guide_id = g.id and s.strayed) as wrong_clicks,
@@ -73,9 +84,17 @@ export async function insights(sql: Sql, site: string, days: number) {
       order by wrong desc, shown desc limit 8`,
       [site, since],
     ),
+    // The lead: what people asked and couldn't find, grouped by meaning and counted by person.
+    untilMigrated("what people can't find", cantFind(sql, site, since)),
+    // Groups whose guides stopped finishing, week over week, always over the last eight weeks.
+    untilMigrated("guide health", guideHealth(sql, site)),
+    untilMigrated(
+      "health alerts",
+      sql.query(`select question_group as key, max(sent_at) as sent_at, bool_or(emailed) as emailed from health_alerts where site_id = $1 and sent_at > now() - interval '30 days' group by 1`, [site]),
+    ),
   ]);
 
-  return { days, summary: summary[0], outcomes, unanswered, recent, abandonedAt, wrongClicks };
+  return { days, summary: summary[0], outcomes, recent, abandonedAt, wrongClicks, cantFind: cannotFind, health, alerts };
 }
 
 /** "2026-11" for the month a date falls in, in UTC. Bills are counted by UTC month. */
@@ -118,7 +137,8 @@ export function finishedCsv(list: Awaited<ReturnType<typeof finishedGuides>>): s
 export async function guideSteps(sql: Sql, site: string, guide: string) {
   if (!/^[0-9a-f-]{36}$/.test(guide)) return undefined;
   const rows = await sql.query(
-    `select g.id, g.question, g.started_at, g.ended_at, g.started_path, g.origin, g.helped, ${OUTCOME} as outcome from guides g where g.id = $1 and g.site_id = $2`,
+    `select g.id, g.question, g.started_at, g.ended_at, g.started_path, g.origin, g.helped,
+      coalesce((to_jsonb(g)->>'cancelled_steps')::int, 0) as cancelled_steps, ${OUTCOME} as outcome from guides g where g.id = $1 and g.site_id = $2`,
     [guide, site],
   );
   if (!rows[0]) return undefined;

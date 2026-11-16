@@ -1,5 +1,8 @@
-import { DEFAULT_CACHE, measureTurn, tidySay, type TurnSettings } from "../src/server/model.ts";
+import { measureTurn, tidySay, type TurnSettings } from "../src/server/model.ts";
 import { STREAM_TYPE, type SiteContext, type TurnReply, type TurnRequest } from "../src/shared/types.ts";
+import { parseModel } from "./models.ts";
+
+export { parseModel };
 
 // Where a benchmark gets its answers from. Either a model called from here,
 // through the same code as the live server, or a server that is already
@@ -22,19 +25,6 @@ export interface Asked {
 }
 
 export type Asker = (site: SiteContext, request: Omit<TurnRequest, "site">) => Promise<Asked>;
-
-/** "claude-haiku-5-5@off" is Haiku with no thinking. "@low", "@medium" and "@high" set the effort. */
-export function parseModel(spec: string): { name: string; settings: TurnSettings } {
-  const [model = "", ...flags] = spec.trim().split("@");
-  const settings: TurnSettings = { model, effort: "low", thinking: "default", cache: DEFAULT_CACHE };
-  for (const flag of flags) {
-    if (flag === "low" || flag === "medium" || flag === "high") settings.effort = flag;
-    else if (flag === "off") settings.thinking = "off";
-    else throw new Error(`"${flag}" in "${spec}" isn't a setting. Use low, medium, high or off.`);
-  }
-  if (!model) throw new Error("A model is missing from --models.");
-  return { name: spec.trim(), settings };
-}
 
 /** Answers from a model called here. Real models need ANTHROPIC_API_KEY. */
 export function modelAsker(settings: TurnSettings): Asker {

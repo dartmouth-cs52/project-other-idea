@@ -16,7 +16,7 @@
     "site:on": "tsx src/intake/switch.ts on",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
-    "test:browser": "tsx --test test/browser/*.test.ts",
+    "test:browser": "tsx --test --test-concurrency=1 test/browser/*.test.ts",
     "eval": "tsx --env-file-if-exists=.env eval/run.ts",
     "eval:record": "tsx eval/record.ts",
     "eval:look": "tsx eval/look.ts",
@@ -26,6 +26,8 @@
     "eval:toolkits": "tsx eval/toolkits/run.ts",
     "eval:acts": "tsx eval/acts.ts",
     "eval:sweep": "tsx eval/sweep/run.ts",
+    "eval:answers": "tsx --env-file-if-exists=.env eval/answers-run.ts",
+    "eval:answers:record": "tsx eval/answers-record.ts",
     "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts"
   },
   "dependencies": {
@@ -38,6 +40,7 @@
     "@types/node": "^26.6.6",
     "date-fns": "^4.4.0",
     "esbuild": "^0.28.2",
+    "playwright": "^1.64.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "wrangler": "^4.162.0"

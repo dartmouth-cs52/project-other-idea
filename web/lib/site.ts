@@ -61,13 +61,8 @@ export const pricing = {
       monthlyUsd: null,
       includedGuides: null,
       overageUsd: null,
-      detail: "For larger rollouts. Tell us what your security and compliance teams need, and we will say plainly what we support today.",
+      detail: "For larger rollouts.",
     },
-  ],
-  notes: [
-    "A guide is finished when the visitor uses the last control Haptic pointed at, or reaches the screen they asked for.",
-    "Haptic is free during early access, and billing starts after it. Every guide we count will be listed in your dashboard, so you can check the bill.",
-    "Prices are in US dollars and may change before general release.",
   ],
 } as const;
 
@@ -104,5 +99,12 @@ export const faqs = [
 
 /** The widget's script, as it goes in every customer's tag. It must never change. */
 export const widgetScriptUrl = `${(process.env.NEXT_PUBLIC_WIDGET_URL ?? "https://widget.joinhaptic.com").replace(/\/$/, "")}/widget.js`;
+
+/**
+ * This site's own id on the widget server, so people can try Haptic here. Its context
+ * is built from haptic-notes.md (see README.md, "Haptic on this site"). Set
+ * NEXT_PUBLIC_HAPTIC_SITE to another id to try a local server, or to nothing to leave it off.
+ */
+export const hapticSiteId = process.env.NEXT_PUBLIC_HAPTIC_SITE ?? "site_joinhaptic";
 
 export const signInHref = "/sign-in/";

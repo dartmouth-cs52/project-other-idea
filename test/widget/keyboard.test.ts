@@ -80,7 +80,7 @@ test("a menu that takes the keyboard a while after the visitor began typing a qu
     await session.page.locator("#open").click();
     await session.page.locator("haptic-root .launcher").click();
     await session.page.keyboard.type("what can I do here", { delay: 90 });
-    const typed = await session.page.evaluate(() => (document.querySelector("haptic-root")!.shadowRoot!.querySelector(".panel input") as HTMLInputElement).value);
+    const typed = await session.page.evaluate(() => (document.querySelector("haptic-root")!.shadowRoot!.querySelector(".ask input") as HTMLInputElement).value);
     assert.equal(typed, "what can I do here");
     assert.equal(await session.page.evaluate(() => (document.getElementById("menu") as HTMLElement).hidden), false, "a key meant for the question reached the menu");
     await session.page.keyboard.press("Enter");
@@ -112,7 +112,7 @@ test("an element of a toolkit that takes the keyboard, and shows nothing put ins
     await session.page.keyboard.type("what can I do here", { delay: 90 });
     const state = await session.page.evaluate(() => {
       const host = document.querySelector("haptic-root") ?? document.querySelector("x-item haptic-root");
-      return { drawn: !!host && host.getClientRects().length > 0, typed: (host!.shadowRoot!.querySelector(".panel input") as HTMLInputElement).value };
+      return { drawn: !!host && host.getClientRects().length > 0, typed: (host!.shadowRoot!.querySelector(".ask input") as HTMLInputElement).value };
     });
     assert.ok(state.drawn, "the widget is not drawn");
     assert.equal(state.typed, "what can I do here");

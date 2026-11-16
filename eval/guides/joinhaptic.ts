@@ -28,8 +28,10 @@ const guides: Guide[] = [
     id: "pricing",
     start: "/",
     goal: "How much does it cost?",
-    steps: [{ expect: [any("How much does it cost?")], act: { click: 'button:has-text("How much does it cost?")' } }, DONE],
-    reached: { selector: 'button[aria-expanded="true"]:has-text("How much does it cost?")' },
+    // The Pricing link in the top bar and the FAQ's question both get there, so a reply pointing at either is right.
+    // The recorder points at the first of them on the page, the Pricing link, so that is what it clicks.
+    steps: [{ expect: [any("Pricing"), any("How much does it cost?")], act: { click: 'header a[href="/#pricing"]' } }, DONE],
+    reached: [{ url: "#pricing$" }, { selector: 'button[aria-expanded="true"]:has-text("How much does it cost?")' }],
     says: {
       shown: { selector: "#pricing li:nth-child(1) > h3, #pricing li:nth-child(-n+2) > h3 + p", when: "start" },
       not: ["\\b(isn't|is not|not|never)\\s+free\\b"],
@@ -69,15 +71,24 @@ const guides: Guide[] = [
     steps: [{ expect: [any("Terms")], act: { click: 'footer a[href="/terms/"]' } }, DONE],
     reached: { url: "/terms/?$" },
   },
-  // The site has no sign-in, so the right answer points at nothing.
-  { id: "no-such-feature", start: "/", goal: "How do I log in to my account?", steps: [DONE] },
+  {
+    id: "sign-in",
+    start: "/",
+    goal: "How do I log in to my account?",
+    steps: [{ expect: [any("Sign in")], act: { click: 'header a[href="/sign-in/"]' } }, DONE],
+    reached: { url: "/sign-in/?$" },
+  },
+  // Sign in is by an emailed link or Google, so there is no password to change, and the right answer points at nothing.
+  { id: "no-such-feature", start: "/", goal: "How do I change my password?", steps: [DONE] },
 ];
 
+// The site has its own tag now (web/components/haptic-tag.tsx), loaded from the same address as the one a run adds, so
+// both are answered by the run (eval/browser.ts) and only one widget starts. No step reaches the live server.
 export default {
   siteId: "site_joinhaptic",
   origin: "https://joinhaptic.com",
   hasTag: false,
-  about: "Haptic's own public site: a simple marketing page with an accordion and a two-step form.",
+  about: "Haptic's own public site: a simple marketing page with an accordion, a sign-in page and a two-step form.",
   // The site's pages report their loading times to the network in front of them. Nothing else here is sent but plain reads.
   chatter: "^POST joinhaptic\\.com/cdn-cgi/rum$",
   guides,

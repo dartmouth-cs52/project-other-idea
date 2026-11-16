@@ -1,5 +1,6 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import { cleanText, normalizePath, questionKey, type GuideReport, type SiteContext, type TurnRequest } from "../shared/types.ts";
+import { cleanText, normalizePath, questionKey, type GuideReport, type PageOutline, type SiteContext, type TurnRequest } from "../shared/types.ts";
+import { MAX_VISITORS, outlineRows, visitorHash, withLearned, type LearnedLabel } from "./learned.ts";
 import type { TurnMeasure } from "./model.ts";
 
 // What the widget server keeps in Neon: each site, which origins the script has
@@ -34,6 +35,11 @@ const SEEN_EVERY_MS = 60_000;
  * means a burst of made-up ones cannot stop a real one being noted for good.
  */
 const MAX_REFUSED_ORIGINS = 20;
+/** Learned labels kept for one site. Past this, labels already known are still counted and new ones are not added. */
+const MAX_LABELS = 5000;
+/** The most learned labels read with a site, the most seen first. */
+const LABELS_READ = 1500;
+
 /** How long a report waits before each look for its guide's row. A Worker may keep working this long after it has answered. */
 const REPORT_RETRIES_MS = [0, 1000, 3000, 6000];
 
@@ -45,23 +51,87 @@ export class Store {
   /** Each guide's step write still under way in this process, so a report about it can wait for it. */
   private readonly writing = new Map<string, Promise<void>>();
 
-  /** `connection` is Neon's connection string. A test hands in a stand-in for the query function instead. */
-  constructor(connection: string | NeonQueryFunction<false, false>) {
+  /**
+   * `connection` is Neon's connection string. A test hands in a stand-in for
+   * the query function instead. `labelThreshold` is how many different
+   * visitors must have seen a learned label before the prompt gets it.
+   */
+  constructor(
+    connection: string | NeonQueryFunction<false, false>,
+    private readonly labelThreshold = 3,
+  ) {
     this.sql = typeof connection === "string" ? neon(connection) : connection;
   }
 
+  /**
+   * A site, with what traffic has taught Haptic about its pages merged into
+   * the crawl's. Callers keep it in memory (src/server/site-cache.ts), so a
+   * step never waits on this.
+   */
   async loadSite(id: string): Promise<SiteContext | undefined> {
-    const rows = (await this.sql`select id, name, origin, allowed_origins, context from sites where id = ${id}`) as SiteRow[];
-    return rows[0] ? siteFromRow(rows[0]) : undefined;
+    const [rows, labels] = await Promise.all([
+      this.sql`select id, name, origin, allowed_origins, context from sites where id = ${id}` as unknown as Promise<SiteRow[]>,
+      this.learnedLabels(id),
+    ]);
+    return rows[0] ? withLearned(siteFromRow(rows[0]), labels, this.labelThreshold) : undefined;
   }
 
-  /** Saves a site built by `npm run tag`. A site the team made by hand has no company until one claims it. */
+  /** The labels enough visitors have seen on this site. None, rather than a failed site, when the table is missing (db/migrations/0009). */
+  private async learnedLabels(id: string): Promise<LearnedLabel[]> {
+    try {
+      const rows = await this.sql`
+        select route, kind, label, href, visitor_count as visitors, seen_count::int as seen from outline_labels
+        where site_id = ${id} and visitor_count >= ${this.labelThreshold}
+        order by visitor_count desc, seen_count desc limit ${LABELS_READ}`;
+      return rows as LearnedLabel[];
+    } catch (error) {
+      console.error("Couldn't read what was learned (has db/migrations/0009 been applied?):", error instanceof Error ? error.message : error);
+      return [];
+    }
+  }
+
+  /**
+   * Counts the labels of a page a visitor saw. `visitor` is already hashed
+   * with the site's id. Each label keeps up to ten visitors, and a visitor
+   * already counted for a label isn't counted again.
+   */
+  recordOutline(site: SiteContext, visitor: string, outline: PageOutline): Promise<void> {
+    const rows = outlineRows(outline);
+    if (!rows.length) return Promise.resolve();
+    return this.quietly("learn from a page (has db/migrations/0009 been applied?)", async () => {
+      const [counted] = (await this.sql`select count(*)::int as count from outline_labels where site_id = ${site.id}`) as { count: number }[];
+      const count = counted?.count ?? 0;
+      const json = JSON.stringify(rows);
+      if (count >= MAX_LABELS) {
+        await this.sql`
+          update outline_labels o set seen_count = o.seen_count + 1, last_seen_at = now(),
+            visitors = case when ${visitor} = any(o.visitors) or cardinality(o.visitors) >= ${MAX_VISITORS} then o.visitors else o.visitors || ${visitor}::text end
+          from jsonb_to_recordset(${json}::jsonb) as r(route text, kind text, label text, href text)
+          where o.site_id = ${site.id} and o.route = r.route and o.kind = r.kind and o.label = r.label and o.href = r.href`;
+        return;
+      }
+      await this.sql`
+        insert into outline_labels (site_id, route, kind, label, href, visitors)
+        select ${site.id}, r.route, r.kind, r.label, r.href, array[${visitor}::text]
+        from jsonb_to_recordset(${json}::jsonb) as r(route text, kind text, label text, href text)
+        on conflict (site_id, route, kind, label, href) do update set
+          seen_count = outline_labels.seen_count + 1, last_seen_at = now(),
+          visitors = case when ${visitor} = any(outline_labels.visitors) or cardinality(outline_labels.visitors) >= ${MAX_VISITORS}
+            then outline_labels.visitors else outline_labels.visitors || ${visitor}::text end`;
+    });
+  }
+
+  /**
+   * Saves a site built by `npm run tag`. A site the team made by hand has no company until one claims it.
+   * Corrections and controls never to point at are made in the dashboard, so a publish keeps them unless it brings its own.
+   */
   async saveSite(site: SiteContext): Promise<void> {
     await this.sql`
       insert into sites (id, name, origin, allowed_origins, context)
       values (${site.id}, ${site.name}, ${site.origin}, ${site.allowedOrigins}, ${JSON.stringify(site)}::jsonb)
-      on conflict (id) do update set name = excluded.name, origin = excluded.origin,
-        allowed_origins = excluded.allowed_origins, context = excluded.context, updated_at = now()`;
+      on conflict (id) do update set name = excluded.name, origin = excluded.origin, allowed_origins = excluded.allowed_origins,
+        context = jsonb_strip_nulls(jsonb_build_object('corrections', sites.context->'corrections', 'blocked', sites.context->'blocked')) || excluded.context,
+        updated_at = now()`;
   }
 
   seenAt(site: SiteContext, origin: string, allowed: boolean): Promise<void> | undefined {
@@ -108,7 +178,21 @@ export class Store {
         on conflict (id) do nothing`;
     });
     this.track(guide, write);
-    return write;
+    return write.then(() => this.recordVisitor(request));
+  }
+
+  /**
+   * Adds who asked, as a hash of the widget's random id made with the site's
+   * id, so the dashboard counts people and not questions. A statement of its
+   * own, because the column came later (db/migrations/0011).
+   */
+  private recordVisitor(request: TurnRequest): Promise<void> {
+    const { guide, visitor } = request;
+    if (!guide || !visitor) return Promise.resolve();
+    return this.quietly("note who asked (has db/migrations/0011 been applied?)", async () => {
+      const hash = await visitorHash(request.site, visitor);
+      await this.sql`update guides set visitor = ${hash} where id = ${guide} and site_id = ${request.site} and visitor is null`;
+    });
   }
 
   /** Records one step, and the guide it belongs to if this is its first. A step asked again (after a loop or a page change) replaces the earlier try. */
@@ -137,7 +221,62 @@ export class Store {
       ]);
     });
     this.track(guide, write);
-    return write.then(() => this.recordCost(guide, request.step, measure));
+    return write
+      .then(() => (request.step === 0 ? undefined : this.recordVisitor(request)))
+      .then(() => this.recordCost(guide, request.step, measure))
+      .then(() => this.recordKind(guide, request.step, measure))
+      .then(() => this.recordUnseen(guide, request.step, measure));
+  }
+
+  /**
+   * Counts a step the widget hung up on, because the page changed while the
+   * model was answering. The step is asked again from the new page and
+   * recorded then, so only the count is kept. The column is from db/migrations/0008.
+   */
+  cancelStep(request: TurnRequest): Promise<void> | undefined {
+    const guide = request.guide;
+    if (!guide) return undefined;
+    const write = this.quietly("count a dropped step (has db/migrations/0008 been applied?)", async () => {
+      await this.sql`update guides set cancelled_steps = cancelled_steps + 1 where id = ${guide} and site_id = ${request.site}`;
+    });
+    this.track(guide, write);
+    return write;
+  }
+
+  /**
+   * Adds the controls an answer named that are nowhere Haptic can see. With
+   * the step's sources, that says which help articles may be out of date. The
+   * column is from db/migrations/0007.
+   *
+   * Only a site with Answers on can have any, so a site without sends nothing.
+   * On one with, every step sends it, as nothing when there are none: a step
+   * written again, when the widget asks for it a second time, must not keep
+   * the list from the first answer.
+   */
+  private recordUnseen(guide: string, step: number, measure: TurnMeasure): Promise<void> {
+    const unseen = measure.unseen?.length ? measure.unseen : null;
+    if (!unseen && (!measure.reply.mode || measure.reply.mode === "act")) return Promise.resolve();
+    return this.quietly("record controls an answer named that aren't in the product (has db/migrations/0007 been applied?)", async () => {
+      await this.sql`update steps set unseen = ${unseen} where guide_id = ${guide} and n = ${step}`;
+    });
+  }
+
+  /**
+   * On a site with Answers on, adds what kind of reply the step was and the
+   * help docs it rested on. Like the cost, it is a statement of its own for
+   * columns that came later (db/migrations/0005). A site without Answers
+   * sends nothing here.
+   */
+  private recordKind(guide: string, step: number, measure: TurnMeasure): Promise<void> {
+    const { mode, reason } = measure.reply;
+    // An act step's mode is "act", which the column does not take: it says what kind of reply a guide's step was, on a
+    // site with Answers on. How acting went is in the server's log of counts (turnCounts in app.ts).
+    if (!mode || mode === "act") return Promise.resolve();
+    return this.quietly("record what kind of reply a step was (has db/migrations/0005 been applied?)", async () => {
+      await this.sql`
+        update steps set mode = ${mode}, reason = ${reason ?? null}, sources = ${measure.cited}, overruled = ${measure.overruled ?? null}
+        where guide_id = ${guide} and n = ${step}`;
+    });
   }
 
   /**
@@ -186,6 +325,10 @@ export class Store {
         }
         if (report.helped !== undefined) {
           await this.sql`update guides set helped = ${report.helped} where id = ${guide} and site_id = ${site.id}`;
+        }
+        // Last, because the column came later (db/migrations/0006): if it is missing, what is above is already written.
+        if (report.handoff) {
+          await this.sql`update guides set handed_off = true where id = ${guide} and site_id = ${site.id}`;
         }
         return;
       }

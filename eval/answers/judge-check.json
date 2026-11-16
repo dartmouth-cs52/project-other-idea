@@ -1,0 +1,606 @@
+[
+  {
+    "id": "judge-01",
+    "question": "invite link expiry?",
+    "reference": "The link in the invite email works for 7 days. If it has run out, sending the invite again gives the person a new link.",
+    "sources": [
+      "inviting-teammates.md"
+    ],
+    "answer": "The link in the invite email works for 7 days. If it runs out, send the invite again from the Team page and the person gets a new link.",
+    "correct": true,
+    "supported": true,
+    "note": "It gives the 7 days and the re-send, and the article states both."
+  },
+  {
+    "id": "judge-02",
+    "question": "invite link expiry?",
+    "reference": "The link in the invite email works for 7 days. If it has run out, sending the invite again gives the person a new link.",
+    "sources": [
+      "inviting-teammates.md"
+    ],
+    "answer": "The link in the invite email works for 14 days. If it runs out, send the invite again from the Team page and the person gets a new link.",
+    "correct": false,
+    "supported": false,
+    "note": "It says 14 days where the reference and the article say 7, so the one fact asked for is wrong and is not in the article."
+  },
+  {
+    "id": "judge-03",
+    "question": "Do I have to be the owner to add someone to the team, or can any of us do it?",
+    "reference": "Anyone in the workspace can invite a new teammate; it does not have to be the owner.",
+    "sources": [
+      "inviting-teammates.md"
+    ],
+    "answer": "Any of you can: everyone in a workspace is able to invite a new teammate, and all it takes is the person's email address. The owner is sent a notice each time an invite goes out.",
+    "correct": true,
+    "supported": false,
+    "note": "It rightly says anyone can invite, but no article says the owner is told when an invite is sent."
+  },
+  {
+    "id": "judge-04",
+    "question": "Do I have to be the owner to add someone to the team, or can any of us do it?",
+    "reference": "Anyone in the workspace can invite a new teammate; it does not have to be the owner.",
+    "sources": [
+      "inviting-teammates.md"
+    ],
+    "answer": "No, you don't need to be the owner. Anyone in the workspace can invite a new teammate, and all you need is the person's email address.",
+    "correct": true,
+    "supported": true,
+    "note": "It answers that anyone can invite, and the extra detail about the email address is in the same article."
+  },
+  {
+    "id": "judge-05",
+    "question": "when the owner takes someone off the team how fast are they actualy locked out",
+    "reference": "The person loses access straight away and is signed out of Acme Console within a minute.",
+    "sources": [
+      "roles-and-removing-people.md"
+    ],
+    "answer": "Straight away. The person loses access as soon as they are removed, and they are signed out of Acme Console within a minute.",
+    "correct": true,
+    "supported": true,
+    "note": "Both the loss of access straight away and the sign-out within a minute are in the article and match the reference."
+  },
+  {
+    "id": "judge-06",
+    "question": "when the owner takes someone off the team how fast are they actualy locked out",
+    "reference": "The person loses access straight away and is signed out of Acme Console within a minute.",
+    "sources": [
+      "roles-and-removing-people.md"
+    ],
+    "answer": "Only the workspace owner can remove people. Projects the person created, and everything they deployed, stay in the workspace and keep running, and they can be invited again later as a member.",
+    "correct": false,
+    "supported": true,
+    "note": "Every sentence is in the article, but it never says how quickly the person loses access, which is what was asked."
+  },
+  {
+    "id": "judge-07",
+    "question": "where are US East and EU West physically?",
+    "reference": "US East is in Virginia and EU West is in Ireland.",
+    "sources": [
+      "projects-and-regions.md"
+    ],
+    "answer": "US East is in Virginia and EU West is in Ireland. Each region also keeps a backup copy of your data in a second data centre nearby.",
+    "correct": true,
+    "supported": false,
+    "note": "The two places are right, but no article says anything about backup copies or a second data centre."
+  },
+  {
+    "id": "judge-08",
+    "question": "where are US East and EU West physically?",
+    "reference": "US East is in Virginia and EU West is in Ireland.",
+    "sources": [
+      "projects-and-regions.md"
+    ],
+    "answer": "The region is where a project runs and where its data is kept. You choose between US East and EU West when you create the project, and US East is selected unless you choose EU West.",
+    "correct": false,
+    "supported": true,
+    "note": "All of it is in the article, but it names neither Virginia nor Ireland, so it does not say where the regions are."
+  },
+  {
+    "id": "judge-09",
+    "question": "Made a new API key but the list only shows \"New key\". Where do I get the actual secret?",
+    "reference": "The list never shows the secret. It is sent once, to the workspace owner's email address, as a link that can be opened one time within 24 hours.",
+    "sources": [
+      "api-keys.md"
+    ],
+    "answer": "The list never shows a key's secret value. It is sent to the workspace owner's email address as a link, and that link can be opened as often as needed for 24 hours.",
+    "correct": false,
+    "supported": false,
+    "note": "The article and the reference say the link can be opened one time, and this says it can be opened as often as needed."
+  },
+  {
+    "id": "judge-10",
+    "question": "Made a new API key but the list only shows \"New key\". Where do I get the actual secret?",
+    "reference": "The list never shows the secret. It is sent once, to the workspace owner's email address, as a link that can be opened one time within 24 hours.",
+    "sources": [
+      "api-keys.md"
+    ],
+    "answer": "The list never shows a key's secret value. The secret is sent once, to the workspace owner's email address, as a link that can be opened one time within 24 hours. Keep it somewhere safe, such as a password manager, because after that nobody can read it again.",
+    "correct": true,
+    "supported": true,
+    "note": "It says where the secret goes and how the link works, and the advice to keep it safe is also in the article."
+  },
+  {
+    "id": "judge-11",
+    "question": "how many of those emergency login codes does each person get with 2fa, and can one be used twice",
+    "reference": "Each person is given 10 backup codes during setup, and each code works once.",
+    "sources": [
+      "two-factor-authentication.md"
+    ],
+    "answer": "Backup codes are given to each person while they set up two-factor authentication. Someone who loses the device with their authenticator app can sign in with a backup code, and if they have none left the owner can write to support to have that person's two-factor setup reset.",
+    "correct": false,
+    "supported": true,
+    "note": "Everything it says is in the article, but it gives neither the number of codes nor whether a code can be used again."
+  },
+  {
+    "id": "judge-12",
+    "question": "how many of those emergency login codes does each person get with 2fa, and can one be used twice",
+    "reference": "Each person is given 10 backup codes during setup, and each code works once.",
+    "sources": [
+      "two-factor-authentication.md"
+    ],
+    "answer": "Each person gets 10 backup codes during setup. Each one works a single time, so a code can't be used twice.",
+    "correct": true,
+    "supported": true,
+    "note": "It gives the 10 codes and that each works once, both as the article states them."
+  },
+  {
+    "id": "judge-13",
+    "question": "who gets told when a deploy goes out? I never see any emails about ours",
+    "reference": "The workspace owner gets an email for every deploy, successful or failed.",
+    "sources": [
+      "deploys.md"
+    ],
+    "answer": "Deploy emails go to the workspace owner. The owner gets one for every deploy, successful or failed, giving the project, the result and the time.",
+    "correct": true,
+    "supported": true,
+    "note": "It names the owner as the one who is emailed, and what the email gives is in the article too."
+  },
+  {
+    "id": "judge-14",
+    "question": "who gets told when a deploy goes out? I never see any emails about ours",
+    "reference": "The workspace owner gets an email for every deploy, successful or failed.",
+    "sources": [
+      "deploys.md"
+    ],
+    "answer": "Deploy emails go to whoever started the deploy. That person gets one for every deploy, successful or failed, giving the project, the result and the time.",
+    "correct": false,
+    "supported": false,
+    "note": "It names the person who started the deploy, where the article and the reference say the email goes to the workspace owner."
+  },
+  {
+    "id": "judge-15",
+    "question": "can the sign-in codes come by sms instead of an app",
+    "reference": "No. Codes by text message are not supported; any authenticator app that produces 6-digit codes will work.",
+    "sources": [
+      "two-factor-authentication.md"
+    ],
+    "answer": "No, codes by text message are not supported. Any authenticator app that produces 6-digit codes will work.",
+    "correct": true,
+    "supported": true,
+    "note": "It says text message codes are not supported and what works instead, exactly as the article has it."
+  },
+  {
+    "id": "judge-16",
+    "question": "can the sign-in codes come by sms instead of an app",
+    "reference": "No. Codes by text message are not supported; any authenticator app that produces 6-digit codes will work.",
+    "sources": [
+      "two-factor-authentication.md"
+    ],
+    "answer": "No, codes by text message are not supported, because text messages can be intercepted in transit. Any authenticator app that produces 6-digit codes will work.",
+    "correct": true,
+    "supported": false,
+    "note": "The answer is right, but the reason it gives, that text messages can be intercepted, is in none of the articles."
+  },
+  {
+    "id": "judge-17",
+    "question": "what happens to our live site if a deploy fials",
+    "reference": "Nothing changes: the previous version stays live.",
+    "sources": [
+      "deploys.md"
+    ],
+    "answer": "If a deploy fails, the command line tool prints the reason. The workspace owner also gets an email for every deploy, successful or failed, giving the project, the result and the time.",
+    "correct": false,
+    "supported": true,
+    "note": "Both sentences are in the article, but it does not say that the previous version stays live, which is what was asked."
+  },
+  {
+    "id": "judge-18",
+    "question": "what happens to our live site if a deploy fials",
+    "reference": "Nothing changes: the previous version stays live.",
+    "sources": [
+      "deploys.md"
+    ],
+    "answer": "Nothing changes for your live site: the previous version stays live. Failed deploys are also marked with a red dot beside the project on the Projects page.",
+    "correct": true,
+    "supported": false,
+    "note": "It rightly says the previous version stays live, but no article mentions a red dot or any mark for failed deploys on the Projects page."
+  },
+  {
+    "id": "judge-19",
+    "question": "if the owner ticks the two-factor box does everybody get kicked out right then",
+    "reference": "No. Nobody is signed out when the box is ticked; each teammate is asked to set up two-factor authentication at their next sign-in.",
+    "sources": [
+      "two-factor-authentication.md"
+    ],
+    "answer": "Yes. Ticking the box signs everyone out, and each teammate then sets up two-factor authentication when they sign back in.",
+    "correct": false,
+    "supported": false,
+    "note": "The article and the reference say nobody is signed out when the box is ticked, and this says everyone is."
+  },
+  {
+    "id": "judge-20",
+    "question": "if the owner ticks the two-factor box does everybody get kicked out right then",
+    "reference": "No. Nobody is signed out when the box is ticked; each teammate is asked to set up two-factor authentication at their next sign-in.",
+    "sources": [
+      "two-factor-authentication.md"
+    ],
+    "answer": "No, nobody is signed out when the box is ticked. Every teammate, the owner included, is asked to set it up at their next sign-in, and people who are already signed in carry on until their session ends, which is at most 30 days later.",
+    "correct": true,
+    "supported": true,
+    "note": "It says nobody is signed out and that setup comes at the next sign-in, and the 30-day detail is in the same article."
+  },
+  {
+    "id": "judge-21",
+    "question": "How long should a deploy normally take? Ours seems to be dragging.",
+    "reference": "A deploy usually takes about 2 minutes.",
+    "sources": [
+      "deploys.md"
+    ],
+    "answer": "A deploy usually takes about 2 minutes. The version that is already live keeps answering requests until the new one is ready, so there is no gap in service while you wait.",
+    "correct": true,
+    "supported": true,
+    "note": "It gives the 2 minutes, and the second sentence about the live version is in the article as well."
+  },
+  {
+    "id": "judge-22",
+    "question": "How long should a deploy normally take? Ours seems to be dragging.",
+    "reference": "A deploy usually takes about 2 minutes.",
+    "sources": [
+      "deploys.md"
+    ],
+    "answer": "Each project runs one deploy at a time, so a second deploy to the same project waits until the first has finished. In the meantime the version that is already live keeps answering requests.",
+    "correct": false,
+    "supported": true,
+    "note": "Both claims are in the article, but it never says how long a deploy takes."
+  },
+  {
+    "id": "judge-23",
+    "question": "We picked US East for a project but nearly all our users are in Germany. Can we switch it over to EU West?",
+    "reference": "No, a region cannot be changed after a project is created. To run in the other region, create a second project there and deploy to it.",
+    "sources": [
+      "projects-and-regions.md"
+    ],
+    "answer": "No, a project's region can't be changed once the project exists. To run in EU West, create a second project with that region and deploy to it; the first project keeps running as before.",
+    "correct": true,
+    "supported": true,
+    "note": "It says the region cannot be changed and gives the second-project route, and the note about the first project is in the article."
+  },
+  {
+    "id": "judge-24",
+    "question": "We picked US East for a project but nearly all our users are in Germany. Can we switch it over to EU West?",
+    "reference": "No, a region cannot be changed after a project is created. To run in the other region, create a second project there and deploy to it.",
+    "sources": [
+      "projects-and-regions.md"
+    ],
+    "answer": "Yes, once. A project's region can be changed one time after it is created; if you need to move again after that, create a second project in the other region and deploy to it.",
+    "correct": false,
+    "supported": false,
+    "note": "The article and the reference say a region cannot be changed at all, and this says it can be changed one time."
+  },
+  {
+    "id": "judge-25",
+    "question": "Is there an undo for a bad deploy?",
+    "reference": "There is no separate way to undo a deploy. To go back to an earlier version, deploy that version again.",
+    "sources": [
+      "deploys.md"
+    ],
+    "answer": "There is no separate undo. To go back, deploy the earlier version again; the command line tool keeps the last ten versions of each project, so any of those can be picked.",
+    "correct": true,
+    "supported": false,
+    "note": "The way back is right, but no article says the command line tool keeps the last ten versions."
+  },
+  {
+    "id": "judge-26",
+    "question": "Is there an undo for a bad deploy?",
+    "reference": "There is no separate way to undo a deploy. To go back to an earlier version, deploy that version again.",
+    "sources": [
+      "deploys.md"
+    ],
+    "answer": "Not as such. Going back means deploying the earlier version again, since there is no separate way to undo a deploy.",
+    "correct": true,
+    "supported": true,
+    "note": "Worded differently from the reference, but it says the same two things and both are in the article."
+  },
+  {
+    "id": "judge-27",
+    "question": "Will anyone get a warning before we run out of requests for the month?",
+    "reference": "The workspace owner gets an email when usage reaches 80% of the included requests, and another at 100%.",
+    "sources": [
+      "usage-and-limits.md"
+    ],
+    "answer": "Yes. The workspace owner is emailed when usage reaches 80% of the included requests, and again at 100%. A yellow banner also appears at the top of the Overview page once usage passes 80%.",
+    "correct": true,
+    "supported": false,
+    "note": "The two emails to the owner are right, but no article mentions a banner on the Overview page."
+  },
+  {
+    "id": "judge-28",
+    "question": "Will anyone get a warning before we run out of requests for the month?",
+    "reference": "The workspace owner gets an email when usage reaches 80% of the included requests, and another at 100%.",
+    "sources": [
+      "usage-and-limits.md"
+    ],
+    "answer": "Your usage for the current month is in the Usage this month card on the Overview page, and the count is brought up to date about every 10 minutes. Once all the included requests are used, further requests are refused with a 429 response.",
+    "correct": false,
+    "supported": true,
+    "note": "Everything in it is in the article, but it does not say whether anyone is warned, and never mentions the emails to the owner."
+  },
+  {
+    "id": "judge-29",
+    "question": "The usage figure on Overview looks behind what we're really sending. How often does it refresh?",
+    "reference": "The count is brought up to date about every 10 minutes.",
+    "sources": [
+      "usage-and-limits.md"
+    ],
+    "answer": "About every 10 minutes.",
+    "correct": true,
+    "supported": true,
+    "note": "A short answer that gives exactly the fact asked for, as the article states it."
+  },
+  {
+    "id": "judge-30",
+    "question": "The usage figure on Overview looks behind what we're really sending. How often does it refresh?",
+    "reference": "The count is brought up to date about every 10 minutes.",
+    "sources": [
+      "usage-and-limits.md"
+    ],
+    "answer": "The count in the Usage this month card is brought up to date about every 30 minutes.",
+    "correct": false,
+    "supported": false,
+    "note": "It says every 30 minutes where the article and the reference say every 10."
+  },
+  {
+    "id": "judge-31",
+    "question": "how long do i stay logged in if i never sign out",
+    "reference": "You stay signed in on that browser for 30 days, and then you are asked to sign in again.",
+    "sources": [
+      "getting-around.md"
+    ],
+    "answer": "For 30 days on that browser. After that you are asked to sign in again.",
+    "correct": true,
+    "supported": true,
+    "note": "It gives the 30 days and what happens after, both from the article."
+  },
+  {
+    "id": "judge-32",
+    "question": "how long do i stay logged in if i never sign out",
+    "reference": "You stay signed in on that browser for 30 days, and then you are asked to sign in again.",
+    "sources": [
+      "getting-around.md"
+    ],
+    "answer": "Sign out ends your session only in the browser you are using, and other browsers where you are signed in are not affected. Sign out is one of the three choices in the menu under the round \"A\" button at the top right.",
+    "correct": false,
+    "supported": true,
+    "note": "It is all in the article, but it is about signing out and never says how long a session lasts without it."
+  },
+  {
+    "id": "judge-33",
+    "question": "We're set to Pacific. Does our monthly usage reset at midnight our time?",
+    "reference": "No. Usage resets at midnight UTC on the 1st of each month; the workspace time zone only changes how times are written.",
+    "sources": [
+      "workspace-settings.md"
+    ],
+    "answer": "Yes. Usage resets at midnight on the 1st of each month in the workspace time zone, so with Pacific selected it resets at midnight Pacific time.",
+    "correct": false,
+    "supported": false,
+    "note": "The article and the reference say the reset is at midnight UTC whatever the time zone, and this says it follows the workspace time zone."
+  },
+  {
+    "id": "judge-34",
+    "question": "We're set to Pacific. Does our monthly usage reset at midnight our time?",
+    "reference": "No. Usage resets at midnight UTC on the 1st of each month; the workspace time zone only changes how times are written.",
+    "sources": [
+      "workspace-settings.md"
+    ],
+    "answer": "No. The time zone only changes how times are written, not when things happen: usage still resets at midnight UTC on the 1st of each month.",
+    "correct": true,
+    "supported": true,
+    "note": "It says the reset stays at midnight UTC and why, as the article does."
+  },
+  {
+    "id": "judge-35",
+    "question": "I need an invoice from back in the spring but the billing page only gives me the newest one. Where are the older ones?",
+    "reference": "Earlier invoices are not listed on the page. They are in the monthly emails sent to the workspace owner, and support can send a copy of any invoice from the last 12 months.",
+    "sources": [
+      "payment-method-and-invoices.md"
+    ],
+    "answer": "Earlier invoices are not listed on the page. They are in the emails sent on the 1st of each month to the workspace owner's address, and support can send a copy of any invoice from the last 12 months.",
+    "correct": true,
+    "supported": true,
+    "note": "It says where the earlier invoices are and that support can send copies, and the 1st of the month is in the article too."
+  },
+  {
+    "id": "judge-36",
+    "question": "I need an invoice from back in the spring but the billing page only gives me the newest one. Where are the older ones?",
+    "reference": "Earlier invoices are not listed on the page. They are in the monthly emails sent to the workspace owner, and support can send a copy of any invoice from the last 12 months.",
+    "sources": [
+      "payment-method-and-invoices.md"
+    ],
+    "answer": "Earlier invoices are not listed on the page. They are in the monthly emails sent to the workspace owner, and support can send a copy of any invoice from the last 12 months. Copies are sent as PDF files.",
+    "correct": true,
+    "supported": false,
+    "note": "The answer is right, but no article says what file format an invoice copy comes in."
+  },
+  {
+    "id": "judge-37",
+    "question": "How quickly does support get back to people? We're on Business.",
+    "reference": "Support replies within one business day, and workspaces on the Business plan get a first reply within 4 working hours.",
+    "sources": [
+      "contacting-support.md"
+    ],
+    "answer": "You reach support by email, and a person reads every message. Support is open Monday to Friday, 09:00 to 18:00 UTC, and is closed on 25 December and 1 January.",
+    "correct": false,
+    "supported": true,
+    "note": "The opening hours are in the article, but it gives neither the one business day nor the 4 working hours, so it does not say how quickly support replies."
+  },
+  {
+    "id": "judge-38",
+    "question": "How quickly does support get back to people? We're on Business.",
+    "reference": "Support replies within one business day, and workspaces on the Business plan get a first reply within 4 working hours.",
+    "sources": [
+      "contacting-support.md"
+    ],
+    "answer": "On the Business plan you get a first reply within 4 working hours; for other workspaces support replies within one business day. Business workspaces are also given a named support contact.",
+    "correct": true,
+    "supported": false,
+    "note": "Both reply times are right, but no article says Business workspaces get a named support contact."
+  },
+  {
+    "id": "judge-39",
+    "question": "The update payment box never asks for a card number. How do we move to a different card?",
+    "reference": "The workspace owner writes to support, who send a secure form from the payment provider. The form works once and for 24 hours.",
+    "sources": [
+      "payment-method-and-invoices.md"
+    ],
+    "answer": "The dialog asks for the name on the card and the billing postcode, not a card number. To pay with a different card, the workspace owner writes to support and is sent a secure form from the payment provider, which works once and for 24 hours.",
+    "correct": true,
+    "supported": true,
+    "note": "It gives the route through support and how the form works, and what the dialog asks for is in the article."
+  },
+  {
+    "id": "judge-40",
+    "question": "The update payment box never asks for a card number. How do we move to a different card?",
+    "reference": "The workspace owner writes to support, who send a secure form from the payment provider. The form works once and for 24 hours.",
+    "sources": [
+      "payment-method-and-invoices.md"
+    ],
+    "answer": "The dialog asks for the name on the card and the billing postcode, not a card number. To pay with a different card, the workspace owner writes to support and is sent a secure form from the payment provider, which works once and for 48 hours.",
+    "correct": false,
+    "supported": false,
+    "note": "It says the form works for 48 hours where the article and the reference say 24."
+  },
+  {
+    "id": "judge-41",
+    "question": "if we drop down to a smaller plan when does that actually kick in",
+    "reference": "A move to a smaller plan takes effect on the 1st of the next month, and you keep the larger plan until then.",
+    "sources": [
+      "plans-and-billing.md"
+    ],
+    "answer": "Only the workspace owner can change the plan, using the Change plan button in the Current plan section of the Plan and billing page. A move to a larger plan takes effect straight away.",
+    "correct": false,
+    "supported": true,
+    "note": "Both sentences are in the article, but it answers for a larger plan and never says when a move to a smaller one takes effect."
+  },
+  {
+    "id": "judge-42",
+    "question": "if we drop down to a smaller plan when does that actually kick in",
+    "reference": "A move to a smaller plan takes effect on the 1st of the next month, and you keep the larger plan until then.",
+    "sources": [
+      "plans-and-billing.md"
+    ],
+    "answer": "It takes effect on the 1st of the next month. Until then you stay on the larger plan.",
+    "correct": true,
+    "supported": true,
+    "note": "It gives the 1st of the next month and that the larger plan is kept until then, as the article states."
+  },
+  {
+    "id": "judge-43",
+    "question": "how many people can a workspace have on the Team plan? does the owner take up one of the places",
+    "reference": "The Team plan allows 10 people, and the owner counts as one of them.",
+    "sources": [
+      "usage-and-limits.md"
+    ],
+    "answer": "Team allows 10 people in the workspace, and yes, the owner counts as one of them.",
+    "correct": true,
+    "supported": true,
+    "note": "It gives the 10 people and that the owner is counted, both stated in the article."
+  },
+  {
+    "id": "judge-44",
+    "question": "how many people can a workspace have on the Team plan? does the owner take up one of the places",
+    "reference": "The Team plan allows 10 people, and the owner counts as one of them.",
+    "sources": [
+      "usage-and-limits.md"
+    ],
+    "answer": "Team allows 10 people in the workspace. The owner is not counted, so that is 10 members plus the owner.",
+    "correct": false,
+    "supported": false,
+    "note": "The number is right, but it says the owner is not counted where the article and the reference say the owner is one of the 10."
+  },
+  {
+    "id": "judge-45",
+    "question": "We've burned through this month's requests. Can we still ship a fix?",
+    "reference": "Yes. Deploys do not count as requests, so you can still deploy after the workspace has reached its request limit for the month.",
+    "sources": [
+      "usage-and-limits.md",
+      "deploys.md"
+    ],
+    "answer": "Yes. Deploys do not count as requests, so you can still deploy after the limit is reached. Requests to your projects are refused with a 429 response until the count resets on the 1st of the month or the workspace moves to a larger plan.",
+    "correct": true,
+    "supported": true,
+    "note": "It says deploys still work, which the deploys article states, and the sentence about refused requests is in the usage article it also cites."
+  },
+  {
+    "id": "judge-46",
+    "question": "We've burned through this month's requests. Can we still ship a fix?",
+    "reference": "Yes. Deploys do not count as requests, so you can still deploy after the workspace has reached its request limit for the month.",
+    "sources": [
+      "usage-and-limits.md",
+      "deploys.md"
+    ],
+    "answer": "Yes, you can. Deploys do not count as requests, so they keep working after the limit is reached. On every plan you can deploy up to 100 times a day.",
+    "correct": true,
+    "supported": false,
+    "note": "The answer is right, but no article gives a number of deploys allowed in a day."
+  },
+  {
+    "id": "judge-47",
+    "question": "do api keys run out after a while",
+    "reference": "No. API keys do not expire.",
+    "sources": [
+      "api-keys.md"
+    ],
+    "answer": "No, API keys do not expire. A workspace can hold up to 20 keys at one time.",
+    "correct": true,
+    "supported": false,
+    "note": "It rightly says keys do not expire, but no article puts a limit on how many keys a workspace can have."
+  },
+  {
+    "id": "judge-48",
+    "question": "do api keys run out after a while",
+    "reference": "No. API keys do not expire.",
+    "sources": [
+      "api-keys.md"
+    ],
+    "answer": "A key belongs to the workspace, not to a person or a project, and it works for every project in both regions. It is also not affected by the two-factor authentication requirement.",
+    "correct": false,
+    "supported": true,
+    "note": "Each claim is in the article, but it never says whether keys expire, which is the one thing asked."
+  },
+  {
+    "id": "judge-49",
+    "question": "Our build server deploys with the key Sam has been using. If the owner removes Sam from the team, will deploys break?",
+    "reference": "No. An API key belongs to the workspace, not to a person, and keeps working after the person who was using it leaves the workspace.",
+    "sources": [
+      "roles-and-removing-people.md",
+      "api-keys.md"
+    ],
+    "answer": "No, deploys carry on. A key belongs to the workspace rather than to a person, so it keeps working after the person who was using it leaves. The projects Sam created and everything Sam deployed also stay in the workspace and keep running.",
+    "correct": true,
+    "supported": true,
+    "note": "The key part is in the API keys article and the part about the projects is in the roles article, and both are cited."
+  },
+  {
+    "id": "judge-50",
+    "question": "Our build server deploys with the key Sam has been using. If the owner removes Sam from the team, will deploys break?",
+    "reference": "No. An API key belongs to the workspace, not to a person, and keeps working after the person who was using it leaves the workspace.",
+    "sources": [
+      "roles-and-removing-people.md",
+      "api-keys.md"
+    ],
+    "answer": "Yes, they will. A key stops working once the person who was using it is removed, so have the owner create a new key first. The projects Sam created and everything Sam deployed stay in the workspace and keep running.",
+    "correct": false,
+    "supported": false,
+    "note": "The articles and the reference say a key keeps working when the person who used it leaves, and this says it stops."
+  }
+]

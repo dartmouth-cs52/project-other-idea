@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { TurnError } from "../src/server/model.ts";
+import { isBlocked, type ControlName } from "../src/shared/corrections.ts";
 import type { SiteContext } from "../src/shared/types.ts";
 import { modelAsker, parseModel, serverAsker, type Asker } from "./ask.ts";
 import { KINDS, loadCaseFiles, plausibleRange, score, type Case } from "./cases.ts";
@@ -29,6 +30,11 @@ const HELP = `Usage: npm run eval -- (--models <list> | --server <address>) [opt
   --split <which>     "held-out" for only the cases kept out of prompt tuning, "tuned" for only the rest. Default: both.
   --repeat <n>        Ask each case this many times. Default 1. More shows which cases a model gets right only sometimes.
   --limit <n>         Only the first n cases, for a quick check.
+  --answers           With --models: ask every case as a site with Answers on would be asked, the longer prompt and
+                      the reply with a mode. The right pointers are the same, so this shows whether guiding got worse.
+  --without-corrections
+                      With --models: ask every case as if its site had no corrections and no controls ruled out, to
+                      see what they change. eval/cases/corrections.json is the file where it shows.
   --yes               Don't stop to show the number of calls first.
 
 Real models need ANTHROPIC_API_KEY, and every call is billed, with --models and with --server alike.`;
@@ -53,6 +59,8 @@ interface Run {
   clean?: boolean;
   /** The rules for a sentence that the model's own sentence broke, like "link" or "length". Part of it was not shown. Unknown when a server answered. */
   broke?: string[];
+  /** The pointer went to a control the site's owner ruled out. Must never happen with them in place. */
+  pointedAtBlocked?: boolean;
   why: string;
   ms: number;
   msToTarget: number;
@@ -66,6 +74,8 @@ interface Work {
   file: string;
   site: SiteContext;
   item: Case;
+  /** The controls the case file's site rules out, whether or not this run asks with them. */
+  ruledOut: ControlName[];
 }
 
 const percent = (part: number, whole: number) => (whole ? `${Math.round((100 * part) / whole)}%` : "n/a");
@@ -86,6 +96,8 @@ async function main() {
       split: { type: "string" },
       repeat: { type: "string", default: "1" },
       limit: { type: "string" },
+      answers: { type: "boolean", default: false },
+      "without-corrections": { type: "boolean", default: false },
       yes: { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
@@ -95,6 +107,7 @@ async function main() {
     process.exit(values.help ? 0 : 1);
   }
   if (values.split && values.split !== "held-out" && values.split !== "tuned") throw new Error('--split is "held-out" or "tuned".');
+  if (values.server && (values.answers || values["without-corrections"])) throw new Error("--answers and --without-corrections change the site as this machine asks it, so they go with --models.");
   const askers: { name: string; ask: Asker; billed: boolean }[] = values.server
     ? [{ name: values.server.replace(/^https?:\/\//, ""), ask: serverAsker(values.server), billed: true }]
     : values.models!.split(",").filter(Boolean).map((spec) => {
@@ -104,7 +117,20 @@ async function main() {
   const repeat = Math.max(1, Number(values.repeat) || 1);
 
   const files = await loadCaseFiles(values.cases?.split(",").filter(Boolean));
-  const all: Work[] = files.flatMap(({ name, file }) => file.cases.map((item) => ({ file: name, site: file.site, item })));
+  // With --answers each site is asked as if it had Answers switched on. Its help docs and everything else stay as they were.
+  // With --without-corrections the owner's corrections and ruled-out controls are taken away, and nothing else.
+  const asked = (site: SiteContext): SiteContext => {
+    const changed = values.answers ? { ...site, answers: { ...site.answers, enabled: true } } : { ...site };
+    if (values["without-corrections"]) {
+      delete changed.corrections;
+      delete changed.blocked;
+    }
+    return changed;
+  };
+  const all: Work[] = files.flatMap(({ name, file }) => {
+    const site = asked(file.site);
+    return file.cases.map((item) => ({ file: name, site, item, ruledOut: file.site.blocked ?? [] }));
+  });
   const unchecked = all.filter(({ item }) => item.reviewed === false).length;
   let work = all.filter(({ item }) => item.reviewed !== false && (!values.split || (values.split === "held-out") === !!item.heldOut));
   if (values.limit) work = work.slice(0, Math.max(1, Number(values.limit) || 1));
@@ -113,7 +139,7 @@ async function main() {
   const calls = work.length * askers.length * repeat;
   const billed = askers.filter((asker) => asker.billed).length * work.length * repeat;
   console.log(
-    `${work.length} cases from ${files.map((file) => file.name).join(", ")}, ${askers.length} setting${askers.length === 1 ? "" : "s"}, ${calls} calls${billed ? `, ${billed} of them billed` : ""}.` +
+    `${work.length} cases from ${files.map((file) => file.name).join(", ")}${values.answers ? ", asked with Answers on" : ""}${values["without-corrections"] ? ", without corrections" : ""}, ${askers.length} setting${askers.length === 1 ? "" : "s"}, ${calls} calls${billed ? `, ${billed} of them billed` : ""}.` +
       (unchecked ? ` ${unchecked} cases drafted from real sessions are left out until someone has checked them.` : ""),
   );
   if (billed && !values.yes) {
@@ -151,6 +177,7 @@ async function main() {
       "status agrees": percent(answered.filter((run) => run.statusAgrees).length, answered.length),
       "clean sentence": cleanKnown.length ? percent(cleanKnown.filter((run) => run.clean).length, cleanKnown.length) : "n/a",
       "within the rules": rulesKnown.length ? percent(rulesKnown.filter((run) => run.broke!.length === 0).length, rulesKnown.length) : "n/a",
+      "pointed at a ruled-out control": answered.filter((run) => run.pointedAtBlocked).length,
       "ms to pointer": middle(ascending(answered.map((run) => run.msToTarget)), 0.5),
       "typical ms": middle(ascending(answered.map((run) => run.ms)), 0.5),
       "slow ms (9 in 10 are faster)": middle(ascending(answered.map((run) => run.ms)), 0.9),
@@ -234,14 +261,16 @@ async function main() {
   console.log(`\nEvery answer is in ${out}`);
 }
 
-async function runOne(name: string, ask: Asker, { file, site, item }: Work): Promise<Run> {
+async function runOne(name: string, ask: Asker, { file, site, item, ruledOut }: Work): Promise<Run> {
   const base = { model: name, file, case: item.id, kind: item.kind ?? "task", heldOut: !!item.heldOut };
   try {
     const asked = await ask(site, item.request);
     const result = score(item, asked.reply);
+    const pointed = item.request.snapshot.elements.find((element) => element.id === asked.reply.target);
     return {
       ...base,
       ...result,
+      ...(isBlocked(pointed, ruledOut) ? { pointedAtBlocked: true } : {}),
       ms: asked.ms,
       msToTarget: asked.msToTarget,
       said: asked.reply.say,

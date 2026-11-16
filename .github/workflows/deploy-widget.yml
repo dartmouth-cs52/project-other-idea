@@ -62,14 +62,28 @@ jobs:
 
       - run: npm test
 
-      # How the widget reads a page, and that nothing a visitor typed leaves it, is
-      # tested in a real browser. Playwright is not one of the project's packages, so
-      # it is added for this step only.
+      # Tested in a real browser before anything is published: how the widget reads a
+      # page, that nothing a visitor typed leaves it, and main's widget tests (dialogs,
+      # covered controls, route changes, learning, ruled-out controls), in Chromium.
+      - name: Install a browser
+        run: npx playwright install --with-deps chromium
+
       - name: Test the widget in a browser
+        env:
+          BROWSERS: chromium
+        run: npm run test:browser
+
+      # Before the publish, so new code finds its tables. Migrations only add, so the code
+      # already live keeps working on the migrated database.
+      - name: Apply database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          npm install --no-save playwright
-          npx playwright install --with-deps chromium
-          npm run test:browser
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::warning::There is no DATABASE_URL secret, so migrations were not applied. Run npm run db:migrate by hand."
+            exit 0
+          fi
+          npm run db:migrate
 
       # Builds the widget, packs it into the Worker and publishes it.
       - name: Build and publish

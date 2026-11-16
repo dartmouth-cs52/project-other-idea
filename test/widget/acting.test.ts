@@ -126,7 +126,7 @@ test("the first Do it on a site says what will happen, and nothing is asked unti
     // Asked again on the same site: straight to work.
     await session.page.locator("haptic-root .caption .close").click();
     await session.untilState("finished");
-    await session.page.locator("haptic-root .panel input").fill("can you issue another card");
+    await session.page.locator("haptic-root .ask input").fill("can you issue another card");
     await session.page.locator("haptic-root .panel .doit").click();
     await session.untilAsked(2);
     assert.equal(session.requests[1]!.mode, "act");
@@ -140,7 +140,7 @@ test("the visitor's words only colour Do it: Enter still asks to be shown, in an
   const session = await start(CARD_FORM, (request) => (request.mode === "act" ? handOver(request, "Issue card", "Ready.") : words("Use the form.")), "/", { acting: { ...ACTING_ON, confirmFirst: false } });
   try {
     await session.page.locator("haptic-root .launcher").click();
-    const input = session.page.locator("haptic-root .panel input");
+    const input = session.page.locator("haptic-root .ask input");
     const nudged = () => session.page.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.querySelector(".panel")!.classList.contains("nudged"));
     await input.fill("how do I issue a card");
     assert.equal(await nudged(), false);
@@ -179,8 +179,8 @@ test("Do it shows only where acting is allowed: not on a site without it, not on
     try {
       await session.page.locator("haptic-root .launcher").click();
       assert.equal(await doItShown(session), false, `Do it shows on ${what}`);
-      await session.page.locator("haptic-root .panel input").fill("can you issue a card");
-      await session.page.locator("haptic-root .panel input").press("Control+Enter");
+      await session.page.locator("haptic-root .ask input").fill("can you issue a card");
+      await session.page.locator("haptic-root .ask input").press("Control+Enter");
       await session.page.waitForTimeout(500);
       assert.ok(session.requests.every((request) => request.mode === undefined), `act mode was asked for on ${what}`);
     } finally {
@@ -444,7 +444,7 @@ async function quiet(session: Session): Promise<{ calls: number; observers: numb
   }, before);
 }
 
-test("once acting is over, by the visitor's click on the commit or by Stop, nothing of Haptic's is left running but the listeners for the top layer and the window's size", async () => {
+test("once acting is over, by the visitor's click on the commit or by Stop, nothing of Haptic's is left running but the listeners for the top layer, the window's size and learning the site", async () => {
   const session = await start(
     `${COUNTED}${CARD_FORM}`,
     (request) => {
@@ -455,7 +455,8 @@ test("once acting is over, by the visitor's click on the commit or by Stop, noth
     "/",
     { acting: { ...ACTING_ON, confirmFirst: false } },
   );
-  const idle = { calls: 0, observers: 0, listeners: ["d:toggle:true", "w:resize:false"] };
+  // What may listen while nothing is in use: the top layer and the window's size, and learning the site (presence.test.ts).
+  const idle = { calls: 0, observers: 0, listeners: ["d:click:true", "d:toggle:true", "w:hashchange:false", "w:popstate:false", "w:resize:false"] };
   // The ask box is put away, as a visitor done with it does. While it is open the widget is in use.
   const putAway = async () => {
     if (await session.page.locator("haptic-root .panel").isVisible()) await session.page.locator("haptic-root .launcher").click();

@@ -1,4 +1,4 @@
-import type { Appearance } from "../shared/types.ts";
+import type { Appearance, Source, TurnReply } from "../shared/types.ts";
 
 // Everything Haptic draws: the launcher, the ask box, the pointer, the
 // highlight ring and the caption. It all lives in one shadow root on one host
@@ -35,10 +35,10 @@ button { font: inherit; cursor: pointer; }
 .panel { width: min(320px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 14px;
   padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.16); }
 [hidden] { display: none !important; }
-.panel form { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 10px; background: #f5f5f4; }
-.panel form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
-.panel input { width: 100%; height: 40px; font: inherit; color: inherit; padding: 4px 12px 0; border: 0; background: transparent; outline: none; }
-.panel input::placeholder { color: #78716c; }
+.ask { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 10px; background: #f5f5f4; }
+.ask:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+.ask input { width: 100%; height: 40px; font: inherit; color: inherit; padding: 4px 12px 0; border: 0; background: transparent; outline: none; }
+.panel ::placeholder { color: #78716c; }
 .panel .row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 6px 10px 8px; }
 .panel .send { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0;
   border-radius: 999px; background: #1c1917; color: #fafaf9; }
@@ -89,6 +89,27 @@ button { font: inherit; cursor: pointer; }
 .helped button { display: inline-flex; align-items: center; justify-content: center; height: 32px; border: 0; border-radius: 999px; padding: 0 14px;
   background: #e7e5e4; color: #1c1917; font-weight: 500; }
 .helped button:hover { background: #d6d3d1; }
+.thread { display: flex; flex-direction: column; gap: 8px; max-height: min(360px, calc(100vh - 220px)); overflow-y: auto; padding: 4px 4px 10px; }
+.thread p { margin: 0; overflow-wrap: anywhere; }
+.question { align-self: flex-end; max-width: 85%; background: #1c1917; color: #fafaf9; border-radius: 14px; padding: 6px 12px; }
+.reply { align-self: flex-start; background: #f5f5f4; border-radius: 14px; padding: 8px 12px; }
+.sources { margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid #e7e5e4; list-style: none; font-size: 12px; line-height: 16px; color: #78716c; }
+.sources li + li { margin-top: 6px; }
+.sources .from { margin-bottom: 4px; }
+.reply .missing { margin-top: 8px; font-size: 12px; line-height: 16px; color: #78716c; }
+.sources .title { display: block; color: #1c1917; font-weight: 500; text-decoration: none; }
+.sources a.title:hover, .sources a.title:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
+.handoff { display: flex; flex-direction: column; gap: 8px; padding: 0 2px 8px 12px; }
+.handoff .offer, .person .offer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 32px; }
+.handoff .offer span { margin-right: auto; color: #78716c; }
+.handoff button { display: inline-flex; align-items: center; justify-content: center; height: 32px; border: 0; border-radius: 999px; padding: 0 14px;
+  background: #e7e5e4; color: #1c1917; font-weight: 500; }
+.handoff button:hover { background: #d6d3d1; }
+.handoff button.person-send { background: #1c1917; color: #fafaf9; }
+.handoff button:disabled { opacity: .5; cursor: default; }
+.person { display: flex; flex-direction: column; gap: 8px; margin-left: -10px; }
+.person input, .person textarea { width: 100%; font: inherit; color: inherit; padding: 8px 12px; border: 1px solid #e7e5e4; border-radius: 10px; background: #fff; outline: none; resize: none; }
+.person input:focus, .person textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 .about { margin: 0; padding: 8px 12px 4px; font-size: 12px; line-height: 16px; color: #78716c; }
 .about a { color: inherit; text-decoration: none; }
 .about a:hover, .about a:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
@@ -237,6 +258,12 @@ export class Ui {
   private readonly captionText: HTMLElement;
   private readonly helped: HTMLElement;
   private onHelped?: (helped: boolean) => void;
+  /** A question and the answer to it in words, with the articles it rests on (Answers). */
+  private readonly thread: HTMLElement;
+  /** The way to a person: one button, and the short form it may open. */
+  private readonly handoff: HTMLElement;
+  /** What the hand-off's buttons do while it is on show. */
+  private onHandoff?: { open: () => void; cancel: () => void; send: () => void };
   private readonly dock: HTMLElement;
   /** The side the site put the launcher on. */
   private readonly side: "left" | "right";
@@ -331,10 +358,28 @@ export class Ui {
         make(
           "div",
           { class: "panel", ...hidden },
+          make(
+            "div",
+            { class: "thread", ...hidden },
+            make("p", { class: "question" }),
+            make("div", { class: "reply" }, make("p"), make("ul", { class: "sources", ...hidden }), make("p", { class: "missing", ...hidden })),
+          ),
           make("div", { class: "helped", ...hidden }),
           make(
+            "div",
+            { class: "handoff", ...hidden },
+            make("div", { class: "offer" }, make("span"), make("button", { class: "person-open", type: "button" })),
+            make(
+              "form",
+              { class: "person", ...hidden },
+              make("input", { type: "email", required: "", maxlength: "200", placeholder: "Your email", "aria-label": "Your email" }),
+              make("textarea", { rows: "2", maxlength: "1000", placeholder: "Anything to add", "aria-label": "Anything to add" }),
+              make("div", { class: "offer" }, make("span"), make("button", { class: "person-cancel", type: "button" }, "Cancel"), make("button", { class: "person-send", type: "button" }, "Send")),
+            ),
+          ),
+          make(
             "form",
-            {},
+            { class: "ask" },
             make("input", { type: "text", placeholder: "What do you want to do?", "aria-label": "Ask a question", maxlength: "300" }),
             make(
               "div",
@@ -354,8 +399,10 @@ export class Ui {
     );
     const pick = <T extends Element>(selector: string) => root.querySelector(selector) as T;
     this.panel = pick(".panel");
-    this.form = pick("form");
-    this.input = pick("input");
+    this.form = pick(".ask");
+    this.input = pick(".ask input");
+    this.thread = pick(".thread");
+    this.handoff = pick(".handoff");
     this.status = pick(".status");
     this.statusText = pick(".status span");
     this.ring = pick(".ring");
@@ -433,6 +480,8 @@ export class Ui {
           if (type === "keydown") {
             this.panel.hidden = true;
             this.keepPlaced();
+            // Inside a page's modal <dialog>, Escape would also close the dialog. It was meant for our panel only.
+            event.preventDefault();
           }
         }
         event.stopPropagation();
@@ -595,18 +644,22 @@ export class Ui {
    * Shows our element again if something the page put in the top layer after
    * it lies on the launcher: a dialog drawn as a popover with a layer that
    * blocks the page behind it. Shown again, ours is the latest, and on top.
-   * While nothing is in use this is done only when the page has just opened
-   * something (`always`), never on a timer.
+   * When the page has just opened something (`always`), ours is shown again
+   * whatever it covers, since the pointer and its caption can be anywhere on
+   * the screen. While nothing is in use that is the only time it is done,
+   * never on a timer.
    */
   private raise(always = false) {
     const launcher = this.dock.querySelector(".launcher");
     if ((!this.inUse() && !always) || !this.host.isConnected || !launcher) return;
-    const box = launcher.getBoundingClientRect();
-    const x = box.left + box.width / 2;
-    const y = box.top + box.height / 2;
-    if (!(x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight)) return;
-    const hit = document.elementFromPoint(x, y);
-    if (!hit || hit === this.host) return;
+    if (!always) {
+      const box = launcher.getBoundingClientRect();
+      const x = box.left + box.width / 2;
+      const y = box.top + box.height / 2;
+      if (!(x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight)) return;
+      const hit = document.elementFromPoint(x, y);
+      if (!hit || hit === this.host) return;
+    }
     const focused = this.host.shadowRoot?.activeElement as HTMLElement | null;
     try {
       this.host.hidePopover();
@@ -661,6 +714,9 @@ export class Ui {
     const act = (button: HTMLButtonElement) => {
       if (button.classList.contains("line")) return this.onLine?.(Number(button.dataset.index));
       if (button.dataset.helped) return this.answerHelped(button.dataset.helped === "yes");
+      if (button.classList.contains("person-open")) return this.onHandoff?.open();
+      if (button.classList.contains("person-cancel")) return this.onHandoff?.cancel();
+      if (button.classList.contains("person-send")) return this.onHandoff?.send();
       const name = (["launcher", "send", "stop", "close", "doit", "go", "resume"] as const).find((name) => button.classList.contains(name));
       if (name) this.buttons[name]();
     };
@@ -669,9 +725,11 @@ export class Ui {
     this.host.addEventListener("pointerdown", (event) => {
       pressed = undefined;
       const into = event.composedPath()[0];
-      if (into === this.input && root.activeElement === this.input) return;
+      // Our own text fields: the ask box, and the hand-off's email and note.
+      const field = into instanceof HTMLInputElement || into instanceof HTMLTextAreaElement ? into : undefined;
+      if (field && root.activeElement === field) return;
       event.preventDefault();
-      if (into === this.input) this.input.focus();
+      if (field) field.focus();
       const button = buttonOf(event);
       if (!button || event.button !== 0) return;
       const copy = button.cloneNode(true) as HTMLButtonElement;
@@ -722,6 +780,8 @@ export class Ui {
       if (this.actingNow) return;
       const to = event.relatedTarget;
       const now = performance.now();
+      // Into another field of ours, like the hand-off's email: nothing of the page's took it.
+      if (to instanceof Node && this.host.shadowRoot?.contains(to)) return;
       if (!(to instanceof Element) || to === this.captor || to.contains(this.host) || (now - wanted > 500 && now - typed > 1500) || now - tabbed < 500) return;
       // What the visitor clicked has the mouse over it. A list that takes the keyboard back does not.
       if (to.matches(":hover")) return;
@@ -742,6 +802,7 @@ export class Ui {
     if (text) {
       this.panel.hidden = false;
       this.hideHelped();
+      this.hideHandoff();
     } else {
       this.input.value = "";
       this.panel.classList.remove("nudged");
@@ -898,6 +959,99 @@ export class Ui {
   closePanel() {
     this.panel.hidden = true;
     this.keepPlaced();
+  }
+
+  /**
+   * Shows the question and its reply in the panel: an answer from the help
+   * docs with the articles it rests on, or the sentence that says Haptic can't
+   * help (Answers). Every word is set as text, and a link is only made for an
+   * http or https address.
+   */
+  showAnswer(question: string, reply: Pick<TurnReply, "say" | "sources" | "missing">) {
+    const [asked, text, list, missing] = [".question", ".reply p", ".sources", ".missing"].map((selector) => this.thread.querySelector(selector) as HTMLElement);
+    asked!.textContent = question;
+    text!.textContent = reply.say;
+    const sources = reply.sources ?? [];
+    // Says where the words came from, then each article.
+    list!.replaceChildren(make("li", { class: "from" }, "From the help docs"), ...sources.map(sourceRow));
+    list!.hidden = sources.length === 0;
+    // A control the article names that isn't in the product any more, as far as Haptic can see. Better said than left for the visitor to hunt for.
+    const gone = (reply.missing ?? []).slice(0, 2).map((label) => `"${label}"`);
+    missing!.textContent = gone.length ? `I can't see ${gone.join(" or ")} on this page or the others I know, so this may no longer be right.` : "";
+    missing!.hidden = gone.length === 0;
+    this.thread.hidden = false;
+    this.panel.hidden = false;
+    this.thread.scrollTop = 0;
+    this.keepPlaced();
+  }
+
+  clearAnswer() {
+    this.thread.hidden = true;
+    this.hideHandoff();
+  }
+
+  /**
+   * Offers the way to a person, as one button in the panel. `open` is called
+   * when it is pressed. With `send`, pressing it shows a short form instead,
+   * and `send` is called with what the visitor typed: it resolves to true
+   * when the company got it.
+   */
+  offerHandoff(label: string, open: () => void, send?: (email: string, note: string) => Promise<boolean>) {
+    const pick = <T extends HTMLElement>(selector: string) => this.handoff.querySelector(selector) as T;
+    const [offer, form] = [pick(".handoff > .offer"), pick<HTMLFormElement>(".person")];
+    const [said, email, note, formSaid] = [pick(".handoff > .offer span"), pick<HTMLInputElement>(".person input"), pick<HTMLTextAreaElement>(".person textarea"), pick(".person .offer span")];
+    // A button that was pressed is a fresh copy of itself (keepPressesOurs), so it is looked for each time.
+    const button = () => pick<HTMLButtonElement>(".person-open");
+    const go = () => pick<HTMLButtonElement>(".person-send");
+    const show = (which: "offer" | "form") => {
+      offer.hidden = which !== "offer";
+      form.hidden = which !== "form";
+      this.keepPlaced();
+    };
+    button().textContent = label;
+    button().hidden = false;
+    said.textContent = "";
+    formSaid.textContent = "";
+    show("offer");
+    let sending = false;
+    const submit = async () => {
+      if (!send || sending || !email.reportValidity()) return;
+      sending = true;
+      go().disabled = true;
+      formSaid.textContent = "Sending…";
+      const sent = await send(email.value.trim(), note.value.trim()).catch(() => false);
+      sending = false;
+      go().disabled = false;
+      if (!sent) return void (formSaid.textContent = "That didn't send. Try again.");
+      // It is with a person now, and the widget says so: from here on they are not talking to the AI about this.
+      email.value = note.value = "";
+      show("offer");
+      button().hidden = true;
+      said.textContent = "Sent to the team. A person will reply by email.";
+    };
+    this.onHandoff = {
+      open: () => {
+        if (!send) return open();
+        show("form");
+        email.focus();
+      },
+      cancel: () => show("offer"),
+      send: () => void submit(),
+    };
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      void submit();
+    };
+    this.handoff.hidden = false;
+    this.panel.hidden = false;
+    this.keepPlaced();
+    // The dock grew. A caption with no target sits above it, so it moves up too.
+    this.placeSaid();
+  }
+
+  hideHandoff() {
+    this.handoff.hidden = true;
+    this.onHandoff = undefined;
   }
 
   /** Move the pointer to an element and show the caption beside it. With no text yet, the pointer goes alone. */
@@ -1737,4 +1891,28 @@ function shownLabelOf(el: Element): Element | undefined {
     if (hasBox(around) && rect.width * rect.height < 60_000) return around;
   }
   return undefined;
+}
+
+/** One article under an answer: its title, linked when it has an address, and when it was last changed. */
+function sourceRow(source: Source): HTMLElement {
+  const row = document.createElement("li");
+  const title = document.createElement(webAddress(source.url) ? "a" : "span");
+  title.className = "title";
+  title.textContent = source.title;
+  if (title instanceof HTMLAnchorElement) Object.assign(title, { href: source.url, target: "_blank", rel: "noopener noreferrer" });
+  row.append(title);
+  const changed = source.updated ? new Date(`${source.updated}T00:00:00`) : undefined;
+  if (changed && !Number.isNaN(changed.getTime())) {
+    const day = changed.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    row.append(source.stale ? `Updated ${day}. It may be out of date.` : `Updated ${day}`);
+  }
+  return row;
+}
+
+function webAddress(url: string | undefined): boolean {
+  try {
+    return /^https?:$/.test(new URL(url ?? "").protocol);
+  } catch {
+    return false;
+  }
 }

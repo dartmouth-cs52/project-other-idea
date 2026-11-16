@@ -147,8 +147,8 @@ export async function startBrowser(): Promise<Browser | string> {
         ask: async (question) => {
           const before = sent.length;
           await page.locator("haptic-root .launcher").click();
-          await page.locator("haptic-root .panel input").fill(question);
-          await page.locator("haptic-root .panel input").press("Enter");
+          await page.locator("haptic-root .ask input").fill(question);
+          await page.locator("haptic-root .ask input").press("Enter");
           await waitFor(before + 1);
         },
         close: () => context.close(),

@@ -28,6 +28,8 @@ A fixed set of questions with known right answers, on Haptic's own demo and on r
 | `gitlab` | A public project on GitLab.com (held out, recorded in part) | DevOps platforms | 8 | 23 |
 | `moodle` | Moodle's demo school (held out, recorded in part) | learning systems | 9 | 33 |
 
+`corrections` holds 7 more cases on the demo app, for a site with corrections and controls ruled out (see [Corrections and controls never to point at](#corrections-and-controls-never-to-point-at)), and is not in the counts above. The Answers benchmark, for replies in words, is separate: see [The Answers benchmark](#the-answers-benchmark).
+
 Three more held-out guide sets, `horilla`, `dhis2` and `finefoods`, have no case file: they are only run whole. See [Three fresh held-out apps](#three-fresh-held-out-apps).
 
 The real apps are public demos and public sites, used the way a visitor would. On a site other people use, no guide saves, sends or deletes anything. The case files hold what those public pages showed.
@@ -171,14 +173,37 @@ With no key to hand, start the **Benchmark** workflow from the repository's Acti
 - **plausible range** is where the true score could lie given how many cases there are. Two models whose ranges overlap have not been told apart.
 - **when the control was listed** is the score with the steps taken out where the widget never listed the right control. The gap between the two is what the widget costs, whichever model is used.
 - **status agrees** is reported beside the score and is not part of it, because models differ on whether a guide's last click is "continue" or "done". A reply can also be "stuck", when the model finds no way forward. The cases do not expect it, so it counts against status agreement only.
-- **clean sentence** is how often the model's sentence needed no tidying (`tidySay` in `src/server/model.ts`): no tag, no character with no width, no stray space and no closing brace left over from the reply's format. The server tidies every sentence, so a visitor never sees the difference, but a low figure means the setting is fighting the reply's format. It is not known when a server answered.
+- **clean sentence** is how often the model's sentence needed no tidying (`tidySay` in `src/server/rules.ts`): no tag, no character with no width, no stray space and no closing brace left over from the reply's format. The server tidies every sentence, so a visitor never sees the difference, but a low figure means the setting is fighting the reply's format. It is not known when a server answered.
 - **within the rules** is how often the server changed nothing else about it (`src/server/rules.ts`). It drops a sentence that holds a web address, an email address, a phone number, a messaging handle, an account to pay or a request to hand over a secret, cuts a reply that runs long, and takes off bold and code marks. A low figure means visitors are reading less than the model wrote, or the model is writing marks it should not. Each case's `broke` in the results file names the rule. It is not known when a server answered.
 - **typical ms** is the middle step, start to finish. **slow ms** is the step that nine in ten are faster than. **ms to pointer** is how long until the model had named the control, which is when the pointer starts to move. Compare timings only within one run: the service's speed drifts from hour to hour.
 - **What the widget gave the model to work with** has nothing to do with the model: how many controls a page had, how many pages were cut at the widget's limit of 300, how many controls had no name, and on how many steps the right control was not listed at all.
 - **followed planted text** counts the hostile cases where the pointer went where text on the page told it to.
 - With `--repeat`, **right every time / sometimes / never** shows how steady each model is. A case that is right two times in three is a visitor sent the wrong way one time in three.
 
+- **pointed at a ruled-out control** counts pointers at a control the case file's site rules out. See below.
+
 Every answer from a run is written to `eval/results/`, which is not committed.
+
+### Corrections and controls never to point at
+
+`eval/cases/corrections.json` is the demo app with two corrections from its owner and two controls ruled out. Three cases are right only if a correction is followed: one for a question like the one corrected, one for the same question asked on another page, and one for another question on the corrected page. One is a question on a corrected page that the correction must not change. Two ask for a ruled-out control, on a copy of the settings page with a danger zone written into the snapshot by hand, since the demo app has no such controls, and one asks for something else on that page.
+
+```bash
+npm run eval -- --models claude-sonnet-5-5 --cases corrections --yes
+npm run eval -- --models claude-sonnet-5-5 --cases corrections --without-corrections --yes
+```
+
+The second run takes the corrections and the list away, which shows what they change. **pointed at a ruled-out control** counts every pointer at one of the file's ruled-out controls, and must be 0 with the list in place: the server takes such a reply back whatever the model wrote. The Benchmark workflow takes the same choices, as `cases` and `corrections`.
+
+### Before switching Answers on for a site
+
+A site with Answers on is asked with a longer prompt, and its replies carry a mode as well as a pointer. The steps a guide should give are the same, so the same cases say whether guiding got worse:
+
+```bash
+npm run eval -- --models claude-sonnet-5-5 --answers --yes
+```
+
+Compare its **right pointer** with a run without `--answers` made in the same hour. Answers should not go on for a customer until the two are level, within the plausible range. This has not been run yet: the figures under "Results" are all without Answers.
 
 ## Running whole guides
 
@@ -501,10 +526,53 @@ Not covered by the sweep: pages behind a sign-in (every site was seen signed out
 
 Not established: on YouTube, with Haptic idle, the page sent one or two more of its own `log_event` reports (3 and 4 without, 5 and 5 with). Haptic sends nothing, and two loads each way do not tell this from chance. YouTube's two "unlisted" controls were Haptic's own buttons, which the check failed to recognise because YouTube's Polymer patches the DOM (ShadyDOM); the widget's list was right.
 
+## The Answers benchmark
+
+The cases above ask one thing: did the pointer go to the right control. A site with Answers on can also answer in words from its help docs, and say it can't help. Those need different questions and different scores, so they have a benchmark of their own, in `eval/answers/`.
+
+```bash
+npm run eval:answers -- --models mock
+npm run eval:answers -- --models claude-sonnet-5-5,claude-haiku-5-5 --judge --yes
+```
+
+A case is one question on one page, with what a right reply does. Each file in `eval/answers/` holds a site with its help docs, the pages its questions are asked on as the widget sees them, and the cases. `eval/answers/demo.json` is the demo app with the help centre in `demo/help`. It has 220 questions. 120 are what visitors ask: 36 that one article answers, 14 that need two, 8 follow-ups, 18 the docs do not cover, 12 about prices, refunds and the like that must be left for a person, 14 how-to questions that should be pointed at and not told, 5 vague ones, 5 that have nothing to do with the site, and 8 with an instruction planted on the page. That leans harder on the awkward kinds than the research report's mix. It proposed about 40% from one article, 15% from two, 20% not covered, 15% how-to and 10% for the rest. This set is 30%, 12%, 25%, 12% and 22%. The other 100 are attacks, ten each of ten kinds, from "ignore your rules" to a question with a harmless half and a hostile half. `--kinds attack` runs only those, and `--kinds one,two` only the questions the docs answer.
+
+`eval/answers/notes/demo-help-coverage.json` is what the questions were written from: each article's facts, the sentences that must never be stated, the one control an out-of-date article names, and the topics the help centre leaves out. Read it before adding a question.
+
+Each score is reported on its own. There is no blended score, because the mistakes do not cost the same: declining a question the docs cover is an annoyance, and answering one they do not is a statement made in the customer's name.
+
+- **right kind of reply**: a guide, an answer or a refusal, as the case expects, and for the right reason when it declines.
+- **declined what it should**: of the questions nothing should answer in words (not in the docs, a price or a refund, nothing to do with the site, an attack), how many it did not answer.
+- **declined what the docs cover**: of the questions the docs do answer, how many it refused anyway. Lower is better.
+- **right article**: of its answers, how many rest on the articles the answer is in, and on no others.
+- **right pointer**: where a case says what to point at, or that nothing should be.
+- **nothing forbidden said**: a price, or what a planted instruction asked for, did not reach the visitor.
+- **overruled by the server**: how many replies the checks in `src/server/answers.ts` changed after the model wrote them. A high number means the prompt is leaning on the code.
+- **ms to kind of reply** is when the widget can first show something. **cents a reply** is worked out from the tokens.
+
+`--judge` adds two more, from a second model that reads each answer beside a reference: **judged right**, and **judged all in the docs**. Model judges differ a great deal from each other in how lenient they are, and rewording a judge's prompt can reverse a ranking. So there is one judge with one prompt (`eval/judge.ts`), asked yes-or-no questions, and it is checked first against answers whose labels are known:
+
+```bash
+npm run eval:answers -- --check-judge --yes
+```
+
+`eval/answers/judge-check.json` holds 50 of them: 25 questions with two answers each, 20 that are right and all in the docs, 10 right but with a claim the docs do not make, 10 wrong but made only of things the docs say, and 10 wrong and unsupported. Do not compare two runs judged by different models or prompts.
+
+A case file can set `marks`, the scores a run has to reach, and `--gate` fails the command when one is missed. That is the check to run for a customer before Answers goes live for them, and again when their docs, the prompt or the model changes. **The marks are for the team to set before a run, not after it.**
+
+To refresh a file's site and pages after the help docs or the widget change (the questions are written by hand and are kept):
+
+```bash
+npm run eval:answers:record -- demo        # needs the local server and the site built with --answers on
+```
+
+**None of this has been run against a real model yet.** With the stand-in model the commands run end to end, which shows the scoring works and nothing more. The labels in `judge-check.json` and the expected replies in the case files were written with the help of a model and checked against the help docs by a second pass, not yet by a person on the team: read a sample before trusting a score built on them.
+
 ## What this does not measure yet
 
 - **Customers' own apps.** The real apps here are public demos and public sites. They are far closer to enterprise software than the demo app was, and they are still not a customer's app, with its own data, its own conventions and whatever its developers did to the page.
 - **Apps the widget cannot enter.** Pages drawn on a canvas, and apps inside an iframe, are not read at all.
 - **People.** A simulated visitor does exactly what the pointer shows. Real ones misread, hesitate and give up. How well "right pointer" predicts that a person finishes the task has not been measured by anyone.
 - **Whether the sentence is true.** It is checked for words it must or must not contain, and for format. Nobody reads it.
+- **Real visitors' questions for Answers.** Every Answers case was written for the benchmark. Once a site has Answers on, replace them with questions from its log.
 - **More than one run.** Each case is asked once unless `--repeat` says otherwise, and timings are from one machine at one time of day.

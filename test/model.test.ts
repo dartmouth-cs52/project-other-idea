@@ -126,7 +126,7 @@ test("a reply is not taken for one that names a control when it does not tell th
 test("with the check asking, the model is asked once more, told what it did, and its second reply is the one sent", async () => {
   const { sent } = use([{ streams: '{"target":null', reply: namesFaq }, { streams: '{"target":"e3"', reply: pointsAtFaq }], "ask");
   const early: string[] = [];
-  const measure = await measureTurn(site, request, undefined, (id) => early.push(id));
+  const measure = await measureTurn(site, request, undefined, { onTarget: (id) => early.push(id) });
   assert.equal(sent.length, 2);
   const told = sent[1]!.messages.at(-1)!.content as string;
   assert.match(told, /tells the visitor to use link "FAQ" \(e3\), but its target is null/);
@@ -292,7 +292,7 @@ test("in act mode, the run 3 reply is asked about once more at a later step, and
   console.log = (...words: unknown[]) => void logged.push(words.join(" "));
   let measure;
   try {
-    measure = await measureTurn(actingSite, onCardType, undefined, (id) => early.push(id));
+    measure = await measureTurn(actingSite, onCardType, undefined, { onTarget: (id) => early.push(id) });
   } finally {
     console.log = log;
   }
@@ -440,7 +440,7 @@ test("in act mode, the step 8 reply is sent as Haptic's click with no second mod
   for (const recheck of ["ask", "off"]) {
     const { sent } = use([{ streams: '{"target":"e36"', reply: clickNextRun1 }, { reply: clickNextRun2 }], recheck);
     const early: string[] = [];
-    const { result: measure, lines } = await logging(() => measureTurn(actingSite, step8, undefined, (id) => early.push(id)));
+    const { result: measure, lines } = await logging(() => measureTurn(actingSite, step8, undefined, { onTarget: (id) => early.push(id) }));
     assert.equal(sent.length, 1, recheck);
     assert.deepEqual(measure.reply, {
       target: "e36",

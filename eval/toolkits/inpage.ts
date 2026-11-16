@@ -348,7 +348,7 @@ const toolkit = {
     const root = h?.shadowRoot;
     const launcher = root?.querySelector(".launcher")?.getBoundingClientRect();
     const panel = root?.querySelector(".panel") as HTMLElement | null | undefined;
-    const input = root?.querySelector(".panel input") as HTMLInputElement | null | undefined;
+    const input = root?.querySelector(".ask input") as HTMLInputElement | null | undefined;
     return {
       there: !!h,
       launcher: launcher ? { x: launcher.left + launcher.width / 2, y: launcher.top + launcher.height / 2 } : undefined,

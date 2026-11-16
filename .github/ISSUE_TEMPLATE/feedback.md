@@ -1,14 +1,14 @@
 ---
 name: Feedback
-about: Describe this issue template's purpose here.
+about: Share feedback on the code, our practices, or the product
 title: ''
 labels: feedback
 assignees: ''
 
 ---
 
-# Title
+**What's the feedback?**
+Describe what you noticed: code, a practice, or the product.
 
-Describe some feedback on code, best practices, or the product here.
-
-[ ] suggest fixing as this might cause issues down the line
+**Why it matters**
+- [ ] This might cause problems down the line and should be fixed

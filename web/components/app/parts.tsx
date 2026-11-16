@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Check, Copy } from "lucide-react";
 import { cn } from "cn";
 import { Pointer } from "@/components/pointer";
@@ -10,19 +8,29 @@ import { Button } from "@/components/ui/button";
 import { auth } from "@/lib/auth-client";
 import { site } from "@/lib/site";
 
+/**
+ * Leaves a signed-in page with a full page load. The public pages load Haptic's
+ * own guide (components/haptic-tag.tsx), which stays in the page once loaded, so
+ * a move that kept the page would let Back bring it to the dashboard with it.
+ */
+export function leaveFor(path: string) {
+  window.location.assign(path);
+}
+
 /** The navigation on signed-in pages. The name on the left, who is signed in and Sign out on the right. */
 export function AppNav({ who }: { who?: string }) {
-  const router = useRouter();
   async function signOut() {
     await auth().signOut();
-    router.push("/sign-in/");
+    leaveFor("/sign-in/");
   }
   return (
     <header className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-6">
-      <Link href="/" className="flex items-center gap-1.5 rounded-md text-lg font-medium tracking-tight outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+      {/* A plain link, not next/link, for the reason given at leaveFor. */}
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+      <a href="/" className="flex items-center gap-1.5 rounded-md text-lg font-medium tracking-tight outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
         <Pointer className="size-[22px]" />
         {site.name}
-      </Link>
+      </a>
       {who && (
         <nav className="flex min-w-0 items-center gap-4 text-sm font-medium">
           <span className="hidden truncate text-muted-foreground sm:block">{who}</span>

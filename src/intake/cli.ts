@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { actingProblems } from "../server/acting.ts";
+import { webhookAllowed } from "../server/handoff.ts";
 import { buildSystemPrompt, docsThatFit, renderSiteMap } from "../server/prompt.ts";
 import { listSiteIds, loadSite, saveSite } from "../server/sites.ts";
 import { DEFAULT_APPEARANCE, type SiteContext, type SiteSource } from "../shared/types.ts";
@@ -46,6 +47,14 @@ Options:
   --accent <hex>       Color of the pointer and its highlight. Default ${DEFAULT_APPEARANCE.accent}.
   --position <side>    bottom-right or bottom-left. Default bottom-right.
   --label <text>       Text on the launcher button. Default "${DEFAULT_APPEARANCE.launcherLabel}".
+  --answers <on|off>   Answers: reply in words from the help docs as well as pointing. Off by default.
+  --stale-days <n>     With Answers on, mark an answer from an article older than this as possibly out of date.
+  --handoff-webhook <url>    When Haptic can't help, the widget offers a short form (an email address and a note).
+                             It is posted here as JSON, with the conversation and the page. An https address of yours.
+  --handoff-secret <text>    Sign each post with this, in an X-Haptic-Signature header.
+  --handoff-url <url>        Open this page instead, like your contact form.
+  --handoff-email <address>  Or open the visitor's mail program, writing to this address.
+  --handoff-label <text>     The words on the button. Default "Contact support".
   --budget-hour <usd>  The most the site may spend on the model in an hour, in US dollars. Default: the server's.
   --budget-day <usd>   The same for a day.
   --visitor-steps <n>  Steps one visitor may take in a day. For a public demo. Default: no limit.
@@ -76,6 +85,13 @@ const { values, positionals } = parseArgs({
     accent: { type: "string" },
     position: { type: "string" },
     label: { type: "string" },
+    "handoff-webhook": { type: "string" },
+    "handoff-secret": { type: "string" },
+    "handoff-url": { type: "string" },
+    "handoff-email": { type: "string" },
+    "handoff-label": { type: "string" },
+    answers: { type: "string" },
+    "stale-days": { type: "string" },
     "budget-hour": { type: "string" },
     "budget-day": { type: "string" },
     "visitor-steps": { type: "string" },
@@ -189,6 +205,16 @@ async function build(base: SiteContext): Promise<SiteContext> {
   if (left.length) {
     console.warn(`  ${left.length} help docs don't fit in the prompt and won't be used: ${left.map((doc) => doc.source).join(", ")}.\n  Trim them or pass fewer. Looking docs up by question is the fix for this and isn't built yet.`);
   }
+  if (site.answers?.enabled) {
+    const linked = docs.filter((doc) => doc.url).length;
+    const dated = docs.filter((doc) => doc.updated).length;
+    console.log(`  Answers is on. ${linked} of ${docs.length} help docs have an address to link to, and ${dated} have a date.`);
+    if (!docs.length) console.warn("  There are no help docs, so nothing can be answered in words. Haptic will still point, and say when it can't help.");
+    // "That needs an answer from a person" with no way to reach one is a dead end.
+    if (!site.handoff?.webhook && !site.handoff?.url && !site.handoff?.email) {
+      console.warn("  There is no way to a person set, so when Haptic can't help it will say so and offer nothing.\n  Set one with --handoff-webhook, --handoff-url or --handoff-email before this goes in front of visitors.");
+    }
+  }
   const mapChars = site.pages.length ? renderSiteMap(site.pages).length : 0;
   console.log(`  The site map is ${mapChars.toLocaleString()} characters. The site knowledge sent with each question is about ${Math.round(buildSystemPrompt(site).length / 4).toLocaleString()} tokens.`);
   return site;
@@ -252,6 +278,21 @@ async function main() {
     budget[field] = amount;
   }
 
+  if (values.answers && values.answers !== "on" && values.answers !== "off") fail("--answers is on or off.");
+  const staleDays = values["stale-days"] === undefined ? existing?.answers?.staleAfterDays : Number(values["stale-days"]);
+  if (staleDays !== undefined && !(Number.isInteger(staleDays) && staleDays > 0)) fail(`--stale-days has to be a whole number above 0, not "${values["stale-days"]}".`);
+  const answersOn = values.answers ? values.answers === "on" : existing?.answers?.enabled === true;
+  const answers = answersOn || staleDays !== undefined ? { enabled: answersOn, ...(staleDays !== undefined ? { staleAfterDays: staleDays } : {}) } : undefined;
+
+  const handoff = { ...existing?.handoff };
+  for (const [flag, field] of [["handoff-webhook", "webhook"], ["handoff-secret", "secret"], ["handoff-url", "url"], ["handoff-email", "email"], ["handoff-label", "label"]] as const) {
+    if (values[flag] !== undefined) handoff[field] = values[flag];
+  }
+  // A webhook on this machine is let through here for trying it out. The online server refuses one.
+  if (handoff.webhook && !webhookAllowed(handoff.webhook, true)) fail(`--handoff-webhook has to be an https address, not "${handoff.webhook}".`);
+  if (handoff.url && !/^https?:\/\//i.test(handoff.url)) fail(`--handoff-url has to start with https://, not "${handoff.url}".`);
+  if (handoff.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(handoff.email)) fail(`--handoff-email has to be an email address, not "${handoff.email}".`);
+
   const origin = new URL(url).origin;
   const source: SiteSource = { url, maxPages, docs: values.docs ?? existing?.source.docs ?? [] };
   const notesFile = values.notes ?? existing?.source.notesFile;
@@ -291,6 +332,8 @@ async function main() {
     source,
     ...(existing?.off ? { off: true } : {}),
     ...(Object.keys(budget).length ? { budget } : {}),
+    ...(answers ? { answers } : {}),
+    ...(Object.keys(handoff).length ? { handoff } : {}),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };

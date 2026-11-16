@@ -50,6 +50,22 @@ export interface SeenOrigin {
   requests: number;
 }
 
+/** A control as the dashboard names it. Role empty means any kind. */
+export interface ControlName {
+  role?: string;
+  label: string;
+}
+
+/** "Point here instead", as saved. */
+export interface Correction {
+  id: string;
+  route: string;
+  question: string;
+  wrong?: ControlName;
+  right: ControlName;
+  createdAt: string;
+}
+
 export interface Site {
   id: string;
   name: string;
@@ -66,15 +82,32 @@ export interface Site {
   connected: boolean;
   origins: SeenOrigin[];
   reading: Reading | null;
+  corrections: Correction[];
+  blocked: ControlName[];
 }
 
-export type Outcome = "finished" | "shown" | "stopped" | "nothing_to_point_at" | "loop" | "step_limit" | "error" | "abandoned" | "under_way";
+export type Outcome =
+  | "finished"
+  | "shown"
+  | "stopped"
+  | "nothing_to_point_at"
+  | "loop"
+  | "step_limit"
+  | "error"
+  // On a site with Answers on: answered in words, or declined for one of three reasons. None is billed.
+  | "answered"
+  | "not_covered"
+  | "sensitive"
+  | "off_topic"
+  // Haptic was asked for a control the company said never to point at.
+  | "blocked"
+  | "abandoned"
+  | "under_way";
 
 export interface Insights {
   days: number;
   summary: { guides: number; unanswered: number; helped_yes: number; helped_no: number; median_ms_to_pointer: number | null; median_steps_finished: number | null };
   outcomes: { outcome: Outcome; count: number }[];
-  unanswered: { key: string; question: string; asked: number; unanswered: number; last_asked: string; example: string | null }[];
   recent: {
     id: string;
     question: string;
@@ -89,6 +122,34 @@ export interface Insights {
   }[];
   abandonedAt: { path: string; step: number; target_label: string | null; count: number }[];
   wrongClicks: { path: string; target_label: string; shown: number; wrong: number }[];
+  /** The lead: questions grouped by meaning, counted by person, that some people asked and didn't get to the end of. */
+  cantFind: { key: string; question: string; visitors: number; found: number; asked: number; stoppedAt: { path: string; step: number; label: string | null; count: number } | null }[];
+  /** The most asked groups of the last eight weeks, with each week's finish rate. A flagged one finishes far less often than before. */
+  health: HealthGroup[];
+  /** Groups the company was told about in the last month. */
+  alerts: { key: string; sent_at: string; emailed: boolean }[];
+}
+
+export interface HealthGroup {
+  key: string;
+  question: string;
+  weeks: { ago: number; guides: number; finished: number; visitors: number }[];
+  flag?: {
+    before: number;
+    now: number;
+    visitorsBefore: number;
+    stop: { path: string; step: number; label: string | null } | null;
+    missing?: { path: string; role: string | null; label: string };
+  };
+}
+
+export interface GroupGuide {
+  id: string;
+  question: string;
+  started_at: string;
+  helped: boolean | null;
+  outcome: Outcome;
+  step_count: number;
 }
 
 export interface FinishedList {
@@ -106,6 +167,8 @@ export interface GuideDetail {
   origin: string | null;
   helped: boolean | null;
   outcome: Outcome;
+  /** Steps asked again because the page changed while the model was answering. */
+  cancelled_steps: number;
   steps: {
     n: number;
     path: string;
@@ -129,6 +192,11 @@ export const OUTCOME_LABEL: Record<Outcome, string> = {
   loop: "Went in a loop",
   step_limit: "Ran out of steps",
   error: "Error",
+  answered: "Answered from the help docs",
+  not_covered: "Not in the help docs",
+  sensitive: "Left for a person",
+  off_topic: "Off topic",
+  blocked: "A control you ruled out",
   abandoned: "Abandoned",
   under_way: "Under way",
 };

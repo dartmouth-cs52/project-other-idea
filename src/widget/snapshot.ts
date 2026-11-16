@@ -1195,6 +1195,19 @@ export function describeChange(before: Snapshot, after: Snapshot): string {
 
 export const NOTHING_CHANGED = "Nothing visible on the page changed.";
 
+/** True when two snapshots show the same controls and headings, whatever their addresses say. */
+export function sameView(a: Snapshot, b: Snapshot): boolean {
+  const view = (snapshot: Snapshot) => [snapshot.dialog ?? "", ...snapshot.headings, ...snapshot.elements.map(elementKey)].join("\n");
+  return view(a) === view(b);
+}
+
+/** A control's name as the snapshot would give it: its label, or its icon when it has no words. For learning the site (learn.ts). */
+export function nameOf(el: Element): { label: string; icon?: string } {
+  const role = el.matches("a[href], [role='link']") ? "link" : "button";
+  const icon = iconOf(el);
+  return { label: labelOf(el, role), ...(icon ? { icon } : {}) };
+}
+
 function listSome(items: string[]): string {
   return items.length > 8 ? `${items.slice(0, 8).join(", ")} and ${items.length - 8} more` : items.join(", ");
 }
@@ -1698,6 +1711,21 @@ function reaches(el: Element, area: number, hit: Element | undefined): boolean {
 const MIDDLE: [number, number][] = [[0.5, 0.5]];
 const AROUND: [number, number][] = [[0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]];
 
+/** What a page opens over the controls under it for a moment: a list, a menu, a dialog, a popover, a tip. */
+const OPENED_OVER = '[role="listbox"], [role="menu"], [role="menubar"], [role="tree"], [role="grid"], [role="dialog"], [role="alertdialog"], [role="tooltip"], [popover], dialog';
+
+/**
+ * Whether a click reaches a control drawn on more than one line, like a link
+ * that wraps, at the middle of one of its lines. Its box spans the lines, and
+ * the points tried in it can all be on the words beside it.
+ */
+function reachedOnALine(c: Candidate, ignore: Element): boolean {
+  const lines = c.el.getClientRects();
+  if (lines.length < 2) return false;
+  for (const line of Array.from(lines).slice(0, 4)) if (!inFrontOf(c.el, line, ignore, c.frame, MIDDLE)) return true;
+  return false;
+}
+
 /**
  * What a click on a control in the window lands on, when that is not the
  * control: what is in front of it at its middle. Nothing when a click at any
@@ -1996,7 +2024,7 @@ function keepReachable(candidates: Candidate[], ignore: Element, findLayer: bool
   }
   for (const { c, seen, clear, blocker } of missed) {
     if (performance.now() - started > MAX_TRYING_MS) break;
-    if (!inFrontOf(c.el, seen, ignore, c.frame, AROUND)) {
+    if (!inFrontOf(c.el, seen, ignore, c.frame, AROUND) || reachedOnALine(c, ignore)) {
       reached.add(c);
       continue;
     }
@@ -2043,7 +2071,14 @@ function keepReachable(candidates: Candidate[], ignore: Element, findLayer: bool
     if (scroller && drawnWithin(blocker, scroller)) {
       const box = scroller.getBoundingClientRect();
       c.offscreen = c.rect.top + c.rect.height / 2 < box.top + box.height / 2 ? "above" : "below";
+      continue;
     }
+    // Under something that is none of those: a click there takes the other thing, and nothing brings it out, like the
+    // pilot app's Restart button under a stack of cards, which the model kept pointing at. It is left out. Under a list,
+    // a menu or a box that the page opened over it, it is only under it while that is open, and stays.
+    // A control that takes no clicks itself lets them through to what is behind it: it is inert, not covered.
+    if (blocker.contains(c.el) || getComputedStyle(c.el).pointerEvents === "none") continue;
+    if (!blocker.closest(OPENED_OVER)) buried.add(c);
   }
   return { kept: buried.size ? kept.filter((c) => !buried.has(c)) : kept };
 }

@@ -1,3 +1,4 @@
+import { BLOCKED_SAY, isBlocked, type ControlName } from "../shared/corrections.ts";
 import {
   ACTING_LIMITS,
   cleanText,
@@ -6,17 +7,22 @@ import {
   namedIn,
   type GuideOutcome,
   type GuideReport,
+  type HandoffRequest,
   type HistoryTurn,
+  type Mode,
+  type PublicHandoff,
   type SnapElement,
   type Snapshot,
+  type TranscriptTurn,
   type TurnReply,
   type TurnRequest,
 } from "../shared/types.ts";
 import { perform, type DidLine, type Heard as HeardStep, type Listening } from "./act.ts";
 import { confirmationAction, planFor, SAYS, type ActPlan, type GateConfig, type GateSession, type Plan, type StopPlan, type VisitorPlan } from "./gate.ts";
 import { hear, isOwn, keyName, keysAsked, nothingHeard, OWN_TYPING_PAUSE_MS, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "./observe.ts";
+import { onAddressChange } from "./navigation.ts";
 import { isDrawn, POPUP_ROLES, watchPopups } from "./popups.ts";
-import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
+import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, sameView, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
 import { ACTING_WORDS, type DidShown, type Ui } from "./ui.ts";
 
 // Runs one guide: ask the model for a step, point at it, wait for the visitor
@@ -25,6 +31,8 @@ import { ACTING_WORDS, type DidShown, type Ui } from "./ui.ts";
 
 const MAX_STEPS = 20;
 const MAX_HISTORY = 12;
+/** How much of the conversation before this question is sent with it: the last three questions answered in words, and their answers. */
+const MAX_THREAD = 6;
 const STORAGE_KEY = "haptic.guide";
 /** Shown the moment the visitor does something other than the step, while the next step is worked out. */
 const OFF_TRACK = "Finding the way from here…";
@@ -178,8 +186,12 @@ interface ActSession {
 interface SavedGuide {
   /** Ties the guide's steps together on the server, across page loads. */
   id?: string;
+  /** How the guide ended, when that has been reported already and its steps go on: the look after its last control was used. */
+  reported?: GuideOutcome;
   goal: string;
   history: HistoryTurn[];
+  /** Earlier questions that were answered in words, so a guide that follows from one still knows what it was about. */
+  thread?: HistoryTurn[];
   step: number;
   path: string;
   /**
@@ -203,8 +215,28 @@ interface SavedGuide {
 /** Says how a guide went. Sent once per ending, and again when the visitor answers "Did this help?". */
 export type Reporter = (guide: string, report: Omit<GuideReport, "site">) => void;
 
+/** What the guide is told while a reply is still on its way. */
+export interface Watch {
+  /** The kind of reply, on a site with Answers on. */
+  onMode?(mode: Mode): void;
+  /** The control it will point at. */
+  onTarget?(id: string): void;
+}
+
+/** The way to a person, when the site has one: what the widget was told about it, and how its form is posted. */
+export interface HandoffWay {
+  config: PublicHandoff;
+  /** Posts the widget's form. Resolves to true when the company got it. */
+  send(form: Omit<HandoffRequest, "site">): Promise<boolean>;
+}
+
+/** Questions in a row that ended without the visitor saying it helped, after which a person is offered. */
+const OFFER_PERSON_AFTER = 3;
+/** How much of the conversation goes to a person with a handoff. */
+const MAX_TRANSCRIPT = 16;
+
 /** Endings worth asking "Did this help?" about. A stop or a failure already says no. */
-const ASK_IF_HELPED: GuideOutcome[] = ["finished", "shown", "nothing_to_point_at", "loop", "step_limit"];
+const ASK_IF_HELPED: GuideOutcome[] = ["finished", "shown", "nothing_to_point_at", "loop", "step_limit", "answered"];
 
 /** What a question carries besides the page. */
 interface Asking {
@@ -221,8 +253,17 @@ interface Asking {
 }
 
 export class Guide {
-  /** Empty when no guide is under way, or once the current one has reported how it ended. */
+  /** Empty when no guide is under way, or once the current one has ended. */
   private id = "";
+  /**
+   * How this guide's ending was reported, once it has been. A guide can be
+   * reported before it is over: the moment the last pointer of a guide that
+   * got there shows, or the visitor uses the last control, the outcome is
+   * sent at once, as the page may be about to go. The guide keeps its id for
+   * the look that follows, and nothing is reported twice. The server keeps
+   * the first outcome it is told.
+   */
+  private reported?: GuideOutcome;
   /**
    * Set while a pointer the model called the last step is on show, and the
    * visitor has not yet used it: how the guide ended if it ends there. Asking
@@ -232,8 +273,20 @@ export class Guide {
   private unconfirmed?: GuideOutcome;
   private goal = "";
   private history: HistoryTurn[] = [];
+  /**
+   * Questions answered in words, and their answers. It outlives a question, so
+   * "and who can remove them?" is read with what came before. Pressing Stop
+   * clears it.
+   */
+  private thread: HistoryTurn[] = [];
+  /** Everything said since the visitor last pressed Stop, for handing to a person. */
+  private transcript: TranscriptTurn[] = [];
+  /** Questions in a row that ended without a "Yes" to "Did this help?". */
+  private misses = 0;
   private step = 0;
   private previous?: Snapshot;
+  /** The page as it was last sent to the server, whether or not the answer was used. */
+  private lastSent?: Snapshot;
   /**
    * The control the last step pointed at, how the list described it then, and
    * whether the visitor used it. The element itself is kept because two
@@ -267,10 +320,13 @@ export class Guide {
 
   constructor(
     private readonly ui: Ui,
-    private readonly sendTurn: (request: Omit<TurnRequest, "site">, onTarget?: (id: string) => void, signal?: AbortSignal) => Promise<TurnReply>,
+    private readonly sendTurn: (request: Omit<TurnRequest, "site">, watch?: Watch, signal?: AbortSignal) => Promise<TurnReply>,
     /** The site's acting settings, when it has acting on, and whether the page turned it off. */
     private readonly config: GateConfig = {},
     private readonly report: Reporter = () => {},
+    private readonly handoff?: HandoffWay,
+    /** Controls the site's owner ruled out. Checked here as well as on the server, so the pointer never goes to one. */
+    private readonly blocked: ControlName[] = [],
   ) {}
 
   /**
@@ -334,8 +390,29 @@ export class Guide {
   private watchPage(on: boolean) {
     leavingSince = 0;
     window.removeEventListener("beforeunload", noteLeaving);
-    if (on) window.addEventListener("beforeunload", noteLeaving);
+    window.removeEventListener("pagehide", this.onPageHide);
+    if (on) {
+      window.addEventListener("beforeunload", noteLeaving);
+      window.addEventListener("pagehide", this.onPageHide);
+    }
     requests.watch(on);
+  }
+
+  /**
+   * The page is going, with the guide's ending not yet reported: the last
+   * pointer is on show and the visitor has neither used it nor done anything
+   * else. How it would end there is sent now, since nothing will be sent once
+   * the page has gone. The report goes with keepalive, so it still arrives.
+   */
+  private onPageHide = safely(() => {
+    if (this.unconfirmed) this.sendOutcome(this.unconfirmed);
+  });
+
+  /** Reports how the guide ended before it is over, once: the moment that is known for sure, while the page may yet go. */
+  private sendOutcome(outcome: GuideOutcome) {
+    if (!this.id || this.reported) return;
+    this.reported = outcome;
+    this.report(this.id, { outcome });
   }
 
   /** The visitor called the guide off: Stop, the caption's cross, or Escape while Haptic acts. What Haptic did stays listed. */
@@ -343,7 +420,11 @@ export class Guide {
     const session = this.acting;
     this.reportEnding(this.unconfirmed ?? "stopped");
     this.reset();
+    this.thread = [];
+    this.transcript = [];
+    this.misses = 0;
     this.ui.clear();
+    this.ui.clearAnswer();
     this.ui.setBusy("");
     if (session?.did.length) this.showDid(session, ACTING_WORDS.stopped);
     // Typing that Stop cut short is reported by the engine a moment later, and shown then.
@@ -457,10 +538,7 @@ export class Guide {
       ui.pointAt(el, say);
       ui.yourTurn(true);
       // Shown until the visitor clicks anywhere, as the last pointer of a guide is.
-      const ended = this.run;
-      const dismiss = () => ended === this.run && ui.clear();
-      document.addEventListener("click", dismiss, { capture: true, once: true });
-      this.stopWaiting = () => document.removeEventListener("click", dismiss, true);
+      this.leavePointerUp();
     } else ui.say(say);
     if (session?.did.length) this.showDid(session, "");
     ui.setState("finished");
@@ -509,9 +587,11 @@ export class Guide {
     if (!saved) return;
     this.reset();
     this.id = saved.id ?? newGuideId();
+    if (saved.reported) this.reported = saved.reported;
     this.goal = saved.goal;
     this.ui.showQuestion(saved.goal);
     this.history = saved.history;
+    this.thread = saved.thread ?? [];
     this.step = saved.step;
     this.strayed = saved.strayed === true;
     this.closings = saved.closings ?? 0;
@@ -560,6 +640,8 @@ export class Guide {
     this.history = [];
     this.step = 0;
     this.previous = undefined;
+    this.lastSent = undefined;
+    this.reported = undefined;
     this.last = undefined;
     this.stuck = undefined;
     this.strayed = false;
@@ -624,6 +706,13 @@ export class Guide {
       if (run !== this.run) return;
       page = takeSnapshot(ui.host, this.goal);
     }
+    // A single-page app can change the address before it draws the new page. A new address over the same controls as
+    // the page last sent hasn't been drawn yet, so the page is given the chance to change before it is read.
+    if (this.lastSent && page.snapshot.path !== this.lastSent.path && sameView(this.lastSent, page.snapshot)) {
+      await settle(ui.host, { untilChanged: true, patient: false });
+      if (run !== this.run) return;
+      page = takeSnapshot(ui.host, this.goal);
+    }
     const change = event && this.previous ? describeChange(this.previous, page.snapshot) : undefined;
     // What became of the control just used, read from the control itself, and whether the guide is going round.
     const became = event ? this.fateOfLast(page) : { told: "", kept: "" };
@@ -650,6 +739,8 @@ export class Guide {
       const el = page.elements.get(id);
       if (run !== this.run || early || pointedEarly || !el?.isConnected || currentPath() !== page.snapshot.path) return;
       const listed = page.snapshot.elements.find((element) => element.id === id);
+      // A control the site's owner ruled out gets no pointer, not even for a moment.
+      if (isBlocked(listed, this.blocked)) return;
       if (listed?.offscreen) el.scrollIntoView({ block: "center", behavior: "smooth" });
       ui.pointAt(el, "");
       if (acting) {
@@ -686,20 +777,41 @@ export class Guide {
     // While Haptic acts: a page that changed since its last action on a control makes the next action on it a fresh one.
     const pageNow = acting ? pageState(page.snapshot) : "";
     if (acting && acting.before !== pageNow) acting.gate.repeats = undefined;
-    const abort = acting ? new AbortController() : undefined;
+    const abort = new AbortController();
     if (acting) {
       acting.abort = abort;
       acting.turns++;
     }
+    // If the address changes while the model is answering, the answer is about a page the visitor has left, like the
+    // page they were on when they clicked a link that took a moment to load. The request is dropped at once, which
+    // the server hears as the widget hanging up, and the step is asked again from the new page.
+    let moved = false;
+    const stopWatching = onAddressChange(() => {
+      if (moved || currentPath() === page.snapshot.path) return;
+      moved = true;
+      abort.abort();
+    });
+    /** Asks for the step again, from the page the visitor is on now. While Haptic acts, someone else moved the page: acting ends. */
+    const startOver = async () => {
+      dropEarly();
+      if (this.acting) return this.stopActing(SAYS.moved, undefined, "stopped");
+      const here = currentPath();
+      ui.setBusy(this.step === 0 ? "Finding it…" : "Next step…");
+      await settle(ui.host);
+      if (run !== this.run) return;
+      return this.turn(run, { event: `${event ?? ""} The user went from ${page.snapshot.path} to ${here}.`.trim(), ...(followed ? { followed } : {}), closing });
+    };
     let reply: TurnReply;
     this.noteShownOwn(page.snapshot);
+    this.lastSent = page.snapshot;
     try {
       reply = await this.sendTurn(
         {
           ...(this.id ? { guide: this.id } : {}),
           goal: this.asked,
           step: this.step,
-          history: this.history.slice(-MAX_HISTORY),
+          // Earlier questions answered in words come first, so a question that follows from one is read with it.
+          history: [...this.thread, ...this.history].slice(-MAX_HISTORY),
           snapshot: page.snapshot,
           ...(told ? { event: told } : {}),
           ...(change ? { change } : {}),
@@ -707,17 +819,26 @@ export class Guide {
           ...(closing ? { closing: true as const } : {}),
           ...(acting ? { mode: "act" as const } : {}),
         },
-        pointEarly,
-        abort?.signal,
+        {
+          onTarget: pointEarly,
+          // An answer takes a moment longer than a pointer, so say what the wait is for.
+          onMode: (mode) => {
+            if (run === this.run && !acting && mode === "answer") ui.setBusy("Reading the help docs…");
+          },
+        },
+        abort.signal,
       );
     } catch (error) {
+      stopWatching();
       if (run !== this.run) return;
       // The page is on its way out and took the request with it. The next page picks the guide up.
       if (isLeaving()) return this.askAgainIfStaying(run, asking, dropEarly);
+      if (moved) return startOver();
       dropEarly();
       console.warn("[Haptic]", error);
       return this.finish("Something went wrong on our side. Try asking again.", "error");
     }
+    stopWatching();
     if (run !== this.run) return;
     if (isLeaving()) return this.askAgainIfStaying(run, asking, dropEarly);
     // The line that said what Doing it means has been read by now.
@@ -733,20 +854,21 @@ export class Guide {
       return;
     }
 
-    // The answer is about a page the visitor has already left. Start over from where they are now.
-    const here = currentPath();
-    // While Haptic acts, nothing of its own was going on while it waited: someone else moved the page, and acting ends.
-    if (here !== page.snapshot.path && acting) return this.stopActing(SAYS.moved, undefined, "stopped");
-    if (here !== page.snapshot.path) {
-      dropEarly();
-      await settle(ui.host);
-      if (run !== this.run) return;
-      return this.turn(run, { event: `${event ?? ""} The user went from ${page.snapshot.path} to ${here}.`.trim(), ...(followed ? { followed } : {}), closing });
-    }
+    // The answer is about a page the visitor has already left. Start over from where they are now. While Haptic acts,
+    // nothing of its own was going on while it waited: someone else moved the page, and acting ends.
+    if (moved || currentPath() !== page.snapshot.path) return startOver();
 
     let el = reply.target ? page.elements.get(reply.target) : undefined;
     const listed = reply.target ? page.snapshot.elements.find((element) => element.id === reply.target) : undefined;
     const acted = early?.acted;
+
+    // A control the site's owner ruled out. The server says so, and the widget checks for itself. Nothing is pointed at or done.
+    if (reply.blocked || isBlocked(listed, this.blocked)) {
+      dropEarly();
+      const say = reply.blocked ? reply.say : BLOCKED_SAY;
+      if (this.acting) return this.finishActing(say, "blocked");
+      return this.finish(say, "blocked");
+    }
 
     // Data that arrives a moment after a click, with no sign that it is on its
     // way, lands while the model is answering. The answer is then about a page
@@ -801,7 +923,12 @@ export class Guide {
       }
     }
 
-    this.history.push({ role: "user", text: this.step === 0 ? this.asked : [event, became.kept, followed].filter(Boolean).join(" ") || "The page changed." }, { role: "assistant", text: reply.say });
+    // The model is sent the question with addresses and numbers masked. The transcript is the visitor's own words, kept
+    // in the browser, and only goes anywhere if they ask for a person.
+    const did = this.step === 0 ? this.goal : [event, became.kept, followed].filter(Boolean).join(" ") || "The page changed.";
+    this.history.push({ role: "user", text: this.step === 0 ? this.asked : did }, { role: "assistant", text: reply.say });
+    const kind = reply.mode && reply.mode !== "act" ? { kind: reply.mode } : {};
+    this.transcript = [...this.transcript, { role: "user" as const, text: did }, { role: "assistant" as const, text: reply.say, ...kind }].slice(-MAX_TRANSCRIPT);
     this.step++;
     this.previous = page.snapshot;
     this.last = listed ? { listed, used: false, page: pageState(page.snapshot), ...(el ? { el: new WeakRef(el) } : {}) } : undefined;
@@ -811,6 +938,21 @@ export class Guide {
     // where they asked to be, or when they used the control the last answer pointed at. A first answer
     // that the visitor did not act on, or that only needed words, was shown, and is free.
     const arrived = this.step > 1;
+
+    // An answer in words, or a fixed sentence saying Haptic can't help, is read in the panel, where there is room for it
+    // and for the articles it rests on (Answers). A step's sentence stays beside the pointer, in the caption. An act
+    // reply is never one.
+    const inPanel = !acting && (reply.mode === "answer" || reply.mode === "cannot_help");
+    if (inPanel) {
+      // Earlier questions go to the model with the next one, so they are masked like it.
+      this.thread = [...this.thread, { role: "user" as const, text: this.asked }, { role: "assistant" as const, text: reply.say }].slice(-MAX_THREAD);
+      ui.showAnswer(this.goal, reply);
+    } else ui.clearAnswer();
+    if (inPanel && (!el || !el.isConnected)) {
+      dropEarly();
+      return this.conclude(reply.mode === "answer" ? "answered" : (reply.reason ?? "not_covered"));
+    }
+
     // No way forward was found. The guide ends on the sentence, whatever it points at, and is free. While Haptic acted, nothing more is done.
     if (reply.status === "stuck") {
       dropEarly();
@@ -843,14 +985,25 @@ export class Guide {
       dropEarly();
       if (listed?.offscreen) target.scrollIntoView({ block: "center", behavior: "smooth" });
     }
-    // If they have already used it, the caption would only flash.
-    if (!acted) ui.pointAt(target, reply.say);
+    // If they have already used it, the caption would only flash. An answer's words are in the panel, so its pointer goes alone.
+    if (!acted) ui.pointAt(target, inPanel ? "" : reply.say);
 
     if (handover) {
       ui.setBusy("");
       ui.yourTurn(true);
       this.showDid(handover.session, ACTING_WORDS.nothingSaved(handover.commit), handover.commit);
-    } else ui.closePanel();
+    } else if (inPanel) ui.setBusy("");
+    else ui.closePanel();
+    // An answer in words that also points ends as answered, whatever the visitor does next. Answers are not billed.
+    // The pointer stays up until the visitor clicks anywhere or goes to another page.
+    if (inPanel && reply.status === "done") {
+      early?.stop();
+      this.endRun(true);
+      ui.setState("finished");
+      this.reportEnding("answered");
+      this.leavePointerUp();
+      return;
+    }
     // "done" with a pointer is the model calling this the last step. It has
     // not seen what the step does: the click may open a menu, or a field that
     // still needs typing. So it is listened for like any other step, and when
@@ -862,16 +1015,16 @@ export class Guide {
       this.endRun();
       ui.setState("finished");
       this.reportEnding(arrived ? "finished" : "shown");
-      const ended = this.run;
-      const dismiss = () => ended === this.run && ui.clear();
-      document.addEventListener("click", dismiss, { capture: true, once: true });
-      this.stopWaiting = () => document.removeEventListener("click", dismiss, true);
+      this.leavePointerUp();
       return;
     }
     this.showingLast = last;
     // A guide that stops on the last pointer ended there. After following steps, the visitor is on the screen
     // they asked for. A first answer, or a hand-over, is finished only once its control is used.
     this.unconfirmed = last ? (arrived && !handover ? "finished" : "shown") : undefined;
+    // A guide that got there is reported finished the moment its last pointer shows: the visitor may close the tab
+    // with it on show, and the look that follows is the guide's own business. Its steps keep the guide's id.
+    if (this.unconfirmed === "finished") this.sendOutcome("finished");
     // At the hand-over the visitor may go back to a field to check it: only the commit, or leaving, ends it.
     how.anyClick = last && !handover;
     how.keys = keysAsked(reply.say);
@@ -896,8 +1049,13 @@ export class Guide {
       }
       // The last step was there to be used or left. Doing something else puts it away, with no more questions.
       if (last && !what.onTarget) return this.end(this.unconfirmed ?? "shown");
-      // The control the last answer pointed at was used.
-      if (last) this.unconfirmed = "finished";
+      // The control the last answer pointed at was used: finished, and said so at once, before the click can take the page away.
+      if (last) {
+        this.unconfirmed = "finished";
+        this.sendOutcome("finished");
+      }
+      // From here it is a guide. An answer in the panel has been read, and the pointer needs the room.
+      if (inPanel) ui.clearAnswer();
       this.strayed = what.strayed;
       this.stopField?.();
       // Saved straight away: if this click loads a new page, the next page needs to know about it.
@@ -1303,8 +1461,8 @@ export class Guide {
     });
   }
 
-  /** Stops everything a running guide keeps going. Whatever is on show stays. */
-  private endRun() {
+  /** Stops everything a running guide keeps going. Whatever is on show stays. `keepPanel` leaves the panel open, with an answer in it. */
+  private endRun(keepPanel = false) {
     this.run++;
     this.endActing();
     this.stopWaiting?.();
@@ -1314,7 +1472,36 @@ export class Guide {
     this.watchPage(false);
     forget();
     this.ui.setBusy("");
-    this.ui.closePanel();
+    if (!keepPanel) this.ui.closePanel();
+  }
+
+  /**
+   * The pointer on show, once its guide is over, stays up until the visitor
+   * clicks anywhere or goes to another page some other way, like the back button.
+   */
+  private leavePointerUp() {
+    const ended = this.run;
+    const { ui } = this;
+    let stopAddress = () => {};
+    const unlisten = () => {
+      document.removeEventListener("click", dismiss, true);
+      stopAddress();
+    };
+    const dismiss = () => {
+      unlisten();
+      if (ended === this.run) ui.clear();
+    };
+    document.addEventListener("click", dismiss, true);
+    stopAddress = onAddressChange(dismiss);
+    this.stopWaiting = unlisten;
+  }
+
+  /** Ends a question whose reply is in the panel (Answers): nothing to wait for, and the ask box comes back under the answer. */
+  private conclude(outcome: GuideOutcome) {
+    this.endRun(true);
+    this.ui.clear();
+    this.ui.setState("finished");
+    this.reportEnding(outcome);
   }
 
   /** Ends the guide with nothing more to say. */
@@ -1340,10 +1527,53 @@ export class Guide {
   private reportEnding(outcome: GuideOutcome) {
     const id = this.id;
     if (!id) return;
+    // What the server has: a guide whose ending was sent before it was over keeps that ending.
+    const ended = this.reported ?? outcome;
+    if (!this.reported) this.report(id, { outcome });
     this.id = "";
+    this.reported = undefined;
     this.unconfirmed = undefined;
-    this.report(id, { outcome });
-    if (ASK_IF_HELPED.includes(outcome)) this.ui.askIfHelped((helped) => this.report(id, { helped }));
+    // A finished guide is one the visitor followed to the end, which says as much as a "Yes".
+    if (ended === "finished") this.misses = 0;
+    else if (outcome !== "stopped") this.misses++;
+    if (ASK_IF_HELPED.includes(outcome)) {
+      this.ui.askIfHelped((helped) => {
+        this.report(id, { helped });
+        if (helped) this.misses = 0;
+        // "No" is the plainest sign that a person is needed.
+        else this.offerPerson(id);
+      });
+    }
+    // A person is offered when Haptic has just said it can't help, and when a few questions in a row have got nowhere.
+    // Not after every reply: most questions don't need one. And not for a question that had nothing to do with the site.
+    if (outcome === "not_covered" || outcome === "sensitive" || (this.misses >= OFFER_PERSON_AFTER && outcome !== "off_topic")) this.offerPerson(id);
+  }
+
+  /**
+   * Shows the button that leads to a person, if the site has such a way.
+   *
+   * The page hears about it first, as a "haptic:handoff" event on the
+   * document, with the conversation and the page. A site that cancels the
+   * event (preventDefault) has taken over, say by opening its own chat with
+   * the conversation filled in, and the widget does nothing more.
+   */
+  private offerPerson(guide: string) {
+    const way = this.handoff;
+    if (!way) return;
+    const { config } = way;
+    const transcript = this.transcript;
+    const path = currentPath();
+    const took = () => this.report(guide, { handoff: true });
+    const open = () => {
+      const heard = new CustomEvent("haptic:handoff", { cancelable: true, detail: { question: this.goal, path, transcript } });
+      if (!document.dispatchEvent(heard)) return took();
+      if (config.url) window.open(config.url, "_blank", "noopener");
+      else if (config.email) location.href = mailTo(config.email, transcript, path);
+      took();
+    };
+    // The server records that the form was used when it passes it on, so the widget doesn't report it twice.
+    const send = config.form ? (email: string, note: string) => way.send({ guide, email, note, path, transcript }) : undefined;
+    this.ui.offerHandoff(config.label, open, send);
   }
 
   /** Saves the guide for the next page. `shown` is a step pointed at whose reply is still coming, counted as done. */
@@ -1351,8 +1581,10 @@ export class Guide {
     const history: HistoryTurn[] = shown ? [...this.history, { role: "user", text: shown.user }, { role: "assistant", text: shown.assistant }] : this.history;
     const saved: SavedGuide = {
       ...(this.id ? { id: this.id } : {}),
+      ...(this.reported ? { reported: this.reported } : {}),
       goal: this.goal,
       history: history.slice(-MAX_HISTORY),
+      ...(this.thread.length ? { thread: this.thread } : {}),
       step: shown ? this.step + 1 : this.step,
       path: currentPath(),
       savedAt: Date.now(),
@@ -1368,6 +1600,18 @@ export class Guide {
       // Storage full or blocked. The guide just won't survive a page load.
     }
   }
+}
+
+/** A link that opens the visitor's own mail program, with the conversation written into the message. */
+function mailTo(address: string, transcript: TranscriptTurn[], path: string): string {
+  const lines = transcript.map((turn) => `${turn.role === "user" ? "Me" : "Haptic"}: ${turn.text}`);
+  // Mail programs give up on a very long link, so the oldest lines go first.
+  let body = "";
+  for (const line of lines.reverse()) {
+    if (body.length + line.length > 1500) break;
+    body = `${line}\n${body}`;
+  }
+  return `mailto:${address}?subject=${encodeURIComponent("A question Haptic couldn't answer")}&body=${encodeURIComponent(`\n\n---\nI was on ${location.origin}${path} and asked Haptic:\n${body}`)}`;
 }
 
 /** A random v4 UUID. crypto.randomUUID exists only on https pages, and some customers test on plain http. */
@@ -1711,6 +1955,8 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     if (!waiting(heard, now) && ++idle % 5) return;
     feed({ type: "tick", at: now, fate: fate() });
   }), 100);
+  // Back, forward and anything else that changes the address in a single-page app is heard at once, not at the next look.
+  const stopAddress = onAddressChange(safely(() => feed({ type: "tick", at: performance.now(), fate: fate() })));
 
   const listeners = ([
     [document, "pointerdown", onPress],
@@ -1726,6 +1972,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   ] as [EventTarget, string, (event: Event) => void][]).map(([on, type, listener]) => [on, type, safely(listener)] as const);
   const stop = () => {
     clearInterval(timer);
+    stopAddress();
     watch.stop();
     for (const [on, type, listener] of listeners) on.removeEventListener(type, listener, true);
   };
@@ -2197,6 +2444,8 @@ interface Settling {
   fetches?: boolean;
   /** Wait past `maxMs`, up to the longer limit, for as long as the page says it is loading. */
   patient?: boolean;
+  /** A quiet page is not enough: the page has to change at least once first, still no longer than `maxMs`. For an address that changed before its page was drawn. */
+  untilChanged?: boolean;
 }
 
 /**
@@ -2205,9 +2454,11 @@ interface Settling {
  * keeps changing, up to `maxMs`: longer only while the page itself says it is
  * loading, and a little longer when data the click asked for has not come.
  */
-export function settle(ignore: Element, { quietMs = 300, maxMs = 3000, since, used, fetches = false, patient = true }: Settling = {}): Promise<void> {
+export function settle(ignore: Element, { quietMs = 300, maxMs = 3000, since, used, fetches = false, patient = true, untilChanged = false }: Settling = {}): Promise<void> {
   return new Promise((resolve) => {
     let quiet: ReturnType<typeof setTimeout>;
+    /** Anything on the page has changed since this began. */
+    let changed = false;
     let late: ReturnType<typeof setTimeout>;
     let mark: Element | undefined;
     /** Something on the page other than the used control has changed since this began. */
@@ -2223,6 +2474,7 @@ export function settle(ignore: Element, { quietMs = 300, maxMs = 3000, since, us
       resolve();
     };
     const check = () => {
+      if (untilChanged && !changed) return restart();
       mark = loadingMark(ignore);
       if (mark) return restart();
       const more = requests.stillComing(since, performance.now(), fetches, answered);
@@ -2239,6 +2491,7 @@ export function settle(ignore: Element, { quietMs = 300, maxMs = 3000, since, us
     const observer = new MutationObserver((records) => {
       const page = records.filter((record) => record.target !== ignore && !ignore.contains(record.target));
       if (!page.length) return;
+      changed = true;
       // A data- attribute is the page's own bookkeeping, which a visitor never sees: it is not an answer.
       if (page.some((record) => !isUsed(record) && !(record.type === "attributes" && record.attributeName?.startsWith("data-")))) answered = true;
       restart();

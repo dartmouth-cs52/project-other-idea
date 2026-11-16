@@ -152,6 +152,9 @@ export async function open(browser: Browser, set: GuideSet, path: string, answer
   if (!set.hasTag) await context.addInitScript(addTag(`${api}/widget.js`, set.siteId));
 
   const widget = await widgetSource();
+  // Anything else the widget posts to its server, like the outline of a page it learns from or a visitor's note to a
+  // person, is answered here too, so a run never reaches a real server's records. Added first, so the routes below come before it.
+  await context.route(`${api}/v1/**`, (route: Page) => route.fulfill({ status: 200, contentType: "application/json", headers: CORS, body: JSON.stringify({ ok: true }) }));
   await context.route(`${api}/widget.js`, (route: Page) => route.fulfill({ status: 200, contentType: "text/javascript", headers: CORS, body: widget }));
   const acting = site ? publicActing(site) : undefined;
   const served: PublicSiteConfig = { name: site?.name ?? "", appearance: site?.appearance ?? DEFAULT_APPEARANCE, ...(acting ? { acting } : {}), ...config };
@@ -429,8 +432,8 @@ export async function saysOrWhy(page: Page, says: Says, sentence: string, atStar
  */
 export async function ask(page: Page, goal: string): Promise<void> {
   if (!(await page.locator("haptic-root .panel").isVisible())) await page.locator("haptic-root .launcher").click();
-  await page.locator("haptic-root .panel input").fill(goal);
-  await page.locator("haptic-root .panel input").press("Enter");
+  await page.locator("haptic-root .ask input").fill(goal);
+  await page.locator("haptic-root .ask input").press("Enter");
 }
 
 let bundled: Promise<string> | undefined;

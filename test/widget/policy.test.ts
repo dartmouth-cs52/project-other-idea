@@ -96,8 +96,8 @@ for (const [name, policy] of Object.entries(POLICIES)) {
       assert.deepEqual(drawn.launcher, { height: 40, background: "rgb(28, 25, 23)", position: "fixed" }, "the launcher is not drawn with the widget's own styles");
 
       await page.locator("haptic-root .launcher").click();
-      await page.locator("haptic-root .panel input").fill("how do I export my orders");
-      await page.locator("haptic-root .panel input").press("Enter");
+      await page.locator("haptic-root .ask input").fill("how do I export my orders");
+      await page.locator("haptic-root .ask input").press("Enter");
       for (const until = Date.now() + 10_000; !asked.length && Date.now() < until; ) await page.waitForTimeout(50);
       assert.equal(asked.length, 1, "the question never reached Haptic");
       await page.locator("haptic-root .cursor").waitFor({ state: "visible", timeout: 5000 });

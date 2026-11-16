@@ -124,3 +124,83 @@ test("while Haptic acts, a reply that is stuck does nothing, even with something
     await session.close();
   }
 });
+
+// No guide that got there goes unreported. A visitor who has what they asked for on screen often just closes the
+// tab, so a guide is reported the moment its ending is known, and a page that goes with its ending still open
+// reports it as it goes. These were found in review: on each, nothing at all used to reach the server. The third,
+// a tab closed on a first answer, is in test/browser/leaving.test.ts, where the server is a real one: a request a
+// closing page sends is not seen by this harness, which answers in the browser.
+
+/** Every report the widget sends from any page of the session, the page being closed included. */
+function allReports(session: Session): Record<string, unknown>[] {
+  const sent: Record<string, unknown>[] = [];
+  session.page.context().on("request", (request: { url(): string; postData(): string | null }) => {
+    const found = /\/v1\/guides\/([^/]+)\/report$/.exec(request.url());
+    if (found) sent.push({ guide: found[1], ...JSON.parse(request.postData() ?? "{}") });
+  });
+  return sent;
+}
+const outcomes = (sent: Record<string, unknown>[]) => sent.filter((report) => "outcome" in report).map((report) => report.outcome);
+
+test("a guide that got there is reported finished the moment its last pointer shows, its last look keeps its id, and closing the tab sends nothing more", async () => {
+  const PAGE = `<h1>Account</h1><button id="settings" type="button">Settings</button>
+    <div id="more" hidden><button id="billing" type="button">Billing</button><p id="open" hidden>Billing details</p></div>
+    <script>
+      document.getElementById('settings').addEventListener('click', () => (document.getElementById('more').hidden = false));
+      document.getElementById('billing').addEventListener('click', () => (document.getElementById('open').hidden = false));
+    </script>`;
+  const session = await start(PAGE, (request, index) =>
+    index === 0 ? point(request, "Settings", "Open Settings.") : index === 1 ? point(request, "Billing", "Billing is here.", "done") : words("Your billing details are open."),
+  );
+  const sent = allReports(session);
+  try {
+    await session.ask("where is billing");
+    await session.untilState("pointing");
+    await session.page.locator("#settings").click();
+    await session.untilAsked(2);
+    await session.until(async () => (await session.pointed()) === "billing", "the last pointer");
+    await session.until(() => outcomes(sent).length === 1, "the ending to be reported while the last pointer is on show");
+    const guide = session.requests[0]?.guide;
+    assert.deepEqual(sent, [{ guide, outcome: "finished", site: "site_widget_test" }]);
+    // The visitor uses it, and the look at what came of it is a step of the same guide. Nothing is reported twice.
+    await session.page.locator("#billing").click();
+    const look = await session.untilAsked(3);
+    assert.equal(look.guide, guide, "the last look carried another id, or none");
+    assert.equal(look.closing, true);
+    await session.untilState("finished");
+    await session.page.waitForTimeout(300);
+    assert.deepEqual(outcomes(sent), ["finished"]);
+    assert.equal(await session.page.locator("haptic-root .helped").isVisible(), true, "Did this help? was not asked");
+    await session.page.close({ runBeforeUnload: true });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.deepEqual(outcomes(sent), ["finished"]);
+  } finally {
+    await session.close();
+  }
+});
+
+test("a first answer that points at a link to another site is reported finished when the visitor clicks it, before the page goes", async () => {
+  const session = await start({ "/": "<h1>Home</h1>", "/portal": "<h1>Billing portal</h1><p>Elsewhere.</p>" }, (request) => point(request, "Billing portal", "Open the billing portal.", "done"));
+  // A link to the same server under another name, which is another origin: the guide cannot follow it there.
+  const other = session.origin.replace("127.0.0.1", "localhost");
+  await session.page.evaluate((href: string) => {
+    const link = document.createElement("a");
+    link.id = "portal";
+    link.href = href;
+    link.textContent = "Billing portal";
+    document.body.prepend(link);
+  }, `${other}/portal`);
+  const sent = allReports(session);
+  try {
+    await session.ask("open the billing portal");
+    await session.until(async () => (await session.pointed()) === "portal", "the pointer on the link");
+    assert.deepEqual(sent, [], "nothing is reported before the visitor uses it");
+    await session.page.locator("#portal").click();
+    await session.page.waitForURL(/localhost.*\/portal/);
+    await session.until(() => outcomes(sent).length > 0, "the ending to be reported");
+    assert.deepEqual(sent, [{ guide: session.requests[0]?.guide, outcome: "finished", site: "site_widget_test" }]);
+    assert.equal(session.requests.length, 1, "nothing was asked from the other site");
+  } finally {
+    await session.close();
+  }
+});

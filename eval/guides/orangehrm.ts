@@ -98,7 +98,7 @@ const RECORDING_AIDS = `(() => {
       try { goal = JSON.parse(sessionStorage.getItem("haptic.guide") || "{}").goal || ""; } catch (error) {}
       if (asked !== before || leaving || !root || !goal) return;
       root.querySelector(".stop").click();
-      const input = root.querySelector(".panel input");
+      const input = root.querySelector(".ask input");
       input.value = goal;
       input.form.requestSubmit();
     }, 4000);

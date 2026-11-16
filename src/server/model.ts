@@ -2,13 +2,17 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { checkAction } from "../shared/act-rules.ts";
-import { ACTING_LIMITS, ACTS, actionsAllowed, type Act, type SiteContext, type SnapElement, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { BLOCKED_SAY, isBlocked } from "../shared/corrections.ts";
+import { ACTING_LIMITS, ACTS, actionsAllowed, MODES, REASONS, type Act, type Mode, type Reason, type SiteContext, type SnapElement, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { actingFor, type NotActing } from "./acting.ts";
+import { declinedReply, finishAnswer, neverDecided, type Finished, type ModelReply, type Overruled } from "./answers.ts";
 import type { Ceiling } from "./budget.ts";
 import { namedButNotDone, namedButNotDoneNote, namedButNotPointed, namedButNotPointedNote, pressLeftToVisitor } from "./check.ts";
 import { costOf } from "./prices.ts";
-import { buildSystemPrompt, buildUserMessage } from "./prompt.ts";
-import { checkSay, type Rule } from "./rules.ts";
+import { answersOn, articlesOf, buildSystemPrompt, buildUserMessage } from "./prompt.ts";
+import { checkSay, SAY_MAX_CHARS, SAY_MAX_SENTENCES, SAY_WITHOUT_WORDS, tidySay, type Rule } from "./rules.ts";
+
+export { SAY_MAX_CHARS, SAY_MAX_SENTENCES, SAY_WITHOUT_WORDS, tidySay };
 
 // One model call per step. HAPTIC_MODEL picks the model, or "mock" for a
 // keyword matcher that needs no API key. The reply is streamed, so the control
@@ -18,6 +22,11 @@ import { checkSay, type Rule } from "./rules.ts";
 // (acting.ts). Only then is the model given the act instructions and the act
 // reply's shape, its reply checked with the same rules the widget uses, and
 // `mode: "act"` put on it: the widget acts on no reply without that.
+//
+// On a site with Answers on, a guide's step may also answer in words, or say
+// it can't help (answers.ts). An act step never does: the visitor asked
+// Haptic to do something, so it is asked and checked as an act step, Answers
+// or not.
 
 type Effort = "low" | "medium" | "high";
 /** How long the provider keeps a site's rules and knowledge ready between steps. */
@@ -124,6 +133,14 @@ export interface TurnMeasure {
   ms: number;
   /** Until the control to point at was known, which is when the pointer can start moving. */
   msToTarget: number;
+  /** On a site with Answers on: until the kind of reply was known, which is the first thing the visitor can be shown. */
+  msToMode?: number;
+  /** The help articles an answer rests on, by where each came from. Empty for anything else. */
+  cited: string[];
+  /** Set when the server did not let the reply through as the model wrote it, with why. */
+  overruled?: Overruled;
+  /** Controls an answer named that are on none of the pages Haptic knows. The articles in `cited` may be out of date. */
+  unseen?: string[];
   /** The sentence exactly as the model wrote it, before it was tidied and checked. The benchmark compares the two. */
   wrote: string;
   /** The rules in rules.ts that changed the sentence. Empty for nearly every step. */
@@ -203,123 +220,24 @@ function checked(reply: TurnReply, request: TurnRequest, commitWords: readonly s
   }
 }
 
-/** The reply's first field, as soon as it is complete in the text streamed so far. */
+/**
+ * The reply on a site with Answers on. The order matters: the kind of reply
+ * and the control to point at come first, so both can be acted on while the
+ * sentence is still being written.
+ */
+const AnswerReply = z.object({
+  mode: z.enum(MODES).describe("\"guide\": a step, or the sentence that ends a guide. \"answer\": an explanation taken from the help articles, with or without a pointer. \"cannot_help\": neither is possible."),
+  target: z.string().nullable().describe("Id of the element to point at, like \"e12\", or null. Always null with \"cannot_help\"."),
+  status: z.enum(["continue", "done"]).describe("\"continue\" if the visitor must act on the target before the next step. Otherwise \"done\". Always \"done\" with \"cannot_help\"."),
+  reason: z.enum(REASONS).nullable().describe("null unless mode is \"cannot_help\". Then \"not_covered\", \"sensitive\" or \"off_topic\"."),
+  say: z.string().describe("With \"guide\", one or two short sentences. With \"answer\", one to four. With \"cannot_help\", an empty string."),
+  sources: z.array(z.string()).describe("Ids of the help articles the answer is taken from, like [\"a2\"]. Empty unless mode is \"answer\"."),
+  controls: z.array(z.string()).describe("The visible label of each control the answer tells the visitor to use, like [\"Send invite\"]. Empty unless mode is \"answer\"."),
+});
+
+/** The first fields of a reply, as soon as each is complete in the text streamed so far. */
+const MODE_SO_FAR = /"mode"\s*:\s*"([a-z_]+)"/;
 const TARGET_SO_FAR = /"target"\s*:\s*(?:"([^"]*)"|null)/;
-
-/** The most a visitor is shown. Of 1,555 live sentences, every one that was fine had at most four sentences and 258 characters. */
-export const SAY_MAX_SENTENCES = 4;
-export const SAY_MAX_CHARS = 300;
-
-// The sentence is one string in the reply's JSON, and it is read only when the
-// whole reply has arrived. So nothing wrong with it comes from cutting a reply
-// that is still streaming: the model wrote it. About one live sentence in
-// thirty has something that is not for the visitor, nearly always after its
-// last full stop: a line-break tag, the reply's own closing quote mark and
-// brace written with the wrong characters, a character with no width, a stray
-// word. The tests hold every kind that was seen, as it was written.
-
-/** What ends a sentence. */
-const STOP = ".!?…。！？";
-/** A stop, then any quote marks or brackets that close with it, and nothing more. */
-const PROPER_END = new RegExp(`[${STOP}]["'”’»«)\\]]*$`);
-/**
- * Tags that break a line. The sentence is shown as plain text, so a tag would
- * be read out as one. Only the line-break tag has been seen. A name in angle
- * brackets that is not one of these, like a key, is left alone.
- */
-const BREAK_TAG = /<\/?(?:br|p|div)\s*\/?>/gi;
-/** Tags that only dress the words between them. */
-const DRESS_TAG = /<\/?(?:b|i|em|strong|u|code|span)\s*\/?>/gi;
-/** Characters that take no room and mean nothing here. */
-const NO_WIDTH = /[\u200B\u2060\uFEFF]/g;
-/** The two joiners are part of how some languages are written, but only between letters, never beside a space or at an end. */
-const LOOSE_JOINER = /(?<=^|[\s.!?,;:])[\u200C\u200D]+|[\u200C\u200D]+(?=$|[\s.!?,;:])/g;
-/** A check mark or a picture where a sentence would start, with the marks that can trail a picture. Inside a sentence it may be part of a control's name. */
-const SIGN_AFTER_STOP = /(?<=[.!?…])\s*(?:[\p{So}\u{1F3FB}-\u{1F3FF}\uFE0F\u200D]+\s*)+/gu;
-/** "its menu.Step 1": a full stop with a new sentence right behind it. */
-const NO_SPACE_AFTER_STOP = /(\p{Ll}[.!?])(?=\p{Lu}\p{Ll})/gu;
-/**
- * What can be left stuck to the last full stop: quote marks and stops and then
- * one word of code ("start.”.replace"), or one bare word ("list.markdown").
- * A bare word has to be five letters or more, which spares the end of a file
- * name or a web address when a sentence stops on one with no full stop.
- */
-const SCRAP = /^(?:["'”’»«)\]}.]+[A-Za-z_$][\w$]*(?:\(\))?|[A-Za-z]{5,})$/;
-const OPENS: Record<string, string> = { "}": "{", "]": "[", ")": "(" };
-
-const count = (text: string, chars: string) => [...text].filter((char) => chars.includes(char)).length;
-
-/** Takes off what follows the last sentence and is not part of it. */
-function withoutLeftovers(text: string): string {
-  for (;;) {
-    const before = (text = text.trimEnd());
-    const last = text.at(-1) ?? "";
-    const rest = text.slice(0, -1);
-    // A bracket that closes nothing: most often the brace that ends the reply itself.
-    if (OPENS[last] && count(text, last) > count(text, OPENS[last])) text = rest;
-    // A quote mark with no partner. French and German marks are counted with their own kind.
-    else if ('"“”'.includes(last) && count(text, '"“”„') % 2) text = rest;
-    else if ("«»".includes(last) && count(text, "«»") % 2) text = rest;
-    // A single one counts only after a stop, and only when no word in the sentence opens with one: "we'll" does not.
-    else if ("'’".includes(last) && STOP.includes(rest.at(-1) ?? " ") && !/(?:^|[\s(])['‘’]\S/.test(rest)) text = rest;
-    // A comma, colon or semicolon after the last stop and any marks that close with it ends nothing: it is the reply's own JSON, written as text.
-    else if (",;:".includes(last) && PROPER_END.test(rest)) text = rest;
-    else if (!PROPER_END.test(text)) {
-      // The last run of characters holds a full stop with more stuck to it.
-      const word = /\S+$/.exec(text)?.[0] ?? "";
-      const stuck = /^.*?\p{L}[.!?](?=\D)/su.exec(word)?.[0];
-      if (stuck && word.length - stuck.length > 1 && SCRAP.test(word.slice(stuck.length))) text = text.slice(0, text.length - word.length + stuck.length);
-    }
-    if (text === before) return text;
-  }
-}
-
-/** Where one sentence ends and the next begins. A lower-case letter after the stop means it was a short form, like "e.g.". */
-const BETWEEN_SENTENCES = /[.!?…]["'”’»)\]]*(?=\s+[^\s\p{Ll}])|[。！？]["”’」』）]*(?=.)/gsu;
-
-/** Keeps to the limits above, cutting after a whole sentence wherever one ends in time. */
-function capped(text: string): string {
-  let sentences = 0;
-  let cut = 0;
-  for (const end of text.matchAll(BETWEEN_SENTENCES)) {
-    const at = end.index + end[0].length;
-    if (at > SAY_MAX_CHARS) break;
-    cut = at;
-    if (++sentences === SAY_MAX_SENTENCES) return text.slice(0, cut);
-  }
-  if (text.length <= SAY_MAX_CHARS) return text;
-  if (cut) return text.slice(0, cut);
-  // One sentence longer than the limit: stop at a word, and show that there was more.
-  const room = text.slice(0, SAY_MAX_CHARS - 1);
-  return room.slice(0, Math.max(room.lastIndexOf(" "), 0) || room.length).replace(/[\s,;:(–-]+$/, "") + "…";
-}
-
-/**
- * The sentence a visitor reads, tidied. It comes out as plain prose on one
- * line: no tags, no characters without width, no blank lines or double
- * spaces, a space after every full stop, nothing left over after the last
- * sentence, and no longer than a caption can show. A sentence that was fine
- * comes out exactly as it went in.
- */
-export function tidySay(say: string): string {
-  const prose = say
-    .replace(BREAK_TAG, " ")
-    .replace(DRESS_TAG, "")
-    .replace(NO_WIDTH, "")
-    .replace(LOOSE_JOINER, "")
-    .replace(SIGN_AFTER_STOP, " ")
-    .replace(/\s*[\n\r]\s*/g, " ")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(NO_SPACE_AFTER_STOP, "$1 ")
-    .trim();
-  return capped(withoutLeftovers(prose));
-}
-
-/** What a visitor reads when every sentence the model wrote had to be dropped. */
-export const SAY_WITHOUT_WORDS = {
-  pointing: "This is the one to use.",
-  nothing: "I can't help with that one.",
-} as const;
 
 /** Thrown for failures the visitor's browser should hear about with a specific status. */
 export class TurnError extends Error {
@@ -330,6 +248,17 @@ export class TurnError extends Error {
     readonly usd = 0,
   ) {
     super(message);
+  }
+}
+
+/**
+ * Thrown when the visitor's widget hung up before the step was ready, because
+ * the page changed under it. The model call is stopped, and what it had cost
+ * so far is still counted.
+ */
+export class TurnCancelled extends TurnError {
+  constructor(usd = 0) {
+    super(499, "The widget hung up before the step was ready.", usd);
   }
 }
 
@@ -359,9 +288,10 @@ export function ceilingFor(site: SiteContext, request: TurnRequest, settings: Tu
   const known = promptTokens.get(site) ?? {};
   promptTokens.set(site, known);
   const prompt = (known[mode] ??= size(buildSystemPrompt(site, act ? "act" : undefined)));
-  const input = size(buildUserMessage(request)) + request.history.reduce((sum, turn) => sum + size(turn.text), 0);
+  const input = size(buildUserMessage(request, site)) + request.history.reduce((sum, turn) => sum + size(turn.text), 0);
   const cost = (cacheWrite: number, cacheRead: number) => costOf(settings.model, { input, cacheRead, cacheWrite, output: MAX_TOKENS }, settings.cache);
-  const twice = settings.recheck === "ask" && (act || (request.step === 0 && !request.event));
+  // A guide's step on a site with Answers on is never asked twice (see measureTurn).
+  const twice = settings.recheck === "ask" && (act || (!answersOn(site) && request.step === 0 && !request.event));
   const again = twice ? cost(0, prompt) : 0;
   return { cold: cost(prompt, 0) + again, warm: cost(0, prompt) + again };
 }
@@ -370,16 +300,26 @@ export async function runTurn(site: SiteContext, request: TurnRequest): Promise<
   return (await measureTurn(site, request)).reply;
 }
 
+/** What a caller is told while a reply is still forming. Each is called at most once. */
+export interface Watch {
+  /** The kind of reply, on a site with Answers on. */
+  onMode?(mode: Mode): void;
+  /** The control to point at, and only if it is on the page the model was shown. */
+  onTarget?(id: string): void;
+}
+
 /**
- * One step, timed. `onTarget` is called once, as soon as the control to point
- * at is known and only if it is on the page the model was shown. The benchmark
- * calls this with the settings it wants to compare.
+ * One step, timed. `watch` hears the kind of reply and the control to point at
+ * as soon as each is known: the control only if it is on the page the model
+ * was shown. The benchmark calls this with the settings it wants to compare.
  */
 export async function measureTurn(
   site: SiteContext,
   asked: TurnRequest,
   settings: TurnSettings = SETTINGS,
-  onTarget?: (id: string) => void,
+  watch: Watch = {},
+  /** Aborted when the widget hangs up. The model call stops and TurnCancelled is thrown. */
+  signal?: AbortSignal,
 ): Promise<TurnMeasure> {
   const started = Date.now();
   // Decided again on every step, from the site as it is now.
@@ -387,42 +327,65 @@ export async function measureTurn(
   // A step answered as a guide is asked exactly as a guide's, whatever the widget asked for. From here, `request.mode` is the mode answered in.
   const request: TurnRequest = acting.act || asked.mode === undefined ? asked : withoutMode(asked);
   const actingMeasure: TurnMeasure["acting"] = asked.mode === "act" ? (acting.act ? {} : { refused: acting.refused ?? "site" }) : undefined;
+  // Answers in words are for a guide's steps. A step Haptic was asked to do is answered as an act step, Answers or not.
+  const answers = !acting.act && answersOn(site);
 
   // Past the site's cap, acting ends without asking the model. The widget's own cap comes first; this is for a widget that does not keep it.
   if (acting.act && request.step > actionsAllowed(acting.settings) + ACTING_LIMITS.stepAllowance) {
     const reply: TurnReply = { target: null, status: "done", say: ACT_CAP_SAY, mode: "act", withheld: "cap" };
     const ms = Date.now() - started;
-    return { reply, model: "none", ms, msToTarget: ms, wrote: reply.say, broke: [], usd: 0, acting: { ...actingMeasure, capped: true } };
+    return { reply, model: "none", ms, msToTarget: ms, wrote: reply.say, broke: [], cited: [], usd: 0, acting: { ...actingMeasure, capped: true } };
   }
 
   let msToTarget: number | undefined;
+  let msToMode: number | undefined;
+  let declining = false;
   let pointed = false;
-  const onPage = (id: string | null): id is string => id !== null && request.snapshot.elements.some((element) => element.id === id);
+  const onPage = (id: string | null | undefined): id is string => !!id && request.snapshot.elements.some((element) => element.id === id);
+  // A control the site's owner ruled out is never pointed at, whatever the model wrote. Not even for a moment, before the reply is checked.
+  const blocked = (id: string | null | undefined) => !!id && isBlocked(request.snapshot.elements.find((element) => element.id === id), site.blocked);
+  const modeKnown = (mode: string | undefined) => {
+    if (msToMode !== undefined || !MODES.includes(mode as Mode)) return;
+    msToMode = Date.now() - started;
+    declining = mode === "cannot_help";
+    watch.onMode?.(mode as Mode);
+  };
   // A reply that names nothing may be followed by one that does, when the model is asked again, and that one is sent early too.
   const targetKnown = (id: string | null) => {
     if (pointed) return;
     if (msToTarget === undefined || onPage(id)) msToTarget = Date.now() - started;
-    if (!onPage(id)) return;
+    // A reply that declines points at nothing, whatever it names.
+    if (!onPage(id) || declining || blocked(id)) return;
     pointed = true;
-    onTarget?.(id);
+    watch.onTarget?.(id);
   };
 
   let answer: Answer;
   if (settings.model === "mock") {
-    const reply = mockTurn(request);
+    const reply = answers ? mockAnswerTurn(site, request) : mockTurn(request);
     if (mockPauseMs > 0) {
+      modeKnown(reply.mode);
       targetKnown(reply.target);
-      await new Promise((resolve) => setTimeout(resolve, mockPauseMs));
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, mockPauseMs);
+        signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(new TurnCancelled(mockUsd));
+        });
+      });
     }
+    if (signal?.aborted) throw new TurnCancelled(mockUsd);
     answer = { reply, model: "mock", usd: mockUsd };
-  } else answer = await claudeTurn(site, request, settings, targetKnown);
+  } else answer = await claudeTurn(site, request, settings, answers, modeKnown, targetKnown, signal);
   // The model can only point at what's on the page it was shown.
   if (!onPage(answer.reply.target)) answer.reply.target = null;
 
-  const checking = settings.model !== "mock" && settings.recheck !== "off";
+  // The second look is for a guide's steps and for acting. On a site with Answers on, an answer that names a control
+  // without pointing at it is how an answer is written, so it is not asked about again. Nor is a reply the provider declined.
+  const checking = settings.model !== "mock" && settings.recheck !== "off" && !answers && !answer.declined;
   // In act mode at any step: a "continue" that points at nothing stops the run, so a control it names that Haptic could press is asked about.
-  const stalled = checking && acting.act ? namedButNotDone(request, answer.reply, acting.settings.commitWords) : undefined;
-  const named = checking && !stalled ? namedButNotPointed(request.snapshot, answer.reply) : undefined;
+  const stalled = checking && acting.act ? namedButNotDone(request, asStep(answer.reply), acting.settings.commitWords) : undefined;
+  const named = checking && !stalled ? namedButNotPointed(request.snapshot, asStep(answer.reply)) : undefined;
   const found = stalled ?? named;
   if (found) {
     const ask = settings.recheck === "ask" && (stalled !== undefined || (request.step === 0 && !request.event));
@@ -436,10 +399,12 @@ export async function measureTurn(
     if (ask) {
       try {
         const note = stalled ? namedButNotDoneNote(stalled) : namedButNotPointedNote(found);
-        const again = await claudeTurn(site, request, settings, targetKnown, { reply: answer.reply, note });
+        const again = await claudeTurn(site, request, settings, answers, modeKnown, targetKnown, signal, { reply: asStep(answer.reply), note });
         if (!onPage(again.reply.target)) again.reply.target = null;
         answer = { ...again, tokens: added(answer.tokens, again.tokens), usd: answer.usd + again.usd, recheck: answer.recheck };
       } catch (error) {
+        // The visitor's widget hung up: the step is dropped, and both calls are counted.
+        if (error instanceof TurnCancelled) throw new TurnCancelled(answer.usd + error.usd);
         // A second call that failed may still have been paid for.
         if (error instanceof TurnError) answer.usd += error.usd;
         // The first reply is still one the visitor can be shown.
@@ -447,28 +412,68 @@ export async function measureTurn(
       }
     }
   }
-  targetKnown(answer.reply.target);
+
   const wrote = answer.reply.say;
-  const { say, broke } = checkSay(tidySay(wrote));
-  // Nothing fit to show was left. The pointer, if there is one, still says where to go.
-  answer.reply.say = say || (answer.reply.target ? SAY_WITHOUT_WORDS.pointing : SAY_WITHOUT_WORDS.nothing);
-  if (broke.length) console.warn(`turn ${site.id} step ${request.step}: the sentence broke the rules for ${broke.join(", ")}.`);
+  let finished: Finished;
+  if (answer.declined) finished = declinedReply(site, answers);
+  else if (answers) finished = finishAnswer(site, request, answer.reply);
+  else {
+    const { say, broke } = checkSay(tidySay(wrote));
+    // Nothing fit to show was left. The pointer, if there is one, still says where to go.
+    finished = { reply: { ...asStep(answer.reply), say: say || (answer.reply.target ? SAY_WITHOUT_WORDS.pointing : SAY_WITHOUT_WORDS.nothing) }, cited: [], broke };
+  }
+  let reply = finished.reply;
   if (acting.act) {
-    const modelDo = answer.reply.do ?? null;
+    const modelDo = reply.do ?? null;
     // A press the model left to the visitor that Haptic could make itself is made Haptic's, with no model call (check.ts). The check below and the widget's gate judge it as any other.
-    const pressed = pressLeftToVisitor(request, answer.reply, acting.settings.commitWords);
+    const pressed = pressLeftToVisitor(request, reply, acting.settings.commitWords);
     if (pressed) {
       // Ids only: the server's log holds nothing from the visitor's page.
       console.log(`press ${site.id} step ${request.step}: an act reply of "continue" left a click on ${pressed.element.id} to the visitor, which Haptic could press, so Haptic clicks it`);
-      answer.reply = { ...answer.reply, do: "click", enter: null, say: pressed.say };
+      reply = { ...reply, do: "click", enter: null, say: pressed.say };
     }
-    answer.reply = { ...checked(asAct(answer.reply), request, acting.settings.commitWords), mode: "act" };
+    reply = { ...checked(asAct(reply), request, acting.settings.commitWords), mode: "act" };
     answer.acting = { ...actingMeasure, modelDo, ...(pressed ? { converted: true as const } : {}) };
   } else {
-    answer.reply = asGuide(answer.reply);
+    // An answer's reply is already only its own fields (answers.ts). A guide's is its three.
+    if (!answers) reply = asGuide(reply);
     if (actingMeasure) answer.acting = actingMeasure;
   }
-  return { ...answer, ms: Date.now() - started, msToTarget: msToTarget ?? Date.now() - started, wrote, broke };
+  // A control the site's owner ruled out: nothing is pointed at, nothing is done, and the visitor reads a fixed sentence.
+  let overruled = finished.overruled;
+  if (blocked(reply.target)) {
+    reply = { target: null, status: "done", say: BLOCKED_SAY, blocked: true, ...(acting.act ? { do: null, enter: null, commits: false, mode: "act" as const } : answers ? { mode: "guide" as const } : {}) };
+    overruled = "blocked";
+  }
+  modeKnown(reply.mode);
+  targetKnown(reply.target);
+  const { broke, cited, unseen } = finished;
+  if (broke.length) console.warn(`turn ${site.id} step ${request.step}: the sentence broke the rules for ${broke.join(", ")}.`);
+  if (overruled) console.warn(`turn ${site.id} step ${request.step}: the reply was overruled (${overruled}).`);
+
+  const { declined: _declined, reply: _raw, ...rest } = answer;
+  const ms = Date.now() - started;
+  return {
+    ...rest,
+    reply,
+    ms,
+    msToTarget: msToTarget ?? ms,
+    ...(answers ? { msToMode: msToMode ?? ms } : {}),
+    wrote,
+    broke,
+    cited,
+    ...(overruled ? { overruled } : {}),
+    ...(unseen ? { unseen } : {}),
+  };
+}
+
+/** A reply as the model wrote it, as a step: the fields of a guide's or an act reply, and none of an answer's. */
+function asStep(raw: ModelReply): TurnReply {
+  const step: TurnReply = { target: raw.target, status: raw.status, say: raw.say };
+  if (raw.do !== undefined) step.do = raw.do;
+  if (raw.enter !== undefined) step.enter = raw.enter;
+  if (raw.commits !== undefined) step.commits = raw.commits;
+  return step;
 }
 
 /** The request without the mode the widget asked for, for a step answered as a guide. */
@@ -477,7 +482,19 @@ function withoutMode(request: TurnRequest): TurnRequest {
   return rest;
 }
 
-type Answer = Omit<TurnMeasure, "ms" | "msToTarget" | "wrote" | "broke">;
+/** What the model returned, before the server has checked it. */
+interface Answer {
+  reply: ModelReply;
+  /** The model that answered. After a fallback it is not the one asked for. */
+  model: string;
+  tokens?: TurnMeasure["tokens"];
+  /** What the call cost, in US dollars: every call the step made. */
+  usd: number;
+  /** The provider declined the request, so there is no reply to check. */
+  declined?: true;
+  recheck?: TurnMeasure["recheck"];
+  acting?: TurnMeasure["acting"];
+}
 
 function added(one: TurnMeasure["tokens"], two: TurnMeasure["tokens"]): TurnMeasure["tokens"] {
   if (!one || !two) return one ?? two;
@@ -498,7 +515,10 @@ async function claudeTurn(
   site: SiteContext,
   request: TurnRequest,
   settings: TurnSettings,
+  answers: boolean,
+  modeKnown: (mode: string | undefined) => void,
   targetKnown: (id: string | null) => void,
+  signal?: AbortSignal,
   /** The reply to ask about again, and what to tell the model about it. */
   followUp?: { reply: TurnReply; note: string },
 ): Promise<Answer> {
@@ -506,7 +526,7 @@ async function claudeTurn(
   const messages: Anthropic.Beta.BetaMessageParam[] = request.history.map((turn) => ({ role: turn.role, content: turn.text }));
   // The conversation has to start with a user message.
   while (messages[0]?.role === "assistant") messages.shift();
-  messages.push({ role: "user", content: buildUserMessage(request) });
+  messages.push({ role: "user", content: buildUserMessage(request, site) });
   if (followUp) messages.push({ role: "assistant", content: JSON.stringify(followUp.reply) }, { role: "user", content: followUp.note });
 
   // If the model declines a request on policy grounds, the API retries it on a
@@ -530,13 +550,17 @@ async function claudeTurn(
       max_tokens: MAX_TOKENS,
       ...fallback,
       ...(settings.thinking === "off" ? withoutThinking(settings.model) : {}),
-      output_config: { effort: settings.effort, format: request.mode === "act" ? betaZodOutputFormat(ActReply) : betaZodOutputFormat(Reply) },
-      // Rules and site knowledge are the same for every turn on a site, so they're cached: once for guides and once for acting.
+      output_config: {
+        effort: settings.effort,
+        format: request.mode === "act" ? betaZodOutputFormat(ActReply) : answers ? betaZodOutputFormat(AnswerReply) : betaZodOutputFormat(Reply),
+      },
+      // Rules and site knowledge are the same for every turn on a site, so they're cached: once for guides (or answers) and once for acting.
       system: [{ type: "text", text: buildSystemPrompt(site, request.mode), cache_control: { type: "ephemeral", ttl: settings.cache } }],
       messages,
-    });
-    // The reply is JSON with "target" first, so it is the first thing that can be acted on.
+    }, signal ? { signal } : undefined);
+    // The reply is JSON with the fields that can be acted on first: the kind of reply where there is one, then "target".
     stream.on("text", (_delta, soFar) => {
+      if (answers) modeKnown(MODE_SO_FAR.exec(soFar)?.[1]);
       const found = TARGET_SO_FAR.exec(soFar);
       if (found) targetKnown(found[1] ?? null);
     });
@@ -551,6 +575,7 @@ async function claudeTurn(
   } catch (error) {
     const soFar = counted && { ...counted.usage, output_tokens: Math.max(counted.usage.output_tokens ?? 0, Math.ceil(streamed / BYTES_PER_TOKEN)) };
     const paid = counted && soFar ? usdOf(soFar, counted.model, settings.cache, settings.model) : 0;
+    if (signal?.aborted) throw new TurnCancelled(paid);
     if (error instanceof Anthropic.AuthenticationError) throw new TurnError(500, "The server's Anthropic credentials are missing or invalid.", paid);
     if (error instanceof Anthropic.RateLimitError) throw new TurnError(503, "The model is rate limited. Try again shortly.", paid);
     if (error instanceof Anthropic.APIError) throw new TurnError(502, `The model call failed (${error.status ?? "no status"}): ${error.message}`, paid);
@@ -572,7 +597,7 @@ async function claudeTurn(
     cacheWrite: usage.cache_creation_input_tokens ?? 0,
     output: usage.output_tokens,
   };
-  if (response.stop_reason === "refusal") return { reply: { target: null, status: "stuck", say: SAY_WITHOUT_WORDS.nothing }, model: response.model, tokens, usd };
+  if (response.stop_reason === "refusal") return { reply: { target: null, status: "stuck", say: SAY_WITHOUT_WORDS.nothing }, model: response.model, tokens, usd, declined: true };
   if (!response.parsed_output) throw new TurnError(502, `The model's reply couldn't be read (stop reason: ${response.stop_reason}).`, usd);
   return { reply: response.parsed_output, model: response.model, tokens, usd };
 }
@@ -605,21 +630,58 @@ export function scriptMock(...replies: TurnReply[]): void {
 }
 
 /**
+ * The stand-in on a site with Answers on. A question that asks what, why,
+ * when or who is answered with the opening of the help article that shares
+ * the most words with it. Anything else is pointed at as before, and a first
+ * question with nothing to point at is not covered. It exists so that every
+ * kind of reply can be seen without a key, not to be right.
+ */
+function mockAnswerTurn(site: SiteContext, request: TurnRequest): ModelReply {
+  const cannot = (reason: Reason): ModelReply => ({ mode: "cannot_help", target: null, status: "done", reason, say: "", sources: [] });
+  const first = request.step === 0 && !request.event;
+  const goal = request.goal.toLowerCase();
+  if (first && /\b(?:poem|joke|weather|recipe|your instructions|your rules|system prompt)\b/.test(goal)) return cannot("off_topic");
+  if (first && /^(?:what|why|when|who|which|does|do|is|are|can|will|how (?:long|many|often))\b/.test(goal)) {
+    if (neverDecided(request.goal, "")) return cannot("sensitive");
+    const words = new Set(goal.match(/[a-z]{4,}/g) ?? []);
+    let best: { id: string; say: string; score: number } | undefined;
+    for (const { id, doc } of articlesOf(site)) {
+      const score = new Set((`${doc.title} ${doc.text}`.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((word) => words.has(word))).size;
+      if (score < 2 || score <= (best?.score ?? 0)) continue;
+      // The article's opening, without its heading.
+      const body = doc.text.replace(/^#.*$/gm, "").replace(/\s+/g, " ").trim();
+      best = { id, score, say: body.split(/(?<=[.!?])\s+/).slice(0, 2).join(" ") };
+    }
+    if (best) {
+      // "…and where is it" gets a pointer too, when the control the question names is on the page.
+      const named = request.snapshot.elements.find((element) => element.label.length > 3 && goal.includes(element.label.toLowerCase()));
+      // The controls it names: whatever the answer says to press, click or choose.
+      const controls = [...best.say.matchAll(/\b(?:press|click|choose|select|open)\s+(?:the\s+)?([A-Z][A-Za-z]*(?:\s+[a-z]+){0,3}?)(?=[.,;]|\s+(?:on|in|at|to|and|then)\b|$)/g)].map((found) => found[1] ?? "");
+      return { mode: "answer", target: named?.id ?? null, status: "done", reason: null, say: best.say, sources: [best.id], controls };
+    }
+  }
+  const step = mockTurn(request);
+  if (first && !step.target) return cannot(neverDecided(request.goal, "") ? "sensitive" : "not_covered");
+  return { ...step, mode: "guide", reason: null, sources: [] };
+}
+
+/**
  * Stand-in for the model: points at the element whose label shares the most
  * words with the goal, and never at the same label twice. Good enough to test
  * everything around the model, not to guide anyone. In act mode it also says
  * what Haptic does to the control (`mockAct`).
  */
-function mockTurn(request: TurnRequest): TurnReply {
+function mockTurn(request: TurnRequest): ModelReply {
   const scripted = mockScript.shift();
-  if (scripted) return structuredClone(scripted);
+  // A test's script may write anything a model could, fields the reply may not carry included: the server takes those off.
+  if (scripted) return structuredClone(scripted) as unknown as ModelReply;
   const act = request.mode === "act";
   const words = (text: string) => text.toLowerCase().match(/[a-z]{3,}/g) ?? [];
   const goal = new Set(words(request.goal));
   const used = request.history.filter((turn) => turn.role === "assistant").map((turn) => turn.text);
   // Every sentence the stand-in writes about a control ends with its label: "Click Billing." in a guide, "Clicking Billing." when acting.
   const usedBefore = (label: string) => used.some((text) => text.endsWith(`Click ${label}.`) || (act && text.endsWith(` ${label}.`)));
-  const visitorDoes = (reply: TurnReply): TurnReply => (act ? { target: reply.target, do: null, enter: null, commits: false, status: reply.status, say: reply.say } : reply);
+  const visitorDoes = (reply: ModelReply): ModelReply => (act ? { target: reply.target, do: null, enter: null, commits: false, status: reply.status, say: reply.say } : reply);
   // After a wrong click, point again at the control it meant, if that is still on the page.
   const strayed = /instead of|without using/.test(request.event ?? "");
   if (strayed) {
@@ -647,11 +709,11 @@ const MOCK_COMMITS = /^(?:save|send|submit|pay|delete|issue|publish|invite|appro
  * in the visitor's question, and otherwise the visitor fills the field in;
  * a click, a check or a choice by the control's role.
  */
-function mockAct(element: SnapElement, goal: string): TurnReply {
+function mockAct(element: SnapElement, goal: string): ModelReply {
   const { id: target, label } = element;
   if (MOCK_COMMITS.test(label)) return { target, do: null, enter: null, commits: true, status: "done", say: `Ready. Check it and click ${label}.` };
   const given = /["“]([^"“”]+)["”]/.exec(goal)?.[1]?.trim() || null;
-  const step = (act: Act, say: string, enter: string | null = null): TurnReply => ({ target, do: act, enter, commits: false, status: "continue", say });
+  const step = (act: Act, say: string, enter: string | null = null): ModelReply => ({ target, do: act, enter, commits: false, status: "continue", say });
   switch (element.role) {
     case "textbox":
     case "searchbox":

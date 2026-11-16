@@ -1,5 +1,6 @@
-import { actingAllowedAt, DEFAULT_APPEARANCE, localDate, STREAM_TYPE, TURN_VERSION, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
-import { Guide, type Reporter } from "./guide.ts";
+import { actingAllowedAt, DEFAULT_APPEARANCE, localDate, MODES, STREAM_TYPE, TURN_VERSION, type Mode, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { Guide, type HandoffWay, type Reporter, type Watch } from "./guide.ts";
+import { startLearning, visitorId } from "./learn.ts";
 import { currentPath } from "./snapshot.ts";
 import { Ui } from "./ui.ts";
 
@@ -35,20 +36,24 @@ async function boot() {
   // Switched off for this site. Nothing is drawn, and nothing is said about it on the customer's page.
   if (config.off) return;
 
-  // The reply comes as lines of JSON. The first names the control to point at,
-  // as soon as the model has decided. The last is the whole reply. `request`
+  // The reply comes as lines of JSON. The first lines say what kind of reply
+  // it is (on a site with Answers on) and name the control to point at, each as
+  // soon as the model has decided. The last is the whole reply. `request`
   // carries `mode: "act"` when the visitor pressed Do it; the version says
-  // this widget understands an act reply. Stop aborts the request in flight.
+  // this widget understands an act reply. Stop aborts the request in flight, and
+  // so does a page that changes under it: the server then stops asking the model.
   //
   // `fetch` is the page's, and a page's monitoring script may have wrapped it
   // and hand back an object of its own: one that can be read as text, with no
   // stream to read as it arrives, and sometimes no headers. Then the reply is
   // read whole and taken line by line all the same.
-  const sendTurn = async (request: Omit<TurnRequest, "site">, onTarget?: (id: string) => void, signal?: AbortSignal): Promise<TurnReply> => {
+  // So the dashboard can count people and not questions. The server keeps only a hash of it, made with the site's id.
+  const visitor = visitorId();
+  const sendTurn = async (request: Omit<TurnRequest, "site">, watch: Watch = {}, signal?: AbortSignal): Promise<TurnReply> => {
     const response = await fetch(`${api}/v1/turn`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: STREAM_TYPE },
-      body: JSON.stringify({ ...request, site, version: TURN_VERSION, today: localDate() }),
+      body: JSON.stringify({ ...request, site, version: TURN_VERSION, today: localDate(), ...(visitor ? { visitor } : {}) }),
       ...(signal ? { signal } : {}),
     });
     const status = typeof response.status === "number" ? response.status : 0;
@@ -59,7 +64,8 @@ async function boot() {
     const takeMessage = (message: Partial<TurnReply> & { error?: string; code?: number }) => {
       if (message.error) throw new Error(`Turn failed with ${message.code}: ${message.error}`);
       if (typeof message.say === "string") reply = message as TurnReply;
-      else if (typeof message.target === "string") onTarget?.(message.target);
+      else if (typeof message.target === "string") watch.onTarget?.(message.target);
+      else if (MODES.includes(message.mode as Mode)) watch.onMode?.(message.mode as Mode);
     };
     const take = (line: string) => {
       if (line.trim()) takeMessage(JSON.parse(line));
@@ -127,8 +133,35 @@ async function boot() {
     acting ? { site, confirmFirst: acting.confirmFirst !== false, allowedHere: () => actingAllowedAt(acting, currentPath()) } : undefined,
     { present },
   );
-  const guide = new Guide(ui, sendTurn, { ...(acting ? { acting } : {}), ...(pageOff ? { pageOff } : {}) }, report);
+  // The way to a person, when the site has one. The form goes to the server, which passes it on to the company.
+  const handoff: HandoffWay | undefined = config.handoff && {
+    config: config.handoff,
+    send: async (form) => {
+      try {
+        const response = await fetch(`${api}/v1/handoff`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, site }) });
+        return response.ok === true;
+      } catch {
+        return false;
+      }
+    },
+  };
+  const blocked = Array.isArray(config.blocked) ? config.blocked : [];
+  const guide = new Guide(ui, sendTurn, { ...(acting ? { acting } : {}), ...(pageOff ? { pageOff } : {}) }, report, handoff, blocked);
   guide.resume();
+
+  // Each page's outline, so the site map keeps up with the product (learn.ts). Sent as text/plain, which needs no
+  // preflight, and it never matters to the visitor whether it arrives. A site can turn it off.
+  if (config.learn !== false) {
+    startLearning((body) => {
+      try {
+        void Promise.resolve(
+          fetch(`${api}/v1/outline`, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ ...body, site }) }),
+        ).catch(() => {});
+      } catch {
+        // Nothing to tell the visitor.
+      }
+    }, ui.host);
+  }
 }
 
 /** A response read whole as text: by `text()`, or by `json()` when that is all a wrapped `fetch` gives back. */

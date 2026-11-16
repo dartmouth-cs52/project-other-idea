@@ -6,6 +6,7 @@ import {
   STREAM_TYPE,
   type GuideOutcome,
   type GuideReport,
+  type PageOutline,
   type PublicSiteConfig,
   type SiteContext,
   type SnapElement,
@@ -15,7 +16,9 @@ import {
 } from "../shared/types.ts";
 import { publicActing } from "./acting.ts";
 import type { Alert, Budget, Gate } from "./budget.ts";
-import { ceilingFor, measureTurn, TurnError } from "./model.ts";
+import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
+import { parseOutlineReport, visitorHash } from "./learned.ts";
+import { ceilingFor, measureTurn, TurnCancelled, TurnError } from "./model.ts";
 import type { TurnMeasure } from "./model.ts";
 
 // What the Haptic server answers: the widget file, each site's public
@@ -55,13 +58,28 @@ export interface AppParts {
   /** Told about each finished step, for logging. Must not throw. */
   onTurn?(request: TurnRequest, measure: TurnMeasure, site: SiteContext, origin: string | undefined): void;
   /**
+   * Told when the widget hung up before a step was ready, because the page
+   * changed while the model was answering. The widget asks for the step again
+   * from the new page, so the dropped one is only counted. Must not throw.
+   */
+  onCancel?(request: TurnRequest, site: SiteContext): void;
+  /**
    * Told each time the script calls from a page, allowed or not. This is how
    * an install is seen to be live, and why it looks dead when the origin is not
    * on the list. Must not throw.
    */
   onSeen?(site: SiteContext, origin: string, allowed: boolean): void;
-  /** Told how a guide ended, or whether it helped. Must not throw. */
+  /**
+   * Told about an outline of a page a visitor saw, for learning the site.
+   * `visitor` is already hashed with the site's id. Must not throw.
+   */
+  onOutline?(site: SiteContext, visitor: string, outline: PageOutline): void;
+  /** Told how a guide ended, whether it helped, or that the visitor asked for a person. Must not throw. */
   onReport?(site: SiteContext, guide: string, report: GuideReport): void;
+  /** How the handoff form is posted to a company's webhook. The web's own fetch unless a test says otherwise. */
+  fetch?: typeof fetch;
+  /** True on a developer's machine, where a webhook may be on the same machine. */
+  localWebhooks?: boolean;
 }
 
 const MAX_BODY_BYTES = 512 * 1024;
@@ -121,6 +139,10 @@ export function createApp(parts: AppParts) {
         const acting = publicActing(site);
         if (acting) config.acting = acting;
       }
+      if (site.learn === false) config.learn = false;
+      if (site.blocked?.length) config.blocked = site.blocked;
+      const handoff = publicHandoff(site.handoff);
+      if (handoff) config.handoff = handoff;
       return json(200, config);
     }
 
@@ -137,17 +159,17 @@ export function createApp(parts: AppParts) {
       // A page that was open before the switch was thrown still has its launcher, so a step can arrive.
       if (await switchedOff(parts, site)) {
         const reply = fixedReply(FIXED_SAY.off);
-        return streamed ? lines(cors, async (line) => line(reply)) : json(200, reply);
+        return streamed ? lines(cors, undefined, async (line) => line(reply)) : json(200, reply);
       }
 
       const admitted = await askBudget(parts, site, caller, turn);
       if (!admitted.gate.open) {
         const reply = fixedReply(admitted.gate.why === "caller" ? FIXED_SAY.visitorLimit : FIXED_SAY.resting);
-        return streamed ? lines(cors, async (line) => line(reply)) : json(200, reply);
+        return streamed ? lines(cors, undefined, async (line) => line(reply)) : json(200, reply);
       }
 
       // A widget that asks for it gets the step as it forms: the control to point at first, then the whole reply.
-      if (streamed) return streamTurn(parts, site, turn, caller, admitted, cors, origin);
+      if (streamed) return streamTurn(parts, site, turn, caller, admitted, cors, origin, request.signal);
 
       try {
         const measure = await measureTurn(site, turn);
@@ -178,6 +200,39 @@ export function createApp(parts: AppParts) {
       return json(200, { ok: true });
     }
 
+    // An outline of a page a visitor saw, for learning the site. Sent as
+    // text/plain, which needs no preflight. Answered at once: what is learned
+    // is written after the response, and never on a step's path.
+    if (request.method === "POST" && url.pathname === "/v1/outline") {
+      const report = parseOutlineReport(await readJson(request));
+      if (!report) return json(400, { error: "That isn't a valid outline." });
+      const site = await parts.loadSite(report.site, true);
+      if (!site) return json(404, { error: "No site with that id." });
+      if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      if (await parts.overLimit(`${site.id} outline ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
+      // Without the widget's random id there is no way to count this visitor once, so the outline isn't used.
+      if (site.learn === false || !report.visitor) return json(200, { ok: false });
+      parts.onOutline?.(site, await visitorHash(site.id, report.visitor), report.outline);
+      return json(200, { ok: true });
+    }
+
+    // The widget's handoff form: an email address and a note, with the
+    // conversation so far. It is passed on to the company's webhook and not kept.
+    if (request.method === "POST" && url.pathname === "/v1/handoff") {
+      const form = parseHandoff(await readJson(request));
+      if (!form) return json(400, { error: "That isn't a valid handoff. It needs an email address." });
+      const site = await parts.loadSite(form.site);
+      if (!site) return json(404, { error: "No site with that id." });
+      if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      // Its own allowance, so a burst of steps doesn't cost someone their way to a person, and the reverse.
+      if (await parts.overLimit(`${site.id} handoff ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
+      if (!site.handoff?.webhook) return json(404, { error: "This site has nowhere to send that." });
+      const sent = await sendHandoff(site, form, origin, parts.fetch ?? fetch, parts.localWebhooks === true);
+      if (!sent) return json(502, { error: "That couldn't be passed on." });
+      if (form.guide) parts.onReport?.(site, form.guide, { site: site.id, handoff: true });
+      return json(200, { ok: true });
+    }
+
     return undefined;
   };
 }
@@ -189,13 +244,16 @@ function parseReport(body: unknown): GuideReport | undefined {
   const report: GuideReport = { site: raw.site };
   if (GUIDE_OUTCOMES.includes(raw.outcome as GuideOutcome)) report.outcome = raw.outcome as GuideOutcome;
   if (typeof raw.helped === "boolean") report.helped = raw.helped;
-  return report.outcome || report.helped !== undefined ? report : undefined;
+  if (raw.handoff === true) report.handoff = true;
+  return report.outcome || report.helped !== undefined || report.handoff ? report : undefined;
 }
 
 /**
  * One JSON value per line. `{"target":"e12"}` goes out the moment the model has
- * named the control, and the full reply follows as the last line. The status
- * line is already sent by then, so a failure arrives as `{"error":…,"code":…}`.
+ * named the control, and the full reply follows as the last line. On a site
+ * with Answers on, `{"mode":"answer"}` goes out before either, so the widget
+ * knows what kind of reply is coming. The status line is already sent by
+ * then, so a failure arrives as `{"error":…,"code":…}`.
  */
 function streamTurn(
   parts: AppParts,
@@ -205,15 +263,21 @@ function streamTurn(
   admitted: Admitted,
   cors: Record<string, string>,
   origin: string | undefined,
+  /** The request's own signal. A Worker aborts it when the caller goes away. */
+  gone?: AbortSignal,
 ): Response {
-  return lines(cors, async (line) => {
+  return lines(cors, gone, async (line, signal) => {
     try {
-      const measure = await measureTurn(site, turn, undefined, (id) => line({ target: id }));
+      const measure = await measureTurn(site, turn, undefined, { onMode: (mode) => line({ mode }), onTarget: (id) => line({ target: id }) }, signal);
       charge(parts, site, caller, admitted, measure.usd, 1);
       parts.onTurn?.(turn, measure, site, origin);
       line(measure.reply);
     } catch (error) {
       charge(parts, site, caller, admitted, paidFor(error), 0);
+      if (error instanceof TurnCancelled) {
+        console.log(`turn ${site.id} step ${turn.step}: dropped, the widget hung up.`);
+        return parts.onCancel?.(turn, site);
+      }
       const known = error instanceof TurnError;
       console.error(`turn ${site.id}:`, known ? error.message : error);
       line({ error: known ? error.message : "Something went wrong.", code: known ? error.status : 500 });
@@ -221,13 +285,25 @@ function streamTurn(
   });
 }
 
-/** A response in the streamed format. `write` is handed the function that sends one line. */
-function lines(cors: Record<string, string>, write: (line: (value: unknown) => void) => Promise<void>): Response {
+/**
+ * A response in the streamed format. `write` is handed the function that
+ * sends one line, and a signal that is aborted if the caller hangs up first.
+ * After that, lines go nowhere.
+ */
+function lines(cors: Record<string, string>, gone: AbortSignal | undefined, write: (line: (value: unknown) => void, signal: AbortSignal) => Promise<void>): Response {
   const encoder = new TextEncoder();
+  const hungUp = new AbortController();
+  // Node cancels the response when the caller goes away. A Worker aborts the request's signal instead.
+  gone?.addEventListener("abort", () => hungUp.abort());
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
-      await write((value) => controller.enqueue(encoder.encode(JSON.stringify(value) + "\n")));
-      controller.close();
+      await write((value) => {
+        if (!hungUp.signal.aborted) controller.enqueue(encoder.encode(JSON.stringify(value) + "\n"));
+      }, hungUp.signal);
+      if (!hungUp.signal.aborted) controller.close();
+    },
+    cancel() {
+      hungUp.abort();
     },
   });
   return new Response(body, { headers: { ...cors, "Content-Type": STREAM_TYPE, "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
@@ -433,6 +509,7 @@ export function parseTurn(body: unknown, now: Date = new Date()): TurnRequest | 
 
   const request: TurnRequest = { site: raw.site, goal, step: Math.min(Math.max(Number(raw.step) || 0, 0), 100), history, snapshot };
   if (typeof raw.guide === "string" && GUIDE_ID.test(raw.guide)) request.guide = raw.guide;
+  if (typeof raw.visitor === "string" && /^[0-9a-f-]{36}$/.test(raw.visitor)) request.visitor = raw.visitor;
   if (raw.event) request.event = text(raw.event, 600);
   if (raw.change) request.change = text(raw.change, 2000);
   if (raw.offTrack === true) request.offTrack = true;

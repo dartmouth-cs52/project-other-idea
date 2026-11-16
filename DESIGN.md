@@ -320,17 +320,17 @@ squeezed. The
 FAQ is two columns on desktop, with the title on the left and the accordion in
 the right half. Each row is 20px padding around a 24px line with a 1px divider.
 
-Pricing opens the way the FAQ does, with the title on the left and one
-sentence of Muted sub-copy in the right half, saying what is charged for. Under
-it sit the plans, one card each on the same Muted surface as a feature card,
-four across on desktop, two across from 640px and one below that. A card holds
-the plan's name, its price at the 24px headline size, what the price includes,
-and who it is for in Muted text. The price is the largest thing in the card and
-no larger than a feature card's title. No plan is marked as the popular one,
-and a card has no button, because the site has one call to action. Three short
-lines of 14px Muted text under the cards say when a guide counts as finished,
-that billing has not started, and that prices may change. The plans and that
-copy live in `web/lib/site.ts`.
+Pricing opens with its title alone. Under it sit the plans, one card each on
+the same Muted surface as a feature card, four across on desktop, two across
+from 640px and one below that. A card holds the plan's name, its price at the
+24px headline size, what the price includes, and who it is for in a few Muted
+words. Those four line up across the cards in a row, so each starts at the
+same height in every card. Text in a card is wrapped so a line does not end on
+a single word (`text-pretty`, where the browser supports it). The price is the
+largest thing in the card and no larger than a feature card's title. No plan
+is marked as the popular one, and a card has no button, because the site has
+one call to action. Two short sentences of 14px Muted text under the cards say
+what is charged for, on one line from 820px up. The plans and those sentences live in `web/lib/site.ts`.
 
 The request access page is two columns. The pitch sits on the left, as a
 headline over a card. The form sits on the right in a second card, with its
@@ -490,6 +490,24 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
   Haptic carries on without comment.
 - **Finish plainly.** Haptic confirms in a sentence, shows the green tick, and
   reopens the ask box.
+- **An answer is read in the chat.** When Haptic answers in words, the chat
+  shows the question as an Ink bubble on the right and the answer as a Muted
+  bubble on the left. Under the answer, after a hairline, 12px Muted text says
+  "From the help docs" and lists each article by its title, in Ink, with the
+  day it was last updated. A title with an address is a link, underlined only
+  under the mouse or keyboard focus. If the answer is about a control on the
+  page, the pointer goes to it with no caption, because the words are in the
+  chat. A step's sentence stays in the caption beside the pointer. When Haptic
+  can't help, the same Muted bubble holds one fixed sentence. If the answer
+  names a control Haptic can't find in the product, one more line of 12px
+  Muted text under the articles says so.
+- **A person is one button away, when Haptic can't help.** Under a reply that
+  says Haptic can't help, after a "No" to "Did this help?", and after three
+  questions with no "Yes", the chat shows one secondary button, "Contact
+  support". It opens a two-field form in the chat, the company's page, or the
+  visitor's mail program, whichever the company set. When the form is sent the
+  chat says "Sent to the team. A person will reply by email.", so nobody
+  thinks the AI is still the one answering.
 - **Say it is an AI.** One line of 12px Muted text sits under the ask box,
   "Haptic is an AI guide and can be wrong." It looks like plain text, with no
   underline. Its last words are a link to the page that says what Haptic reads

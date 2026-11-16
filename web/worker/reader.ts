@@ -2,7 +2,8 @@
 // can show "N pages read" as it goes and no single request runs long.
 //
 // It follows navigation only. It loads pages, opens tabs, menus and
-// accordions that say they show something, and collects where links lead. It
+// accordions that say they show something, and collects where links lead and
+// what each of those openings showed, so a route that takes two clicks is known. It
 // never submits a form or presses a button that changes anything, and in a
 // real browser every request other than GET is refused before it leaves, so a
 // stray click cannot change the company's data either.
@@ -15,8 +16,11 @@
 // widget once it is installed.
 
 import puppeteer from "@cloudflare/puppeteer";
-import { cleanText, normalizePath, type PageNode } from "../../src/shared/types";
+import { normalizePath, type PageNode } from "../../src/shared/types";
 import { openDisclosures, outlinePage, type RawOutline } from "./outline";
+import { toPageNode } from "./page-node";
+
+export { toPageNode };
 
 /** What is kept between batches, in sites.reading. */
 export interface Reading {
@@ -173,9 +177,9 @@ async function readWithBrowser(binding: BrowserBinding, urls: string[], fail: (u
         });
         const response = await page.goto(url, { waitUntil: "networkidle2", timeout: TIMEOUT_MS });
         if (response && !response.ok()) throw new Error(`HTTP ${response.status()}`);
-        const opened = await page.evaluate(openDisclosures, 20);
+        const { opened, reveals } = await page.evaluate(openDisclosures, 20);
         const outline = await page.evaluate(outlinePage);
-        out.push({ url: page.url() || url, outline: { ...outline, opened } });
+        out.push({ url: page.url() || url, outline: { ...outline, opened, reveals } });
       } catch (error) {
         fail(url, error instanceof Error ? error.message : String(error));
       } finally {
@@ -207,7 +211,7 @@ async function readWithFetch(urls: string[], fail: (url: string, reason: string)
 
 /** The same outline from plain HTML, with the runtime's streaming parser. Text inside scripts and styles is skipped. */
 export async function outlineHtml(response: Response, base: string): Promise<RawOutline> {
-  const outline: RawOutline = { title: "", description: "", headings: [], links: [], buttons: [], fields: [], opened: 0 };
+  const outline: RawOutline = { title: "", description: "", headings: [], links: [], buttons: [], fields: [], opened: 0, reveals: [] };
   // Each open element that collects text gets a buffer, closed by its end tag.
   const collect = (onDone: (text: string) => void) => {
     let buffer = "";
@@ -253,32 +257,4 @@ export async function outlineHtml(response: Response, base: string): Promise<Raw
   outline.buttons = [...new Set(outline.buttons)].slice(0, 40);
   outline.fields = [...new Set(outline.fields.filter(Boolean))].slice(0, 30);
   return outline;
-}
-
-/** Turns a raw outline into the PageNode the server's prompt reads, masked and capped like the intake crawl. */
-export function toPageNode(url: string, raw: RawOutline): { page: PageNode; found: string[]; controls: number } {
-  const here = new URL(url);
-  const found: string[] = [];
-  const links = new Map<string, { label: string; to: string }>();
-  for (const link of raw.links) {
-    if (!URL.canParse(link.href)) continue;
-    const target = new URL(link.href);
-    if (target.origin !== here.origin) continue;
-    target.hash = "";
-    found.push(target.href);
-    const label = cleanText(link.label, 60);
-    const to = normalizePath(target.pathname);
-    if (label && links.size < 60) links.set(`${label}|${to}`, { label, to });
-  }
-  const page: PageNode = {
-    path: normalizePath(here.pathname),
-    title: cleanText(raw.title, 80),
-    headings: raw.headings.map((text) => cleanText(text, 80)).filter(Boolean),
-    links: [...links.values()],
-    buttons: [...new Set(raw.buttons.map((text) => cleanText(text, 60)).filter(Boolean))],
-    fields: [...new Set(raw.fields.map((text) => cleanText(text, 60)).filter(Boolean))],
-  };
-  const description = cleanText(raw.description, 200);
-  if (description) page.description = description;
-  return { page, found, controls: links.size + page.buttons.length + page.fields.length };
 }
