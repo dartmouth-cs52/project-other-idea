@@ -127,7 +127,10 @@ function answer(state: State, method: string, path: string, body: Record<string,
   if (path === "/me") return [200, me];
   if (path === `/sites/${SITE}` && method === "GET") return [200, site];
   if (path === `/sites/${SITE}` && method === "PATCH") {
+    // As the Worker works it out: an origin is allowed by the list as it stands now, and seen on an allowed one is connected.
     site.allowedOrigins = body.allowedOrigins as string[];
+    site.origins = (site.origins as { origin: string }[]).map((row) => ({ ...row, allowed: site.allowedOrigins.includes(row.origin) }));
+    site.connected = (site.origins as { allowed: boolean }[]).some((row) => row.allowed);
     return [200, site];
   }
   if (path === `/sites/${SITE}` && method === "DELETE") return [200, { deleted: SITE }];

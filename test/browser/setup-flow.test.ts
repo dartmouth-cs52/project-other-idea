@@ -18,6 +18,21 @@ describe("the setup screens in chromium", { skip: HAS_WEB ? false : "web/node_mo
     await flow?.close();
   });
 
+  describe("Enter", () => {
+    test("Enter never allows an address: that takes a click", async () => {
+      state = siteState({ setup: { step: "connect" }, origins: [{ origin: "http://localhost:3000", allowed: false, first_seen_at: new Date().toISOString(), last_seen_at: new Date().toISOString(), requests: 1 }] });
+      const page = await openSetup(flow);
+      await page.getByRole("button", { name: "Allow this address" }).waitFor();
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(700);
+      assert.deepEqual(state.calls.filter((call) => call.method === "PATCH"), [], "Enter sent nothing");
+      await page.getByRole("button", { name: "Allow this address" }).click();
+      await page.getByRole("heading", { name: /Haptic is live/ }).waitFor();
+      assert.deepEqual((state.calls.find((call) => call.method === "PATCH")?.body as { allowedOrigins: string[] }).allowedOrigins, ["https://app.example.com", "http://localhost:3000"]);
+      await page.close();
+    });
+  });
+
   describe("changing the address", () => {
     const deletes = () => state.calls.filter((call) => call.method === "DELETE");
 

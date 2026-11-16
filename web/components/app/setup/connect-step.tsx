@@ -100,9 +100,11 @@ export function ConnectStep({
         <>
           <Back onClick={onBack} />
           {status.kind === "refused" ? (
-            <Primary onClick={() => void allow(status.origin)} disabled={allowing}>
+            // Not the screen's Enter button: anyone can make a request look as if it came from any address,
+            // so allowing one is a click of its own, never a keystroke on arrival.
+            <Button size="xl" onClick={() => void allow(status.origin)} disabled={allowing}>
               {allowing ? "Allowing" : "Allow this address"}
-            </Primary>
+            </Button>
           ) : (
             <a href={site.origin} target="_blank" rel="noopener noreferrer" className={buttonVariants({ size: "xl" })} data-setup-primary>
               Open my site
