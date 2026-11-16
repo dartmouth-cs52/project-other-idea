@@ -1053,7 +1053,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   };
   const onInput = (event: Event) => {
     const path = outside(event);
-    if (path) feed({ type: "input", at: performance.now(), inTarget: path.includes(target) });
+    if (path) feed({ type: "input", at: performance.now(), inTarget: path.includes(target), ...(event.isTrusted ? {} : { byPage: true }) });
   };
   const onLeave = (event: Event) => {
     if (event.target === target) feed({ type: "left", at: performance.now() });
@@ -1144,7 +1144,8 @@ function watchFor(
     if (["enter", " ", "escape", "tab"].includes(key) || key.startsWith("arrow")) lookSoon(`The user pressed ${keyName(key)}.`);
   });
   const onInput = safely((event: Event) => {
-    const path = outside(event);
+    // A field the page fills in by itself is not the visitor filling it in.
+    const path = event.isTrusted ? outside(event) : undefined;
     if (!path) return;
     const on = path.find((node): node is Element => node instanceof Element && listing.has(node));
     const field = on && listing.get(on);

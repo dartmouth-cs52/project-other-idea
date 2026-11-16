@@ -186,3 +186,9 @@ test("a press that began on the control and came up on a box around it, as a dra
   // A press that began elsewhere and came up there is still nothing.
   assert.equal(run(BUTTON, [press(0, BLANK), release(400), click(401, around)]).verdict, undefined);
 });
+
+test("the page writing into the pointed field by script is not the visitor typing, but a pick it reflects is still heard", () => {
+  const written: Seen = { type: "input", at: 500, inTarget: true, byPage: true };
+  assert.equal(run(FIELD, [written, tick(2000), tick(3000)]).verdict, undefined);
+  assert.equal(run(SELECT, [written]).verdict?.how, "filled");
+});

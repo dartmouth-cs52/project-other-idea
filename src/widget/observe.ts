@@ -78,8 +78,8 @@ export type Seen =
   | { type: "click"; at: number; where: Where }
   /** A key went down outside the widget. `inTyped` is true when the keyboard was in something text is typed into. */
   | { type: "key"; at: number; key: string; inTarget: boolean; inTyped: boolean }
-  /** Something was typed, picked or ticked. */
-  | { type: "input"; at: number; inTarget: boolean }
+  /** Something was typed, picked or ticked. `byPage` when the page's script fired it, as a calendar does when it writes the picked day into its field. */
+  | { type: "input"; at: number; inTarget: boolean; byPage?: boolean }
   /** The pointed control lost the keyboard. */
   | { type: "left"; at: number }
   /** The window lost the keyboard to a frame inside the pointed control: a click in the frame, which the page never hears. */
@@ -205,6 +205,8 @@ export function hear(heard: Heard, seen: Seen, pointed: Pointed): Heard {
     }
     case "input":
       if (!seen.inTarget) return next;
+      // The page writing into a field is not the visitor typing in it. A box ticked or a choice picked by the page's script is still news of a pick.
+      if (seen.byPage && pointed.typed) return next;
       if (pointed.ticked) return say(used);
       if (pointed.select) return say(filled);
       next.typed = seen.at;

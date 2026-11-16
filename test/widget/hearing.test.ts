@@ -243,3 +243,32 @@ test("a click the page makes by script while the visitor presses the pointed fie
     await session.close();
   }
 });
+
+test("a calendar that writes each picked day into the field by script is still a pick of days, not the visitor typing", async () => {
+  // Carbon's date range picker (flatpickr): each click on a day puts the dates in the field and fires its input and change events.
+  const days = Array.from({ length: 28 }, (_, day) => `<span class="day" tabindex="-1" aria-label="November ${day + 1}, 2026" style="display:inline-block;cursor:pointer;padding:4px">${day + 1}</span>`).join("");
+  const page = `<h1>Report</h1><label for="start">Start date</label> <input id="start"><div id="cal" hidden style="position:absolute;top:120px;left:24px;width:280px;background:#fff;border:1px solid #999">${days}</div><button type="button">Run</button>
+    <script>
+      const cal = document.getElementById('cal'), start = document.getElementById('start'); const picked = [];
+      start.addEventListener('focus', () => cal.hidden = false);
+      for (const day of cal.querySelectorAll('.day')) day.addEventListener('click', () => {
+        picked.push(day.textContent);
+        start.value = '11/' + picked.join(' to 11/') + '/2026';
+        start.dispatchEvent(new Event('input', { bubbles: true }));
+        start.dispatchEvent(new Event('change', { bubbles: true }));
+        if (picked.length === 2) cal.hidden = true;
+      });
+    </script>`;
+  const session = await pointing(page, "Start date");
+  try {
+    await session.page.locator("#start").click();
+    await session.page.locator("#cal .day").nth(9).click();
+    await session.page.waitForTimeout(1600);
+    assert.equal(session.requests.length, 1, "the first day was reported before the range had its second date");
+    await session.page.locator("#cal .day").nth(13).click();
+    const second = await session.untilAsked(2, 6000);
+    assert.match(second.event ?? "", /^The user chose "November 10, 2026" and "November 14, 2026" from the list that textbox "Start date" opened\./);
+  } finally {
+    await session.close();
+  }
+});
