@@ -12,6 +12,8 @@
   "name": "haptic-widget-staging",
   "main": "./worker/index.ts",
   "compatibility_date": "2026-11-01",
+  // As on the live server: aborts request.signal when the caller goes away, so a step the widget hangs up on stops the model call.
+  "compatibility_flags": ["enable_request_signal"],
   "build": { "command": "npm run build" },
   // The same sites as the live server, read only.
   "kv_namespaces": [{ "binding": "SITES", "id": "b481eb9c6ba24efe9889ef52a4f17e8a" }],
@@ -19,7 +21,18 @@
   // for each site and caller. It is still a limit: the server spends the same
   // model key as the live one.
   "ratelimits": [{ "name": "TURN_LIMIT", "namespace_id": "1003", "simple": { "limit": 120, "period": 60 } }],
+  // The live server's budget meter (worker/budget.ts), in a Durable Object of this Worker's own. Its address is in the
+  // repository and anyone can call it, so it is held to a small budget: see the vars below.
+  "durable_objects": { "bindings": [{ "name": "BUDGET", "class_name": "BudgetMeter" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BudgetMeter"] }],
   "vars": {
+    // US dollars this server may spend on the model in an hour and in a day, for every site together:
+    // HAPTIC_BUDGET_SHARED puts all sites on one meter, whatever a site sets for itself (src/server/budget.ts, meterFor).
+    // Past either, every step gets the fixed "resting" sentence until the hour or the day turns (UTC).
+    // A benchmark run of a few hundred steps needs a higher day: raise it for that run, and put it back.
+    "HAPTIC_BUDGET_HOUR": "2",
+    "HAPTIC_BUDGET_DAY": "5",
+    "HAPTIC_BUDGET_SHARED": "1",
     "HAPTIC_MODEL": "claude-sonnet-5-5"
   },
   "workers_dev": true

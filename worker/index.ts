@@ -1,5 +1,5 @@
 import { createApp, turnCounts, type AppParts } from "../src/server/app.ts";
-import { describeAlert, limitsFor, type Admission, type Ceiling, type Gate, type Limits, type Report } from "../src/server/budget.ts";
+import { describeAlert, meterFor, type Admission, type Ceiling, type Gate, type Limits, type Report } from "../src/server/budget.ts";
 import { Store } from "../src/server/db.ts";
 import { labelThreshold } from "../src/server/learned.ts";
 import { configure } from "../src/server/model.ts";
@@ -41,6 +41,8 @@ export interface Env {
   /** US dollars a site may spend in an hour and in a day, unless the site sets its own. */
   HAPTIC_BUDGET_HOUR?: string;
   HAPTIC_BUDGET_DAY?: string;
+  /** "1": every site shares one meter, held to the two limits above whatever a site sets. For the staging Worker (wrangler.staging.jsonc). */
+  HAPTIC_BUDGET_SHARED?: string;
   /** A secret. When set, budget alerts are posted here as {"text": …}, the shape Slack's incoming webhooks take. */
   HAPTIC_ALERT_WEBHOOK?: string;
   HAPTIC_MODEL?: string;
@@ -140,11 +142,11 @@ function budgetFor(env: Env): AppParts["budget"] {
   const store = env.BUDGET;
   if (!store) return undefined;
   const reach = async (site: SiteContext, caller: string) => {
-    const limits = limitsFor(site, { HAPTIC_BUDGET_HOUR: env.HAPTIC_BUDGET_HOUR, HAPTIC_BUDGET_DAY: env.HAPTIC_BUDGET_DAY });
+    const { name, limits } = meterFor(site, { HAPTIC_BUDGET_HOUR: env.HAPTIC_BUDGET_HOUR, HAPTIC_BUDGET_DAY: env.HAPTIC_BUDGET_DAY, HAPTIC_BUDGET_SHARED: env.HAPTIC_BUDGET_SHARED });
     // Callers are only told apart when the site limits each one. The site's own object scrambles the
     // address before it keeps it. This copy of the Worker holds the address only in memory, for a few seconds.
     const who = limits.perCaller ? caller : "";
-    return { limits, who, key: `${site.id} ${who}`, meter: store.get(store.idFromName(site.id)) };
+    return { limits, who, key: `${name} ${who}`, meter: store.get(store.idFromName(name)) };
   };
   const remember = (key: string, gate: Gate) => {
     if (gate.open) return closed.delete(key);

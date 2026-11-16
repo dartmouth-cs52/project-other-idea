@@ -202,6 +202,22 @@ export function limitsFor(site: SiteContext, env: Record<string, string | undefi
   return limits;
 }
 
+/**
+ * Which meter a site's spend is counted on, and with what limits. Each site
+ * has its own, named by its id, unless `HAPTIC_BUDGET_SHARED` is "1": then
+ * every site the server can reach shares one meter, held to the server's own
+ * HAPTIC_BUDGET_HOUR and HAPTIC_BUDGET_DAY whatever a site sets for itself.
+ * That is for a copy of the server whose address is public and whose spend
+ * must stay small however many sites it can reach, like the staging Worker.
+ */
+export function meterFor(site: SiteContext, env: Record<string, string | undefined>): { name: string; limits: Limits } {
+  if (env.HAPTIC_BUDGET_SHARED === "1") {
+    const { budget: _own, ...rest } = site;
+    return { name: "all sites", limits: limitsFor(rest, env) };
+  }
+  return { name: site.id, limits: limitsFor(site, env) };
+}
+
 /** An alert in words, for a log line or a message to the team. */
 export function describeAlert(site: SiteContext, alert: Alert): string {
   const span = alert.window === "hour" ? "hourly" : "daily";
