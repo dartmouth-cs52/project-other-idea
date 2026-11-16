@@ -756,12 +756,25 @@ export async function actLive(browser: Browser, set: GuideSet, guide: Guide, liv
         }
         if (now.status === ACTING_WORDS.yourTurn && turnAt !== result.calls.length) {
           turnAt = result.calls.length;
+          // The step pointed at: a step's own control first, then a part of one, such as the option of a list the visitor opened on their last turn.
           let index: number | undefined;
+          let from = 0;
           for (const [at, item] of items.entries()) {
             const selector = selectorOf(item.control.act);
             if (selector && (await pointsAt(page, selector))) {
               index = at;
               break;
+            }
+          }
+          for (const [at, item] of items.entries()) {
+            if (index !== undefined) break;
+            for (const [part, step] of item.steps.entries()) {
+              const selector = part > 0 ? selectorOf(step.act) : undefined;
+              if (selector && (await pointsAt(page, selector))) {
+                index = at;
+                from = part;
+                break;
+              }
             }
           }
           const item = index === undefined ? undefined : items[index];
@@ -777,8 +790,8 @@ export async function actLive(browser: Browser, set: GuideSet, guide: Guide, liv
           if ((await data()) !== known) hapticChanged = true;
           try {
             for (const [part, step] of item.steps.entries()) {
-              if (!step.act) continue;
-              if (part > 0 && !["pointing", "watching"].includes((await widget(page)).state)) break;
+              if (!step.act || part < from) continue;
+              if (part > from && !["pointing", "watching"].includes((await widget(page)).state)) break;
               await perform(page, step.act);
               await page.waitForTimeout(400);
             }
