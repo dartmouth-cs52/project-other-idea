@@ -91,8 +91,9 @@ test("the model is told to point at nothing more once the goal is reached (10 si
 });
 
 test("the model is told to say what to type and stop (jira and ui5: 'type it, then press Enter', which on Jira sends a signed-out visitor to sign in)", () => {
-  assert.match(rules, /For a text field, say what to type and stop there, without "then press Enter": you're asked again when they pause\./);
-  assert.match(rules, /point at what comes next, usually the search, save or submit button\. Ask for Enter only if no button does it\./);
+  // Jira's quick search has no button. Told "ask for Enter only if no button does it", the model said "type KAFKA-1, then press Enter" 8 times in 8 on staging.
+  assert.match(rules, /For a text field, say what to type and stop there: never add "then press Enter" or any later step, even when no button sends it\./);
+  assert.match(rules, /You're asked again once they have typed it; then treat the field as filled in and point at what comes next, usually the search, save or submit button, or say to press Enter if no button does it\./);
 });
 
 test("the model is told what a step with nothing to point at means (ui5 and grafana: 'Press Enter' with no target ended the guide)", () => {
