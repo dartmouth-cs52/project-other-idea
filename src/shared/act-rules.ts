@@ -395,6 +395,54 @@ export function readAddress(address: string, extra?: readonly string[]): NameVer
   return readName(text, extra ? { extra } : {});
 }
 
+// A link named for what its form will do. Northpine's "Issue card" is a plain
+// link to /cards/new, the first page of the card form. Read as a button it
+// "saves something", and the first press of "Can you issue Malika a card…"
+// went to the visitor, with a sentence that was not true of it (5 demo runs
+// of 5 on 16 November). Its words alone cannot tell it from "<a href='#'>Send
+// invite</a>", which a script makes send. Its address can: a real visit whose
+// last word is the one web frameworks give to the page that holds a form.
+
+/**
+ * The last word of an address that names the page holding a form, which a
+ * visit only shows: "/cards/new" and "/people/7/edit" (Rails, Phoenix,
+ * Laravel's edit), "/mail/compose".
+ */
+const FORM_PAGES = new Set(["new", "edit", "compose"]);
+/**
+ * The same, when the address carries nothing after it: "/photos/create" is
+ * Laravel's form page and "/users/add" Django's and CakePHP's. With a query,
+ * as in "/cart/add?item=5", a visit can be the act itself, so it does not count.
+ */
+const BARE_FORM_PAGES = new Set(["create", "add"]);
+
+/**
+ * Whether an address plainly opens a form to fill in: its path, or its route
+ * after "#/", ends in a word of `FORM_PAGES`, or of `BARE_FORM_PAGES` with no
+ * query, and nothing else in it carries a commit word ("/checkout/new" pays,
+ * "/posts/new?publish=1" publishes). A link to such a page, when it is a real
+ * visit (gate.ts, visitsAnotherPage), is stopped by its words only as a
+ * choice in a list is (`CHOICE_STOPS`): "Issue card" to "/cards/new" opens
+ * the card form, while "Delete project" or "Pay now" stay the visitor's
+ * wherever they lead. An address that does not end so says nothing either
+ * way: "/invites/send", "/cards/new/start", "/expenses/7/approve".
+ */
+export function opensAFormPage(address: string, extra?: readonly string[]): boolean {
+  const text = address.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, "");
+  // An app that keeps its place after "#/" has its page there. Any other "#" is a place on a page.
+  const route = /#!?(\/.*)$/.exec(text)?.[1];
+  const page = route ?? text.split("#")[0] ?? "";
+  const at = page.indexOf("?");
+  const path = at < 0 ? page : page.slice(0, at);
+  const query = at < 0 ? "" : page.slice(at + 1);
+  const segments = path.split("/").filter(Boolean);
+  const last = (segments.pop() ?? "").toLowerCase();
+  if (!(FORM_PAGES.has(last) || (BARE_FORM_PAGES.has(last) && !query))) return false;
+  // Everything but that last word is read as any address is, the path before a route included.
+  const before = route === undefined ? "" : (text.split("#")[0] ?? "");
+  return !readAddress(`${before} /${segments.join("/")} ${query}`, extra).commit;
+}
+
 /** The words of a button that moves a form on to its next part, in every shipped language. */
 const FORWARD_ENTRIES = entries(
   "next|next step|continue|siguiente|continuar|suivant|continuer|weiter|fortfahren|proximo|seguinte|avanti|successivo|continua|volgende|doorgaan|次へ|次|続行|下一步|继续|繼續",
@@ -848,11 +896,14 @@ export function checkAction(reply: TurnReply, request: Pick<TurnRequest, "goal" 
   if (act === "click" && !PICKED.has(element.role)) {
     // An icon names a control only when it has no words of its own: a dialog's "Close" with an X icon is not "Close x".
     const name = element.label || element.icon || "";
-    // A link is read as a button is: "Send invite" sends whether it is drawn as a link or not.
-    const verdict = readName(name, { dialog: !!request.snapshot.dialog, opener: opensSomething(element), extra: acting.commitWords });
+    // A link is read as a button is: "Send invite" sends whether it is drawn as a link or not. Unless its address plainly
+    // opens a form ("Issue card" to "/cards/new"): then its words stop it only as a choice's would. Whether it is a real
+    // visit, with no script answering the click, only the widget's gate can see, and it decides again on the live link.
+    const formPage = element.role === "link" && !!element.href && opensAFormPage(element.href, acting.commitWords);
+    const verdict = readName(name, { choice: formPage, dialog: !!request.snapshot.dialog, opener: opensSomething(element), extra: acting.commitWords });
     if (verdict.commit) return withhold(verdict.marked ? "marked" : "words");
     // And where it leads: a visit to "/expenses/:id/approve" approves.
-    if (element.role === "link" && element.href) {
+    if (element.role === "link" && element.href && !formPage) {
       const address = readAddress(element.href, acting.commitWords);
       if (address.commit) return withhold(address.marked ? "marked" : "words");
     }

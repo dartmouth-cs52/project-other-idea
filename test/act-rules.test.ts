@@ -13,6 +13,7 @@ import {
   LANGUAGES,
   namesADay,
   pickChoice,
+  opensAFormPage,
   readAddress,
   readName,
   safeWordsFor,
@@ -123,6 +124,28 @@ test("a link's address commits as a button's words do: its path, its query and a
   ];
   rows(addresses, ([address, commit]) => (readAddress(address).commit === commit ? undefined : `"${address}" read ${JSON.stringify(readAddress(address))}, wanted ${commit}`));
   assert.equal(readAddress("/rooms/12/book-a-room", ["book a room"]).marked, true);
+});
+
+test("an address plainly opens a form when it ends in the word frameworks give that page, and nothing else in it commits", () => {
+  const forms = [
+    "/cards/new", "/cards/new/", "https://app.test/cards/new", "/bills/vendors/new", "/reimbursements/new?kind=mileage", "/people/7/edit", "/people/:id/edit", "/mail/compose",
+    // Laravel's form page, and Django's and CakePHP's, when nothing follows them.
+    "/photos/create", "/users/add/",
+    // An app that keeps its place after "#/".
+    "/app#/cards/new",
+  ];
+  rows(forms, (address) => (opensAFormPage(address) ? undefined : `"${address}" was not taken for a form page`));
+  const others = [
+    // Where a visit can be the act itself.
+    "/invites/send", "/expenses/7/approve", "/cards/request", "/items/5/delete", "/logout", "/cart/add?item=5", "/photos/create?now=1",
+    // "new" is not the last word, or something else in the address commits.
+    "/cards/new/start", "/checkout/new", "/posts/new?publish=1", "/delete#/cards/new", "/app#/cards/approve",
+    // Nothing that says a form.
+    "/cards", "/team/members", "/", "", "#", "#new", "/news", "/renew",
+  ];
+  rows(others, (address) => (opensAFormPage(address) ? `"${address}" was taken for a form page` : undefined));
+  // The company's own commit words are read in the address too.
+  assert.equal(opensAFormPage("/rooms/book-a-room/new", ["book a room"]), false);
 });
 
 test("a control that opens a menu or dialog is stopped only by words that destroy, spend, sign in or out, or reveal", () => {
@@ -355,6 +378,13 @@ const PAGE: Snapshot = {
     element("e24", "link", "Publish"),
     element("e25", "link", "Expense 7", { href: "/expenses/:id/approve" }),
     element("e26", "link", "Book a room", { href: "/rooms" }),
+    element("e27", "link", "Issue card", { href: "/cards/new/start" }),
+    element("e28", "link", "Send invite", { href: "/invites/send" }),
+    element("e29", "link", "Delete project", { href: "/projects/new" }),
+    element("e30", "link", "Pay invoice", { href: "/payments/new" }),
+    element("e31", "link", "Book a room", { href: "/rooms/new" }),
+    element("e32", "link", "Send invite", { href: "/invites/new" }),
+    element("e33", "link", "Add to order", { href: "/checkout/new" }),
   ],
 };
 const ask = (reply: Partial<TurnReply>, goal = CARD_QUESTION, snapshot = PAGE) =>
@@ -363,6 +393,9 @@ const ask = (reply: Partial<TurnReply>, goal = CARD_QUESTION, snapshot = PAGE) =
 test("a reply that may be done keeps its do and its value", () => {
   const kept: Partial<TurnReply>[] = [
     { target: "e22", do: "click" },
+    // A link named for what its form will do, whose address plainly opens that form: "Issue card" to "/cards/new".
+    { target: "e1", do: "click" },
+    { target: "e32", do: "click" },
     { target: "e2", do: "click" },
     { target: "e4", do: "type", enter: "Ads" },
     { target: "e5", do: "type", enter: "500" },
@@ -395,8 +428,15 @@ test("every reply that may not be done loses its do and says why", () => {
     [{ target: "e18", do: "click" }, "words"],
     [{ target: "e10", do: "click" }, "leaves"],
     // A link is read as a button is, and its address too: whatever the model calls it, Haptic never presses a link that sends, saves or approves.
-    [{ target: "e1", do: "click" }, "words"],
     [{ target: "e23", do: "click", commits: false }, "words"],
+    // Only an address that plainly opens a form lets a link's saving or sending words through: not "/cards/new/start", not "/invites/send".
+    [{ target: "e27", do: "click" }, "words"],
+    [{ target: "e28", do: "click" }, "words"],
+    // And then words that destroy or spend still stop it, as do the company's own, and an address that commits elsewhere.
+    [{ target: "e29", do: "click" }, "words"],
+    [{ target: "e30", do: "click" }, "words"],
+    [{ target: "e31", do: "click" }, "marked"],
+    [{ target: "e33", do: "click" }, "words"],
     [{ target: "e24", do: "click" }, "words"],
     [{ target: "e25", do: "click" }, "words"],
     [{ target: "e26", do: "click" }, "marked"],
@@ -489,6 +529,13 @@ test("the server never makes a link that sends, saves or approves Haptic's click
   assert.equal(left("e5", "Click Expense 7 to approve it."), undefined);
   // A link that only leads somewhere is still pressed for the visitor.
   assert.equal(left("e6", "Click Members to go on.")?.say, "Clicking Members to go on.");
+  // And so is one that plainly opens the form its words name: Northpine's "Issue card" to /cards/new.
+  const cards: Snapshot = { ...team, path: "/cards", elements: [element("e1", "link", "Issue card", { href: "/cards/new" }), element("e2", "link", "Issue card", { href: "/cards/issue" })] };
+  const onCards = { goal: CARD_QUESTION, snapshot: cards };
+  const opened = checkAction({ target: "e1", do: "click", enter: null, commits: false, status: "continue", say: "Opening Issue card." }, onCards);
+  assert.deepEqual([opened.reply.do, opened.withheld], ["click", undefined]);
+  assert.equal(pressLeftToVisitor(onCards, { target: "e1", do: null, enter: null, commits: false, status: "continue", say: "Click Issue card to start.", mode: "act" })?.say, "Clicking Issue card to start.");
+  assert.equal(checkAction({ target: "e2", do: "click", enter: null, commits: false, status: "continue", say: "Opening Issue card." }, onCards).withheld, "words");
 });
 
 test("a reply with no do keeps the server's reason, and loses a value nothing uses", () => {

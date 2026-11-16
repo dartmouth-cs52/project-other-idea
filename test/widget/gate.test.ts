@@ -265,7 +265,7 @@ test("a link to another page of the site, a tab and a control that opens a menu 
     // Pressed as a visit, and watched: a page whose script answers the click and sends something stops acting.
     assert.deepEqual([cards.kind, cards.control, cards.navigates, cards.tripwire], ["act", "link", true, true]);
     assert.deepEqual((await page.press()).hits, ["cards"]);
-    // A link named like the commit is read as a button is: the visitor clicks it, even when it only leads to the form.
+    // A link named like the commit is read as a button is, unless its address plainly opens a form: "/cards/new/start" does not end in "new".
     const issue = await page.plan("#issue", { do: "click" }, CARD);
     assert.deepEqual([issue.kind, issue.reason, issue.say], ["visitor", "words", "I'll leave Issue card to you: it saves something. Click it and I'll carry on."]);
     assert.equal((await page.plan("#t2", { do: "click" }, "see payments")).control, "tab");
@@ -428,6 +428,61 @@ test("links that send, save, approve or publish are never pressed, whatever the 
     assert.deepEqual([visit.kind, visit.control, visit.tripwire], ["act", "link", true]);
     assert.deepEqual((await page.press()).hits, ["expense"]);
     assert.deepEqual(await page.run("performance.getEntriesByType('resource').filter((entry) => entry.name.endsWith('/save')).length"), 0, "a script sent something");
+  } finally {
+    await page.close();
+  }
+});
+
+test("a link named for what its form will do is pressed when it plainly visits that form's page, watched, and in no other case", async () => {
+  // Northpine's "Issue card" is a link to /cards/new. Read as a button it "saves something", and the demo's first press went to the visitor.
+  // These pages are served at /cards/new, so the card form's own address here is another one.
+  const page = await open(`<main><h1>Cards</h1>
+    <a href="/team/cards/new" id="issue" data-watch>Issue card</a>
+    <a href="/cards/new" id="same" data-watch>Issue card</a>
+    <a href="/people/7/edit" id="edit" data-watch>Update Dana</a>
+    <a href="/invites/new" id="invite" data-watch>Send invite</a>
+    <a href="/photos/create" id="create" data-watch>Create album</a>
+    <a href="/invites/send" id="send" data-watch>Send invite</a>
+    <a href="/expenses/7/approve" id="approve" data-watch>Approve expense</a>
+    <a href="#" id="hash" data-watch>Issue card</a>
+    <span role="link" tabindex="0" id="span" data-watch>Issue card</span>
+    <a href="/team/cards/new" id="scripted" data-watch onclick="fetch('/save',{method:'POST'});return false">Issue card</a>
+    <a href="/team/cards/new" role="button" id="as-button" data-watch>Issue card</a>
+    <a href="/team/cards/new/start" id="start" data-watch>Issue card</a>
+    <a href="/albums/create?now=1" id="add" data-watch>Create album</a>
+    <a href="/checkout/new" id="checkout" data-watch>Issue card</a>
+    <a href="/projects/new" id="delete" data-watch>Delete project</a>
+    <a href="/payments/new" id="pay" data-watch>Pay invoice</a>
+    <a href="/team/cards/new" target="_blank" id="tab" data-watch>Issue card</a>
+    <a href="/rooms/new" id="book" data-watch>Book a room</a></main>`);
+  try {
+    for (const selector of ["#issue", "#edit", "#invite", "#create"]) {
+      const plan = await page.plan(selector, { do: "click", commits: false }, CARD);
+      assert.deepEqual([selector, plan.kind, plan.control, plan.navigates, plan.tripwire], [selector, "act", "link", true, true]);
+    }
+    const refused: [string, string, string][] = [
+      // Where a visit can be the act itself, and links that are no visit at all.
+      ["#send", "visitor", "words"], ["#approve", "visitor", "words"], ["#hash", "visitor", "words"], ["#span", "visitor", "words"], ["#scripted", "visitor", "words"], ["#as-button", "visitor", "words"],
+      // A link to the page the visitor is already on visits nothing.
+      ["#same", "visitor", "words"],
+      // "new" is not where the address ends, a query that can make the visit the act, and an address that pays.
+      ["#start", "visitor", "words"], ["#add", "visitor", "words"], ["#checkout", "visitor", "words"],
+      // Words that delete or pay stop a link wherever it leads: acting stops before it, since the visitor asked for neither.
+      ["#delete", "stop", "class"], ["#pay", "stop", "class"],
+      // So do the company's own commit words.
+      ["#book", "visitor", "marked"],
+      // And a link that leaves the tab is the visitor's whatever it opens.
+      ["#tab", "visitor", "leaves"],
+    ];
+    for (const [selector, kind, reason] of refused) {
+      const seen = await page.plan(selector, { do: "click", commits: false }, CARD, { config: { acting: { commitWords: ["Book a room"] } } });
+      assert.deepEqual([selector, seen.kind, seen.reason], [selector, kind, reason]);
+      assert.deepEqual((await page.press()).hits, [], `${selector} was pressed`);
+    }
+    assert.deepEqual(await page.run("performance.getEntriesByType('resource').filter((entry) => entry.name.endsWith('/save')).length"), 0, "a script sent something");
+    // The one that is pressed, last: only it is reached.
+    await page.plan("#issue", { do: "click" }, CARD);
+    assert.deepEqual((await page.press()).hits, ["issue"]);
   } finally {
     await page.close();
   }

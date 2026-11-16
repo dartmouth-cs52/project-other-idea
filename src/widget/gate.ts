@@ -1,4 +1,4 @@
-import { ASKED_CLASSES, checkAction, CLASS_DOES, classAsked, fold, grounded, isDismissName, isForwardName, isSearchName, isSecretField, isTypeToConfirm, namesADay, opensByName, readAddress, readName, type CommitClass } from "../shared/act-rules.ts";
+import { ASKED_CLASSES, checkAction, CLASS_DOES, classAsked, fold, grounded, isDismissName, isForwardName, isSearchName, isSecretField, isTypeToConfirm, namesADay, opensAFormPage, opensByName, readAddress, readName, type CommitClass } from "../shared/act-rules.ts";
 import { actingAllowedAt, actionsAllowed, ACTING_LIMITS, describeElement, type Act, type ActingSettings, type Refusal, type SnapElement, type Snapshot, type TurnReply } from "../shared/types.ts";
 import { SAYS } from "./says.ts";
 import { currentPath, findOpenModal } from "./snapshot.ts";
@@ -22,7 +22,10 @@ import { currentPath, findOpenModal } from "./snapshot.ts";
 //  4. Writes the page declares: a native submit, `data-method`, `hx-post`, ...
 //  5. A confirmation dialog is open: acting stops.
 //  6. Commit words, by class (act-rules.ts), on links as on buttons, and
-//     the words of a link's address: "/expenses/7/approve" approves.
+//     the words of a link's address: "/expenses/7/approve" approves. One
+//     exception: a visit to a page that plainly holds a form ("/cards/new",
+//     `visitsAFormPage`) is stopped by its words only as a choice is, since
+//     "Issue card" there names what the form will do.
 //  7. Destructive styling: red, or a toolkit's danger class.
 //  8. Safe by what it is: a link that visits another page of the site
 //     (`visitsAnotherPage`), pressed with the tripwire armed, a control that opens something,
@@ -324,11 +327,26 @@ function visitsAnotherPage(el: Element): boolean {
   return url.pathname !== location.pathname || url.search !== location.search || routeOf(url.hash) !== routeOf(location.hash);
 }
 
-/** What a visit to another page says it does, by the words of its address. Undefined for a link that is not a visit. */
+/** A visit's address as it is read: its path, its query and a route after "#/". */
+const visitedAddress = (url: URL) => url.pathname + url.search + routeOf(url.hash);
+
+/**
+ * Whether a press on `el` is a visit to a page that plainly holds a form to
+ * fill in: a real visit (`visitsAnotherPage`) whose address ends in "new",
+ * "edit" or the like and carries no commit word (act-rules.ts,
+ * opensAFormPage). Such a link is named for what its form will do, "Issue
+ * card" to "/cards/new", so its words stop it only as a choice's would. A
+ * link a script answers, "#", "javascript:" and `role="link"` are never one.
+ */
+function visitsAFormPage(el: Element, config: GateConfig): boolean {
+  if (!visitsAnotherPage(el)) return false;
+  return opensAFormPage(visitedAddress(addressOf(el)!), config.acting?.commitWords);
+}
+
+/** What a visit to another page says it does, by the words of its address. Undefined for a link that is not a visit, or that visits a form page. */
 function addressCommits(el: Element, config: GateConfig): Refused | undefined {
-  if (!visitsAnotherPage(el)) return undefined;
-  const url = addressOf(el)!;
-  const verdict = readAddress(url.pathname + url.search + routeOf(url.hash), config.acting?.commitWords);
+  if (!visitsAnotherPage(el) || visitsAFormPage(el, config)) return undefined;
+  const verdict = readAddress(visitedAddress(addressOf(el)!), config.acting?.commitWords);
   return verdict.commit ? { reason: verdict.marked ? "marked" : "words", commit: verdict.commit, at: el } : undefined;
 }
 
@@ -973,8 +991,9 @@ function judgePress(el: Element, control: ControlKind, listedName: string, sessi
   const link = control === "link";
   const choice = control === "option";
   const name = [listedName, liveName(el)].join(" ");
-  // A link is read as a button is: only a choice in a list is read as the page's value.
-  const verdict = readName(name, { choice, dialog: inDialog(el, session.host), opener: isOpener(el), extra: config.acting?.commitWords });
+  // A link is read as a button is: only a choice in a list is read as the page's value, and a visit to a page that
+  // plainly holds a form, whose words name what the form will do ("Issue card" to "/cards/new").
+  const verdict = readName(name, { choice: choice || (link && visitsAFormPage(el, config)), dialog: inDialog(el, session.host), opener: isOpener(el), extra: config.acting?.commitWords });
   if (verdict.commit) return { refused: { reason: verdict.marked ? "marked" : "words", commit: verdict.commit, at: el } };
   const asks = dialogAsks(el, session);
   if (asks) return { refused: { reason: "words", commit: asks, at: el } };
