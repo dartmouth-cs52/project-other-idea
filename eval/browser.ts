@@ -270,11 +270,14 @@ export async function reachedOrWhy(page: Page, reached: Reached, waitMs = 4000, 
   if (reached.request) {
     const to = new RegExp(reached.request.to);
     const has = new RegExp(reached.request.has);
-    // The page's own record of every address it has fetched since it loaded, in order.
-    const fetched = ((await page.evaluate(() => performance.getEntriesByType("resource").map((entry) => entry.name)).catch(() => [])) as string[]).filter((address) => to.test(address));
+    // The page's own record of every address it has fetched since it loaded, in order. A browser keeps 250 by
+    // default and then stops adding, so a full record may not hold the last one, and says so.
+    const all = (await page.evaluate(() => performance.getEntriesByType("resource").map((entry) => entry.name)).catch(() => [])) as string[];
+    const full = all.length >= 250 ? ` (the page's record of its requests is full, at ${all.length}, so a later one may be missing)` : "";
+    const fetched = all.filter((address) => to.test(address));
     const latest = fetched[fetched.length - 1];
-    if (!latest) return `the page has made no request to ${reached.request.to} since it loaded`;
-    if (!has.test(latest)) return `the page's last request to ${reached.request.to} was ${latest}, which does not match ${reached.request.has}`;
+    if (!latest) return `the page has made no request to ${reached.request.to} since it loaded${full}`;
+    if (!has.test(latest)) return `the page's last request to ${reached.request.to} was ${latest}, which does not match ${reached.request.has}${full}`;
   }
   if (reached.said !== undefined) {
     if (sentence === undefined) return `only the widget's sentence can say this is the place, and there was none to read`;
