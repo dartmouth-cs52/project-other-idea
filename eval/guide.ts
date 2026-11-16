@@ -72,7 +72,11 @@ export interface Step {
  * pointed at.
  */
 export interface Reached {
-  /** A regular expression the page's address has to match, like "#/cart$". */
+  /**
+   * A regular expression the page's address has to match, like "#/cart$": the
+   * address as it is, or with its escapes undone and whatever the case, so a
+   * query can be written as the visitor would type it.
+   */
   url?: string;
   /** Text that has to be visible on the page. */
   text?: string;
@@ -80,6 +84,27 @@ export interface Reached {
   selector?: string;
   /** A selector that must match nothing visible: what the visitor wanted rid of has gone. */
   absent?: string;
+  /**
+   * A selector for a field the visitor has typed into on this page. For a form
+   * that has to hold what the visitor came to enter before they are shown the
+   * button that sends it.
+   */
+  typedInto?: string;
+  /**
+   * For a page whose look does not show what was asked of it, as an empty list
+   * looks the same whatever filter ran: the last request the page made to an
+   * address matching `to` has to match `has` too. Both are patterns matched
+   * against the whole address, query and all. It is read from the page's own
+   * record of what it has fetched since it loaded, which nothing leaves.
+   */
+  request?: { to: string; has: string };
+  /**
+   * A pattern, matched whatever the case, that the sentence on show has to
+   * match. For an ending where the page holds several places and only the
+   * sentence says which one the visitor should look at. Only the widget's own
+   * words can pass it: a page alone never does.
+   */
+  said?: string;
 }
 
 /**
@@ -115,6 +140,14 @@ export interface ReadAnswer {
    * reads it from the page as it is when the sentence is judged.
    */
   when?: "start" | "end";
+  /**
+   * A path on the same site to read it from instead, when the guide starts on
+   * a page that does not show it: the answer to "what does it read?" asked
+   * from the sign-up form is on the home page. It is opened in a tab of its own
+   * as the guide starts, read, and closed; the visitor's page is left alone.
+   * Only with `when: "start"`.
+   */
+  from?: string;
 }
 
 export interface Guide {
@@ -123,7 +156,19 @@ export interface Guide {
   start: string;
   goal: string;
   steps: Step[];
-  reached?: Reached;
+  /**
+   * How to tell the visitor got there. A list gives the ends of other good
+   * ways to the same goal, and any one of them holding is enough.
+   */
+  reached?: Reached | Reached[];
+  /**
+   * The last controls of other good ways to the same goal, on a site where they
+   * must not be pressed: each is a step with no `act`, like a script's own last
+   * step, and with a `given` where the page has to show that it is the right
+   * one (the Remove in this panel's menu, not another's). A run that points at
+   * one is over, as reached, the way it is at the script's own last control.
+   */
+  otherEnds?: Step[];
   /**
    * For a question that asks for a fact: the last sentence gives the true
    * answer, which reaches the guide as fully as the walk-through does. In a
@@ -203,14 +248,18 @@ export function faults(set: GuideSet): string[] {
     if (guide.steps.length > 1 && !guide.reached && !guide.says && (last.act || !last.expect.length)) {
       found.push(`${guide.id}: no run of it can be scored as reached. Give it a "reached" that says how to tell the visitor got there, or end it on a step with no "act"`);
     }
+    const ends = guide.otherEnds ?? [];
+    const tests = (name: string, reached: Reached | undefined): (readonly [string, string | undefined])[] =>
+      reached ? [[`${name}.url`, reached.url], [`${name}.said`, reached.said], [`${name}.request.to`, reached.request?.to], [`${name}.request.has`, reached.request?.has]] : [];
     const patterns = [
-      ["reached.url", guide.reached?.url],
-      ...(guide.says?.all ?? []).map((one) => ["says.all", one]),
-      ...(guide.says?.not ?? []).map((one) => ["says.not", one]),
-      ["says.shown.part", guide.says?.shown?.part],
-      ["says.notShown.part", guide.says?.notShown?.part],
-      ["the last step's given.url", last.given?.url],
-    ] as const;
+      ...reachedList(guide.reached).flatMap((one, index) => tests(Array.isArray(guide.reached) ? `reached[${index}]` : "reached", one)),
+      ...(guide.says?.all ?? []).map((one) => ["says.all", one] as const),
+      ...(guide.says?.not ?? []).map((one) => ["says.not", one] as const),
+      ["says.shown.part", guide.says?.shown?.part] as const,
+      ["says.notShown.part", guide.says?.notShown?.part] as const,
+      ...tests("the last step's given", last.given),
+      ...ends.flatMap((end, index) => tests(`otherEnds[${index}].given`, end.given)),
+    ];
     for (const [name, pattern] of patterns) {
       if (pattern === undefined) continue;
       try {
@@ -220,7 +269,10 @@ export function faults(set: GuideSet): string[] {
       }
     }
     if (guide.says && !guide.says.all?.length && !guide.says.shown) found.push(`${guide.id}: "says" has to give the answer, with "all" or "shown"`);
+    for (const answer of [guide.says?.shown, guide.says?.notShown]) if (answer?.from !== undefined && answer.when !== "start") found.push(`${guide.id}: an answer read "from" another page is read when the guide starts: give it when: "start"`);
     if (guide.steps.some((step) => step.given && (step !== last || step.act))) found.push(`${guide.id}: only a last step that is not pressed can have a "given"`);
+    if (Array.isArray(guide.reached) && !guide.reached.length) found.push(`${guide.id}: "reached" is an empty list, which nothing can match`);
+    if (ends.some((end) => end.act || !end.expect.length)) found.push(`${guide.id}: each of "otherEnds" is a control that is pointed at and not pressed: it needs "expect" and no "act"`);
   }
   for (const name of ["never", "reads", "chatter"] as const) {
     if (set[name] === undefined) continue;
@@ -231,6 +283,11 @@ export function faults(set: GuideSet): string[] {
     }
   }
   return found;
+}
+
+/** A guide's `reached` as a list of the ends that count: empty when it has none. */
+export function reachedList(reached: Reached | Reached[] | undefined): Reached[] {
+  return reached === undefined ? [] : Array.isArray(reached) ? reached : [reached];
 }
 
 export const button = (label: string): Matcher => ({ label, role: "button" });

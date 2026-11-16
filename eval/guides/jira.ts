@@ -41,6 +41,23 @@ const UPDATE = 'input[type="submit"][value="Update"]:visible';
  * wherever a search is being narrowed, though not the one a visitor is shown here.
  */
 const ADVANCED = link("Advanced");
+
+/** A day this many days before the run, as JQL writes a date: 2026-11-09. */
+const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+/**
+ * The address of the Kafka search narrowed to issues created in the last seven days, and to nothing else, in the
+ * ways Jira and a visitor write it: 'project = "12311720" AND created >= -7d' from the form, "project = KAFKA AND
+ * created >= -7d" typed, "-1w" from a week, the date a week ago from "Between", either clause first, and an order
+ * after. A search of every project ("created >= -7d" alone, or the sidebar's "Created recently", which is Project:
+ * All), a clause joined by OR, and a clause more ("AND status = Open") are not it.
+ */
+const KAFKA_THIS_WEEK = (() => {
+  // Jira writes the project back by its id once the form has been used: project = "12311720" is Kafka.
+  const project = `project\\s*(?:=|in\\s*\\()\\s*"?(?:kafka|12311720)"?\\s*\\)?`;
+  const since = [7, 6].flatMap((days) => [daysAgo(days), daysAgo(days).replace(/-/g, "/")]).join("|");
+  const created = `created(?:date)?\\s*>=?\\s*"?(?:-(?:7d|1w|168h)|${since})"?`;
+  return `[?&]jql=\\s*(?:${project}\\s+and\\s+${created}|${created}\\s+and\\s+${project})\\s*(?:order\\s+by\\s[^&#]*)?(?:[&#]|$)`;
+})();
 /** The first of two same-named controls in the date criterion's form: the "Within the last" row. */
 const first = (label: string, role: string): Matcher => ({ label, role, nth: 1 });
 
@@ -114,7 +131,8 @@ const guides: Guide[] = [
       { expect: [button("Update")], act: { click: UPDATE } },
       DONE,
     ],
-    reached: { url: "created%20%3E%3D%20-7d" },
+    // "These" are the Kafka issues the visitor is looking at, so the project has to stay.
+    reached: { url: KAFKA_THIS_WEEK },
   },
   // Asked in German: where can I type a query myself? The answer is a place, so the guide ends by pointing at the query box.
   {

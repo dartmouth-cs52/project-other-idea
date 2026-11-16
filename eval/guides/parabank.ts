@@ -199,7 +199,10 @@ const guides: Guide[] = [
     reached: { selector: "#noTransactions:visible, #transactionTable tbody:not(:has(td:nth-child(3):not(:empty))):visible" },
   },
   {
-    // Spanish: "Where can I change my phone number?"
+    // Spanish: "Where can I change my phone number?" It ends on Update Profile, unpressed, once the visitor has typed
+    // the new number. Pressing it fails on ParaBank's side, whatever was typed: the site answers "An internal error
+    // has occurred and has been logged", also for the form sent back unchanged (seen on 16 November 2026, and in every
+    // run before). Ending there leaves Haptic's whole walk to the form judged, and the site's fault out of it.
     id: "update-phone",
     start: "/parabank/billpay.htm",
     goal: "¿Dónde puedo cambiar mi número de teléfono?",
@@ -207,10 +210,8 @@ const guides: Guide[] = [
     steps: [
       { expect: [menu("Update Contact Info", "updateprofile.htm")], act: menuClick("updateprofile.htm") },
       { expect: [named("customer.phoneNumber")], act: { fill: ['input[name="customer.phoneNumber"]', "310-555-0142"] }, say: "Type the new phone number." },
-      { expect: [button("Update Profile")], act: { click: 'input[value="Update Profile"]' } },
-      DONE,
+      { expect: [button("Update Profile")], given: { url: "/parabank/updateprofile\\.htm", typedInto: 'input[name="customer.phoneNumber"]' } },
     ],
-    reached: { text: "Profile Updated" },
   },
   {
     // Typos. The form is two text boxes and a dropdown, none with a label the widget can see. A loan this size is

@@ -240,7 +240,13 @@ const guides: Guide[] = [
       },
       DONE,
     ],
-    reached: { url: "/admin/saveSubscriber/5$", text: "Subscribers: Leave Rejections" },
+    // The Email Subscriptions page answers the question too: its Leave Rejections row has a Subscribers column, the
+    // same people the row's own page lists (both empty on 16 November 2026). There it counts once the sentence says
+    // which row, since the page has five.
+    reached: [
+      { url: "/admin/saveSubscriber/5$", text: "Subscribers: Leave Rejections" },
+      { url: "/admin/viewEmailNotification$", selector: '.oxd-table-card:has-text("Leave Rejections")', said: "\\bleave rejections\\b" },
+    ],
   },
   // Asked in French. Five dropdowns that all read "-- Select --"; Status is the fourth.
   {
@@ -255,10 +261,16 @@ const guides: Guide[] = [
       SEARCH,
       DONE,
     ],
-    // The list shows only shortlisted candidates: every row says so, and there is at least one. Before Search the
-    // list still shows every status, so the filter set and not yet run does not pass, as it did when this tested
-    // only the dropdown.
-    reached: { url: "/recruitment/viewCandidates$", selector: '.oxd-table-body:has(.oxd-table-card):not(:has(.oxd-table-card:not(:has-text("Shortlisted"))))' },
+    // The list shows the result of a search for shortlisted candidates and nothing else: the page's last request
+    // for candidates asked for status 2, Shortlisted, with no other filter, and no row says another status. An empty
+    // list is a true answer: on 16 November 2026 the demo had no candidates at all, so the list read "No Records
+    // Found" before any search and after it. The request tells the two apart, so the filter set and not yet run,
+    // another status, or another filter as well, does not pass.
+    reached: {
+      url: "/recruitment/viewCandidates$",
+      request: { to: "/api/v2/recruitment/candidates\\?", has: "\\?(?=(?:[^#]*&)?status=2(?:&|$))(?:(?:limit|offset|status|model|sortField|sortOrder)=[^&#]*(?:&|$))+$" },
+      absent: '.oxd-table-card:not(:has-text("Shortlisted"))',
+    },
   },
   // Asked with typos. A tab that opens a menu. Stops before the button that
   // records the punch. That button reads In or Out depending on whether the

@@ -157,6 +157,10 @@ const guides: Guide[] = [
   },
   // Grafana exports a dashboard as PDF, JSON or an image. There is no slide deck.
   { id: "no-powerpoint", start: GRAPHS, goal: "How do I export this dashboard as a PowerPoint presentation?", kind: "no-answer", steps: [DONE] },
+  // Two ways end on a control that deletes, and neither is pressed here: Delete in the edit pane once The Basics is
+  // the panel selected, and Remove in The Basics' own menu (seen on staging three times in three: edit mode, the
+  // panel's menu, Remove). Each counts only for this panel: Delete with another panel selected, or Remove in another
+  // panel's menu, is pointed at as before, and a run on a site other people use stops there short of the goal.
   {
     id: "delete-panel",
     start: GRAPHS,
@@ -166,7 +170,17 @@ const guides: Guide[] = [
       { expect: [button("Enter edit mode")], act: { click: '[data-testid="data-testid Edit dashboard button"]' } },
       // In edit mode a panel is selected by clicking it. The panel is not a control the widget lists.
       { expect: [{ label: "The Basics" }], unlisted: true, act: { click: '[data-testid="data-testid Panel header The Basics"] h2' } },
-      { expect: [button("Delete")] },
+      { expect: [button("Delete")], given: { selector: '[data-testid="data-testid Panel header The Basics"].dashboard-selected-element' } },
+    ],
+    // The widget reads the menu entry with its keyboard shortcut, "p r", after it.
+    otherEnds: [
+      {
+        expect: [
+          { label: "Remove", role: "menuitem" },
+          { label: "Remove p r", role: "menuitem" },
+        ],
+        given: { selector: '[data-testid="data-testid Panel menu The Basics"][aria-expanded="true"]' },
+      },
     ],
   },
 ];

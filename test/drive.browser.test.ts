@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { after, test } from "node:test";
 import { launch, type Browser } from "../eval/browser.ts";
 import { drive } from "../eval/drive.ts";
-import { DONE, type Guide, type GuideSet } from "../eval/guide.ts";
+import { button, DONE, type Guide, type GuideSet } from "../eval/guide.ts";
 import type { SiteContext, TurnReply, TurnRequest } from "../src/shared/types.ts";
 
 // Whole-guide runs (eval/drive.ts) on a small local site, with the model's
@@ -34,6 +34,38 @@ const PAGES: Record<string, { html: string; delay?: number }> = {
     </script>`,
   },
   "/people": { html: `<h1>People</h1><p>Everyone who works here.</p>` },
+  // Two panels, each with a menu whose last entry deletes it, as on a dashboard.
+  "/panels": {
+    html: `<h1>Dashboard</h1><button id="edit">Edit</button>
+      <section><h2>The Basics</h2><button aria-label="Menu for panel The Basics" aria-expanded="false" data-panel="The Basics">...</button></section>
+      <section><h2>Other</h2><button aria-label="Menu for panel Other" aria-expanded="false" data-panel="Other">...</button></section>
+      <div id="menu"></div>
+      <script>
+        for (const opener of document.querySelectorAll("[data-panel]")) opener.addEventListener("click", () => {
+          for (const other of document.querySelectorAll("[data-panel]")) other.setAttribute("aria-expanded", "false");
+          opener.setAttribute("aria-expanded", "true");
+          document.getElementById("menu").innerHTML = '<div role="menu"><div role="menuitem" tabindex="-1">View</div><div role="menuitem" tabindex="-1">Remove</div></div>';
+        });
+      </script>`,
+  },
+  // One page of settings with several rows, each a place of its own.
+  "/subscriptions": { html: `<h1>Email subscriptions</h1><table><tr><td>Leave Approvals</td><td></td></tr><tr><td>Leave Rejections</td><td></td></tr></table>` },
+  // A list behind a filter that looks the same whatever was asked: empty.
+  "/candidates": {
+    html: `<h1>Candidates</h1><label>Status <select id="status"><option value="">-- Select --</option><option value="2">Shortlisted</option><option value="3">Rejected</option></select></label>
+      <button id="search">Search</button><p>No Records Found</p>
+      <script>
+        const load = (query) => fetch("/api/candidates?" + query).catch(() => undefined);
+        load("limit=50");
+        const chosen = document.getElementById("status");
+        document.getElementById("search").addEventListener("click", () => load("limit=50" + (chosen.value ? "&status=" + chosen.value : "")));
+      </script>`,
+  },
+  // A form that fills itself in from a script, as many do, so no field's value is the one the page was sent with.
+  "/profile": {
+    html: `<h1>Update profile</h1><label>Phone <input id="phone"></label><button id="update">Update Profile</button>
+      <script>document.getElementById("phone").value = "555-2596-70";</script>`,
+  },
 };
 
 const server: Server = createServer((request, response) => {
@@ -114,4 +146,89 @@ test("a page that loads again under the runner as it reads the pointer is waited
     run.trail.slice(0, 2).map((step) => `${step.path} ${step.pointed}: ${step.did}`),
     ['/dashboard link "People": nothing: a new page loaded before the pointer could be used', '/dashboard link "People": clicked it'],
   );
+});
+
+/** Points at the control called `label` on whatever page asked, with `say`. */
+const point = (request: Omit<TurnRequest, "site">, label: string, say: string, status: TurnReply["status"] = "continue"): TurnReply => ({ target: idOf(request, label), status, say });
+
+test("another good way's last control ends the run as reached, only on the page its 'given' describes", { skip }, async () => {
+  const guide: Guide = {
+    id: "remove-panel",
+    start: "/panels",
+    goal: "How do I get rid of The Basics?",
+    steps: [{ expect: [{ label: "Edit", role: "button" }], act: { click: "#edit" } }, { expect: [button("Delete")] }],
+    otherEnds: [{ expect: [{ label: "Remove", role: "menuitem" }], given: { selector: '[data-panel="The Basics"][aria-expanded="true"]' } }],
+  };
+  // A site other people use, where a control that deletes is never pressed.
+  const live: GuideSet = { ...set([guide]), sandbox: false };
+  const run = async (panel: string) =>
+    (
+      await drive(
+        browser,
+        live,
+        guide,
+        site,
+        scripted((request) => (request.step === 0 ? point(request, `Menu for panel ${panel}`, `Open the menu of ${panel}.`) : point(request, "Remove", "Click Remove."))),
+        { visitor: "new", trace: false },
+      )
+    ).run;
+  const right = await run("The Basics");
+  assert.equal(right.end, "reached", `${right.end}: ${right.why}`);
+  assert.equal(right.trail.at(-1)?.did, "stopped here: another good way ends on this control, which is not pressed here");
+  // Remove in another panel's menu is not the goal, and is not pressed either.
+  const wrong = await run("Other");
+  assert.equal(wrong.end, "cut short", `${wrong.end}: ${wrong.why}`);
+});
+
+test("an end on a page of several places counts only when the sentence says which one", { skip }, async () => {
+  const guide: Guide = {
+    id: "rejection-emails",
+    start: "/subscriptions",
+    goal: "Who gets an email when leave is rejected?",
+    steps: [{ expect: [{ label: "Subscribers", role: "button" }], act: { click: "#subscribers" } }, DONE],
+    reached: [{ url: "/subscriptions/5$" }, { url: "/subscriptions$", said: "\\bleave rejections\\b" }],
+  };
+  const run = async (say: string) => (await drive(browser, set([guide]), guide, site, scripted(() => ({ target: null, status: "done", say })), { visitor: "new", trace: false })).run;
+  const right = await run("The Leave Rejections row lists who gets emailed. Nobody is subscribed now.");
+  assert.equal(right.end, "reached", `${right.end}: ${right.why}`);
+  const wrong = await run("This page lists who gets emailed about leave.");
+  assert.equal(wrong.end, "stopped short");
+  assert.match(wrong.why, /the sentence does not say \\bleave rejections\\b/);
+});
+
+test("an empty list counts only when the page's last request for it asked for what the visitor wanted", { skip }, async () => {
+  const guide: Guide = {
+    id: "shortlisted",
+    start: "/candidates",
+    goal: "Show only the shortlisted candidates",
+    steps: [{ expect: [{ label: "Status", role: "select" }], act: { select: ["#status", "Shortlisted"] } }, { expect: [button("Search")], act: { click: "#search" } }, DONE],
+    reached: { request: { to: "/api/candidates\\?", has: "[?&]status=2(&|$)" } },
+  };
+  const searched = scripted((request) =>
+    request.step === 0 ? point(request, "Status", "Choose Shortlisted.") : request.step === 1 ? point(request, "Search", "Click Search.") : { target: null, status: "done", say: "No one is shortlisted." },
+  );
+  const right = (await drive(browser, set([guide]), guide, site, searched, { visitor: "new", trace: false })).run;
+  assert.equal(right.end, "reached", `${right.end}: ${right.why}`);
+  // The same empty list, with the filter chosen and never run.
+  const notRun = scripted((request) => (request.step === 0 ? point(request, "Status", "Choose Shortlisted.") : { target: null, status: "done", say: "No one is shortlisted." }));
+  const wrong = (await drive(browser, set([guide]), guide, site, notRun, { visitor: "new", trace: false })).run;
+  assert.equal(wrong.end, "stopped short");
+  assert.match(wrong.why, /last request to .* was .*limit=50, which does not match/);
+});
+
+test("a form's last button counts only once the visitor has typed into the field it is for", { skip }, async () => {
+  const guide: Guide = {
+    id: "update-phone",
+    start: "/profile",
+    goal: "Where can I change my phone number?",
+    steps: [{ expect: [{ label: "Phone", role: "textbox" }], act: { fill: ["#phone", "310-555-0142"] } }, { expect: [button("Update Profile")], given: { typedInto: "#phone" } }],
+  };
+  const typed = scripted((request) => (request.step === 0 ? point(request, "Phone", "Type your new number.") : point(request, "Update Profile", "Click Update Profile.")));
+  const right = (await drive(browser, set([guide]), guide, site, typed, { visitor: "new", trace: false })).run;
+  assert.equal(right.end, "reached", `${right.end}: ${right.why}`);
+  assert.equal(right.trail[0]?.did, 'clicked it and typed "310-555-0142"');
+  // Shown the button straight away, the visitor has entered nothing: the button is used like any other, and the guide is not over.
+  const early = scripted((request) => (request.step === 0 ? point(request, "Update Profile", "Click Update Profile.") : { target: null, status: "done", say: "Saved." }));
+  const wrong = (await drive(browser, set([guide]), guide, site, early, { visitor: "new", trace: false })).run;
+  assert.equal(wrong.end, "stopped short", `${wrong.end}: ${wrong.why}`);
 });

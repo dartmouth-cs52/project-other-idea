@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseModel } from "../eval/ask.ts";
 import { findListed, KINDS, loadCaseFiles, matches, plausibleRange, score, type Case } from "../eval/cases.ts";
-import { saidOrWhy } from "../eval/browser.ts";
+import { addressFits, saidOrWhy } from "../eval/browser.ts";
 import { DONE, faults, type Guide, type GuideSet } from "../eval/guide.ts";
 import { judge, Net, onlyQueries } from "../eval/net.ts";
+import { NEUTRAL, valueAsked } from "../eval/visitor.ts";
 
 const item: Case = {
   id: "sample-1",
@@ -274,4 +275,67 @@ test("an answer in words passes only when it says the true answer, and nothing w
   const page = { shown: ["This page was last edited on 20 September 2026, at 19:55 (UTC)."] };
   assert.equal(saidOrWhy(when, "The latest edit is from September 20, 2026, by Quivico.", page), "");
   assert.match(saidOrWhy(when, "The latest edit is from 19 September 2026.", page), /does not say "20 September 2026"/);
+});
+
+test("the visitor types what the sentence asks for, in quotes of any kind or after \"type\" with none", () => {
+  // Seen on staging: an unquoted name sent the visitor's "Test" into UI5's search ("No products found"), a value in
+  // single quotes was never typed into Ant Design's description (eight times round), and a query after "type:" never
+  // reached Jira's query box.
+  assert.equal(valueAsked("Click the Search box and type Notebook Basic 17 to find it.", "Search"), "Notebook Basic 17");
+  assert.equal(valueAsked("Click Rule Description and type a longer text, like 'template change', then we'll continue.", "Rule Description"), "template change");
+  assert.equal(valueAsked("Click the Advanced Query box and type: created >= -7d (you can add project = KAFKA before it).", "Advanced Query"), "created >= -7d");
+  assert.equal(valueAsked("Type ‘Kafka’ to find the project.", "Find Projects..."), "Kafka");
+  assert.equal(valueAsked("Tapez « Shortlisted » dans le champ.", "Status"), "Shortlisted");
+  assert.equal(valueAsked('Type "KAFKA-1" in the search box.', "Search"), "KAFKA-1");
+  assert.equal(valueAsked("Click Timespan and type 7, then choose days.", "Timespan"), "7");
+  // Text in quotes straight after "type" wins over any other, and text after "type" over quotes elsewhere.
+  assert.equal(valueAsked('Click the Timespan box under "Within the last" and type 7.', "Timespan"), "7");
+  // A description of what to type, the field's own name, a key to press and an apostrophe give nothing.
+  for (const say of ["Type your work email.", "Enter a name for the rule.", "Escribe tu nuevo número en el campo Phone #.", "Type text here and press Enter.", "Fill in Rule Description, then click Next.", 'Click the "Search" box.', "Click the users' list, then type the name."]) {
+    assert.equal(valueAsked(say, say.includes("Rule Description") ? "Rule Description" : "Search"), undefined, say);
+  }
+  // With nothing asked for, the made-up text is long enough for a field that wants five characters.
+  assert.ok(NEUTRAL.length >= 5);
+});
+
+test("a guide's other ends are checked like its own: patterns that can be read, and controls that are not pressed", () => {
+  const base: Guide = { id: "g", start: "/", goal: "x", steps: [{ expect: [{ label: "A" }], act: { click: "#a" } }, { expect: [{ label: "Delete" }] }] };
+  const one = (guide: Guide): GuideSet => ({ siteId: "s", origin: "https://example.com", hasTag: false, guides: [guide] });
+  assert.deepEqual(faults(one({ ...base, otherEnds: [{ expect: [{ label: "Remove", role: "menuitem" }], given: { selector: "[aria-expanded=true]" } }] })), []);
+  assert.match(faults(one({ ...base, otherEnds: [{ expect: [{ label: "Remove" }], act: { click: "#remove" } }] }))[0] ?? "", /each of "otherEnds" is a control that is pointed at and not pressed/);
+  assert.match(faults(one({ ...base, otherEnds: [{ expect: [{ label: "Remove" }], given: { url: "(" } }] }))[0] ?? "", /otherEnds\[0\]\.given\.url is not a pattern/);
+  assert.deepEqual(faults(one({ ...base, steps: [base.steps[0]!, DONE], reached: [{ url: "/a$" }, { url: "/b$", said: "\\bB\\b" }] })), []);
+  assert.match(faults(one({ ...base, steps: [base.steps[0]!, DONE], reached: [{ url: "/a$" }, { said: "(" }] }))[0] ?? "", /reached\[1\]\.said is not a pattern/);
+  assert.match(faults(one({ ...base, steps: [base.steps[0]!, DONE], reached: { request: { to: "/api", has: "[" } } }))[0] ?? "", /reached\.request\.has is not a pattern/);
+  assert.match(faults(one({ ...base, steps: [base.steps[0]!, DONE], reached: [] }))[0] ?? "", /empty list/);
+  assert.match(faults(one({ ...base, says: { shown: { selector: "p", from: "/" } } }))[0] ?? "", /read "from" another page is read when the guide starts/);
+});
+
+test("an address is matched as it is, or as a visitor would write it", () => {
+  const kafka = addressFits("[?&]jql=project\\s*=\\s*kafka\\s+and\\s+created\\s*>=\\s*-7d(?:&|$)");
+  assert.equal(kafka("https://issues.apache.org/jira/issues/?jql=project%20%3D%20KAFKA%20AND%20created%20%3E%3D%20-7d"), true);
+  assert.equal(kafka("https://issues.apache.org/jira/issues/?jql=project+%3D+KAFKA+AND+created+%3E%3D+-7d"), true);
+  assert.equal(kafka("https://issues.apache.org/jira/issues/?jql=created%20%3E%3D%20-7d"), false);
+  // A pattern written for the address as it is still works.
+  assert.equal(addressFits("created%20%3E%3D%20-7d")("https://x/?jql=created%20%3E%3D%20-7d"), true);
+});
+
+test("the guides' answers in words pass the sentences seen on staging, and not wrong ones", async () => {
+  const joinhaptic = (await import("../eval/guides/joinhaptic.ts")).default as GuideSet;
+  const says = (id: string) => joinhaptic.guides.find((guide) => guide.id === id)!.says!;
+  // As the home page showed them on 16 November 2026.
+  const prices = { shown: ["Early access", "Free", "$149 a month"] };
+  for (const right of [
+    "The Pricing section is on this page: Free during early access, Team at $149 a month, Scale at $499 a month, and Enterprise is custom.",
+    "Haptic is free during early access. After that, plans start at $149 per month.",
+  ]) assert.equal(saidOrWhy(says("pricing"), right, prices), "", right);
+  assert.match(saidOrWhy(says("pricing"), "Haptic is free during early access, then from $99 a month.", prices), /does not say "\$149 a month"/);
+  assert.match(saidOrWhy(says("pricing"), "It costs $149 a year after early access, which is free.", prices), /does not say "\$149 a month"/);
+  assert.match(saidOrWhy(says("pricing"), "Early access is not free: $149 a month.", prices), /wrong answer/);
+
+  const reads = { shown: ["Haptic reads the names of buttons and fields. What people type stays in the browser, and emails and long numbers are masked before anything is sent."] };
+  assert.equal(saidOrWhy(says("what-it-reads"), "It reads button labels and form field names, and never what you type.", reads), "");
+  // What failed three times in three on staging: where the answer is, and not the answer.
+  assert.notEqual(saidOrWhy(says("what-it-reads"), 'The FAQ on the home page has an answer titled "What does Haptic see on the page?". Click FAQ in the top bar to read it.', reads), "");
+  assert.notEqual(saidOrWhy(says("what-it-reads"), "It reads the buttons and fields on your page and what people type.", reads), "");
 });

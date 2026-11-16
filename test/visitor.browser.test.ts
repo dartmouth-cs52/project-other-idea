@@ -138,7 +138,7 @@ test("the visitor types what the script or the sentence says before anything of 
 
   // The field's own name in quotes is not something to type.
   const named = await use(page, await page.$("#q"), shown("Search or jump to...", 'Click the "Search or jump to..." box.'));
-  assert.equal(named.did, 'clicked it and typed "Test", for want of anything better');
+  assert.equal(named.did, 'clicked it and typed "Sample text", for want of anything better');
   await page.close();
 });
 

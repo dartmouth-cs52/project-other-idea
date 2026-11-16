@@ -5,7 +5,7 @@ import { parseArgs } from "node:util";
 import { buildUserMessage } from "../src/server/prompt.ts";
 import { describeElement, type SiteContext, type Snapshot, type TurnReply, type TurnRequest } from "../src/shared/types.ts";
 import { modelAsker, parseModel, serverAsker, type Asker } from "./ask.ts";
-import { ask, launch, loadGuideSet, open, reachedOrWhy, readAnswers, saysOrWhy, siteFor, type Browser, type Read } from "./browser.ts";
+import { ask, launch, loadGuideSet, open, reachedAnyOrWhy, reachedOrWhy, readAnswers, saysOrWhy, siteFor, type Browser, type Read } from "./browser.ts";
 import { matches, plausibleRange } from "./cases.ts";
 import type { Guide, GuideSet, Step } from "./guide.ts";
 import { countSent, type Net, type SentLog } from "./net.ts";
@@ -187,9 +187,10 @@ export async function drive(browser: Browser, set: GuideSet, guide: Guide, site:
   const looks = (snapshot: Snapshot) => snapshot.elements.map((element) => `${element.role} ${element.label}`).sort().join("\n");
 
   const last = guide.steps[guide.steps.length - 1];
-  // A script that ends on a control it does not press is over when that control is pointed at.
-  const stopAt = last && last.expect.length && !last.act ? last.expect : [];
-  const stopAtNames = stopAt.map((matcher) => `"${matcher.label}"`).join(" or ");
+  // A script that ends on a control it does not press is over when that control is pointed at, and so is
+  // another good way's last control (its "otherEnds"), each while the page is as its "given" says.
+  const stopAt = [...(last && last.expect.length && !last.act ? [last] : []), ...(guide.otherEnds ?? [])];
+  const stopAtNames = stopAt.flatMap((end) => end.expect.map((matcher) => `"${matcher.label}"`)).join(" or ");
   const limit = guide.steps.length + EXTRA_STEPS;
   let net: Net | undefined;
   const result = (end: End, why: string, more: Partial<Pick<GuideRun, "overran" | "answered" | "endedOnPointer" | "showing">> = {}): { run: GuideRun; traced: Traced[] } => {
@@ -265,7 +266,9 @@ export async function drive(browser: Browser, set: GuideSet, guide: Guide, site:
     if (frame === page.mainFrame()) moves++;
   });
   net = opened.net;
-  const reachedNow = async (wait: number) => (guide.reached ? (await reachedOrWhy(page, guide.reached, wait)) === "" : false);
+  /** The sentence the widget has on show: the latest answer's, which is what a test that reads the sentence reads. */
+  const sentenceNow = () => replies[replies.length - 1]?.reply.say;
+  const reachedNow = async (wait: number, sentence = sentenceNow()) => (guide.reached ? (await reachedAnyOrWhy(page, guide.reached, wait, sentence)) === "" : false);
   /** The answer to a question that asks for a fact, where it is read from the page the guide starts on. */
   let atStart: Read = {};
 
@@ -319,9 +322,9 @@ export async function drive(browser: Browser, set: GuideSet, guide: Guide, site:
     const showing = await showingNow();
     // A request the last click set off has to have begun before the run is judged.
     if (net) await page.waitForTimeout(700);
-    const whyNot = guide.reached ? await reachedOrWhy(page, guide.reached) : stopAt.length ? `it never pointed at ${stopAtNames}` : "the script has no test of the page";
+    const lastSaid = sentenceNow() ?? "";
+    const whyNot = guide.reached ? await reachedAnyOrWhy(page, guide.reached, 4000, lastSaid) : stopAt.length ? `it never pointed at ${stopAtNames}` : "the script has no test of the page";
     if (guide.reached && !whyNot) return result("reached", "", { ...more, showing });
-    const lastSaid = replies[replies.length - 1]?.reply.say ?? "";
     if (guide.says) {
       const whyNotSaid = await saysOrWhy(page, guide.says, lastSaid, atStart);
       if (!whyNotSaid) return result("reached", "", { ...more, showing, answered: true });
@@ -361,7 +364,7 @@ export async function drive(browser: Browser, set: GuideSet, guide: Guide, site:
       if (replies.length > at) return "answered";
       if (watch && guide.reached && Date.now() - lookedAt >= 500) {
         lookedAt = Date.now();
-        if ((await reachedOrWhy(page, guide.reached, 50)) === "") return "reached";
+        if ((await reachedAnyOrWhy(page, guide.reached, 50, sentenceNow())) === "") return "reached";
       }
       if (whenQuiet && asked === askedBefore && Date.now() - began > QUIET_MS) {
         const once = whenQuiet;
@@ -423,11 +426,15 @@ export async function drive(browser: Browser, set: GuideSet, guide: Guide, site:
       };
       const pointed = reply.target ? snapshot.elements.find((element) => element.id === reply.target) : undefined;
 
-      // The script ends on this control unpressed, and the page is as it has to be then: the guide is over.
-      // Pointed at too soon, before the page is ready for it, it is used like any other control.
-      if (pointed && stopAt.some((matcher) => matches(matcher, pointed, snapshot.elements)) && (!last?.given || (await reachedOrWhy(page, last.given, 300)) === "")) {
-        did("stopped here, as the script does");
-        return await ended("reached", "");
+      // The script ends on this control unpressed, or another good way does, and the page is as it has to be
+      // then: the guide is over. Pointed at too soon, before the page is ready for it, it is used like any other control.
+      if (pointed) {
+        for (const end of stopAt) {
+          if (!end.expect.some((matcher) => matches(matcher, pointed, snapshot.elements))) continue;
+          if (end.given && (await reachedOrWhy(page, end.given, 300, reply.say)) !== "") continue;
+          did(end === last ? "stopped here, as the script does" : "stopped here: another good way ends on this control, which is not pressed here");
+          return await ended("reached", "");
+        }
       }
       if (!pointed) {
         // "continue" with nothing to point at means "do this, I am watching", on a widget that watches.
@@ -452,7 +459,7 @@ export async function drive(browser: Browser, set: GuideSet, guide: Guide, site:
         counts.repeated++;
       }
       // Already there, and it is still pointing. "done" with a pointer shows where the answer is. "continue" is a step too many.
-      if (await reachedNow(300)) {
+      if (await reachedNow(300, reply.say)) {
         did("nothing: already there");
         return await ended("reached", "", { overran: reply.status === "continue" });
       }
