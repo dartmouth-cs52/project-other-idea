@@ -603,10 +603,30 @@ test("values come only from the visitor's words: typed text, and the option the 
     const wipe = await page.plan("#interval", { do: "choose", enter: "Delete the limit" }, "delete the limit");
     assert.equal(wipe.kind, "act");
     assert.equal((await page.pick("#wipe")).reason, "words");
-    // An option outside what Haptic opened is not pressed.
+    // An option in a list that no field says is open is not pressed.
+    await page.run(`document.getElementById("interval").setAttribute("aria-expanded", "false")`);
     const outside = await page.plan("#month", { do: "click" }, CARD);
     assert.deepEqual([outside.kind, outside.reason], ["visitor", "unknown"]);
     assert.deepEqual((await page.press()).hits, []);
+  } finally {
+    await page.close();
+  }
+});
+
+test("an option of a list the visitor opened from a field is picked as from one Haptic opened: by its own words, and only while the field says the list is open", async () => {
+  // Seen live: the visitor opened Limit interval on their turn, and the model then chose "Per month" in it.
+  const page = await open(WIZARD);
+  try {
+    await page.run(`document.getElementById("interval-list").style.display = "block"; document.getElementById("interval").setAttribute("aria-expanded", "true")`);
+    const month = await page.plan("#month", { do: "choose", enter: "Per month" }, CARD);
+    assert.deepEqual([month.kind, month.act, month.control, month.tripwire], ["act", "click", "option", true]);
+    assert.deepEqual((await page.press()).hits, ["month"]);
+    // Its words must still be the visitor's, and words that end something still stop it.
+    assert.deepEqual([(await page.plan("#day", { do: "click" }, CARD)).reason, (await page.press()).hits], ["ungrounded", ["month"]]);
+    assert.equal((await page.plan("#wipe", { do: "choose", enter: "Delete the limit" }, "delete the limit")).reason, "words");
+    // A list no control names as its own is nobody's field.
+    await page.run(`document.getElementById("interval").removeAttribute("aria-controls")`);
+    assert.equal((await page.plan("#month", { do: "click" }, CARD)).reason, "unknown");
   } finally {
     await page.close();
   }

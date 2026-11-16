@@ -22,8 +22,8 @@ import { currentPath, findOpenModal } from "./snapshot.ts";
 //  6. Commit words, by class (act-rules.ts).
 //  7. Destructive styling: red, or a toolkit's danger class.
 //  8. Safe by what it is: a same-origin link, a control that opens something,
-//     a tab, a choice in a list Haptic opened, a staged field, Enter in a
-//     search box. Also a button outside any
+//     a tab, a choice in a list Haptic opened or the visitor opened from a
+//     field, a staged field, Enter in a search box. Also a button outside any
 //     form whose name says it opens something ("Edit limits", "New budget"),
 //     pressed with the tripwire armed.
 //  9. Safe by its words: "Next", "Back", "Cancel", ...
@@ -548,14 +548,42 @@ function kindOf(el: Element, act: Act, session: GateSession): { control: Control
   return { control: "button" };
 }
 
-/** Whether `trigger` names `el`'s box as what it controls or owns. */
-function isControlledBy(trigger: Element, el: Element): boolean {
+/**
+ * The list an option is in, with what opened it: the one Haptic opened, or
+ * one the visitor opened, which a control on the page names as its own
+ * (`aria-controls` or `aria-owns`) and says is open (`aria-expanded="true"`).
+ * Undefined when nothing on the page says the list is its own: an option
+ * that no field opened is not pressed.
+ */
+function openedHolding(el: Element, session: GateSession): GateSession["opened"] {
+  const opened = session.opened;
+  if (opened && ((opened.popup && within(opened.popup, el)) || isControlledBy(opened.from, el))) return opened;
+  const root = el.getRootNode() as Document | ShadowRoot;
+  const triggers = new Set([...Array.from(root.querySelectorAll(OPEN_TRIGGER)), ...(root === document ? [] : Array.from(document.querySelectorAll(OPEN_TRIGGER)))]);
+  for (const trigger of Array.from(triggers).slice(0, 60)) {
+    if (within(session.host, trigger) || within(trigger, el) || disabled(trigger)) continue;
+    const popup = boxControlledBy(trigger, el);
+    if (popup) return { from: trigger, popup };
+  }
+  return undefined;
+}
+
+/** A control that says it is open and names what it opened. */
+const OPEN_TRIGGER = "[aria-expanded='true'][aria-controls], [aria-expanded='true'][aria-owns]";
+
+/** The box `trigger` controls or owns that holds `el`, if any. */
+function boxControlledBy(trigger: Element, el: Element): Element | undefined {
   const root = trigger.getRootNode() as Document | ShadowRoot;
   for (const id of `${trigger.getAttribute("aria-controls") ?? ""} ${trigger.getAttribute("aria-owns") ?? ""}`.split(/\s+/).filter(Boolean)) {
     const box = root.getElementById?.(id) ?? document.getElementById(id);
-    if (box && within(box, el)) return true;
+    if (box && within(box, el)) return box;
   }
-  return false;
+  return undefined;
+}
+
+/** Whether `trigger` names `el`'s box as what it controls or owns. */
+function isControlledBy(trigger: Element, el: Element): boolean {
+  return !!boxControlledBy(trigger, el);
 }
 
 /** Whether the field Haptic opened a list from is one a visitor picks a value in, so what is chosen there must be their own words. */
@@ -845,9 +873,10 @@ function decide(reply: TurnReply, target: Element | undefined, listed: SnapEleme
     if (pressed.refused) return refuse(pressed.refused.reason, el, pressed.refused.commit);
     if (control === "link") return actPlan(el, act, control, name, { navigates: true });
     if (control === "option") {
-      const opened = session.opened;
-      const inOpened = !!opened && ((opened.popup && within(opened.popup, el)) || isControlledBy(opened.from, el));
-      if (!inOpened) return refuse("unknown");
+      const opened = openedHolding(el, session);
+      if (!opened) return refuse("unknown");
+      // A list the visitor opened on their turn is picked from as one Haptic opened: the field it belongs to is known, and judged.
+      session.opened = opened;
       const fromField = openedFromField(session);
       if (CHOICE_ROLES.has(roleOf(el)) && fromField && !grounded(liveName(el) || name, session.words)) return refuse("ungrounded");
       // A choice sets the field it was opened from, so that field must be one whose change waits.
