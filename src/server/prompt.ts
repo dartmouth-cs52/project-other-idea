@@ -1,4 +1,5 @@
 import { controlText, correctionsFor } from "../shared/corrections.ts";
+import { answersOn } from "../shared/types.ts";
 import type { Doc, PageNode, PageOpening, SiteContext, SnapElement, Snapshot, TurnRequest } from "../shared/types.ts";
 
 // Builds what the model reads. The system part (rules and site knowledge) is
@@ -108,7 +109,7 @@ export const DOCS_BUDGET = 60_000;
 export const ANSWERS_DOCS_BUDGET = 250_000;
 
 /** True when the site's replies can answer in words as well as point. */
-export const answersOn = (site: SiteContext): boolean => site.answers?.enabled === true;
+export { answersOn };
 
 export function buildSystemPrompt(site: SiteContext): string {
   const answers = answersOn(site);

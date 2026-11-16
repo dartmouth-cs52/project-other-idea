@@ -79,6 +79,8 @@ export interface Site {
     used: number;
     list: { title: string; source: string; pasted: boolean; chars: number; inPrompt: boolean }[];
   };
+  /** Answering in words from the docs. `chosen` is null while the site follows the default, which is on once it has docs. */
+  answers: { on: boolean; chosen: boolean | null };
   connected: boolean;
   origins: SeenOrigin[];
   reading: Reading | null;
