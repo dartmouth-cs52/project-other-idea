@@ -204,7 +204,9 @@ function within(el: Element, node: Element): boolean {
 }
 
 function disabled(el: Element): boolean {
-  return (el as HTMLButtonElement).disabled === true || el.getAttribute("aria-disabled") === "true" || (CHOICE_ROLES.has(roleOf(el)) && el.hasAttribute("data-disabled"));
+  // Radix writes data-disabled with no value on a disabled option; cmdk writes data-disabled="false" on every option that is not.
+  const flag = el.getAttribute("data-disabled");
+  return (el as HTMLButtonElement).disabled === true || el.getAttribute("aria-disabled") === "true" || (CHOICE_ROLES.has(roleOf(el)) && flag !== null && flag !== "false");
 }
 
 /** Words of an element for reading, capped. Never the inside of a field: what a visitor typed is not read. */
@@ -953,7 +955,7 @@ export function planPick(option: Element, plan: ActPlan, session: GateSession, c
       if (part.hasAttribute("data-haptic-commit")) return refuse("marked");
       if ((part.getAttribute("data-haptic-act") ?? "").toLowerCase() === "off") return refuse("off");
     }
-    if (!words || !grounded(words, session.words)) return refuse("ungrounded");
+    if (!words || !(grounded(words, session.words) || namesOption(plan.value, words, session.words))) return refuse("ungrounded");
     const verdict = readName(words, { link: true, extra: config.acting?.commitWords });
     if (verdict.commit) {
       if (unasked(verdict.commit, session)) return classStop(option, undefined, verdict.commit);
@@ -964,6 +966,20 @@ export function planPick(option: Element, plan: ActPlan, session: GateSession, c
     console.warn("[Haptic]", error);
     return visitorPlan(plan.el, undefined, "unknown", "choose", plan.value);
   }
+}
+
+/**
+ * Whether the visitor's own value names this option by its first words: the
+ * value is grounded in what they wrote, and the option's words begin with it.
+ * A person in a list is often shown with their title or email after the name
+ * ("Malika Cummerata  Senior Accountant"): the visitor named the person, and
+ * the words after the name only describe them. "Per day" does not begin with
+ * "Per month", so it stays the visitor's to pick.
+ */
+function namesOption(value: string | undefined, option: string, words: string): boolean {
+  const plain = (text: string) => fold(text).replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const [named, shown] = [plain(value ?? ""), plain(option)];
+  return !!named && grounded(value!, words) && (shown === named || shown.startsWith(`${named} `));
 }
 
 const FREE_KEYS = new Set(["Escape", "Esc", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Up", "Down", "Left", "Right", "Home", "End", "PageUp", "PageDown"]);

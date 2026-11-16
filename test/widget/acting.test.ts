@@ -479,3 +479,51 @@ test("once acting is over, by the visitor's click on the commit or by Stop, noth
     await session.close();
   }
 });
+
+/** A picker built the way Northpine's is, from a Radix popover and cmdk: options carry data-disabled="false" unless they are disabled. */
+const PICKER = `${WATCH}<h1>New card</h1><form>
+  <label for="holder">Cardholder</label>
+  <button id="holder" type="button" role="combobox" aria-expanded="false" aria-controls="people" aria-label="Cardholder">Search people…</button>
+  <div id="people" role="listbox" hidden style="position:absolute;background:#fff;border:1px solid #999;padding:4px;width:220px">
+    <div role="option" cmdk-item="" data-disabled="false" aria-disabled="false" id="malika" data-watch><span>Malika Cummerata</span> <span>Senior Accountant</span></div>
+    <div role="option" cmdk-item="" data-disabled="false" aria-disabled="false" id="ravi" data-watch><span>Ravi Patel</span> <span>Designer</span></div>
+    <div role="option" cmdk-item="" data-disabled="" aria-disabled="true" id="gone" data-watch><span>Former Employee</span></div>
+  </div>
+  <button type="button">Next</button></form>
+  <script>
+    const holder = document.getElementById('holder'), people = document.getElementById('people');
+    const show = (open) => { people.hidden = !open; holder.setAttribute('aria-expanded', String(open)); };
+    holder.addEventListener('click', () => show(people.hidden));
+    for (const option of people.children) option.addEventListener('click', () => { if (option.getAttribute('aria-disabled') === 'true') return; holder.textContent = option.firstElementChild.textContent; show(false); });
+  </script>`;
+
+const choosing = (request: Asked, value: string): TurnReply => ({ target: idOf(request, "Cardholder", "combobox"), do: "choose", enter: value, commits: false, status: "continue", say: `Choosing ${value}.`, mode: "act" });
+
+test("a person the visitor named is picked from a list that shows each name with a title and says data-disabled=\"false\", as cmdk's does; one they did not name is theirs to pick, and acting carries on after their pick", async () => {
+  const session = await start(PICKER, (request, index) => (index === 0 ? choosing(request, "Malika Cummerata") : words("Done.")), "/", { acting: { ...ACTING_ON, confirmFirst: false } });
+  try {
+    await session.ask("can you give Malika Cummerata a card", { act: true });
+    const second = await session.untilAsked(2, 15_000);
+    assert.match(second.event ?? "", /^You chose "Malika Cummerata Senior Accountant" from the list that combobox "Cardholder" opened\./);
+    assert.equal(await session.page.textContent("#holder"), "Malika Cummerata");
+  } finally {
+    await session.close();
+  }
+  // The model picks a person the visitor never named: the visitor picks, and Haptic waits for the pick, not the click that opens the list.
+  const theirs = await start(PICKER, (request, index) => (index === 0 ? choosing(request, "Ravi Patel") : words("Done.")), "/", { acting: { ...ACTING_ON, confirmFirst: false } });
+  try {
+    await theirs.ask("can you give someone a card", { act: true });
+    await theirs.untilState("pointing", 15_000);
+    assert.equal(await theirs.status(), "Your turn");
+    assert.deepEqual(await reached(theirs), [], "an option was pressed for a name the visitor never gave");
+    await theirs.page.locator("#holder").click();
+    await theirs.page.waitForTimeout(1500);
+    assert.equal(theirs.requests.length, 1, `acting went on once the list was open, before the pick: ${theirs.requests[1]?.event}`);
+    await theirs.page.locator("#ravi").click();
+    const next = await theirs.untilAsked(2, 10_000);
+    assert.equal(next.mode, "act");
+    assert.match(next.event ?? "", /The visitor chose "Ravi Patel( Designer)?" from the list that combobox "Cardholder" opened\./);
+  } finally {
+    await theirs.close();
+  }
+});

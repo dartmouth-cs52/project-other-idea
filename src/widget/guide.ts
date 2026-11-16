@@ -44,6 +44,8 @@ const DATA_FLOOR_MS = 700;
  * "again"). A page that keeps changing under it has to stop somewhere.
  */
 const MAX_AGAIN = 2;
+/** How long after the visitor's click on a list's control the list is looked for, when it is their turn to pick from it. */
+const LIST_OPENS_MS = 200;
 /** How the visitor is named to the model while Haptic acts: Haptic's own steps are "You". */
 const VISITOR = "The visitor";
 /** The widget's own sentences while acting that the gate does not have. English in this version. */
@@ -837,7 +839,7 @@ export class Guide {
       case "stop":
         return this.stopActing(plan.say, plan.el);
       case "visitor":
-        return this.visitorTurn(run, plan.el, listing, plan.say, plan.event);
+        return this.visitorTurn(run, plan.el, listing, plan.say, plan.event, reply.do === "choose");
       case "act":
         return this.doStep(run, plan, reply, listing, listed, pageNow);
     }
@@ -891,7 +893,7 @@ export class Guide {
       }
       case "visitor":
         if (outcome.reason === "failed") session.gate.failures++;
-        return this.visitorTurn(run, outcome.el, listing, outcome.say, outcome.event);
+        return this.visitorTurn(run, outcome.el, listing, outcome.say, outcome.event, plan.act === "choose");
       case "done": {
         session.gate.failures = 0;
         if (outcome.did) this.noteDid(session, outcome.did);
@@ -916,9 +918,10 @@ export class Guide {
    * give, a control the gate keeps for them, a step the engine could not do.
    * The pointer stays, its ring breathes, and acting carries on when the
    * hearing hears them do it. Haptic does not pause for their hand now: it is
-   * their turn.
+   * their turn. For a choice (`picks`), the click that opens the list is not
+   * the step: the pick is.
    */
-  private visitorTurn(run: number, el: Element, listing: Map<Element, SnapElement>, say: string, event: string) {
+  private visitorTurn(run: number, el: Element, listing: Map<Element, SnapElement>, say: string, event: string, picks = false) {
     const { ui } = this;
     const session = this.acting;
     const listed = listing.get(el);
@@ -929,9 +932,27 @@ export class Guide {
     ui.yourTurn(true);
     this.save();
     const how: Hearing = { anyClick: false, keys: keysAsked(say), subject: VISITOR };
+    const isOpen = (on: Element) => on.isConnected && (on.getAttribute("aria-expanded") === "true" || !!on.querySelector("[aria-expanded='true']"));
+    /** Whether that was the click that opens the list the visitor is to pick from. The page opens it after the click is heard, so it is looked at a moment later. */
+    let opening = false;
     const onHeard = (what: Acted, on: Element) => {
       this.stopWaiting = undefined;
       if (run !== this.run || this.acting !== session) return;
+      if (picks && !opening && what.onTarget && (what.how === "clicked" || what.how === "opened")) {
+        opening = true;
+        const timer = setTimeout(
+          safely(() => {
+            this.stopWaiting = undefined;
+            if (run !== this.run || this.acting !== session) return;
+            // The list is open: the pick is still to come, from the list it opened.
+            if (isOpen(on)) this.stopWaiting = waitForAction(on, listed, ui.host, listing, how, (next) => onHeard(next, on));
+            else onHeard(what, on);
+          }),
+          LIST_OPENS_MS,
+        );
+        this.stopWaiting = () => clearTimeout(timer);
+        return;
+      }
       if (what.how === "redrawn") {
         // The page drew the control again: the same step, on its new node.
         const again = listed ? sameControl(this.previous ?? takeSnapshot(ui.host, this.goal).snapshot, listed, takeSnapshot(ui.host, this.goal)) : undefined;
