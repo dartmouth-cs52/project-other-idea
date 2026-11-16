@@ -86,13 +86,20 @@ test("the ask box still takes the cursor where it is pressed, and text can be se
 /**
  * A page that counts, from before the widget loads, every timer and frame
  * callback the widget's script sets that runs, every observer it leaves
- * watching, and every listener it leaves on the document or the window. What
- * the test's browser adds of its own is not the widget's, and is told apart by
- * where it was set from.
+ * watching, and every listener it leaves on the document or the window, by
+ * where it is, its type and its phase ("d:toggle:true"). What the test's
+ * browser adds of its own is not the widget's, and is told apart by where it
+ * was set from.
  */
 const COUNTED = `<h1>Account</h1><button id="save" type="button">Save</button>
+  <dialog id="native"><p>Native dialog</p><button id="close-native" type="button">Close</button></dialog>
+  <div id="layer" popover="manual" style="position:fixed;inset:0;margin:0;width:100vw;height:100vh;max-width:none;max-height:none;border:0;background:rgba(0,0,0,.4)">
+    <div role="dialog" aria-label="Order" style="position:absolute;left:30%;top:30%;width:40%;background:#fff;padding:16px"><button id="close-layer" type="button">Close</button></div>
+  </div>
   <script>
-    const counts = (window.__counts = { calls: 0, observers: 0, listeners: 0 });
+    document.getElementById('close-native').addEventListener('click', () => document.getElementById('native').close());
+    document.getElementById('close-layer').addEventListener('click', () => document.getElementById('layer').hidePopover());
+    const counts = (window.__counts = { calls: 0, observers: 0, listeners: 0, kept: [] });
     const ours = () => /widget\\.js/.test(new Error().stack || '');
     for (const name of ['setTimeout', 'setInterval', 'requestAnimationFrame']) {
       const original = window[name];
@@ -113,30 +120,77 @@ const COUNTED = `<h1>Account</h1><button id="save" type="button">Save</button>
       target.addEventListener = function (type, listener, options) { const k = key(type, listener, options); if (!kept.has(k) && ours()) { kept.add(k); counts.listeners++; } return add.call(this, type, listener, options); };
       target.removeEventListener = function (type, listener, options) { const k = key(type, listener, options); if (kept.delete(k)) counts.listeners--; return remove.call(this, type, listener, options); };
     }
+    // Where, of what type and in which phase each listener of ours is, without its own number.
+    counts.kept = () => [...kept].map((k) => k.split(':').slice(0, 3).join(':')).sort();
   </script>`;
 
-/** How many of our callbacks run in two quiet seconds, and how many observers and listeners are left. */
-async function quietCounts(session: Session): Promise<{ calls: number; observers: number; listeners: number }> {
+/** How many of our callbacks run in two quiet seconds, how many observers are left, and the listeners left, by where, type and phase. */
+async function quietCounts(session: Session, during?: () => Promise<void>): Promise<{ calls: number; observers: number; listeners: string[] }> {
   await session.page.waitForTimeout(1500);
   const before = await session.page.evaluate(() => (window as unknown as { __counts: { calls: number } }).__counts.calls);
+  await during?.();
   await session.page.waitForTimeout(2000);
   return session.page.evaluate((calls: number) => {
-    const counts = (window as unknown as { __counts: { calls: number; observers: number; listeners: number } }).__counts;
-    return { calls: counts.calls - calls, observers: counts.observers, listeners: counts.listeners };
+    const counts = (window as unknown as { __counts: { calls: number; observers: number; kept: () => string[] } }).__counts;
+    return { calls: counts.calls - calls, observers: counts.observers, listeners: counts.kept() };
   }, before);
 }
 
-test("nothing of Haptic's runs on a page where no guide is running: no timer, no frame, no observer, no listener", async () => {
+/** The one listener of Haptic's allowed while nothing is in use: a page's dialog or popover opening on the top layer, heard on the document in the capture phase. */
+const IDLE = { calls: 0, observers: 0, listeners: ["d:toggle:true"] };
+
+test("nothing of Haptic's runs on a page where no guide is running: no timer, no frame, no observer, and no listener but the one for the top layer", async () => {
   const session = await start(COUNTED, () => words("Saving is done with the Save button at the top."));
   try {
     // The widget's own start-up listener for the page to finish loading is gone once it has.
     const idle = await quietCounts(session);
-    assert.deepEqual(idle, { calls: 0, observers: 0, listeners: 0 }, "before any question");
+    assert.deepEqual(idle, IDLE, "before any question");
     await session.ask("how do I save");
     await session.untilState("finished");
     await session.page.locator("haptic-root .caption .close").click();
     const after = await quietCounts(session);
-    assert.deepEqual(after, { calls: 0, observers: 0, listeners: 0 }, "after a guide is over and put away");
+    assert.deepEqual(after, IDLE, "after a guide is over and put away");
+    // The page opens and closes its dialogs while nothing is in use: the one listener places the widget, and leaves nothing running.
+    const dialogs = await quietCounts(session, async () => {
+      await session.page.evaluate(() => (document.getElementById("native") as HTMLDialogElement).showModal());
+      await session.page.waitForTimeout(300);
+      await session.page.evaluate(() => (document.getElementById("native") as HTMLDialogElement).close());
+      await session.page.evaluate(() => (document.getElementById("layer") as HTMLElement).showPopover());
+      await session.page.waitForTimeout(300);
+      await session.page.evaluate(() => (document.getElementById("layer") as HTMLElement).hidePopover());
+    });
+    assert.deepEqual(dialogs, IDLE, "after the page opened and closed its dialogs");
+  } finally {
+    await session.close();
+  }
+});
+
+/** What a press at the middle of Haptic's launcher would land on. */
+async function onLauncher(session: Session): Promise<string | undefined> {
+  return session.page.evaluate(() => {
+    const rect = document.querySelector("haptic-root")!.shadowRoot!.querySelector(".launcher")!.getBoundingClientRect();
+    return document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)?.tagName.toLowerCase();
+  });
+}
+
+test("a dialog the page opens on the top layer while no guide runs does not cover the launcher, which still opens the ask box", async () => {
+  const session = await start(COUNTED, () => words("Click Close."));
+  try {
+    await session.page.waitForTimeout(1500);
+    // The browser's own modal dialog: everything outside it is inert, so the widget goes inside it.
+    await session.page.evaluate(() => (document.getElementById("native") as HTMLDialogElement).showModal());
+    await session.until(async () => (await onLauncher(session)) === "haptic-root", "the launcher to be on top of the modal dialog", 3000);
+    await session.ask("how do I close this");
+    const first = await session.untilAsked(1, 5000);
+    assert.equal(first.goal, "how do I close this");
+    assert.equal(first.snapshot.dialog, "Native dialog", "the question was not asked about the open dialog");
+    await session.untilState("finished");
+    await session.page.locator("haptic-root .caption .close").click();
+    await session.page.evaluate(() => (document.getElementById("native") as HTMLDialogElement).close());
+    await session.until(() => session.page.evaluate(() => document.querySelector("haptic-root")?.parentElement === document.documentElement), "the widget to be back on the page once the dialog closed", 3000);
+    // A UI5 dialog: a popover of its own with a layer that blocks the page behind it.
+    await session.page.evaluate(() => (document.getElementById("layer") as HTMLElement).showPopover());
+    await session.until(async () => (await onLauncher(session)) === "haptic-root", "the launcher to be on top of the page's popover", 3000);
   } finally {
     await session.close();
   }

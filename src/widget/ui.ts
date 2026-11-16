@@ -183,9 +183,32 @@ export class Ui {
     this.keepPressesOurs();
     this.watchKeyboard();
     this.host.setAttribute("popover", "manual");
+    // The one thing of ours that listens on the page while nothing is in use: see `onToggle`.
+    document.addEventListener("toggle", this.onToggle, true);
     this.setState("idle");
     this.place();
   }
+
+  /**
+   * A popover or a dialog the page opens goes into the top layer above our
+   * element, and would cover the launcher: a UI5 dialog with the layer it
+   * puts over the page, or the browser's own modal <dialog>, which also makes
+   * everything outside it inert. The browser says so with a "toggle" event on
+   * the element, when it opens and when it closes, and this is heard in the
+   * capture phase, since the event does not bubble. It is the only listener of
+   * ours left on the page while no guide runs, and it does nothing but place
+   * our element again. Our own showing and hiding, and a <details> opening,
+   * which is not in the top layer, are not its business.
+   */
+  private onToggle = (event: Event) => {
+    try {
+      const toggled = event.target;
+      if (!(toggled instanceof Element) || toggled === this.host || this.host.contains(toggled) || !toggled.matches("[popover], dialog")) return;
+      this.place(true);
+    } catch (error) {
+      console.warn("[Haptic]", error);
+    }
+  };
 
   /**
    * Keeps our element placed while the visitor is using it: while the ask box
@@ -220,10 +243,12 @@ export class Ui {
    * something the page shows in the top layer after us is not left on top of
    * us.
    */
-  place = () => {
+  place = (raise?: boolean) => {
     if (this.captor && !shown(this.captor)) this.captor = undefined;
-    let home = (this.inUse() && (this.captor ?? blockingDialog(this.host))) || document.documentElement;
-    if (this.host.parentNode === home) this.raise();
+    // Not in use, our element goes inside nothing of the page's but the browser's own modal dialog, outside which it would
+    // be inert: the toggle listener hears that dialog close, and nothing else could be heard taking our element away with it.
+    let home = (this.inUse() ? (this.captor ?? blockingDialog(this.host)) : topModal()) || document.documentElement;
+    if (this.host.parentNode === home) this.raise(raise === true);
     else {
       // Moving takes the keyboard from whatever of ours had it, so it is given back. So does the page taking away what we were in.
       const focused = (this.host.shadowRoot?.activeElement as HTMLElement | null) ?? (performance.now() - this.lostAt < 100 ? this.input : null);
@@ -238,7 +263,8 @@ export class Ui {
       }
       focused?.focus();
     }
-    this.watchHome(home);
+    // While nothing is in use, nothing watches.
+    this.watchHome(this.inUse() ? home : document.documentElement);
   };
 
   private show() {
@@ -254,10 +280,12 @@ export class Ui {
    * Shows our element again if something the page put in the top layer after
    * it lies on the launcher: a dialog drawn as a popover with a layer that
    * blocks the page behind it. Shown again, ours is the latest, and on top.
+   * While nothing is in use this is done only when the page has just opened
+   * something (`always`), never on a timer.
    */
-  private raise() {
+  private raise(always = false) {
     const launcher = this.dock.querySelector(".launcher");
-    if (!this.inUse() || !this.host.isConnected || !launcher) return;
+    if ((!this.inUse() && !always) || !this.host.isConnected || !launcher) return;
     const box = launcher.getBoundingClientRect();
     const x = box.left + box.width / 2;
     const y = box.top + box.height / 2;
@@ -596,6 +624,17 @@ export class Ui {
 function shown(el: Element): boolean {
   if (!el.isConnected || !el.getClientRects().length) return false;
   return typeof el.checkVisibility !== "function" || el.checkVisibility({ visibilityProperty: true });
+}
+
+/** The browser's own modal dialog that is open on top, if any. Everything outside it is inert. */
+function topModal(): Element | undefined {
+  let found: Element | undefined;
+  try {
+    document.querySelectorAll("dialog:modal").forEach((el) => (found = el));
+  } catch {
+    // :modal unsupported. Then there is no such dialog to be in.
+  }
+  return found;
 }
 
 /**
