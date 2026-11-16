@@ -844,8 +844,10 @@ function liveReport(result: LiveResult): string[] {
     `  question: ${result.question}`,
   ];
   for (const [index, call] of result.calls.entries()) {
-    const { target, do: doing, enter, commits, status, say, mode } = call.reply;
-    lines.push(`  call ${index + 1} (step ${call.step}, ${(call.ms / 1000).toFixed(1)} s): ${target ?? "no target"}${call.named ? ` ${call.named}` : ""}, do ${doing ?? "none"}${enter ? ` "${enter}"` : ""}, commits ${commits ?? "-"}, ${status}${mode ? "" : ", NO ACT ECHO"}: "${say}"`);
+    const { target, do: doing, enter, commits, status, say, mode, withheld, removed } = call.reply;
+    // What the server's check took away, and why: "do none (choose removed: unfit)".
+    const check = withheld ? ` (${removed ? `${removed} removed` : "withheld"}: ${withheld})` : "";
+    lines.push(`  call ${index + 1} (step ${call.step}, ${(call.ms / 1000).toFixed(1)} s): ${target ?? "no target"}${call.named ? ` ${call.named}` : ""}, do ${doing ?? "none"}${enter ? ` "${enter}"` : ""}${check}, commits ${commits ?? "-"}, ${status}${mode ? "" : ", NO ACT ECHO"}: "${say}"`);
   }
   for (const event of result.events) lines.push(`  event: ${event}`);
   // A run the runner cut short is read where it stopped: a field it never reached is not wrong.

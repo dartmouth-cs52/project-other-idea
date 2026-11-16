@@ -301,6 +301,8 @@ export interface TurnReply {
    * widget speaks for that step in its own words instead.
    */
   withheld?: Refusal;
+  /** Set with `withheld`: the `do` that was removed. A name from `ACTS`, never anything from the page, so it can be logged and shown in a test run. */
+  removed?: Act;
 }
 
 // Paths ---------------------------------------------------------------------

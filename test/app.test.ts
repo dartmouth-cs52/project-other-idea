@@ -255,7 +255,7 @@ test("the server's check takes out a do the reply should not have, and says why"
   };
   // A do on the control that commits: the hand-over, as both server and widget treat it.
   const both = await ask({ target: "e1", do: "click", enter: null, commits: true, status: "done", say: "Ready. Click Billing." });
-  assert.deepEqual(both, { target: "e1", do: null, enter: null, commits: true, status: "done", say: "Ready. Click Billing.", mode: "act", withheld: "contradiction" });
+  assert.deepEqual(both, { target: "e1", do: null, enter: null, commits: true, status: "done", say: "Ready. Click Billing.", mode: "act", withheld: "contradiction", removed: "click" });
   // A value the visitor never wrote, as if the page had put it there.
   const typed = await ask({ target: "e3", do: "type", enter: "finance@evil.example", commits: false, status: "continue", say: "Typing." }, "name the card Ads");
   assert.deepEqual([typed.do, typed.enter, typed.withheld], [null, null, "ungrounded"]);
@@ -330,6 +330,7 @@ test("each step is counted for the server's log with nothing from the visitor or
     const parsed = JSON.parse(stepBody(extra, "/people/malika-cummerata"));
     parsed.goal = `open billing for ${secret}`;
     parsed.snapshot.text = [`Card holder ${secret}`];
+    parsed.snapshot.elements.push({ id: "e3", role: "radio", label: "Someone else" }, { id: "e4", role: "made-up-by-malika", label: "Billing" });
     return JSON.stringify(parsed);
   };
   await answer(app, body({ version: 2 }));
@@ -340,13 +341,21 @@ test("each step is counted for the server's log with nothing from the visitor or
   scriptMock({ target: "e1", do: null, enter: null, commits: true, status: "done", say: "Ready. Click Billing." });
   await answer(app, body({ version: 3, mode: "act", step: 4 }));
   await answer(app, body({ version: 3, mode: "act", step: 40 }));
+  // "choose" on a radio is done as the click it means; "type" in a radio is not, and the log says which act went on what kind of control.
+  scriptMock({ target: "e3", do: "choose", enter: secret, commits: false, status: "continue", say: `Choosing ${secret}.` });
+  await answer(app, body({ version: 3, mode: "act", step: 5 }));
+  scriptMock({ target: "e3", do: "type", enter: secret, commits: false, status: "continue", say: `Typing ${secret}.` });
+  await answer(app, body({ version: 3, mode: "act", step: 6 }));
+  // A role the reading never gives is not written to the log as the page wrote it.
+  scriptMock({ target: "e4", do: "click", enter: null, commits: false, status: "continue", say: "Clicking." });
+  await answer(app, body({ version: 3, mode: "act", step: 7 }));
 
   for (const line of counted) {
     const written = JSON.stringify(line);
     for (const word of ["Malika", "malika", "Billing", "billing", "Card holder", "/people", "Click", "Typing"]) assert.ok(!written.includes(word), `${word} in ${written}`);
     for (const value of Object.values(line)) assert.ok(["string", "number", "boolean"].includes(typeof value));
   }
-  const [guide, acted, refused, withheld, handover, capped] = counted;
+  const [guide, acted, refused, withheld, handover, capped, chose, typedInRadio, oddRole] = counted;
   // A guide's step is counted as before acting existed: nothing on acting.
   assert.equal(guide?.acting, undefined);
   assert.equal(guide?.version, 2);
@@ -355,7 +364,11 @@ test("each step is counted for the server's log with nothing from the visitor or
   assert.equal(refused?.acting, "site");
   assert.equal(refused?.do, undefined);
   // Typing into a link: the model's act and the reason are counted, the text it would have typed is not.
-  assert.deepEqual([withheld?.modelDo, withheld?.do, withheld?.withheld], ["type", "none", "unfit"]);
+  assert.deepEqual([withheld?.modelDo, withheld?.do, withheld?.withheld, withheld?.removed, withheld?.role], ["type", "none", "unfit", "type", "link"]);
+  assert.deepEqual([acted?.removed, acted?.role], ["none", "link"]);
+  assert.deepEqual([chose?.modelDo, chose?.do, chose?.withheld, chose?.removed, chose?.role], ["choose", "click", "none", "none", "radio"]);
+  assert.deepEqual([typedInRadio?.modelDo, typedInRadio?.do, typedInRadio?.withheld, typedInRadio?.removed, typedInRadio?.role], ["type", "none", "unfit", "type", "radio"]);
+  assert.equal(oddRole?.role, "other");
   assert.deepEqual([handover?.do, handover?.commits, handover?.handover], ["none", true, true]);
   assert.deepEqual([capped?.capped, capped?.model, capped?.withheld], [true, "none", "cap"]);
 });

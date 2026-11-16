@@ -110,6 +110,12 @@ function streamTurn(parts: AppParts, site: SiteContext, turn: TurnRequest, cors:
 /** One step in the server's log. Every value is a number, a yes or no, or a name from Haptic's own code. */
 export type TurnCounts = Record<string, string | number | boolean>;
 
+/** The roles the widget's reading gives a control. Any other text in a request's role is logged as "other", so nothing a page wrote reaches the log. */
+const LISTED_ROLES = new Set([
+  "button", "link", "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "option", "checkbox", "radio", "switch",
+  "combobox", "treeitem", "textbox", "searchbox", "slider", "spinbutton", "select", "clickable", "gridcell",
+]);
+
 /**
  * One step as counts, for the server's log: nothing the visitor wrote and
  * nothing from their page, not even its address. The fields on acting are
@@ -139,6 +145,10 @@ export function turnCounts(request: TurnRequest, measure: TurnMeasure): TurnCoun
   counts.modelDo = measure.acting.modelDo ?? "none";
   counts.do = reply.do ?? "none";
   counts.withheld = reply.withheld ?? "none";
+  // Which act the check took away, and the kind of control it was on: "choose" on a "radio", "unfit".
+  counts.removed = reply.removed ?? "none";
+  const role = request.snapshot.elements.find((element) => element.id === reply.target)?.role;
+  counts.role = !role ? "none" : LISTED_ROLES.has(role) ? role : "other";
   counts.commits = reply.commits === true;
   counts.handover = reply.status === "done" && reply.target !== null && reply.commits === true && !reply.do;
   return counts;

@@ -155,8 +155,8 @@ function checked(reply: TurnReply, request: TurnRequest, commitWords: readonly s
     return check.withheld ? { ...check.reply, withheld: check.withheld } : check.reply;
   } catch (error) {
     console.error("checkAction failed, so the step is left to the visitor:", error instanceof Error ? error.message : error);
-    const { do: _removed, ...rest } = reply;
-    return reply.do ? { ...rest, enter: null, withheld: "unknown" } : { ...rest, enter: null };
+    const { do: removed, ...rest } = reply;
+    return removed ? { ...rest, enter: null, withheld: "unknown", removed } : { ...rest, enter: null };
   }
 }
 

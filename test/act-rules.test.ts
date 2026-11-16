@@ -327,6 +327,8 @@ const PAGE: Snapshot = {
     element("e17", "select", "Country", { options: ["France", "Germany"] }),
     element("e18", "option", "Sign out"),
     element("e19", "option", "Per month"),
+    element("e20", "menuitemradio", "Compact"),
+    element("e21", "treeitem", "Marketing"),
   ],
 };
 const ask = (reply: Partial<TurnReply>, goal = CARD_QUESTION, snapshot = PAGE) =>
@@ -389,9 +391,40 @@ test("every reply that may not be done loses its do and says why", () => {
     if (reason !== why) return `${JSON.stringify(reply)} gave ${reason}, wanted ${why}`;
     if (out.do || out.enter) return `${JSON.stringify(reply)} kept ${out.do} ${out.enter}`;
     if (out.withheld !== why) return `${JSON.stringify(reply)} does not carry withheld`;
+    // Which act was removed is said too, when it is one of Haptic's.
+    if (out.removed !== ((ACTS as readonly string[]).includes(reply.do ?? "") ? reply.do : undefined)) return `${JSON.stringify(reply)} says it removed ${out.removed}`;
     if (reply.commits !== undefined && out.commits !== reply.commits) return `${JSON.stringify(reply)} changed commits`;
     return undefined;
   });
+});
+
+test("acts that mean the same on a control are done as the one that fits it: choosing a radio, a menu radio, an option or a tree item is a click", () => {
+  // Seen live: "choose" on the radio "For someone else" and on the option "Per month" of an open list, removed as unfit, and the visitor told Haptic could not do it.
+  const same: [Partial<TurnReply>, string][] = [
+    [{ target: "e7", do: "choose", enter: "For someone else" }, "click"],
+    [{ target: "e7", do: "choose", enter: null }, "click"],
+    [{ target: "e7", do: "check" }, "check"],
+    [{ target: "e7", do: "click" }, "click"],
+    [{ target: "e19", do: "choose", enter: "Per month" }, "click"],
+    [{ target: "e19", do: "choose", enter: "Monthly" }, "click"],
+    [{ target: "e20", do: "choose", enter: "Compact" }, "click"],
+    [{ target: "e20", do: "check" }, "check"],
+    [{ target: "e21", do: "choose", enter: "Marketing" }, "click"],
+  ];
+  rows(same, ([reply, act]) => {
+    const { reply: out, withheld } = ask(reply);
+    if (withheld) return `${JSON.stringify(reply)} was withheld: ${withheld}`;
+    if (out.do !== act) return `${JSON.stringify(reply)} became ${out.do}, wanted ${act}`;
+    // The control itself is what is picked: a value that came with it is not kept to be typed anywhere.
+    if (out.enter != null) return `${JSON.stringify(reply)} kept ${out.enter}`;
+    if (out.removed) return `${JSON.stringify(reply)} says it removed ${out.removed}`;
+    return undefined;
+  });
+  // What does not mean the same is still removed: a radio is never cleared, an option is not typed into, and an option's own words still stop it.
+  assert.equal(ask({ target: "e7", do: "uncheck" }).withheld, "unfit");
+  assert.equal(ask({ target: "e19", do: "type", enter: "Per month" }).withheld, "unfit");
+  assert.equal(ask({ target: "e19", do: "check" }).withheld, "unfit");
+  assert.deepEqual([ask({ target: "e18", do: "choose", enter: "Sign out" }).withheld, ask({ target: "e18", do: "choose", enter: "Sign out" }).reply.removed], ["words", "choose"]);
 });
 
 test("a reply with no do keeps the server's reason, and loses a value nothing uses", () => {

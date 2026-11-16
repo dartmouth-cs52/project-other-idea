@@ -1,4 +1,4 @@
-import { ACTING_LIMITS, ACTS, type Refusal, type SnapElement, type TurnReply, type TurnRequest } from "./types.ts";
+import { ACTING_LIMITS, ACTS, type Act, type Refusal, type SnapElement, type TurnReply, type TurnRequest } from "./types.ts";
 
 // The pure half of acting's safety gate (DESIGN section 4): which words
 // commit, which are safe, whether a value is the visitor's own, and the check
@@ -680,6 +680,26 @@ function isSearchBox(element: SnapElement): boolean {
   return element.role === "searchbox" || isSearchName(element.label) || /^search\b/.test(element.context ?? "");
 }
 
+/**
+ * Controls that are picked, where "choose" means what a click means. A model
+ * that asks to choose the radio "For someone else", or the option "Per month"
+ * of a list that is open, asks for the press that picks it.
+ */
+const PICKED_BY_PRESS = new Set(["radio", "menuitemradio", "option", "treeitem"]);
+
+/**
+ * The act Haptic does for `act` on this control, or undefined when the act
+ * does not fit it. Acts that mean the same thing on a control are done as
+ * the one the engine knows for it: on a radio, a menu radio, an option or a
+ * tree item, "choose" is a click. A radio is still never cleared, and a value
+ * that came with "choose" is dropped with it: what is picked is the control
+ * itself, judged by its own words.
+ */
+export function actFor(act: string, element: SnapElement): Act | undefined {
+  if (act === "choose" && PICKED_BY_PRESS.has(element.role)) return "click";
+  return fits(act, element) ? (act as Act) : undefined;
+}
+
 /** Whether the act fits what the control is. */
 function fits(act: string, element: SnapElement): boolean {
   switch (act) {
@@ -707,6 +727,8 @@ function fits(act: string, element: SnapElement): boolean {
  * `do`, never add one. The reply returned is a copy:
  * - `do` that is not one of `ACTS`, or with no target listed: removed.
  * - `do` with `commits: true`: `do` and `enter` removed, `commits` kept: the hand-over. Withheld "contradiction".
+ * - `do` that means the same as the act that fits the control (`actFor`):
+ *   replaced by it, so "choose" on a radio or an option is a click.
  * - `do` that does not fit the control's role, or on a disabled control: removed, "unfit".
  * - `do` on a control whose words commit (link or not, `readName`): removed, "words" (or "marked").
  * - `do` on a link to another site: removed, "leaves".
@@ -716,11 +738,13 @@ function fits(act: string, element: SnapElement): boolean {
  * - `type` longer than the whole request may type: removed, "cap".
  * - `press_enter` outside a field named as a search: removed, "enter".
  * - `enter` with no `type` or `choose` left to use it: set to null.
- * When a `do` is removed, `withheld` is set on the reply too.
+ * When a `do` is removed, `withheld` is set on the reply too, and `removed`
+ * says which act it was: names from Haptic's own list, never anything from
+ * the page, so the server can log them.
  */
 export function checkAction(reply: TurnReply, request: Pick<TurnRequest, "goal" | "snapshot">, acting: { commitWords?: readonly string[] } = {}): ActionCheck {
   const out: TurnReply = { ...reply };
-  const act = reply.do;
+  const asked = reply.do;
   const keep = (): ActionCheck => {
     if (out.do !== "type" && out.do !== "choose" && out.enter !== undefined) out.enter = null;
     return { reply: out };
@@ -729,15 +753,18 @@ export function checkAction(reply: TurnReply, request: Pick<TurnRequest, "goal" 
     out.do = null;
     out.enter = null;
     out.withheld = why;
+    if ((ACTS as readonly string[]).includes(asked ?? "")) out.removed = asked as Act;
     return { reply: out, withheld: why };
   };
   // A reply whose `do` is already gone keeps the server's reason, so the widget still speaks for that step itself.
-  if (act === undefined || act === null) return keep();
-  if (!(ACTS as readonly string[]).includes(act)) return withhold("unfit");
+  if (asked === undefined || asked === null) return keep();
+  if (!(ACTS as readonly string[]).includes(asked)) return withhold("unfit");
   const element = request.snapshot.elements.find((listed) => listed.id === reply.target);
   if (!element) return withhold("changed");
   if (reply.commits === true) return withhold("contradiction");
-  if (!fits(act, element) || (element.state ?? []).includes("disabled")) return withhold(act === "press_enter" ? "enter" : "unfit");
+  const act = actFor(asked, element);
+  if (!act || (element.state ?? []).includes("disabled")) return withhold(asked === "press_enter" ? "enter" : "unfit");
+  out.do = act;
   if (act === "click" && element.href?.startsWith("external:")) return withhold("leaves");
 
   if (act === "type" || act === "choose" || act === "press_enter") {
@@ -770,5 +797,6 @@ export function checkAction(reply: TurnReply, request: Pick<TurnRequest, "goal" 
     }
   }
   delete out.withheld;
+  delete out.removed;
   return keep();
 }
