@@ -5,8 +5,9 @@ import { lines, startBrowser } from "./page.ts";
 // What the widget lists on pages built the way Northpine, the spend app made
 // for testing Haptic, builds them with Radix and a table of its own: switches
 // and tick boxes named by a <label>, controls a visitor's role disables, rows
-// that open a record, and a toaster's empty region. Each page is the smallest
-// one that shows a fault found there. Run with: npm run test:browser
+// that open a record, a toaster's empty region, a menu button with no name,
+// counts in badges, and words that repeat what is typed. Each page is the
+// smallest one that shows a fault found there. Run with: npm run test:browser
 
 const started = await startBrowser();
 if (process.env.CI && typeof started === "string") throw new Error(started);
