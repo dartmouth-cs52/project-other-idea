@@ -35,7 +35,9 @@ const testBuild: Plugin = {
     builder.onResolve({ filter: /^\.\/gate\.ts$/ }, (args) => (args.importer.startsWith(WIDGET) ? { path: `${HERE}stub-gate.ts` } : undefined));
     builder.onLoad({ filter: /[\\/]src[\\/]widget[\\/]guide\.ts$/ }, async (args) => {
       const source = await readFile(args.path, "utf8");
-      const hears = /\nfunction waitForAction\(/.test(source);
+      // Once the guide exports its hearing itself, nothing needs adding.
+      const exported = /export\s+(?:async\s+)?function\s+waitForAction\b|export\s*\{[^}]*\bwaitForAction\b/.test(source);
+      const hears = !exported && /\nfunction waitForAction\(/.test(source);
       return { contents: hears ? `${source}\nexport { waitForAction };\n` : source, loader: "ts" };
     });
   },
