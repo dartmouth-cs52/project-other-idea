@@ -271,7 +271,7 @@ export class Guide {
       if (page.snapshot.elements.length && !mark) break;
       if (Date.now() - began >= EMPTY_PAGE_WAIT_MS) {
         // A mark that is still there after all this time is part of the page.
-        if (mark) stuckMarks.add(mark);
+        if (mark) markStuck(ui.host);
         break;
       }
       await settle(ui.host, { maxMs: 1000, patient: false });
@@ -1431,6 +1431,16 @@ const LOADING = '[aria-busy="true"], [role="progressbar"], .animate-spin, .anima
 /** Loading marks that outlasted the longest wait once. They are part of the page, not a sign of anything on its way. */
 const stuckMarks = new WeakSet<Element>();
 
+/**
+ * Takes every loading mark on show now for part of the page, once one of them
+ * has outlasted the longest wait. They were all there all along: waiting the
+ * whole time again for each in turn would keep the first question back for a
+ * minute on a page with a few spinners that never stop.
+ */
+function markStuck(ignore: Element) {
+  for (let mark = loadingMark(ignore), count = 0; mark && count < 50; mark = loadingMark(ignore), count++) stuckMarks.add(mark);
+}
+
 /** Something on the page that says it is still loading, if anything does. */
 function loadingMark(ignore: Element): Element | undefined {
   for (const el of document.querySelectorAll(LOADING)) {
@@ -1535,7 +1545,7 @@ export function settle(ignore: Element, { quietMs = 300, maxMs = 3000, since, us
     const limit = setTimeout(over, maxMs);
     const hard = setTimeout(
       () => {
-        if (mark?.isConnected) stuckMarks.add(mark);
+        if (mark?.isConnected) markStuck(ignore);
         finish();
       },
       Math.max(maxMs, patient ? EMPTY_PAGE_WAIT_MS : 0),

@@ -208,3 +208,19 @@ test("a dialog that fades out after Close is not read while it fades: the page i
     await session.close();
   }
 });
+
+test("a page that shows several spinners for good is waited for once, not once for each spinner", async () => {
+  // Material UI's page of buttons: its "loading" buttons spin for as long as the page is open.
+  const page = `<h1>Buttons</h1><button type="button">Contained</button>
+    ${[1, 2, 3].map((n) => `<button type="button" disabled>Saving ${n} <span role="progressbar" style="display:inline-block;width:12px;height:12px;border:2px solid #999"></span></button>`).join("")}`;
+  const session = await start(page, () => words("Click Contained."));
+  try {
+    const began = Date.now();
+    await session.ask("which button");
+    await session.untilAsked(1, 20_000);
+    const waited = Date.now() - began;
+    assert.ok(waited < 14_000, `the first question waited ${waited} ms`);
+  } finally {
+    await session.close();
+  }
+});
