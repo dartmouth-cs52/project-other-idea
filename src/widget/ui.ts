@@ -103,6 +103,8 @@ export class Ui {
    */
   private captor?: Element;
   private frame = 0;
+  /** What each of our buttons does, by its class. */
+  private buttons!: Record<"launcher" | "send" | "stop" | "close", () => void>;
   /** The timer that keeps our element placed, while it is in use. */
   private placing?: ReturnType<typeof setInterval>;
   /** Where the pointer last was, so each move starts from there. */
@@ -119,7 +121,7 @@ export class Ui {
       <div class="cursor" hidden><svg viewBox="0 0 24 24" width="24" height="24"><path d="${POINTER_PATH}"/></svg></div>
       <div class="dock ${side}">
         <div class="panel" hidden>
-          <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
+          <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><button class="send" type="button" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
           <div class="status" hidden><span></span><button class="stop" type="button">Stop</button></div>
         </div>
         <button class="launcher" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${POINTER_PATH}"/></svg><span></span></button>
@@ -136,24 +138,27 @@ export class Ui {
     this.captionText = pick(".caption span");
     this.dock = pick(".dock");
     this.side = side;
-    const launcher = pick<HTMLButtonElement>(".launcher");
     pick(".launcher span").textContent = appearance.launcherLabel;
     this.at = { x: side === "left" ? 60 : window.innerWidth - 60, y: window.innerHeight - 40 };
 
-    launcher.addEventListener("click", () => {
-      // Nothing kept our element in place while it was not in use. A dialog may have opened since.
-      this.place();
-      this.panel.hidden = !this.panel.hidden;
-      this.keepPlaced();
-      if (!this.panel.hidden) this.input.focus();
-    });
+    // What each of our buttons does. A press on one is acted on in keepPressesOurs.
+    this.buttons = {
+      launcher: () => {
+        // Nothing kept our element in place while it was not in use. A dialog may have opened since.
+        this.place();
+        this.panel.hidden = !this.panel.hidden;
+        this.keepPlaced();
+        if (!this.panel.hidden) this.input.focus();
+      },
+      send: () => this.form.requestSubmit(),
+      stop: handlers.onStop,
+      close: handlers.onStop,
+    };
     this.form.addEventListener("submit", (event) => {
       event.preventDefault();
       const question = this.input.value.trim();
       if (question) handlers.onAsk(question);
     });
-    pick(".stop").addEventListener("click", handlers.onStop);
-    pick(".close").addEventListener("click", handlers.onStop);
 
     // Typing in the ask box mustn't trigger the page's keyboard shortcuts or
     // focus traps. Escape is the page's, though, unless it is closing our own
@@ -219,23 +224,57 @@ export class Ui {
   /**
    * A press on anything of ours is not a press outside the page's open list,
    * menu or calendar, and must not close it. Pages hear such a press on the
-   * document or the window, for the most part as the mouse goes down, and
-   * often in the capture phase, which runs before anything here can stop it.
+   * document or the window, as the mouse goes down or as a click, and often
+   * in the capture phase, which runs before anything here can stop it.
+   *
    * So the press is cancelled: the browser then fires none of the mouse
-   * events that follow it, though the click still comes. A cancelled press
-   * also puts the keyboard nowhere, so a press into the ask box gives the box
-   * the keyboard here. Once the box has it, a press in it is left alone, for
-   * placing the cursor and selecting. Everything else a press sends is
-   * stopped at our element, out of reach of the page's listeners.
+   * events that follow it. A press on one of our buttons also puts a fresh
+   * copy of the button in its place: the browser fires no click for a press
+   * whose element has left the page, so the button is acted on here, when the
+   * press ends on it. A click that comes without a press, from the keyboard or
+   * from assistive technology, is acted on as usual.
+   *
+   * A cancelled press puts the keyboard nowhere, so a press into the ask box
+   * gives the box the keyboard here. Once the box has it, a press in it is left
+   * alone, for placing the cursor and selecting. Everything a press sends is
+   * stopped at our element, out of reach of the page's listeners that come
+   * after it.
    */
   private keepPressesOurs() {
+    const root = this.host.shadowRoot!;
+    const buttonOf = (event: Event) => event.composedPath().find((node): node is HTMLButtonElement => node instanceof HTMLButtonElement);
+    const act = (button: HTMLButtonElement) => {
+      const name = (["launcher", "send", "stop", "close"] as const).find((name) => button.classList.contains(name));
+      if (name) this.buttons[name]();
+    };
+    let pressed: HTMLButtonElement | undefined;
+    let actedAt = -Infinity;
     this.host.addEventListener("pointerdown", (event) => {
+      pressed = undefined;
       const into = event.composedPath()[0];
-      if (into === this.input && this.host.shadowRoot?.activeElement === this.input) return;
+      if (into === this.input && root.activeElement === this.input) return;
       event.preventDefault();
       if (into === this.input) this.input.focus();
+      const button = buttonOf(event);
+      if (!button || event.button !== 0) return;
+      const copy = button.cloneNode(true) as HTMLButtonElement;
+      button.replaceWith(copy);
+      pressed = copy;
     });
-    for (const type of ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "dblclick", "auxclick", "contextmenu", "touchstart", "touchend", "focusout"]) {
+    this.host.addEventListener("pointerup", (event) => {
+      const was = pressed;
+      pressed = undefined;
+      if (!was || buttonOf(event) !== was) return;
+      actedAt = performance.now();
+      act(was);
+    });
+    this.host.addEventListener("pointercancel", () => (pressed = undefined));
+    root.addEventListener("click", (event) => {
+      const button = buttonOf(event);
+      // A browser that fires the click all the same has had it acted on already.
+      if (button && performance.now() - actedAt > 500) act(button);
+    });
+    for (const type of ["pointerdown", "pointerup", "pointercancel", "mousedown", "mouseup", "click", "dblclick", "auxclick", "contextmenu", "touchstart", "touchend", "focusout"]) {
       this.host.addEventListener(type, (event) => event.stopPropagation());
     }
   }

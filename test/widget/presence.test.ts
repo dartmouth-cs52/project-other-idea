@@ -9,10 +9,11 @@ after(closeBrowser);
 
 /**
  * A menu that closes on a press outside it, heard the way the toolkits hear
- * one: `how` is the event, `phase` where it is listened for. Ant Design
- * listens for the mouse going down on the window, in the capture phase;
- * Material UI for the click on the document; others for the pointer going
- * down, or for the keyboard going somewhere else.
+ * one: `how` is the event, `on` and `capture` where it is listened for. Ant
+ * Design listens for the mouse going down on the window, in the capture
+ * phase; Material UI for the click on the document; Fluent UI for the click
+ * on the document, in the capture phase; others for the pointer going down,
+ * or for the keyboard going somewhere else.
  */
 const menuClosingOn = (how: string, on: "window" | "document", capture: boolean) => `<h1>Orders</h1>
   <button id="more" type="button">More actions</button><button type="button">Export</button>
@@ -42,6 +43,7 @@ async function askByHand(session: Session, question: string): Promise<void> {
 for (const [how, on, capture] of [
   ["mousedown", "window", true],
   ["click", "document", false],
+  ["click", "document", true],
   ["pointerdown", "document", false],
   ["focusin", "document", false],
 ] as const) {
@@ -160,6 +162,34 @@ test("a dialog that keeps the keyboard, opened while nothing of Haptic's was run
     const first = await session.untilAsked(1, 5000).catch(() => undefined);
     assert.ok(first, "the question never reached the ask box");
     assert.equal(first.goal, "what goes in here");
+  } finally {
+    await session.close();
+  }
+});
+
+test("Haptic's buttons work with the mouse and with the keyboard, and a question is sent with its button or with Enter", async () => {
+  const session = await start(menuClosingOn("click", "document", true), () => words("Choose Archive."));
+  try {
+    const panelOpen = () => session.page.evaluate(() => !(document.querySelector("haptic-root")!.shadowRoot!.querySelector(".panel") as HTMLElement).hidden);
+    // The launcher from the keyboard: Tab to it, then Enter.
+    await session.page.evaluate(() => (document.querySelector("haptic-root")!.shadowRoot!.querySelector(".launcher") as HTMLElement).focus());
+    await session.page.keyboard.press("Enter");
+    await session.until(panelOpen, "the launcher to open the box from the keyboard");
+    await session.page.keyboard.type("first question");
+    // The send button with the mouse.
+    await session.page.locator("haptic-root .send").click();
+    const first = await session.untilAsked(1, 5000);
+    assert.equal(first.goal, "first question");
+    await session.untilState("finished");
+    // The caption's close button with the mouse puts the sentence away.
+    await session.page.locator("haptic-root .caption .close").click();
+    assert.equal(await session.caption(), "", "the close button did not put the sentence away");
+    // The launcher with the mouse closes the box and opens it again, once for each click.
+    const before = await panelOpen();
+    await session.page.locator("haptic-root .launcher").click();
+    assert.equal(await panelOpen(), !before, "one click on the launcher did not open or close the box once");
+    await session.page.locator("haptic-root .launcher").click();
+    assert.equal(await panelOpen(), before);
   } finally {
     await session.close();
   }
