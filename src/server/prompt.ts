@@ -1,5 +1,5 @@
 import { controlText, correctionsFor } from "../shared/corrections.ts";
-import type { Doc, PageNode, SiteContext, SnapElement, Snapshot, TurnRequest } from "../shared/types.ts";
+import type { Doc, PageNode, PageOpening, SiteContext, SnapElement, Snapshot, TurnRequest } from "../shared/types.ts";
 
 // Builds what the model reads. The system part (rules and site knowledge) is
 // identical for every turn on a site, so it's cached. Everything that changes
@@ -171,20 +171,29 @@ const MAX_PAGE_BUTTONS = 24;
 /**
  * One line per page. Links and buttons that repeat on most pages (the main
  * navigation) are listed once at the top, which leaves each page's line for
- * what's specific to it. The pages are the crawl's, with what traffic has
- * taught Haptic merged in (src/server/learned.ts).
+ * what's specific to it. The same goes for a menu that opens the same way on
+ * most pages, like an account menu. The pages are the crawl's, with what
+ * traffic has taught Haptic merged in (src/server/learned.ts).
+ *
+ * What a menu, tab or accordion shows once it is opened reads
+ * `behind "Account": Billing → /billing`, so the model knows which control to
+ * point at first.
  */
 export function renderSiteMap(pages: PageNode[]): string {
   const link = (l: { label: string; to: string }) => `${l.label} → ${l.to}`;
+  const opening = (o: PageOpening) => `behind "${o.control.replace(/"/g, "'")}": ${[...o.links.map(link), ...o.buttons].join("; ")}`;
   const counts = new Map<string, number>();
   for (const page of pages) {
-    for (const item of new Set([...page.links.map(link), ...page.buttons])) counts.set(item, (counts.get(item) ?? 0) + 1);
+    for (const item of new Set([...page.links.map(link), ...page.buttons, ...(page.opens ?? []).map(opening)])) counts.set(item, (counts.get(item) ?? 0) + 1);
   }
   const sharedMin = Math.max(3, Math.ceil(pages.length / 2));
   const shared = new Set([...counts].filter(([, count]) => count >= sharedMin).map(([item]) => item));
+  const sharedOpenings = new Set(pages.flatMap((page) => (page.opens ?? []).map(opening)).filter((item) => shared.has(item)));
+  for (const item of sharedOpenings) shared.delete(item);
 
   const lines: string[] = [];
   if (shared.size) lines.push(`On most pages: ${[...shared].join("; ")}`);
+  for (const item of sharedOpenings) lines.push(`On most pages, ${item}`);
   for (const page of pages) {
     // A page only traffic knows may not have a title that enough visitors shared.
     const parts = page.title ? [`"${page.title}"`] : [];
@@ -195,6 +204,7 @@ export function renderSiteMap(pages: PageNode[]): string {
     const buttons = page.buttons.filter((item) => !shared.has(item)).slice(0, MAX_PAGE_BUTTONS);
     if (buttons.length) parts.push(`buttons: ${buttons.join(", ")}`);
     if (page.fields.length) parts.push(`fields: ${page.fields.join(", ")}`);
+    for (const item of (page.opens ?? []).map(opening)) if (!sharedOpenings.has(item)) parts.push(item);
     if (parts.length) lines.push(`${page.path}: ${parts.join(" | ")}`);
   }
   return lines.join("\n");

@@ -18,7 +18,7 @@ export interface SiteContext {
   notes: string;
   /** Help docs the company supplied. */
   docs: Doc[];
-  /** What the crawl found. Pages are nodes and their links are edges, so this is already a graph. */
+  /** What the crawl found. Pages are nodes, and their links and `opens` are edges, so this is a graph of the site. */
   pages: PageNode[];
   /** The inputs this was built from, so `refresh` can rebuild it unattended. */
   source: SiteSource;
@@ -99,6 +99,21 @@ export interface PageNode {
   buttons: string[];
   /** Labels of form fields. */
   fields: string[];
+  /**
+   * What each menu, tab or accordion showed when the reader opened it. These
+   * are the edges that take two clicks: the control first, then what it shows.
+   * Only a reader that runs the page in a browser can fill this in.
+   */
+  opens?: PageOpening[];
+}
+
+export interface PageOpening {
+  /** The label of the control that has to be clicked first. */
+  control: string;
+  /** Same-site links that appeared, and where each one leads. */
+  links: { label: string; to: string }[];
+  /** Buttons, tabs and menu items that appeared. */
+  buttons: string[];
 }
 
 /**
