@@ -555,6 +555,40 @@ test("an unknown button is the visitor's, and acting carries on after their clic
   }
 });
 
+test("a date is the visitor's, and the sentence says plainly that Haptic does not pick dates: a calendar's day or a date field, not a dated row of a table", async () => {
+  // A calendar the way react-day-picker draws one: a grid of weeks, each day a button named by its date.
+  const day = (date: number, weekday: string) =>
+    `<td role="gridcell"><button type="button" id="d${date}" data-watch aria-label="${weekday}, November ${date}th, 2026">${date}</button></td>`;
+  const week = [
+    [15, "Sunday"],
+    [16, "Monday"],
+    [17, "Tuesday"],
+    [18, "Wednesday"],
+    [19, "Thursday"],
+    [20, "Friday"],
+    [21, "Saturday"],
+  ] as const;
+  const page = await open(`<h1>Delegate approvals</h1>
+    <table role="grid" aria-label="November 2026"><tbody><tr>${week.map(([date, weekday]) => day(date, weekday)).join("")}</tr></tbody></table>
+    <label>Back on <input type="date" id="back" data-watch></label>
+    <table><tr><td>Brightdesk Coworking</td><td><button type="button" id="due" data-watch>Nov 20, 2026</button></td><td>$1,200.00</td></tr></table>`);
+  try {
+    const seen = await page.plan("#d20", { do: "click" }, "I'm on vacation from November 20th");
+    assert.deepEqual([seen.kind, seen.reason, seen.el], ["visitor", "date", "d20"]);
+    assert.equal(seen.say, "I don't pick dates yet, so I'll leave this one to you. Pick Friday, November 20th, 2026 and I'll carry on.");
+    assert.equal(seen.event, 'You did not click button "20 (Friday, November 20th, 2026)": you do not pick dates in this version, so the visitor has it.');
+    assert.deepEqual((await page.press()).hits, []);
+    const field = await page.plan("#back", { do: "type", enter: "2026-11-27" }, "I'm back on 2026-11-27");
+    assert.deepEqual([field.kind, field.reason], ["visitor", "date"]);
+    assert.equal(field.say, "I don't pick dates yet, so I'll leave this one to you. Pick a date in Back on and I'll carry on.");
+    // A row with one date in it is a row of a table, not a week: its button is judged as any other.
+    const row = await page.plan("#due", { do: "click" }, "pay the Brightdesk bill");
+    assert.deepEqual([row.kind, row.reason], ["visitor", "unknown"]);
+  } finally {
+    await page.close();
+  }
+});
+
 test("a press that would land on a link inside an allowed control is judged as that link", async () => {
   const page = await open(`<section><input aria-label="Name"><div role="button" tabindex="0" id="tile" data-watch style="width:300px;height:80px;border:1px solid #999;position:relative">Next
       <a href="https://evil.example/" id="inner-link" data-watch style="position:absolute;inset:10px 40px;background:#eee">read more</a></div></section>`);

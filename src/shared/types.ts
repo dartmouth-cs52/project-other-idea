@@ -171,8 +171,10 @@ export type Refusal =
   | "ungrounded"
   /** Enter, outside a search box and outside a list Haptic opened. */
   | "enter"
-  /** The act does not fit the control, or is one Haptic does not do in this version (sliders, uploads, dates, editors). */
+  /** The act does not fit the control, or is one Haptic does not do in this version (sliders, uploads, editors). */
   | "unfit"
+  /** It picks a date: a day in a calendar, or a field the browser gives a date picker. Dates are not picked in this version. */
+  | "date"
   /** The reply gave a `do` together with `commits: true`. Treated as a hand-over. */
   | "contradiction"
   /** 4.5: the commit deletes, spends, signs in or out, or reveals a secret, and the visitor asked for nothing of that kind. */

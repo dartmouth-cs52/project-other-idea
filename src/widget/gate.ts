@@ -1,4 +1,4 @@
-import { ASKED_CLASSES, checkAction, CLASS_DOES, classAsked, fold, grounded, isDismissName, isForwardName, isSearchName, isSecretField, isTypeToConfirm, opensByName, readName, type CommitClass } from "../shared/act-rules.ts";
+import { ASKED_CLASSES, checkAction, CLASS_DOES, classAsked, fold, grounded, isDismissName, isForwardName, isSearchName, isSecretField, isTypeToConfirm, namesADay, opensByName, readName, type CommitClass } from "../shared/act-rules.ts";
 import { actingAllowedAt, actionsAllowed, ACTING_LIMITS, describeElement, type Act, type ActingSettings, type Refusal, type SnapElement, type Snapshot, type TurnReply } from "../shared/types.ts";
 import { currentPath, findOpenModal } from "./snapshot.ts";
 
@@ -169,6 +169,7 @@ export const SAYS = {
   covered: (name: string) => `Something is in the way, so I'll leave this one to you. Click ${name} and I'll carry on.`,
   off: (name: string) => `I'll leave this one to you. Use ${name} and I'll carry on.`,
   unfit: (name: string) => `I can't do this one myself. Use ${name} and I'll carry on.`,
+  date: (name: string) => `I don't pick dates yet, so I'll leave this one to you. Pick ${name} and I'll carry on.`,
   confirmation: "The page is asking you to confirm. Read it and choose.",
   class: (name: string, does: string) => `I stopped before ${name}: it ${does}, and you didn't ask for that.`,
   cap: "That's as far as I'll go on my own. Here's what I did.",
@@ -657,6 +658,33 @@ function nameFor(el: Element, listed: SnapElement | undefined): string {
   return name.replace(/\s+/g, " ").trim().slice(0, 60) || "this";
 }
 
+/**
+ * Whether a control picks a date, which Haptic leaves to the visitor in this
+ * version: a field the browser gives a date picker, or a day in a calendar. A
+ * day is a cell of a grid or a table, named by the day it is, in a row that
+ * holds at least three cells named so.
+ */
+function picksADate(el: Element): boolean {
+  if (el instanceof HTMLInputElement) return DATE_TYPES.has(el.type) && el.type !== "time";
+  const cell = el.closest('td, [role="gridcell"]');
+  const row = cell?.closest('tr, [role="row"]');
+  if (!cell || !row?.closest('table, [role="grid"]')) return false;
+  // A calendar names a day on its cell or on the button inside it, for screen readers or as a tooltip.
+  const dated = (part: Element) =>
+    [part, ...Array.from(part.querySelectorAll("[aria-label], [title]")).slice(0, 3)].some((node) => namesADay(`${node.getAttribute("aria-label") ?? ""} ${node.getAttribute("title") ?? ""}`));
+  if (!dated(cell)) return false;
+  let days = 0;
+  for (const other of Array.from(row.querySelectorAll('td, [role="gridcell"]')).slice(0, 14)) if (dated(other) && ++days >= 3) return true;
+  return false;
+}
+
+/** How the visitor is told which date to pick: a day by the date it names, a field by its name. */
+function dateName(el: Element, listed: SnapElement | undefined): string {
+  const named = [el.getAttribute("aria-label"), el.getAttribute("title")].find((words) => !!words && namesADay(words));
+  if (named) return named.replace(/\s+/g, " ").trim().slice(0, 60);
+  return el instanceof HTMLInputElement ? `a date in ${nameFor(el, listed)}` : nameFor(el, listed);
+}
+
 /** How the model reads a control in an event: as the list named it. */
 function describeFor(el: Element, listed: SnapElement | undefined): string {
   if (listed) return describeElement(listed);
@@ -676,6 +704,7 @@ const WHY: Partial<Record<Refusal, string>> = {
   ungrounded: "the visitor did not say what to enter",
   covered: "something covers it",
   unfit: "you can't do that to it yourself",
+  date: "you do not pick dates in this version",
   enter: "Enter is pressed only in a search box",
   cap: "you have done as much as one request allows",
   failed: "you could not do it",
@@ -724,6 +753,8 @@ function sayFor(reason: Refusal, name: string, commit?: CommitClass): string {
     case "enter":
     case "changed":
       return SAYS.unfit(name);
+    case "date":
+      return SAYS.date(name);
     case "failed":
     case "cap":
       return SAYS.failed(name);
@@ -740,7 +771,7 @@ function sayFor(reason: Refusal, name: string, commit?: CommitClass): string {
 
 /** A step the gate gives the visitor, with a sentence for them and one for the model that each say the real reason. `commit` is the class of the words that stopped it, when words did. */
 function visitorPlan(el: Element, listed: SnapElement | undefined, reason: Refusal, act?: Act, value?: string, commit?: CommitClass): VisitorPlan {
-  const name = nameFor(el, listed);
+  const name = reason === "date" ? dateName(el, listed) : nameFor(el, listed);
   const why = reason === "words" && commit ? `its words say it ${CLASS_DOES[commit]}` : (WHY[reason] ?? "you can't tell what it does");
   return { kind: "visitor", reason, el, say: sayFor(reason, name, commit), event: `You did not ${verbFor(act, value)} ${describeFor(el, listed)}: ${why}, so the visitor has it.` };
 }
@@ -851,6 +882,8 @@ function decide(reply: TurnReply, target: Element | undefined, listed: SnapEleme
   if (session.failures >= ACTING_LIMITS.failuresInARow) return { kind: "stop", reason: "cap", say: SAYS.cap, event: "Several steps could not be done, so you stopped acting." };
   if (act === "type" && value && session.typed + value.length > ACTING_LIMITS.typedChars) return { kind: "stop", reason: "cap", say: SAYS.cap, event: "You have typed as much as one request allows, so you stopped." };
 
+  // Dates are not picked in this version, and the visitor is told so.
+  if (picksADate(el)) return refuse("date");
   const kind = kindOf(el, act, session);
   if ("unfit" in kind || disabled(el)) return refuse("unfit");
   const { control } = kind;

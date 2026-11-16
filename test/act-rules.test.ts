@@ -11,6 +11,7 @@ import {
   isSecretField,
   isTypeToConfirm,
   LANGUAGES,
+  namesADay,
   pickChoice,
   readName,
   safeWordsFor,
@@ -296,6 +297,11 @@ test("a date is written in the pattern a field shows", () => {
   assert.equal(dateLike("YYYY.MM.DD", date), "2026.12.01");
   assert.equal(dateLike("d/m/yy", date), "1/12/26");
   assert.equal(dateLike("Pick a date", date), undefined);
+});
+
+test("a calendar's names for its days are read as days, and other words with numbers are not", () => {
+  for (const name of ["Friday, November 20th, 2026", "Today, Monday, November 16th, 2026", "20 nov. 2026", "vendredi 20 novembre 2026", "2026-11-20", "20/11/2026"]) assert.ok(namesADay(name), name);
+  for (const name of ["20", "November 2026", "Step 3 of 4", "Expenses 19", "$1,500.00", "May I help"]) assert.ok(!namesADay(name), name);
 });
 
 // The check on a reply ------------------------------------------------------------

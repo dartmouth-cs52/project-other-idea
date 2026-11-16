@@ -612,6 +612,20 @@ function dateGrounded(iso: RegExpExecArray, folded: string): boolean {
 }
 
 /**
+ * Whether a text names one day of the calendar: "2026-11-20", "20/11/2026",
+ * or a month's name beside a day's number, as a calendar names its days for
+ * screen readers ("Friday, November 20th, 2026").
+ */
+export function namesADay(text: string): boolean {
+  const folded = fold(text);
+  if (/(?<!\d)\d{4}-\d{1,2}-\d{1,2}(?!\d)/.test(folded)) return true;
+  if (/(?<!\d)\d{1,2}[/.-]\d{1,2}[/.-](?:\d{2}|\d{4})(?!\d)/.test(folded)) return true;
+  const words = wordsOf(folded);
+  const isDay = (word: string | undefined) => /^\d{1,2}(?:st|nd|rd|th|er|e|o|a)?$/.test(word ?? "");
+  return words.some((word, at) => MONTHS.some((names) => names.includes(word)) && (isDay(words[at - 1]) || isDay(words[at + 1])));
+}
+
+/**
  * Whether `value` is in the visitor's own `words` (DESIGN 4.4).
  * - Emails compare whole.
  * - An ISO date (YYYY-MM-DD) is grounded by the same date in figures, by its
