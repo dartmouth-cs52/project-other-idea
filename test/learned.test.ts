@@ -155,7 +155,7 @@ test("a site with too many labels still counts the known ones and adds no more",
 test("a site is read with its learned labels merged in, and still read when the table is missing", async () => {
   const row = { id: site.id, name: site.name, origin: site.origin, allowed_origins: site.allowedOrigins, context: site };
   const learned = [{ route: "/billing", kind: "button", label: "Update card", href: "", visitors: 4, seen: 10 }];
-  const { sql, sent } = standIn((text) => (text.includes("from sites") ? [row] : learned));
+  const { sql, sent } = standIn((text) => (text.includes("from sites") ? [row] : text.includes("outline_openings") ? [] : learned));
   const loaded = await new Store(sql, 3).loadSite(site.id);
   assert.deepEqual(loaded?.pages.at(-1), { path: "/billing", title: "", headings: [], links: [], buttons: ["Update card"], fields: [] });
   assert.ok(sent.some((query) => query.text.includes("visitor_count >= ?") && query.values.includes(3)));
