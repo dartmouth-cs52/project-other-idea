@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircleIcon, ExternalLink } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ExternalLink } from "lucide-react";
+import { FormAlert, failureFrom, type Failure } from "@/components/form";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { api } from "@/lib/app-api";
 import { hostOf, installStatus } from "@/lib/setup";
@@ -35,7 +35,7 @@ export function ConnectStep({
   const [help, setHelp] = useState(false);
   const [allowing, setAllowing] = useState(false);
   const [allowed, setAllowed] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Failure | null>(null);
   const host = hostOf(site.origin);
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export function ConnectStep({
       setAllowed(origin);
       onChange(next);
     } catch (failure) {
-      setError((failure as Error).message);
+      setError(failureFrom("Couldn't allow that address", failure));
     } finally {
       setAllowing(false);
     }
@@ -114,6 +114,13 @@ export function ConnectStep({
           </Button>
         </>
       }
+      after={
+        error && (
+          <div className="max-w-xl">
+            <FormAlert failure={error} />
+          </div>
+        )
+      }
     >
       {status.kind === "refused" ? (
         <div className="flex flex-col gap-2 rounded-xl border bg-card p-6" role="status" data-connect="refused">
@@ -130,12 +137,6 @@ export function ConnectStep({
             Haptic checks every few seconds. It allows {site.allowedOrigins.map(hostOf).join(", ")} now, and shows any other address it sees here.
           </p>
         </div>
-      )}
-      {error && (
-        <Alert variant="destructive" className="max-w-xl">
-          <AlertCircleIcon />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
       )}
       {help && status.kind !== "refused" && (
         <section className="flex flex-col gap-3" aria-labelledby="not-showing">

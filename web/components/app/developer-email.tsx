@@ -1,17 +1,16 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { AlertCircleIcon, Send } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Send } from "lucide-react";
+import { FieldWithButton, FormAlert, failureFrom, useFieldErrors, type Failure } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { api } from "@/lib/app-api";
 import { checkEmail } from "@/lib/setup";
 import { CopyLink } from "./agent-pill";
 import { DoneMark } from "./parts";
 
-type State = { kind: "idle" } | { kind: "sending" } | { kind: "sent"; to: string } | { kind: "failed"; reason: string };
+type State = { kind: "idle" } | { kind: "sending" } | { kind: "sent"; to: string } | { kind: "failed"; failure: Failure };
 
 /**
  * Emails the install steps to whoever looks after the code. The site's Worker
@@ -21,17 +20,14 @@ type State = { kind: "idle" } | { kind: "sending" } | { kind: "sent"; to: string
  */
 export function DeveloperEmail({ siteId, installLink }: { siteId: string; installLink: string }) {
   const [to, setTo] = useState("");
-  const [fieldError, setFieldError] = useState<string | null>(null);
   const [state, setState] = useState<State>({ kind: "idle" });
+  const id = `developer-${siteId}`;
+  const fields = useFieldErrors({ to: id });
 
   async function send(event: FormEvent) {
     event.preventDefault();
     const checked = checkEmail(to);
-    if (!checked.ok) {
-      setFieldError(checked.message);
-      return;
-    }
-    setFieldError(null);
+    if (fields.show({ to: checked.ok ? undefined : checked.message }) || !checked.ok) return;
     setState({ kind: "sending" });
     try {
       // One key per press, so a retry of this press can never send a second email.
@@ -39,7 +35,9 @@ export function DeveloperEmail({ siteId, installLink }: { siteId: string; instal
       const result = await api<{ sent: boolean; to: string }>(`/sites/${siteId}/developer-email`, { method: "POST", body: { to: checked.email, key } });
       setState({ kind: "sent", to: result.to });
     } catch (failure) {
-      setState({ kind: "failed", reason: (failure as Error).message || "The email didn't go out." });
+      // A refusal about the address goes under the field. Anything else is said in the alert, with the link beside it.
+      if (fields.showRefusal(failure)) setState({ kind: "idle" });
+      else setState({ kind: "failed", failure: failureFrom("The email didn't go out", failure) });
     }
   }
 
@@ -52,65 +50,56 @@ export function DeveloperEmail({ siteId, installLink }: { siteId: string; instal
             Sent to <span className="font-medium">{state.to}</span>. Their reply comes to you.
           </span>
         </p>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setTo("");
-              setState({ kind: "idle" });
-            }}
-          >
-            Send to someone else
-          </Button>
-        </div>
+        <Button
+          variant="ghost"
+          className="self-start"
+          onClick={() => {
+            setTo("");
+            setState({ kind: "idle" });
+          }}
+        >
+          Send to someone else
+        </Button>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-3" data-developer-email={state.kind}>
-      <form onSubmit={send} noValidate className="flex flex-col gap-2">
-        <Label htmlFor={`developer-${siteId}`}>Email it to my developer</Label>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-          <div className="flex flex-1 flex-col gap-2">
-            <Input
-              id={`developer-${siteId}`}
-              type="email"
-              inputMode="email"
-              autoComplete="off"
-              placeholder="developer@company.com"
-              value={to}
-              onChange={(event) => {
-                setTo(event.target.value);
-                setFieldError(null);
-              }}
-              aria-invalid={fieldError ? true : undefined}
-              aria-describedby={fieldError ? `developer-${siteId}-error` : undefined}
-              className="h-11 bg-card px-3.5 md:text-base"
-            />
-            {fieldError && (
-              <p id={`developer-${siteId}-error`} className="text-[13px] leading-5 text-destructive">
-                {fieldError}
-              </p>
-            )}
-          </div>
-          <Button type="submit" size="xl" variant="secondary" disabled={state.kind === "sending"}>
-            <Send />
-            {state.kind === "sending" ? "Sending" : "Send"}
-          </Button>
-        </div>
+      <form onSubmit={send} noValidate>
+        <FieldWithButton
+          id={id}
+          label="Email it to my developer"
+          error={fields.errors.to}
+          hint={state.kind === "failed" ? undefined : "They get the install steps, the prompt for a coding agent and the tag, from Haptic, and their reply comes to you."}
+          button={
+            <Button type="submit" size="xl" variant="secondary" disabled={state.kind === "sending"}>
+              <Send />
+              {state.kind === "sending" ? "Sending" : "Send"}
+            </Button>
+          }
+        >
+          <Input
+            {...fields.control("to", { hint: state.kind !== "failed" })}
+            type="email"
+            inputMode="email"
+            autoComplete="off"
+            placeholder="developer@company.com"
+            value={to}
+            onChange={(event) => {
+              setTo(event.target.value);
+              fields.clear("to");
+            }}
+            className="h-11 bg-card px-3.5 md:text-base"
+          />
+        </FieldWithButton>
       </form>
       {state.kind === "failed" && (
         <div className="flex flex-col gap-3">
-          <Alert variant="destructive">
-            <AlertCircleIcon />
-            <AlertTitle>The email didn&apos;t go out</AlertTitle>
-            <AlertDescription>{state.reason}</AlertDescription>
-          </Alert>
+          <FormAlert failure={state.failure} />
           <CopyLink link={installLink} label="Copy the link instead" />
         </div>
       )}
-      {state.kind !== "failed" && <p className="text-sm text-muted-foreground">They get the install steps, the prompt for a coding agent and the tag, from Haptic, and their reply comes to you.</p>}
     </div>
   );
 }

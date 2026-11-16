@@ -18,6 +18,7 @@ export function StepFrame({
   mark,
   children,
   actions,
+  after,
   focusHeading = true,
 }: {
   step: SetupStepId;
@@ -27,6 +28,8 @@ export function StepFrame({
   mark?: ReactNode;
   children?: ReactNode;
   actions?: ReactNode;
+  /** Under the buttons: the alert when something that is not one field's fault failed. */
+  after?: ReactNode;
   /** False when the screen puts the focus in a field of its own. */
   focusHeading?: boolean;
 }) {
@@ -46,6 +49,7 @@ export function StepFrame({
       </div>
       {children}
       {actions && <div className="flex flex-wrap items-center gap-3">{actions}</div>}
+      {after}
     </div>
   );
 }

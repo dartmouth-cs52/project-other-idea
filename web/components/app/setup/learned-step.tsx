@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { AlertCircleIcon, Check, Plus } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 import { cn } from "cn";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FormAlert, failureFrom, type Failure } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, type ControlName } from "@/lib/app-api";
@@ -30,7 +30,7 @@ export function LearnedStep({ site, pages, onChange, onBack, onNext }: { site: S
   const [chosen, setChosen] = useState<SuggestedControl[]>(() => neverTouchSuggestions(reading?.risky ?? []));
   const [adding, setAdding] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Failure | null>(null);
 
   const read = reading?.read ?? 0;
   const list = reading?.pages ?? [];
@@ -58,7 +58,7 @@ export function LearnedStep({ site, pages, onChange, onBack, onNext }: { site: S
       }
       onNext();
     } catch (failure) {
-      setError((failure as Error).message);
+      setError(failureFrom("Couldn't save the list", failure));
       setBusy(false);
     }
   }
@@ -85,6 +85,13 @@ export function LearnedStep({ site, pages, onChange, onBack, onNext }: { site: S
             Skip
           </Button>
         </>
+      }
+      after={
+        error && (
+          <div className="max-w-xl">
+            <FormAlert failure={error} />
+          </div>
+        )
       }
     >
       {list.length > 0 && (
@@ -154,12 +161,6 @@ export function LearnedStep({ site, pages, onChange, onBack, onNext }: { site: S
             Add
           </Button>
         </form>
-        {error && (
-          <Alert variant="destructive" className="max-w-xl">
-            <AlertCircleIcon />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
       </section>
     </StepFrame>
   );

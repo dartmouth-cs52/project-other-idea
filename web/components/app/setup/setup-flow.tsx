@@ -115,8 +115,8 @@ export function SetupFlow() {
     router.push(`/dashboard/?site=${siteId}`);
   }
 
-  /** Step 1's answer: the same address carries on, a new one replaces a site that hasn't connected, and none makes one. */
-  async function choose(origin: string, url: string): Promise<string | undefined> {
+  /** Step 1's answer: the same address carries on, a new one replaces a site that hasn't connected, and none makes one. Resolves with any failure. */
+  async function choose(origin: string, url: string): Promise<unknown> {
     try {
       if (current && current.origin === origin) {
         go("reading");
@@ -132,7 +132,7 @@ export function SetupFlow() {
       setChosen({ step: "reading", for: added.id });
       router.replace(`/dashboard/setup/?site=${added.id}`);
     } catch (error) {
-      return (error as Error).message;
+      return error;
     }
   }
 
