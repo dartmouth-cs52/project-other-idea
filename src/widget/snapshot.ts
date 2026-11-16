@@ -206,6 +206,14 @@ const MAX_HIDDEN_CHECKED = 200;
 /** The state such a control is listed with. */
 const SHOWS_ON_HOVER = "shows on hover";
 
+/**
+ * A control's states that it changes into, leaving out those that say how it is drawn: "shows on hover" and "shows on
+ * focus" come and go as the mouse crosses its row or the keyboard passes through it, and are not the control changing.
+ */
+export function statesOf(element: Pick<SnapElement, "state">): string[] {
+  return (element.state ?? []).filter((state) => state !== SHOWS_ON_HOVER && state !== SHOWS_ON_FOCUS);
+}
+
 /** A selector list cut at its commas, leaving alone the commas inside brackets. */
 function selectorParts(list: string): string[] {
   const parts: string[] = [];
@@ -1263,8 +1271,8 @@ function stateChanges(before: SnapElement[], after: SnapElement[]): string[] {
   for (const [key, element] of unique(after)) {
     const old = was.get(key);
     if (!element || !old) continue;
-    const gained = (element.state ?? []).filter((state) => !old.state?.includes(state));
-    const lost = (old.state ?? []).filter((state) => !element.state?.includes(state));
+    const gained = statesOf(element).filter((state) => !statesOf(old).includes(state));
+    const lost = statesOf(old).filter((state) => !statesOf(element).includes(state));
     if (!gained.length && !lost.length) continue;
     const parts: string[] = [];
     if (gained.length) parts.push(`is now ${gained.join(", ")}`);

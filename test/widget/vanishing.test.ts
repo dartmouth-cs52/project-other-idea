@@ -340,6 +340,8 @@ for (const [what, extra] of [
       await session.page.mouse.click(pay.x + pay.width / 2, pay.y + pay.height / 2);
       const second = await session.untilAsked(2);
       assert.match(second.event ?? "", /^The user clicked button "Pay"/);
+      // Shown now because the mouse is over its row: that is not something that became of it.
+      assert.doesNotMatch(second.event ?? "", /shows on hover/);
       assert.equal(await session.page.evaluate(() => (window as unknown as { pays: number }).pays), 1);
     } finally {
       await session.close();

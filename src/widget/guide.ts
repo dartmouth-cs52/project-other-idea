@@ -23,7 +23,7 @@ import { confirmationAction, planFor, SAYS, type ActPlan, type GateConfig, type 
 import { hear, isOwn, keyName, keysAsked, nothingHeard, OUTCOME_WINDOW_MS, OWN_TYPING_PAUSE_MS, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "./observe.ts";
 import { onAddressChange } from "./navigation.ts";
 import { isDrawn, POPUP_ROLES, watchPopups } from "./popups.ts";
-import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, sameView, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
+import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, sameView, statesOf, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
 import { ACTING_WORDS, type DidShown, type Ui } from "./ui.ts";
 
 // Runs one guide: ask the model for a step, point at it, wait for the visitor
@@ -1472,8 +1472,8 @@ export class Guide {
     }
     const parts: string[] = [];
     if (now.label && now.label !== last.listed.label) parts.push(`now reads "${now.label}"`);
-    const gained = (now.state ?? []).filter((state) => !last.listed.state?.includes(state));
-    const lost = (last.listed.state ?? []).filter((state) => !now.state?.includes(state));
+    const gained = statesOf(now).filter((state) => !statesOf(last.listed).includes(state));
+    const lost = statesOf(last.listed).filter((state) => !statesOf(now).includes(state));
     if (gained.length) parts.push(`is now ${gained.join(", ")}`);
     if (lost.length) parts.push(`is no longer ${lost.join(", ")}`);
     // What is in a field is never read, so a field always looks the same. Nor is the choice a list's field shows: one that
@@ -1705,7 +1705,7 @@ function nameOf(listed: SnapElement): string {
 /** Everything about a page that using a control could change, as one string: where it is, its dialog, its controls and their states. */
 /** The page's address, dialog, and every control on it with its state: not only those listed, which on a long page change with a scroll. */
 function pageState(snapshot: Snapshot): string {
-  return [snapshot.path, snapshot.dialog ?? "", ...wholePage(snapshot).elements.map((element) => `${elementKey(element)}|${(element.state ?? []).join(",")}`)].join("\n");
+  return [snapshot.path, snapshot.dialog ?? "", ...wholePage(snapshot).elements.map((element) => `${elementKey(element)}|${statesOf(element).join(",")}`)].join("\n");
 }
 
 /** Text is typed into it. A dropdown is picked from, a slider is dragged, and a field nobody can type in is used by clicking it. */
