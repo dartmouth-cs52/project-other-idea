@@ -211,7 +211,8 @@ export class Guide {
    * same field. `page` is everything about the page that a click could have
    * changed, as one string.
    */
-  private last?: { listed: SnapElement; used: boolean; el?: WeakRef<Element>; page: string };
+  /** The control the last reply named. `set`: Haptic set it itself and checked that it took. */
+  private last?: { listed: SnapElement; used: boolean; set?: boolean; el?: WeakRef<Element>; page: string };
   /** A control that was used with nothing on the page changing, how many times running, and what was said about it for which step. */
   private stuck?: { el: WeakRef<Element>; page: string; count: number; step: number; said: string };
   /** The visitor's last action was not the step they were shown. Cleared once the next step is given. */
@@ -902,7 +903,10 @@ export class Guide {
       case "done": {
         session.gate.failures = 0;
         if (outcome.did) this.noteDid(session, outcome.did);
-        if (this.last) this.last.used = true;
+        if (this.last) {
+          this.last.used = true;
+          if (outcome.did) this.last.set = true;
+        }
         const event = outcome.nothingChanged ? `${outcome.event} ${NOTHING_CHANGED}` : outcome.event;
         // Saved at once: if the press is loading a new page, the next page needs to know what it was.
         this.save(event);
@@ -1147,8 +1151,9 @@ export class Guide {
     const lost = (last.listed.state ?? []).filter((state) => !now.state?.includes(state));
     if (gained.length) parts.push(`is now ${gained.join(", ")}`);
     if (lost.length) parts.push(`is no longer ${lost.join(", ")}`);
-    // What is in a field is never read, so a field always looks the same.
-    const what = parts.join(" and ") || (isField(el) ? "" : "looks unchanged");
+    // What is in a field is never read, so a field always looks the same. Nor is the choice a list's field shows: one that
+    // Haptic set and saw take is not called unchanged, which told the model its choice had not taken.
+    const what = parts.join(" and ") || (isField(el) || last.set ? "" : "looks unchanged");
     return { told: `It is ${now.id} in the list now${what ? `, and ${what}` : ""}.`, kept: parts.length ? `It ${parts.join(" and ")}.` : "" };
   }
 

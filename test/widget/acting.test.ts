@@ -582,7 +582,9 @@ test("What I did lists only what Haptic changed, each line the field and then wh
       await session.untilAsked(4, 20_000);
       await session.until(async () => (await session.did()).closing !== "", "What I did to show");
       const asked = session.requests;
-      assert.match(asked[1]!.event ?? "", /was already chosen, so you left it\./);
+      assert.match(asked[1]!.event ?? "", /was already chosen, so you left it\. It is e\d+ in the list now, and looks unchanged\./);
+      // A choice Haptic made and saw take is not called unchanged: the field's words are never read, so it always looked so.
+      assert.match(asked[3]!.event ?? "", /^You chose "Malika Cummerata Growth Marketing Lead" from the list that combobox "Cardholder" opened\. It is e\d+ in the list now\.$/);
       assert.deepEqual((await session.did()).lines, ["Card name: Ads", "Cardholder: Malika Cummerata"], "a radio that was already chosen is listed");
       const lines = await didBoxes(session);
       assert.deepEqual(
