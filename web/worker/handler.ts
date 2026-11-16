@@ -3,6 +3,7 @@
 
 import { checkRequest, cleanRequest, emailDomain, isPersonalEmail, type AccessField, type AccessRequest } from "../lib/access-request";
 import { appApi, approveLink, type AppEnv } from "./app-api";
+import { textUpTo } from "./body-text";
 import { proxyAuth } from "./auth";
 import { database } from "./db";
 import { sendHealthAlerts } from "./health";
@@ -90,8 +91,9 @@ async function requestAccess(request: Request, env: Env, url: URL): Promise<Resp
     return json({ error: "Too many requests. Try again in a minute." }, 429);
   }
 
-  const raw = await request.text();
-  if (raw.length > 8000) return json({ error: "That is too long." }, 413);
+  // 8,000 characters, at most three bytes each, so a longer body is refused before it is all read.
+  const raw = await textUpTo(request, 8000 * 3);
+  if (raw === undefined || raw.length > 8000) return json({ error: "That is too long." }, 413);
   let body: Record<string, unknown>;
   try {
     body = JSON.parse(raw) as Record<string, unknown>;

@@ -19,6 +19,7 @@
 // id, which is public, is never enough to read or change someone's data.
 
 import { cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
+import { textUpTo } from "./body-text";
 import { DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
@@ -190,32 +191,6 @@ async function body(request: Request, limit: BodyLimit = ANY_BODY): Promise<Reco
     // Falls through to the refusal.
   }
   throw new Refusal(400, "That was not valid JSON.");
-}
-
-/**
- * The body as text, or undefined once it is longer than `maxBytes`. `request.text()` would read the whole
- * body into memory first, and a client can send up to Cloudflare's request limit, far more than a Worker has.
- * So a declared length that is too long is refused before reading, and the rest are counted as they arrive,
- * which also covers chunked bodies with no length given.
- */
-async function textUpTo(request: Request, maxBytes: number): Promise<string | undefined> {
-  if (Number(request.headers.get("content-length")) > maxBytes) return undefined;
-  if (!request.body) return "";
-  const reader = request.body.getReader();
-  const decoder = new TextDecoder();
-  let bytes = 0;
-  let text = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) return text + decoder.decode();
-    bytes += value.byteLength;
-    if (bytes > maxBytes) {
-      // Not awaited: the refusal doesn't depend on it, and the rest of the body is never read.
-      reader.cancel().catch(() => {});
-      return undefined;
-    }
-    text += decoder.decode(value, { stream: true });
-  }
 }
 
 // Who is signed in -----------------------------------------------------------
