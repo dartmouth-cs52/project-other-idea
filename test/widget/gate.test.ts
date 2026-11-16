@@ -256,16 +256,18 @@ test("in a wizard that waits for Next, Haptic may choose a way, type the visitor
   }
 });
 
-test("a same-origin link, a tab and a control that opens a menu are acted on", async () => {
-  const page = await open(`<nav><a href="/cards" id="cards" data-watch>Cards</a><a href="/cards/new" id="issue" data-watch>Issue card</a></nav>
+test("a link to another page of the site, a tab and a control that opens a menu are acted on", async () => {
+  const page = await open(`<nav><a href="/cards" id="cards" data-watch>Cards</a><a href="/cards/new/start" id="issue" data-watch>Issue card</a></nav>
     <div role="tablist"><button role="tab" aria-selected="true" id="t1">Details</button><button role="tab" aria-selected="false" id="t2" data-watch>Payments</button></div>
     <button type="button" aria-haspopup="menu" aria-expanded="false" id="share" data-watch>Share</button>`);
   try {
     const cards = await page.plan("#cards", { do: "click" }, "open my cards");
-    assert.deepEqual([cards.kind, cards.control, cards.navigates], ["act", "link", true]);
+    // Pressed as a visit, and watched: a page whose script answers the click and sends something stops acting.
+    assert.deepEqual([cards.kind, cards.control, cards.navigates, cards.tripwire], ["act", "link", true, true]);
     assert.deepEqual((await page.press()).hits, ["cards"]);
-    // A link named like the commit leads to the form; only a button there commits.
-    assert.equal((await page.plan("#issue", { do: "click" }, CARD)).kind, "act");
+    // A link named like the commit is read as a button is: the visitor clicks it, even when it only leads to the form.
+    const issue = await page.plan("#issue", { do: "click" }, CARD);
+    assert.deepEqual([issue.kind, issue.reason, issue.say], ["visitor", "words", "I'll leave Issue card to you: it saves something. Click it and I'll carry on."]);
     assert.equal((await page.plan("#t2", { do: "click" }, "see payments")).control, "tab");
     assert.equal((await page.plan("#share", { do: "click" }, "share the card")).kind, "act");
   } finally {
@@ -355,7 +357,7 @@ test("a Next that becomes Delete after a re-render is not pressed, whether it ch
   }
 });
 
-test("links that leave the page or the tab go to the visitor: another origin, a new tab, a download, mail, script, and a page whose links all open new tabs", async () => {
+test("links that leave the page or the tab go to the visitor: another origin, a new tab, a download, mail, and a page whose links all open new tabs", async () => {
   const page = await open(`<a id="away" href="https://evil.example/cards" data-watch>Cards help</a>
     <a id="blank" href="/cards" target="_blank" data-watch>Cards</a>
     <a id="download" href="/cards.csv" download data-watch>Card list</a>
@@ -365,15 +367,93 @@ test("links that leave the page or the tab go to the visitor: another origin, a 
     <form id="elsewhere" action="https://pay.example/checkout" method="get"><input type="search" aria-label="Search"><button id="pay-search" data-watch>Search</button></form>
     <a id="home" href="/cards" data-watch>Home</a>`);
   try {
-    for (const id of ["away", "blank", "download", "mail", "script", "tel", "pay-search"]) {
+    for (const id of ["away", "blank", "download", "mail", "tel", "pay-search"]) {
       const seen = await page.plan(`#${id}`, { do: "click" }, "open the cards");
       assert.deepEqual([id, seen.kind, seen.reason], [id, "visitor", "leaves"]);
       assert.match(seen.say ?? "", /^This opens somewhere else, so I'll leave it to you\./);
     }
     assert.deepEqual((await page.press()).hits, []);
+    // A "javascript:" address runs a script on this page, so it is judged as a button is: "Open" says it opens something, and the press is watched.
+    const script = await page.plan("#script", { do: "click" }, "open the cards");
+    assert.deepEqual([script.kind, script.control, script.navigates, script.tripwire], ["act", "button", false, true]);
     assert.equal((await page.plan("#home", { do: "click" }, "open the cards")).kind, "act");
     await page.run(`document.head.append(Object.assign(document.createElement("base"), { target: "_blank" }))`);
     assert.equal((await page.plan("#home", { do: "click" }, "open the cards")).reason, "leaves");
+  } finally {
+    await page.close();
+  }
+});
+
+test("links that send, save, approve or publish are never pressed, whatever the model calls them: drawn as a button, answered by a script, role=link, or a visit whose address approves", async () => {
+  // Found in review: each of these was planned as {kind: "act", control: "link", tripwire: false}, and pressed.
+  const SEND = "Send Dana an invite to the workspace";
+  const page = await open(`<main><h1>Team</h1>
+    <a href="#" id="send" class="btn" data-watch onclick="fetch('/save',{method:'POST'});return false">Send invite</a>
+    <span role="link" tabindex="0" id="publish" data-watch onclick="fetch('/save',{method:'POST'})">Publish</span>
+    <a href="#" id="save" data-watch>Save changes</a> <a href="#" id="approve" data-watch>Approve</a>
+    <a href="/expenses/7/approve" id="approve-visit" data-watch>Approve expense</a>
+    <a href="/expenses/7" id="expense" data-watch>Expense 7</a> <a href="/expenses/7?action=approve" id="approve-query" data-watch>Expense 7, approve</a>
+    <a href="/expenses/7/approve" id="approve-quiet" data-watch>Expense 7</a>
+    <a href="javascript:sendInvite()" id="script-send" data-watch>Send</a>
+    <a href="/team/members" id="members-script" data-watch onclick="fetch('/save',{method:'POST'});return false">Members</a>
+    <span role="link" tabindex="0" id="members-span" data-watch>Members</span></main>`);
+  try {
+    const refused: [string, string, string][] = [
+      ["#send", "words", "I'll leave Send invite to you: it sends something. Click it and I'll carry on."],
+      ["#publish", "words", "I'll leave Publish to you: it sends something. Click it and I'll carry on."],
+      ["#save", "words", "I'll leave Save changes to you: it saves something. Click it and I'll carry on."],
+      ["#approve", "words", "I'll leave Approve to you: it saves something. Click it and I'll carry on."],
+      ["#approve-visit", "words", "I'll leave Approve expense to you: it saves something. Click it and I'll carry on."],
+      // Named harmlessly, but where it leads approves: a page can act on the visit itself.
+      ["#approve-query", "words", "I'll leave Expense 7, approve to you: it saves something. Click it and I'll carry on."],
+      ["#approve-quiet", "words", "I'll leave Expense 7 to you: it saves something. Click it and I'll carry on."],
+      ["#script-send", "words", "I'll leave Send to you: it sends something. Click it and I'll carry on."],
+      // A link a script answers, or a role=link with no address, is not a visit: as a button, a name that says nothing is not pressed.
+      ["#members-script", "unknown", "I can't tell what Members does, so I'll leave it to you. Click it and I'll carry on."],
+      ["#members-span", "unknown", "I can't tell what Members does, so I'll leave it to you. Click it and I'll carry on."],
+    ];
+    for (const [selector, reason, say] of refused) {
+      // The model, or a note planted on the page, says it commits nothing.
+      const seen = await page.plan(selector, { do: "click", commits: false }, SEND);
+      assert.deepEqual([selector, seen.kind, seen.reason, seen.say], [selector, "visitor", reason, say]);
+      assert.deepEqual((await page.press()).hits, [], `${selector} was pressed`);
+    }
+    // The commit by its address is the hand-over, as a button's is.
+    const handover = await page.plan("#approve-visit", { status: "done", commits: true, say: "Ready. Click Approve expense." }, "approve expense 7");
+    assert.deepEqual([handover.kind, handover.commit], ["handover", "save"]);
+    const sendHandover = await page.plan("#send", { status: "done", commits: true, say: "Ready." }, SEND);
+    assert.deepEqual([sendHandover.kind, sendHandover.commit, sendHandover.say], ["handover", "send", "Ready. Click Send invite when it looks right."]);
+    // A visit that commits nothing is still pressed, as a link.
+    const visit = await page.plan("#expense", { do: "click" }, "open expense 7");
+    assert.deepEqual([visit.kind, visit.control, visit.tripwire], ["act", "link", true]);
+    assert.deepEqual((await page.press()).hits, ["expense"]);
+    assert.deepEqual(await page.run("performance.getEntriesByType('resource').filter((entry) => entry.name.endsWith('/save')).length"), 0, "a script sent something");
+  } finally {
+    await page.close();
+  }
+});
+
+test("only a visit to another page of the site is pressed as a link: '#', 'javascript:', role=link and a link a script answers are pressed as buttons, and every link press is watched", async () => {
+  const page = await open(`<main><h1>Cards</h1>
+    <a href="/cards" id="cards" data-watch>Cards</a>
+    <a href="#" id="more" data-watch>Show more</a>
+    <a href="#top" id="top" data-watch>Go back</a>
+    <a href="/cards/new#details" id="here" data-watch>Details</a>
+    <a href="#/cards/virtual" id="route" data-watch>Virtual cards</a>
+    <span role="link" tabindex="0" id="span-details" data-watch>Details</span>
+    <a href="/cards" id="answered" data-watch onclick="return false">Details</a>
+    <a href="/cards" role="button" id="as-button" data-watch>Details</a>
+    <a href="#" id="edit" data-watch>Edit limits</a></main>`);
+  try {
+    const seen = async (selector: string) => {
+      const plan = await page.plan(selector, { do: "click" }, "show me more cards");
+      return [selector, plan.kind, plan.control, plan.navigates, plan.tripwire];
+    };
+    assert.deepEqual(await seen("#cards"), ["#cards", "act", "link", true, true]);
+    // A route of an app that keeps its place after "#/" is a visit too.
+    assert.deepEqual(await seen("#route"), ["#route", "act", "link", true, true]);
+    // Safe by its words, or opening something by its name, as a button would be; watched all the same.
+    for (const selector of ["#more", "#top", "#here", "#span-details", "#answered", "#as-button", "#edit"]) assert.deepEqual(await seen(selector), [selector, "act", "button", false, true]);
   } finally {
     await page.close();
   }
@@ -776,9 +856,9 @@ test("the hand-over: on a commit it hands over, adding the control's name when t
     // The model calling it a plain step does not make Haptic press it.
     const plain = await page.plan("#issue", { do: "click", commits: false }, CARD);
     assert.deepEqual([plain.kind, plain.reason], ["visitor", "words"]);
-    // A link is a way to the form, not the commit.
+    // A link is read as a button is: named as the commit, it is handed over as one.
     const link = await page.plan("#issue-link", { status: "done", commits: true, say: "Click Issue card." }, CARD);
-    assert.deepEqual([link.kind, link.reason], ["visitor", "asked"]);
+    assert.deepEqual([link.kind, link.commit, link.say], ["handover", "save", "Click Issue card."]);
     // A field the model leaves to the visitor is theirs, whatever its label says: "Lock" here locks nothing until the card is issued.
     const field = await page.plan("#lock", { status: "continue", say: "Turn this on if you want it." }, CARD);
     assert.deepEqual([field.kind, field.reason, field.say], ["visitor", "asked", "Turn this on if you want it."]);
