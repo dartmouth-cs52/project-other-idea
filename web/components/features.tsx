@@ -21,7 +21,7 @@ export function Features() {
       </Feature>
       <Feature
         title="Never reads what people type."
-        description="Haptic reads the names of buttons and fields. What people type stays in the browser. Emails and long numbers are masked before anything is sent, except where the page shows the very one a person asked about."
+        description="Haptic reads the names of buttons and fields. What people type stays in the browser, unread. In Do it with me it reads back only its own typing, inside the browser, to check it took. Emails, long numbers and phone numbers are masked before anything is sent, except where the page shows the very one a person asked about."
       >
         <PrivacyDemo />
       </Feature>

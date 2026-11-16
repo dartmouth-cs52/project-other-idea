@@ -51,15 +51,24 @@ export default function Privacy() {
         cannot tell from the rest of the page.
       </p>
       <p>
-        In what it reads, in the page&apos;s address and in the question itself, Haptic masks most email addresses,
-        phone numbers and long numbers before anything leaves the browser. It does not mask names or other words, so
-        text that shows on the page can still hold personal details.
+        Before anything leaves the browser, in what it reads, in the page&apos;s address and in the question itself,
+        Haptic masks anything that looks like an email address, any run of five or more digits, such as an account or
+        order number, and any eight or more digits written in groups with spaces, dashes, dots or brackets between
+        them, such as a phone or card number. Digits that follow straight after a letter, like the model number I9100,
+        count as part of that word. Our server masks the same again.
+      </p>
+      <p>
+        Haptic does not mask dates written in figures, such as 07.03.1984 or 2026-11-16. Questions like &ldquo;my
+        latest invoice&rdquo; need them, and a date says no more about a person than the names a page already shows.
+        But a date on the page can be a date of birth, and it is read and sent like any other text. Nor does Haptic
+        mask shorter numbers, such as prices and quantities, or names and other words, so text that shows on the page
+        can still hold personal details.
       </p>
       <p>
         One exception: when someone writes an email address, or a number of five or more digits, in their question,
         that exact value is left readable wherever it stands on its own on the page, so Haptic can find the order or
-        account they asked about. In the question itself it is left readable only when the page shows it too, and
-        masked otherwise.
+        account they asked about. In the question itself it is left readable only when the page shows it standing on
+        its own like that, and masked otherwise.
       </p>
       <p>
         With each question the widget also sends the person&apos;s date, as their device shows it, so the AI knows what
