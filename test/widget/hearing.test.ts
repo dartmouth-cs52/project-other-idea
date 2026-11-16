@@ -234,7 +234,7 @@ test("a click the page makes by script while the visitor presses the pointed fie
     </script>`;
   const session = await pointing(page, "Timespan", (request, index) => (index === 1 ? words("Now click Update.", "continue") : words("Done.")));
   try {
-    const box = (await session.page.locator("#withinValue").boundingBox())!;
+    const box = (await session.page.locator("#withinValue").boundingBox({ timeout: 5000 }))!;
     await session.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await session.page.keyboard.type("7");
     const second = await session.untilAsked(2, 6000);

@@ -18,7 +18,7 @@ async function pressPointed(session: Session): Promise<void> {
 
 /** Presses the real mouse on an element, and lets go without moving. */
 async function pressOn(session: Session, selector: string): Promise<void> {
-  const box = (await session.page.locator(selector).boundingBox())!;
+  const box = (await session.page.locator(selector).boundingBox({ timeout: 5000 }))!;
   await session.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 3 });
   await session.page.mouse.down();
   await session.page.waitForTimeout(40);
@@ -152,10 +152,10 @@ test("a pick in a menu that opened while the visitor's mouse was over the pointe
   try {
     await session.ask("the danger item");
     await session.untilState("pointing");
-    const box = (await session.page.locator("#trigger").boundingBox())!;
+    const box = (await session.page.locator("#trigger").boundingBox({ timeout: 5000 }))!;
     await session.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 });
     await session.page.waitForTimeout(300);
-    const item = (await session.page.locator('[role="menuitem"]:has-text("a danger item")').boundingBox())!;
+    const item = (await session.page.locator('[role="menuitem"]:has-text("a danger item")').boundingBox({ timeout: 5000 }))!;
     // Down to the menu the way a hand goes, through the gap under the trigger.
     await session.page.mouse.move(item.x + 20, item.y + item.height / 2, { steps: 6 });
     await session.page.mouse.down();
@@ -193,10 +193,10 @@ test("a pick in a submenu that sits inside the pointed entry is named as the pic
   try {
     await session.ask("export as pdf");
     await session.untilState("pointing");
-    const box = (await session.page.locator("#export").boundingBox())!;
+    const box = (await session.page.locator("#export").boundingBox({ timeout: 5000 }))!;
     await session.page.mouse.move(box.x + 30, box.y + 12, { steps: 4 });
     await session.page.waitForTimeout(300);
-    const pdf = (await session.page.locator('#sub [role="menuitem"]:has-text("PDF")').boundingBox())!;
+    const pdf = (await session.page.locator('#sub [role="menuitem"]:has-text("PDF")').boundingBox({ timeout: 5000 }))!;
     await session.page.mouse.move(box.x + 120, box.y + 12, { steps: 3 });
     await session.page.mouse.move(pdf.x + 20, pdf.y + pdf.height / 2, { steps: 3 });
     await session.page.mouse.down();
@@ -238,7 +238,7 @@ test("a slider dragged with the mouse, which sends no input event, is heard", as
     await session.ask("louder");
     await session.untilState("pointing");
     await session.page.waitForTimeout(400);
-    const box = (await session.page.locator("#thumb").boundingBox())!;
+    const box = (await session.page.locator("#thumb").boundingBox({ timeout: 5000 }))!;
     await session.page.mouse.move(box.x + 10, box.y + 10);
     await session.page.mouse.down();
     await session.page.mouse.move(box.x + 70, box.y + 10, { steps: 6 });

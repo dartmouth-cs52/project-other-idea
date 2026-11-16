@@ -164,7 +164,7 @@ test("the space around the launcher and the ask box takes no clicks: a page butt
   try {
     await session.page.locator("haptic-root .launcher").click();
     await session.page.waitForTimeout(200);
-    const close = (await session.page.locator("#close").boundingBox())!;
+    const close = (await session.page.locator("#close").boundingBox({ timeout: 5000 }))!;
     const panel = await ours(session, ".panel");
     assert.ok(close.x + close.width / 2 > panel.left && close.y > panel.bottom, "the test page's button is not beside the launcher, under the open box");
     assert.equal(await hitAt(session, { left: close.x, right: close.x + close.width, top: close.y, bottom: close.y + close.height }), "close", "the empty space beside the launcher took the click");

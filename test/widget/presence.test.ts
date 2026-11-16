@@ -68,7 +68,7 @@ test("the ask box still takes the cursor where it is pressed, and text can be se
   try {
     await askByHand(session, "archive it");
     const input = session.page.locator("haptic-root .panel input");
-    const box = (await input.boundingBox())!;
+    const box = (await input.boundingBox({ timeout: 5000 }))!;
     // Press near the start of the words, then type: the letter goes where the press was.
     await session.page.mouse.click(box.x + 14, box.y + box.height / 2);
     await session.page.keyboard.type("X");
