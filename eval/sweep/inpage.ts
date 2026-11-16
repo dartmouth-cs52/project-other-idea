@@ -141,9 +141,10 @@ function pageAt(x: number, y: number): Element[] {
   for (const el of document.elementsFromPoint(x, y)) {
     if (isHaptic(el)) continue;
     let inner: Element = el;
-    // Into open shadow roots, for what is really there.
+    // Into open shadow roots, for what is really there. When the topmost thing a shadow root sees is its own host, the
+    // host is what is hit, as a tab is by the words the page put in its slot: what lies under it is not.
     for (let depth = 0; inner.shadowRoot && depth < 20; depth++) {
-      const deeper = inner.shadowRoot.elementsFromPoint(x, y).find((hit) => hit !== inner && !isHaptic(hit));
+      const deeper = inner.shadowRoot.elementsFromPoint(x, y).find((hit) => !isHaptic(hit));
       if (!deeper || deeper === inner) break;
       inner = deeper;
     }
@@ -215,6 +216,64 @@ function blockerKind(blocker: Element): string {
   if (blocker.tagName === "IFRAME") return "a frame";
   if (pinned(blocker)) return "a bar pinned to the window";
   return "something else of the page's";
+}
+
+/**
+ * The frame an element is in, when it is in a frame of the page's own origin,
+ * and where that frame's window starts in the page's window.
+ */
+function frameOf(el: Element): { frame?: Element; dx: number; dy: number } {
+  const frame = el.ownerDocument === document ? undefined : (el.ownerDocument.defaultView?.frameElement ?? undefined);
+  if (!frame) return { dx: 0, dy: 0 };
+  const box = frame.getBoundingClientRect();
+  return { frame, dx: box.left + frame.clientLeft, dy: box.top + frame.clientTop };
+}
+
+/** A box of an element, where it lies in the page's window: one in a frame is moved by where the frame is. */
+function inPageWindow(el: Element, r: DOMRect): DOMRect {
+  const { dx, dy } = frameOf(el);
+  return new DOMRect(r.left + dx, r.top + dy, r.width, r.height);
+}
+
+/**
+ * Whether a click on the element reaches it: at its middle and four points
+ * around it, and at the middle of each line of a link that wraps, whose box
+ * takes in words of the lines around it. A click on it, on its label, or on a
+ * small box around it counts. A point in a frame of the page's own origin is
+ * tried in the frame, once the page shows the frame there. Haptic's own parts
+ * are seen through, and said apart.
+ */
+function clickReaches(el: Element): { reached: boolean; blocker?: Element; byHaptic: boolean } {
+  const { frame, dx, dy } = frameOf(el);
+  const r = el.getBoundingClientRect();
+  const labels = Array.from((el as HTMLInputElement).labels ?? []);
+  const own = (hit: Element | undefined) => !!hit && (within(el, hit) || labels.some((label) => within(label, hit)) || (within(hit, el) && hit.getBoundingClientRect().width * hit.getBoundingClientRect().height <= Math.max(4 * r.width * r.height, 2500)));
+  const points: [number, number][] = [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]].map(([fx, fy]) => [r.left + r.width * fx!, r.top + r.height * fy!]);
+  const lines = Array.from(el.getClientRects());
+  if (lines.length > 1) for (const line of lines.slice(0, 4)) points.push([line.left + line.width / 2, line.top + line.height / 2]);
+  let blocker: Element | undefined;
+  let byHaptic = false;
+  for (const [lx, ly] of points) {
+    const [x, y] = [lx + dx, ly + dy];
+    if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+    const top = document.elementFromPoint(x, y);
+    if (isHaptic(top)) {
+      byHaptic = true;
+      continue;
+    }
+    let hit = pageAt(x, y)[0];
+    if (frame && hit === frame) {
+      hit = el.ownerDocument.elementFromPoint(lx, ly) ?? undefined;
+      for (let depth = 0; hit?.shadowRoot && depth < 20; depth++) {
+        const inner: Element | null = hit.shadowRoot.elementFromPoint(lx, ly);
+        if (!inner || inner === hit) break;
+        hit = inner;
+      }
+    }
+    if (own(hit)) return { reached: true, byHaptic };
+    blocker ??= hit;
+  }
+  return { reached: false, blocker, byHaptic };
 }
 
 /** Where the widget draws a thing of its own, if it is on show. */
@@ -379,7 +438,15 @@ const sweep = {
       .slice(0, 3)
       .map((el) => markup(el, 160));
     const consentFrames = frames.filter((frame) => /consent|cmp|privacy-mgmt|sourcepoint|cookiebot|onetrust|didomi|usercentrics|trustarc/i.test(frame.from + frame.title));
+    // A layer pinned to the window over nearly all of it, holding what shows at its middle: it shuts out the page under it as a modal dialog does, whatever it says of itself.
+    const middle = document.elementsFromPoint(innerWidth / 2, innerHeight / 2).find((el) => !isHaptic(el));
+    let blocking: Element | undefined;
+    for (let node: Element | null = middle ?? null; node && node !== document.body && node !== document.documentElement; node = node.parentElement) {
+      const r = node.getBoundingClientRect();
+      if (getComputedStyle(node).position === "fixed" && r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9) blocking = node;
+    }
     return {
+      ...(blocking ? { blockedBy: markup(blocking, 160) } : {}),
       frames,
       canvases,
       canvasLargest: Math.round(canvasLargest * 100) / 100,
@@ -418,7 +485,9 @@ const sweep = {
         unlimited = -1;
       }
     }
-    return { times, controls: snapshot!.elements.length, truncated: snapshot!.truncated, dialog: snapshot!.dialog, unlimited, offscreen: snapshot!.elements.filter((e) => e.offscreen).length };
+    // Controls listed from frames of the page's own origin, which the widget reads as part of the page.
+    const inFrames = [...probe.takeSnapshot(ignore, QUESTION).elements.values()].filter((el) => el.ownerDocument !== document).length;
+    return { times, controls: snapshot!.elements.length, truncated: snapshot!.truncated, dialog: snapshot!.dialog, unlimited, offscreen: snapshot!.elements.filter((e) => e.offscreen).length, inFrames };
   },
 
   /**
@@ -448,7 +517,7 @@ const sweep = {
     const dialogOpen = deepAll().find((el) => !isHaptic(el) && el.matches('dialog:modal, [aria-modal="true"]') && el.getClientRects().length > 0);
     return list.map((handle) => {
       const el = at(handle);
-      if (!el) return { closed: false, open: false, onScreen: false, outsideDialog: false, tag: "", pinned: false, haptic: false };
+      if (!el) return { closed: false, open: false, onScreen: false, outOfReach: false, outsideDialog: false, tag: "", pinned: false, haptic: false };
       let closed = false;
       let open = false;
       for (let node: Node | null = el; node; node = up(node)) {
@@ -458,10 +527,16 @@ const sweep = {
         }
       }
       const r = el.getBoundingClientRect();
+      const onScreen = r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
       return {
         closed,
         open,
-        onScreen: r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth,
+        onScreen,
+        // Nobody sees it or can click it where it is: drawn invisible, clipped away, or something of the page's is over all of it.
+        outOfReach: onScreen && !closed && (drawnInvisible(el) || !visibleRect(el) || (() => {
+          const reach = clickReaches(el);
+          return !reach.reached && !!reach.blocker;
+        })()),
         outsideDialog: !!dialogOpen && !within(dialogOpen, el),
         tag: el.tagName.toLowerCase(),
         pinned: pinned(el),
@@ -564,29 +639,9 @@ const sweep = {
     for (const handle of list) {
       const el = at(handle);
       if (!el) continue;
-      const r = el.getBoundingClientRect();
+      const r = inPageWindow(el, el.getBoundingClientRect());
       if (r.width < 2 || r.height < 2 || r.bottom <= 0 || r.top >= innerHeight || r.right <= 0 || r.left >= innerWidth) continue;
-      const labels = Array.from((el as HTMLInputElement).labels ?? []);
-      const own = (hit: Element | undefined) => !!hit && (within(el, hit) || labels.some((label) => within(label, hit)) || (within(hit, el) && hit.getBoundingClientRect().width * hit.getBoundingClientRect().height <= Math.max(4 * r.width * r.height, 2500)));
-      let blocker: Element | undefined;
-      let byHaptic = false;
-      let reached = false;
-      for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]]) {
-        const x = r.left + r.width * fx!;
-        const y = r.top + r.height * fy!;
-        if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
-        const top = document.elementFromPoint(x, y);
-        if (isHaptic(top)) {
-          byHaptic = true;
-          continue;
-        }
-        const hit = pageAt(x, y)[0];
-        if (own(hit)) {
-          reached = true;
-          break;
-        }
-        blocker ??= hit;
-      }
+      const { reached, blocker, byHaptic } = clickReaches(el);
       if (!reached && (blocker || byHaptic)) {
         // Why a click misses it: the control is not drawn where its box says, or something is over it.
         const why = drawnInvisible(el) ? "drawn invisible" : !visibleRect(el) ? "clipped out of view inside a scrolling or clipping box" : blocker ? `under ${blockerKind(blocker)}` : "under Haptic";

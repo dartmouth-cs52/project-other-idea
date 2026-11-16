@@ -57,15 +57,17 @@ export function faultsOf(r: SiteResult): FaultSeen[] {
   // Reading the page.
   if (r.reading && r.reading.fastestMs >= 100) add("read slow", "Reading the page took 100 ms or more, at its fastest of three", `${r.reading.fastestMs} ms for ${r.reading.controls} controls (${inv?.nodes ?? "?"} elements)`);
   if (r.reading?.dialog !== undefined) {
-    // Only a dialog that says it is modal, or the browser's own modal dialog, shuts out the page. One that does not say so was taken for one.
-    const modal = inv?.dialogs.some((d) => d.modal);
+    // Only a dialog that says it is modal, or the browser's own modal dialog, shuts out the page, or a layer pinned over nearly all of
+    // the window, with the dialog at its middle, that hides the page under it. One that does neither was taken for one.
+    const modal = inv?.dialogs.some((d) => d.modal) || !!inv?.blockedBy;
     const consent = inv?.dialogs.some((d) => d.consent) || (inv?.notices.length ?? 0) > 0;
-    const example = `dialog "${r.reading.dialog}"; ${inv?.dialogs.map((d) => `${d.modal ? "modal" : "not marked modal"} ${d.markup}`).slice(0, 2).join("; ") ?? ""}`;
+    const example = `dialog "${r.reading.dialog}"; ${inv?.dialogs.map((d) => `${d.modal ? "modal" : "not marked modal"} ${d.markup}`).slice(0, 2).join("; ") ?? ""}${inv?.blockedBy ? `; over the page: ${inv.blockedBy}` : ""}`;
     if (modal) add(consent ? "dialog modal consent" : "dialog modal", `A modal ${consent ? "consent dialog" : "dialog"} was open when the page was read, so only it was listed, by design`, example, "page");
     else add(consent ? "dialog taken consent" : "dialog taken", `A ${consent ? "cookie or consent notice" : "dialog"} not marked modal was taken for an open modal, so only it was listed`, example);
   }
   const sameFrames = inv?.frames.filter((f) => f.sameOrigin && (f.controls ?? 0) > 0) ?? [];
-  if (sameFrames.length) add("frame same-origin", "Controls inside a frame from the page's own origin, which the widget does not read", sameFrames.slice(0, 2).map((f) => `${f.from} ${f.width}x${f.height}, ${f.controls} controls`).join("; "));
+  // A widget that reads such frames lists their controls with the page's. One from before it did says nothing of them.
+  if (sameFrames.length && !r.reading?.inFrames) add("frame same-origin", "Controls inside a frame from the page's own origin, which the widget does not read", sameFrames.slice(0, 2).map((f) => `${f.from} ${f.width}x${f.height}, ${f.controls} controls`).join("; "));
   const listed = r.listed;
   if (listed) {
     const byRole = new Map<string, string[]>();
@@ -87,8 +89,8 @@ export function faultsOf(r: SiteResult): FaultSeen[] {
     }
     // Grouped by why a click would miss: each is a different thing for the widget to see.
     const byWhy = new Map<string, string[]>();
-    // A control the widget lists as showing on hover is hidden by design, and the list says so.
-    for (const c of (listed.coveredExamples ?? []).filter((c) => !c.line.includes("shows on hover"))) byWhy.set(c.why ?? "", [...(byWhy.get(c.why ?? "") ?? []), `${c.line} (${c.blocker.slice(0, 160)})`]);
+    // A control the widget lists as showing on hover, or when the keyboard reaches it, is hidden by design, and the list says so.
+    for (const c of (listed.coveredExamples ?? []).filter((c) => !c.line.includes("shows on hover") && !c.line.includes("shows on focus"))) byWhy.set(c.why ?? "", [...(byWhy.get(c.why ?? "") ?? []), `${c.line} (${c.blocker.slice(0, 160)})`]);
     for (const [why, examples] of byWhy) add(`covered ${why}`, `Controls listed as usable in the window that a click cannot reach: ${why || "something of the page's is over them"}`, examples.slice(0, 2).join("; "));
     const apart = listed.duplicates.filter((d) => !d.treeSame);
     if (apart.length) add("same line apart", "Controls listed with the same whole line, though the accessibility tree names them apart", apart.slice(0, 2).map((d) => `${d.count} x ${d.line} ${d.markup}`).join("; "));

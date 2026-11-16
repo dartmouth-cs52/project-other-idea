@@ -204,7 +204,7 @@ async function judgeListed(live: Live, state: PageState, sent: Snapshot): Promis
   const expectedAll = state.controls;
   const related = await live.toolkit<(string | undefined)[]>("relate", expectedAll.map((c) => c.handle), state.reading.ids);
   const unmatched = expectedAll.map((c, i) => ({ c, i })).filter(({ i }) => !related[i]);
-  const placedAll = await live.sweep<{ closed: boolean; open: boolean; onScreen: boolean; outsideDialog: boolean; tag: string; haptic: boolean }[]>("whereMissing", unmatched.map(({ c }) => c.handle));
+  const placedAll = await live.sweep<{ closed: boolean; open: boolean; onScreen: boolean; outOfReach: boolean; outsideDialog: boolean; tag: string; haptic: boolean }[]>("whereMissing", unmatched.map(({ c }) => c.handle));
   // Haptic's own controls are not the page's, wherever the tree put them.
   const ownIndex = new Set(unmatched.filter((_, n) => placedAll[n]!.haptic).map(({ i }) => i));
   const kept = unmatched.map((u, n) => ({ u, p: placedAll[n]! })).filter(({ p }) => !p.haptic);
@@ -243,7 +243,8 @@ async function judgeListed(live: Live, state: PageState, sent: Snapshot): Promis
   const ranked = unmatched.map(({ c, i }, n) => ({ c, i, n })).sort((a, b) => Number(onScreen[b.i]) - Number(onScreen[a.i]));
   for (const { c, i, n } of ranked) {
     const where = placed[n]!;
-    const reason: MissingControl["reason"] = where.closed ? "closed shadow root" : where.outsideDialog ? "outside the open dialog" : cut[n] ? "cut by the limit" : "not read";
+    // One no click can reach where it is, as under a wall of cookie choices, is rightly left out of what a visitor can use.
+    const reason: MissingControl["reason"] = where.closed ? "closed shadow root" : where.outsideDialog ? "outside the open dialog" : cut[n] ? "cut by the limit" : where.outOfReach ? "out of reach" : "not read";
     missingByReason[reason] = (missingByReason[reason] ?? 0) + 1;
     if (missing.length < 25) missing.push({ role: c.role, name: c.name.slice(0, 80), reason, markup: await live.toolkit<string>("markup", c.handle), onScreen: onScreen[i]!, inOpenShadow: where.open, tag: where.tag });
   }
@@ -286,8 +287,8 @@ async function judgeListed(live: Live, state: PageState, sent: Snapshot): Promis
     const treeSame = new Set(group.map((element) => treeName.get(element.id) ?? "")).size === 1;
     if (duplicates.length < 10) duplicates.push({ line: line.slice(0, 160), count: group.length, treeSame, markup: await live.toolkit<string>("markup", state.reading.ids[group[0]!.id]!) });
   }
-  // Listed controls in the window that a click would not reach. One the list marks as showing on hover is hidden by design.
-  const inWindow = sent.elements.filter((element) => !element.offscreen && !element.state?.includes("shows on hover")).map((element) => element.id);
+  // Listed controls in the window that a click would not reach. One the list marks as showing on hover, or when the keyboard reaches it, is hidden by design.
+  const inWindow = sent.elements.filter((element) => !element.offscreen && !element.state?.includes("shows on hover") && !element.state?.includes("shows on focus")).map((element) => element.id);
   const handleOf = sentIds(state.reading, sent);
   const coveredList = await live.sweep<{ handle: number; blocker: string; byHaptic: boolean; why: string }[]>("covered", inWindow.map((id) => handleOf.get(id)).filter((h): h is number => h !== undefined));
   const lineByHandle = new Map([...handleOf].map(([id, handle]) => [handle, sent.elements.find((element) => element.id === id)!]));

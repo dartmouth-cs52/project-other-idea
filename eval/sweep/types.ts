@@ -85,6 +85,8 @@ export interface ReadingResult {
   offscreen: number;
   /** The dialog the widget took to be open, if any. */
   dialog?: string;
+  /** Controls listed from frames of the page's own origin. Absent in results from before the widget read frames. */
+  inFrames?: number;
 }
 
 /** A control the accessibility tree has and the widget's list lacks. */
@@ -97,7 +99,8 @@ export interface MissingControl {
    * read, and dropped to keep the list under its length. "not read": the reader
    * did not take it for a control.
    */
-  reason: "not read" | "cut by the limit" | "closed shadow root" | "outside the open dialog";
+  /** "out of reach": on screen, but drawn invisible, clipped away, or under something of the page's at every point a click could land. */
+  reason: "not read" | "cut by the limit" | "closed shadow root" | "outside the open dialog" | "out of reach";
   markup: string;
   onScreen: boolean;
   inOpenShadow: boolean;
@@ -167,6 +170,8 @@ export interface InventoryResult {
   customElements: number;
   dialogs: { markup: string; consent: boolean; modal: boolean }[];
   notices: string[];
+  /** A layer pinned to the window over nearly all of it, holding what shows at its middle, which shuts out the page under it. */
+  blockedBy?: string;
   consentFrames: number;
   nodes: number;
   rtl: boolean;
