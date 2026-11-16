@@ -17,8 +17,11 @@ export function leaveFor(path: string) {
   window.location.assign(path);
 }
 
-/** The navigation on signed-in pages. The name on the left, who is signed in and Sign out on the right. */
-export function AppNav({ who }: { who?: string }) {
+/**
+ * The navigation on signed-in pages. The name on the left, who is signed in and Sign out on the right.
+ * `who` is the person's first name, or their email when there is no name. Pointing at it shows `email`.
+ */
+export function AppNav({ who, email }: { who?: string; email?: string }) {
   async function signOut() {
     await auth().signOut();
     leaveFor("/sign-in/");
@@ -33,7 +36,9 @@ export function AppNav({ who }: { who?: string }) {
       </a>
       {who && (
         <nav className="flex min-w-0 items-center gap-4 text-sm font-medium">
-          <span className="hidden truncate text-muted-foreground sm:block">{who}</span>
+          <span title={email} className="hidden truncate text-muted-foreground sm:block">
+            {who}
+          </span>
           <Button variant="ghost" size="lg" onClick={signOut}>
             Sign out
           </Button>
