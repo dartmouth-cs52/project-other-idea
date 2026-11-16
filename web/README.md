@@ -45,16 +45,17 @@ Companies sign up by invitation. The pages are `app/sign-in/`, `app/dashboard/`,
 - `worker/reader.ts` reads a new site's public pages a few at a time, in a real browser through Cloudflare Browser Rendering, or as plain HTML when that is not available. It follows links, tabs, menus and accordions only, and in the browser every request other than GET is refused, so it cannot change anything on the customer's site. It starts from the address pasted, then the links on that page, then the pages the site's sitemap lists. If the address redirects to the same site's other name, acme.com to www.acme.com or http to https, that becomes the site's origin and is allowed too. A redirect anywhere else, such as to a sign-in service, is not followed, and the dashboard then says the site could not be read and offers to try again.
 - `worker/insights.ts` is the dashboard's queries.
 
-**Approving a company.** Each access request email now ends with an Approve link. It opens a page that shows the request and changes nothing until a button is pressed, so a mail scanner following the link approves no one. The team approves the one address, or everyone at the company's domain (never a free mailbox domain such as gmail.com). Approving has Neon email the person a sign-in link. Their first sign-in creates the company's organization, and later sign-ins from an approved domain join it. Anyone else who signs in is told they are not approved yet. The list is the `approvals` table, from `../db/migrations`.
+**Approving a company.** Each access request email now ends with an Approve link. It opens a page that shows the request and changes nothing until a button is pressed, so a mail scanner following the link approves no one. The team approves the one address, or everyone at the company's domain (never a free mailbox domain such as gmail.com). Approving emails the person a sign-in link. Their first sign-in creates the company's organization, and later sign-ins from an approved domain join it. Anyone else who signs in is told they are not approved yet. The list is the `approvals` table, from `../db/migrations`.
 
 Being a member of an organization is not enough to get in. Neon Auth lets any signed-in person create an organization through its own API, so only an organization that an approval points at counts (`organizationOf` in `worker/db.ts`). An address can be covered by its own approval and its domain's. Whichever order they were made in, the person joins the organization that already exists, so a company has one.
 
-**Setting it up.** The Worker needs three secrets, and Neon Auth needs to trust the site's address:
+**Setting it up.** The Worker needs four secrets, and Neon Auth needs to trust the site's address:
 
 ```bash
 npx wrangler secret put DATABASE_URL              # Neon's connection string for the haptic project's main branch
 npx wrangler secret put NEON_AUTH_COOKIE_SECRET   # 32 or more random characters: openssl rand -base64 32
 npx wrangler secret put APPROVE_SECRET            # 32 or more random characters, a different one
+npx wrangler secret put RESEND_API_KEY            # sends the sign-in email, see below
 ```
 
 `NEON_AUTH_URL` and `WIDGET_URL` are plain settings in `wrangler.jsonc`. In Neon Auth for the main branch, add `https://joinhaptic.com` as a trusted domain, turn on Magic Link with a 1440 minute expiry, and turn off email and password. Until the secrets are set, the sign-in pages load but say sign-in is not set up.
@@ -68,7 +69,14 @@ npx wrangler dev --port 8787 --local-upstream localhost:8787
 
 `--local-upstream` matters: without it, the site's address looks like joinhaptic.com over plain http and every page redirects to https. Run the widget server next to it with `npm run dev` at the top of the repository and `DATABASE_URL` in its `.env`.
 
-**The sign-in email** is Neon's own template. Only its app name can be set, and it is set to Haptic. Replacing it means subscribing to Neon Auth's `send.magic_link` webhook and sending our own email through a sending service such as Resend.
+**The sign-in email** is Haptic's own, sent through Resend. Neon Auth hands each sign-in link to the Worker through its `send.magic_link` webhook, at `/api/neon-auth-hook` (`worker/neon-hook.ts`), and while that webhook is on, Neon sends no email of its own. The Worker checks Neon's signature against the keys Neon publishes under `NEON_AUTH_URL`, turns away anything signed more than 5 minutes ago, and sends the email in `worker/sign-in-email.ts` from sign-in@joinhaptic.com, with replies going to hello@joinhaptic.com. Neon tries 3 times within 15 seconds, sending the same event id each time, and the Worker passes it to Resend as the idempotency key, so a retry never sends a second email. If every try fails, the person's sign-in fails, so the order to switch it on matters:
+
+1. In Resend, add joinhaptic.com as a sending domain, add the DNS records it lists in Cloudflare, and wait for it to say verified.
+2. Make a Resend API key with sending access only, and set it on the Worker: `npx wrangler secret put RESEND_API_KEY`.
+3. Deploy, so `/api/neon-auth-hook` is live.
+4. In Neon, under Auth, Configuration, Webhooks for the main branch, turn webhooks on with the URL `https://joinhaptic.com/api/neon-auth-hook` and the event `send.magic_link` only.
+
+To go back to Neon's own email, turn the webhook off. Neon's webhook URL must be public HTTPS, so this cannot be tried against `wrangler dev`. `test/neon-hook.test.ts` at the top of the repository signs requests the way Neon does instead.
 
 ## Deploying
 

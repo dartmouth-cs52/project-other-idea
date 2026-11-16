@@ -4,12 +4,13 @@
 import { checkRequest, cleanRequest, emailDomain, isPersonalEmail, type AccessField, type AccessRequest } from "../lib/access-request";
 import { appApi, approveLink, type AppEnv } from "./app-api";
 import { proxyAuth } from "./auth";
+import { HOOK_PATH, neonHook, type HookEnv } from "./neon-hook";
 
 export interface Assets {
   fetch(request: Request): Promise<Response> | Response;
 }
 
-export interface Env extends AppEnv {
+export interface Env extends AppEnv, HookEnv {
   ASSETS?: Assets;
   /** Emails the team a copy of each request. Cloudflare only lets it send to an inbox verified under Email Routing. */
   EMAIL?: {
@@ -37,6 +38,8 @@ export async function handle(request: Request, env: Env, assets: Assets): Promis
   }
 
   if (url.pathname === "/api/request-access") return requestAccess(request, env, url);
+  // Neon Auth hands us each sign-in link to email. Signed by Neon, so it needs no rate limit of its own.
+  if (url.pathname === HOOK_PATH) return neonHook(request, env);
   if (url.pathname.startsWith("/api/auth/")) {
     // Signing in can send an email, and Neon sees every caller as this Worker, so the limit has to be kept here.
     // Checking who is signed in is a GET and is not counted.

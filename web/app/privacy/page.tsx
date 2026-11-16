@@ -22,8 +22,9 @@ export default function Privacy() {
       <p>
         If you sign in, we keep your email address, your name if you give one, and the company you belong to, so you
         can reach your dashboard. Signing in sets cookies that keep you signed in, and they are used for nothing else.
-        Sign in is run for us by Neon, which also sends the sign in email. If you choose to sign in with Google,
-        Google tells us your name and email address.
+        Sign in is run for us by Neon. The sign in email is sent for us by Resend, which gets your email address
+        and the link, and nothing else. If you choose to sign in with Google, Google tells us your name and email
+        address.
       </p>
       <p>
         When you add a site, we read its public pages the way a visitor would, to learn what your product calls
