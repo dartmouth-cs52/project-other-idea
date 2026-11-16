@@ -24,8 +24,9 @@ const guides: Guide[] = [
     id: "pricing",
     start: "/",
     goal: "How much does it cost?",
-    // The FAQ answer and the Pricing link in the top bar both get there.
-    steps: [{ expect: [any("How much does it cost?"), any("Pricing")], act: { click: 'button:has-text("How much does it cost?")' } }, DONE],
+    // The Pricing link in the top bar and the FAQ answer both get there, so a reply pointing at either is right.
+    // The recorder points at the first of them on the page, the Pricing link, so that is what it clicks.
+    steps: [{ expect: [any("Pricing"), any("How much does it cost?")], act: { click: 'header a[href="/#pricing"]' } }, DONE],
   },
   {
     id: "what-it-reads",
