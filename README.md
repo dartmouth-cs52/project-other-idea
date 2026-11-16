@@ -77,6 +77,7 @@ A crawl turns the site into a **graph**. Each page's title, headings, buttons an
 
 - **[Answers](docs/answers.md)** (opt-in): replies in words to questions like "what does this do?", drawn from the site's own help articles, with citations. The server, not the prompt, enforces the rules that matter. An answer must cite a real article. Prices, refunds, legal matters and account specifics are never stated. A button an article names is checked against the live page, so out-of-date docs get flagged instead of repeated.
 - **[What people can't find](docs/corrections.md#what-people-cant-find-and-guide-health)**: the dashboard leads with the questions people gave up on, counted by person, and flags a common question whose guides stopped finishing, which is what a change to the product looks like. The company's team gets an email about it.
+- **[Teach Haptic](docs/corrections.md#teach-haptic)**: when Haptic got a question wrong, someone at the company presses "Teach Haptic the right way", their app opens in a new tab with a one-time link, and they do the task as a visitor would. The script already on the page records which controls they used, never what they typed, with the same masking as everything it reads. They review the steps in plain words, add notes, and leave the last click for the visitor; from then on a question like it carries that route into the prompt as the company's own instructions, and the model still checks each step against the live page.
 - **[Corrections](docs/corrections.md#point-here-instead)**: when Haptic points at the wrong thing, the company picks the right control on that step in the dashboard, and the fix applies to similar questions from then on. A company can also list controls Haptic must never point at, which the server and the widget both enforce.
 - **[Do it with me](docs/widget.md#do-it-with-me)** (opt-in, per site): on a site that turns it on, a **Do it** button sits beside Send. Haptic clicks, types and chooses on the page while the user watches, lists what it did, and points at the last control, the one that saves, sends or pays, for the user to click. It never presses anything that saves, sends, pays or deletes, never types passwords or payment details, and types only what the user wrote in their question. The user's own click or key pauses it, and Escape stops it. The server checks every action with the same rules as the widget, and a page can turn it off for itself with `data-acting="off"` on the script tag.
 - **[Hand-off to a person](docs/answers.md#the-way-to-a-person)**: when Haptic can't help, it passes the conversation to the company's existing support, through a webhook (optionally HMAC-signed), a contact page, email, or the site's own chat widget.
@@ -184,9 +185,9 @@ The browser tests need Playwright's browsers once: `npx playwright install chrom
 
 | Doc | Covers |
 |---|---|
-| [Operations](docs/operations.md) | Deploying, the database, what is recorded about visitors, billing outcomes, the kill switch, spend limits and step costs |
-| [The widget on a live page](docs/widget.md) | Modal dialogs, covered controls, route changes, learning the site from visits, and the browser tests |
-| [Correcting Haptic](docs/corrections.md) | What people can't find, guide health and its emails, "Point here instead", and controls Haptic must never point at |
+| [Operations](docs/operations.md) | Deploying, the database, what is recorded about visitors, what Teach Haptic keeps, billing outcomes, the kill switch, spend limits and step costs |
+| [The widget on a live page](docs/widget.md) | Modal dialogs, covered controls, route changes, teach mode, learning the site from visits, and the browser tests |
+| [Correcting Haptic](docs/corrections.md) | What people can't find, guide health and its emails, "Point here instead", Teach Haptic, and controls Haptic must never point at |
 | [Answers and hand-off](docs/answers.md) | Answering from help docs, the server-side rules, and hand-off to a person |
 | [Benchmark](eval/README.md) | How cases work, how to run them, and results |
 | [Website and dashboard](web/README.md) | Sign-in, approvals, the dashboard, and deploying the site |
