@@ -7,6 +7,7 @@ import { proxyAuth } from "./auth";
 import { database } from "./db";
 import { sendHealthAlerts } from "./health";
 import { HOOK_PATH, neonHook, type HookEnv } from "./neon-hook";
+import { isPlaybookPath, playbook } from "./playbook";
 
 export interface Assets {
   fetch(request: Request): Promise<Response> | Response;
@@ -62,6 +63,8 @@ export async function handle(request: Request, env: Env, assets: Assets): Promis
     return proxyAuth(request, env);
   }
   if (url.pathname.startsWith("/api/app/")) return appApi(request, env, url);
+  // The install steps a coding agent fetches, /install/<site>.md. The install page itself is static.
+  if (isPlaybookPath(url.pathname)) return playbook(request, env, url);
 
   const response = await assets.fetch(request);
   // Anything that is not the real domain is a preview, and search engines should skip it.
