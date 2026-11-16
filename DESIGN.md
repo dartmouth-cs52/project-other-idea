@@ -440,8 +440,13 @@ Components are shadcn/ui, restyled only through tokens and variants.
   that fails gets an Error red outline and one 13px line under it saying what
   to type, the first such field takes the focus, and the line goes as soon as
   the person starts typing. A failure that is not one field's fault uses
-  shadcn's alert, with an icon, a short title and one line of detail. Success
-  replaces the form with a thank you.
+  shadcn's alert, with an icon, a short title and one line of detail, under the
+  form's buttons. Success replaces the form with a thank you. Every form on the
+  site and in the dashboard works this way, sign-in included, and so do the
+  server's refusals: one that names a field shows under that field. The parts
+  are in `web/components/form.tsx`. A page, or part of one, that could not load
+  is a card with a title, the reason in Muted text and, where it could help, Try
+  again. It has no Error red, because it is not a form.
 - **Accordion:** FAQ rows with a plus that turns to a cross. One row open at a
   time.
 

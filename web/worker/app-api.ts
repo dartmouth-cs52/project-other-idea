@@ -53,10 +53,12 @@ interface SeenOrigin {
   requests: number;
 }
 
+/** A request turned away, with what to tell the person. `field` names the one input at fault, so the page can show the message under it. */
 class Refusal extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly field?: string,
   ) {
     super(message);
   }
@@ -133,7 +135,7 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
           if (match[4] && request.method === "DELETE") return reply({ corrections: await removeCorrection(sql, site, org.id, match[4]) });
           if (sub === "/blocked" && request.method === "PUT") return reply({ blocked: await setBlocked(sql, id, org.id, (await body(request)).controls) });
         } catch (error) {
-          if (error instanceof Invalid) throw new Refusal(400, error.message);
+          if (error instanceof Invalid) throw new Refusal(400, error.message, error.field);
           throw error;
         }
       }
@@ -146,7 +148,7 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
     }
     throw new Refusal(404, "Not found.");
   } catch (error) {
-    if (error instanceof Refusal) return reply({ error: error.message }, error.status);
+    if (error instanceof Refusal) return reply({ error: error.message, field: error.field }, error.status);
     console.error("app api:", error);
     return reply({ error: "Something went wrong on our side." }, 500);
   }
@@ -207,13 +209,13 @@ async function ownedSite(sql: Sql, org: Organization, id: string): Promise<SiteR
 /** An address someone pasted, as a URL Haptic can read, or a refusal that says what is wrong with it. */
 function siteAddress(input: unknown): URL {
   let text = typeof input === "string" ? input.trim() : "";
-  if (!text) throw new Refusal(400, "Paste your site's address.");
+  if (!text) throw new Refusal(400, "Paste your site's address.", "url");
   // With no scheme, a local or private address is a developer's own machine, which serves plain http. Anything else gets https.
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) text = `${/^(localhost|127\.|10\.|192\.168\.|\[::1\])/i.test(text) ? "http" : "https"}://${text}`;
-  if (!URL.canParse(text)) throw new Refusal(400, "That isn't a web address. Try something like https://app.example.com.");
+  if (!URL.canParse(text)) throw new Refusal(400, "That isn't a web address. Try something like https://app.example.com.", "url");
   const url = new URL(text);
-  if (url.protocol !== "https:" && url.protocol !== "http:") throw new Refusal(400, "Use an address that starts with https://.");
-  if (!url.hostname.includes(".") && url.hostname !== "localhost") throw new Refusal(400, "That address is missing its domain, like .com.");
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw new Refusal(400, "Use an address that starts with https://.", "url");
+  if (!url.hostname.includes(".") && url.hostname !== "localhost") throw new Refusal(400, "That address is missing its domain, like .com.", "url");
   url.hash = "";
   return url;
 }
@@ -225,7 +227,7 @@ function originList(input: unknown): string[] {
   for (const item of input) {
     const text = typeof item === "string" ? item.trim().replace(/\/$/, "") : "";
     if (!URL.canParse(text) || new URL(text).origin !== text || !/^https?:$/.test(new URL(text).protocol)) {
-      throw new Refusal(400, `"${String(item).slice(0, 80)}" isn't an origin. An origin is the start of an address only, like https://app.example.com.`);
+      throw new Refusal(400, `"${String(item).slice(0, 80)}" isn't an origin. An origin is the start of an address only, like https://app.example.com.`, "allowedOrigins");
     }
     origins.add(text);
   }
@@ -330,16 +332,16 @@ function appearanceFrom(input: unknown, current: Appearance): Appearance {
   const raw = input as Record<string, unknown>;
   const next = { ...current };
   if (raw.accent !== undefined) {
-    if (typeof raw.accent !== "string" || !HEX.test(raw.accent)) throw new Refusal(400, "The colour must be a hex value like #1E6EF4.");
+    if (typeof raw.accent !== "string" || !HEX.test(raw.accent)) throw new Refusal(400, "The colour must be a hex value like #1E6EF4.", "accent");
     next.accent = raw.accent.toUpperCase();
   }
   if (raw.position !== undefined) {
-    if (raw.position !== "bottom-right" && raw.position !== "bottom-left") throw new Refusal(400, "The corner must be bottom-right or bottom-left.");
+    if (raw.position !== "bottom-right" && raw.position !== "bottom-left") throw new Refusal(400, "The corner must be bottom-right or bottom-left.", "position");
     next.position = raw.position;
   }
   if (raw.launcherLabel !== undefined) {
     const label = typeof raw.launcherLabel === "string" ? cleanText(raw.launcherLabel, 24) : "";
-    if (!label) throw new Refusal(400, "Give the button a label, such as Ask.");
+    if (!label) throw new Refusal(400, "Give the button a label, such as Ask.", "launcherLabel");
     next.launcherLabel = label;
   }
   return next;
@@ -351,24 +353,33 @@ async function addDoc(sql: Sql, env: AppEnv, org: Organization, id: string, inpu
   const docs = site.context.docs ?? [];
   if (docs.length >= MAX_DOCS) throw new Refusal(400, `A site can have up to ${MAX_DOCS} help docs. Remove one first.`);
   let doc: Doc;
+  // The input the doc came from, which is the one at fault when its text will not do.
+  let from: "url" | "text";
   if (typeof input.url === "string" && input.url.trim()) {
+    from = "url";
     let text = input.url.trim();
     if (!/^https?:\/\//i.test(text)) text = `https://${text}`;
-    if (!URL.canParse(text)) throw new Refusal(400, "That isn't a web address.");
+    if (!URL.canParse(text)) throw new Refusal(400, "That isn't a web address. Try something like https://help.example.com/billing.", "url");
     try {
       doc = await docFromUrl(new URL(text));
     } catch (error) {
-      throw new Refusal(400, `Haptic couldn't read that page. ${(error as Error).message}`);
+      throw new Refusal(400, `Haptic couldn't read that page. ${(error as Error).message}`, "url");
     }
   } else {
+    from = "text";
     const title = typeof input.title === "string" ? input.title : "";
     const text = typeof input.text === "string" ? input.text : "";
-    if (!title.trim() || !text.trim()) throw new Refusal(400, "Give the doc a title and some text.");
+    if (!title.trim()) throw new Refusal(400, "Give the doc a title.", "title");
+    if (!text.trim()) throw new Refusal(400, "Paste the doc's text.", "text");
     doc = pastedDoc(title, text.slice(0, MAX_DOC_CHARS * 2));
   }
-  if (doc.text.length < 40) throw new Refusal(400, "There was almost no text there. Paste the text instead.");
-  if (doc.text.length > MAX_DOC_CHARS) throw new Refusal(400, `That doc is ${doc.text.length.toLocaleString()} characters. One doc can be up to ${MAX_DOC_CHARS.toLocaleString()}. Split it, or paste the part that matters.`);
-  if (docs.some((existing) => existing.source === doc.source)) throw new Refusal(400, "That page is already one of the help docs.");
+  if (doc.text.length < 40) {
+    throw new Refusal(400, from === "url" ? "There was almost no text on that page. Paste the text instead." : "That is too short to help. Paste the whole article.", from);
+  }
+  if (doc.text.length > MAX_DOC_CHARS) {
+    throw new Refusal(400, `That doc is ${doc.text.length.toLocaleString()} characters. One doc can be up to ${MAX_DOC_CHARS.toLocaleString()}. Split it, or paste the part that matters.`, from);
+  }
+  if (docs.some((existing) => existing.source === doc.source)) throw new Refusal(400, "That page is already one of the help docs.", "url");
   await sql`
     update sites set context = jsonb_set(context, '{docs}', coalesce(context->'docs', '[]'::jsonb) || ${JSON.stringify([doc])}::jsonb), updated_at = now()
     where id = ${id} and company_id = ${org.id}`;
@@ -390,7 +401,7 @@ async function deleteSite(sql: Sql, org: Organization, id: string, input: Record
   const site = await ownedSite(sql, org, id);
   const host = new URL(site.origin).host;
   if (typeof input.confirm !== "string" || input.confirm.trim().toLowerCase() !== host.toLowerCase()) {
-    throw new Refusal(400, `Type ${host} to confirm.`);
+    throw new Refusal(400, `Type ${host} to confirm.`, "confirm");
   }
   await sql`delete from sites where id = ${id} and company_id = ${org.id}`;
   return { deleted: id };
@@ -399,13 +410,13 @@ async function deleteSite(sql: Sql, org: Organization, id: string, input: Record
 async function changeSite(sql: Sql, env: AppEnv, org: Organization, id: string, input: Record<string, unknown>) {
   const site = await ownedSite(sql, org, id);
   const name = input.name === undefined ? site.name : typeof input.name === "string" && input.name.trim() ? input.name.trim().slice(0, 80) : null;
-  if (!name) throw new Refusal(400, "Give the site a name.");
+  if (!name) throw new Refusal(400, "Give the site a name.", "name");
   const origins = input.allowedOrigins === undefined ? site.allowed_origins : originList(input.allowedOrigins);
   if (!origins.length) throw new Refusal(400, "Keep at least one origin, or the widget can't run anywhere.");
   const appearance = input.appearance === undefined ? null : appearanceFrom(input.appearance, { ...DEFAULT_APPEARANCE, ...site.context.appearance });
   if (input.notes !== undefined && typeof input.notes !== "string") throw new Refusal(400, "notes must be text.");
   const notes = typeof input.notes === "string" ? input.notes.trim() : null;
-  if (notes !== null && notes.length > MAX_NOTES) throw new Refusal(400, `Notes can be up to ${MAX_NOTES.toLocaleString()} characters.`);
+  if (notes !== null && notes.length > MAX_NOTES) throw new Refusal(400, `Notes can be up to ${MAX_NOTES.toLocaleString()} characters.`, "notes");
   if (input.answers !== undefined && typeof input.answers !== "boolean") throw new Refusal(400, "answers must be true or false.");
   // Switching Answers keeps how long an answer's article may go before it is marked as possibly out of date.
   const answers = typeof input.answers === "boolean" ? { ...site.context.answers, enabled: input.answers } : null;
