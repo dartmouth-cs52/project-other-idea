@@ -20,7 +20,7 @@ import {
 } from "../shared/types.ts";
 import { perform, type DidLine, type Heard as HeardStep, type Listening } from "./act.ts";
 import { confirmationAction, planFor, SAYS, type ActPlan, type GateConfig, type GateSession, type Plan, type StopPlan, type VisitorPlan } from "./gate.ts";
-import { hear, isOwn, keyName, keysAsked, nothingHeard, OWN_TYPING_PAUSE_MS, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "./observe.ts";
+import { hear, isOwn, keyName, keysAsked, nothingHeard, OUTCOME_WINDOW_MS, OWN_TYPING_PAUSE_MS, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "./observe.ts";
 import { onAddressChange } from "./navigation.ts";
 import { isDrawn, POPUP_ROLES, watchPopups } from "./popups.ts";
 import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, sameView, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
@@ -37,6 +37,8 @@ const MAX_THREAD = 6;
 const STORAGE_KEY = "haptic.guide";
 /** Shown the moment the visitor does something other than the step, while the next step is worked out. */
 const OFF_TRACK = "Finding the way from here…";
+/** The ask box's line while a pointer is up and Haptic waits for the visitor. */
+const YOUR_TURN = ACTING_WORDS.yourTurn;
 /** A saved guide older than this isn't picked back up after a page load. */
 const RESUME_WINDOW_MS = 3 * 60 * 1000;
 const CLICKABLE = 'a[href], button, summary, select, input, textarea, label, [role], [onclick], [tabindex]:not([tabindex="-1"])';
@@ -127,6 +129,12 @@ interface Acted {
   /** They did something else, which the next reply may need to correct. */
   strayed: boolean;
   how: Verdict["how"];
+  /**
+   * When the control went without being used: what became of it, in words for the model ("The user clicked outside the
+   * dialog …, which closed it without using …"), and whether what held it, a dialog or a menu, closed with it, so it
+   * is not looked for again.
+   */
+  gone?: { words: string; closed: boolean };
 }
 
 /** How a pointer is listened to. It can be changed while the listening goes on, since a pointer is shown before its reply is whole. */
@@ -143,6 +151,8 @@ interface Hearing {
   actor?: "visitor" | "haptic";
   /** How the visitor is named in the sentences for the model: "The user" in a guide, "The visitor" while Haptic acts with them. */
   subject?: string;
+  /** The open dialog's name as the reading gave it, masked like the rest of it, to say which dialog closed. */
+  dialog?: string;
 }
 
 /** A pointer shown before the rest of the reply was in, and what the visitor did with it, if anything yet. */
@@ -732,7 +742,7 @@ export class Guide {
     // the rest of the reply arrives.
     let early: EarlyPointer | undefined;
     let whenActed: ((what: Acted) => void) | undefined;
-    const how: Hearing = { anyClick: false, keys: [] };
+    const how: Hearing = { anyClick: false, keys: [], ...(page.snapshot.dialog ? { dialog: page.snapshot.dialog } : {}) };
     /** Every control that was on the page when it was read, with how the list named it. */
     const listing = new Map<Element, SnapElement>();
     for (const element of page.snapshot.elements) {
@@ -999,7 +1009,7 @@ export class Guide {
       ui.yourTurn(true);
       this.showDid(handover.session, ACTING_WORDS.nothingSaved(handover.commit), handover.commit);
     } else if (inPanel) ui.setBusy("");
-    else ui.closePanel();
+    else this.pointingNow();
     // An answer in words that also points ends as answered, whatever the visitor does next. Answers are not billed.
     // The pointer stays up until the visitor clicks anywhere or goes to another page.
     if (inPanel && reply.status === "done") {
@@ -1041,8 +1051,10 @@ export class Guide {
 
     const onActed = (what: Acted, on: Element) => {
       this.stopWaiting = undefined;
-      // Nothing was done: the page drew the control again. Find it and carry on with the same step.
-      if (what.how === "redrawn") return findAgain(0);
+      // Nothing was done: the page drew the control again, or took it away. Find it and carry on with the same step, or ask.
+      if (what.how === "redrawn") return findAgain(what.gone?.words || `${name} is no longer on the page.`, what.gone?.closed === true);
+      // A dialog the page opened shuts the control out: the step can't be done as it stands. The page is read again.
+      if (what.how === "covered") return lost(what.event);
       if (this.last && what.onTarget) this.last.used = true;
       if (handover && !what.onTarget && what.how !== "left") {
         this.stopWaiting = listen(on);
@@ -1090,23 +1102,50 @@ export class Guide {
       );
     };
     const listen = (on: Element) => waitForAction(on, listed, ui.host, listing, how, (what) => onActed(what, on));
-    /** Looks for the control the page drew again, a few times over a few seconds, and asks only if it never comes back. */
-    const findAgain = (tries: number) => {
+    /** Points at the control again on the node the page drew it on, and listens there. */
+    const showAgain = (again: Element) => {
+      if (this.last) this.last.el = new WeakRef(again);
+      ui.pointAt(again, reply.say);
+      this.pointingNow();
+      ui.setState("pointing");
+      this.stopWaiting = listen(again);
+    };
+    /**
+     * The control went with nothing done. Nothing is left pointing at where it was: the pointer and its sentence go at
+     * once, and the page is read again for the next step, told in `gone` what became of it.
+     */
+    const lost = (gone: string) => {
+      ui.clear();
+      ui.setState("asking");
+      ui.setBusy("Next step…");
+      void settle(ui.host, { since: performance.now() }).then(() =>
+        onceStaying(() => {
+          if (run === this.run) void this.turn(run, { event: gone });
+        }),
+      );
+    };
+    /**
+     * Looks for the control the page drew again: at once, since a page that draws a list again does it in one go, and
+     * once more when the page has settled, since one that fetches first shows it later. If it never comes back, or the
+     * dialog or menu it was in closed, the next step is asked for. The pointer is never left on where it was meanwhile.
+     */
+    const findAgain = (gone: string, closed: boolean) => {
       if (run !== this.run) return;
-      const again = listed ? sameControl(page.snapshot, listed, takeSnapshot(ui.host, this.goal)) : undefined;
-      if (again) {
-        if (this.last) this.last.el = new WeakRef(again);
-        ui.pointAt(again, reply.say);
-        ui.setState("pointing");
-        this.stopWaiting = listen(again);
-        return;
-      }
-      if (tries >= 5) {
-        ui.clear();
-        return void this.turn(run, { event: `${name} is no longer on the page.`, closing });
-      }
-      const timer = setTimeout(() => findAgain(tries + 1), 300 * 2 ** tries);
-      this.stopWaiting = () => clearTimeout(timer);
+      // A control whose dialog closed is not looked for: another control just like it elsewhere on the page is not it.
+      const find = () => (listed && !closed ? sameControl(page.snapshot, listed, takeSnapshot(ui.host, this.goal)) : undefined);
+      const again = find();
+      if (again) return showAgain(again);
+      ui.clear();
+      ui.setState("asking");
+      ui.setBusy("Next step…");
+      void settle(ui.host, { since: performance.now() }).then(() =>
+        onceStaying(() => {
+          if (run !== this.run) return;
+          const later = find();
+          if (later) return showAgain(later);
+          void this.turn(run, { event: gone, closing });
+        }),
+      );
     };
     // The early pointer is already listening. Hand its result over, now or when it comes.
     if (acted) onActed(acted, target);
@@ -1216,7 +1255,7 @@ export class Guide {
     ui.pointAt(el, say);
     ui.yourTurn(true);
     this.save();
-    const how: Hearing = { anyClick: false, keys: keysAsked(say), subject: VISITOR };
+    const how: Hearing = { anyClick: false, keys: keysAsked(say), subject: VISITOR, ...(this.previous?.dialog ? { dialog: this.previous.dialog } : {}) };
     const isOpen = (on: Element) => on.isConnected && (on.getAttribute("aria-expanded") === "true" || !!on.querySelector("[aria-expanded='true']"));
     /** Whether that was the click that opens the list the visitor is to pick from. The page opens it after the click is heard, so it is looked at a moment later. */
     let opening = false;
@@ -1239,8 +1278,8 @@ export class Guide {
         return;
       }
       if (what.how === "redrawn") {
-        // The page drew the control again: the same step, on its new node.
-        const again = listed ? sameControl(this.previous ?? takeSnapshot(ui.host, this.goal).snapshot, listed, takeSnapshot(ui.host, this.goal)) : undefined;
+        // The page drew the control again: the same step, on its new node. One whose dialog or menu closed is not looked for.
+        const again = listed && !what.gone?.closed ? sameControl(this.previous ?? takeSnapshot(ui.host, this.goal).snapshot, listed, takeSnapshot(ui.host, this.goal)) : undefined;
         if (again) {
           ui.pointAt(again, say);
           this.stopWaiting = waitForAction(again, listed, ui.host, listing, how, (next) => onHeard(next, again));
@@ -1252,7 +1291,7 @@ export class Guide {
       // Their step may load a page, which then carries on acting.
       if (what.onTarget) this.expectLoad();
       if (this.last && what.onTarget) this.last.used = true;
-      const told = [event, what.event].filter(Boolean).join(" ");
+      const told = [event, what.event || what.gone?.words].filter(Boolean).join(" ");
       this.save(told);
       ui.yourTurn(false);
       ui.rest();
@@ -1315,6 +1354,16 @@ export class Guide {
       did: session.did.map(({ name, value, mine, partly }) => ({ name, ...(value !== undefined ? { value } : {}), ...(mine ? { mine } : {}), ...(partly ? { partly } : {}) })),
       ...(this.expectLoadUntil > Date.now() ? { expectLoadUntil: this.expectLoadUntil } : {}),
     };
+  }
+
+  /**
+   * The pointer is up and it is the visitor's turn. The ask box, closed now, says so if it is opened: it does not go on
+   * saying "Next step…" from the question just answered, which reads as Haptic still working while it waits for them.
+   * Stop stays beside it.
+   */
+  private pointingNow() {
+    this.ui.setBusy(YOUR_TURN);
+    this.ui.closePanel();
   }
 
   /**
@@ -1676,6 +1725,26 @@ const holdsFocus = (el: Element) => {
   return !!active && (active === el || el.contains(active));
 };
 
+/**
+ * Whether a control can be seen and used where it is: drawn, and not both see-through and closed to the mouse, as a
+ * menu that has faded away is. One that is only see-through, like a row's action shown while the mouse is over the
+ * row, can still be used.
+ */
+function usable(el: Element): boolean {
+  if (!isDrawn(el)) return false;
+  if (typeof el.checkVisibility !== "function" || el.checkVisibility({ opacityProperty: true })) return true;
+  return getComputedStyle(el).pointerEvents !== "none";
+}
+
+/** What a box drawn over the page is, in a word for the model: a menu, a list, or a popup. */
+function layerKind(el: Element): string {
+  const role = el.getAttribute("role") ?? "";
+  if (role === "menu" || role === "menubar") return "menu";
+  if (role === "listbox") return "list";
+  if (role === "tree") return "tree";
+  return "popup";
+}
+
 /** Whether `node` is `el` or inside it, shadow roots included. */
 function isWithin(el: Element, node: Node | null): boolean {
   for (let at: Node | null = node; at; at = at.parentNode ?? (at as ShadowRoot).host ?? null) if (at === el) return true;
@@ -1762,6 +1831,16 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   const startAddress = location.href;
   const startDialog = findOpenModal(host);
   const startLook = lookOf(target);
+  /** What holds the control and closes with it: the modal dialog it is in, or else the menu, list or popup it is in. */
+  const holder = (startDialog && isWithin(startDialog, target) ? startDialog : undefined) ?? overlayOf(target);
+  /**
+   * Whether the control could be used when the pointer went up. One shown only while the mouse is over its row was
+   * not, so its hiding again when the mouse leaves is not its going. Only leaving the page is.
+   */
+  const usableAtStart = usable(target);
+  const isGone = () => !target.isConnected || (usableAtStart && !usable(target));
+  /** The visitor's last press or key, to say how what held the control came to close. */
+  let lastGesture: { at: number; kind: "escape" | "outside" | "inside" | "key" } | undefined;
   const numbers = new WeakMap<Element, number>();
   let numbered = 0;
   const numberOf = (el: Element): number => {
@@ -1850,12 +1929,14 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     };
   };
   const fate = (): Fate => {
-    const gone = !isDrawn(target);
+    const gone = isGone();
     const press = pressed;
+    const modal = findOpenModal(host);
     return {
       gone,
       changed: !gone && lookOf(target) !== startLook,
-      dialog: findOpenModal(host) !== startDialog,
+      dialog: modal !== startDialog,
+      covered: !gone && !!modal && modal !== startDialog && !isWithin(modal, target),
       path: currentPath() !== startPath,
       address: location.href !== startAddress,
       pressGone: !!press?.el && (!isDrawn(press.el) || !isWithin(press.el, hitAt(press.x, press.y))),
@@ -1894,13 +1975,37 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
         return "";
     }
   };
+  /**
+   * What became of the control, which went without being used, in plain words: the dialog or menu it was in closed,
+   * and how, or it is simply no longer on the page. Read while what held it can still be looked at.
+   */
+  const vanished = (): { words: string; closed: boolean } => {
+    const who = how.subject ?? "The user";
+    const whom = who.toLowerCase();
+    const recent = lastGesture && performance.now() - lastGesture.at <= OUTCOME_WINDOW_MS ? lastGesture.kind : undefined;
+    if (holder && !isDrawn(holder)) {
+      const what = holder === startDialog ? (how.dialog ? `the dialog "${how.dialog}"` : "the dialog") : `the ${layerKind(holder)}`;
+      const What = what.charAt(0).toUpperCase() + what.slice(1);
+      if (recent === "escape") return { closed: true, words: `${who} pressed Escape, which closed ${what} without using ${name}.` };
+      if (recent === "outside") return { closed: true, words: `${who} clicked outside ${what}, which closed it without using ${name}.` };
+      if (recent) return { closed: true, words: `${What} closed after something ${whom} did, without ${name} being used.` };
+      return { closed: true, words: `${What} closed without ${name} being used.` };
+    }
+    if (recent) return { closed: false, words: `The page changed after something ${whom} did that could not be identified, and ${name} is no longer on the page.` };
+    return { closed: false, words: `${name} is no longer on the page.` };
+  };
 
   const feed = (seen: Seen) => {
     heard = hear(heard, seen, pointed());
     const verdict = heard.verdict;
     if (!verdict) return;
     stop();
-    done({ event: sentence(verdict), onTarget: verdict.onTarget, strayed: verdict.strayed, how: verdict.how });
+    // The control went, and the visitor did not use it: they dismissed what held it, or the page took it away.
+    const gone = verdict.how === "redrawn" || (verdict.how === "unknown" && isGone()) ? vanished() : undefined;
+    const event = gone && verdict.how === "unknown" ? gone.words : sentence(verdict);
+    // Dismissing it is not the step they were shown, and the next reply has to give them the way from where they are now.
+    const strayed = verdict.strayed || (verdict.how === "unknown" && !!gone);
+    done({ event, onTarget: verdict.onTarget, strayed, how: verdict.how, ...(gone ? { gone } : {}) });
   };
   const outside = (event: Event) => {
     const path = event.composedPath();
@@ -1919,8 +2024,14 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   const onPress = (event: Event) => {
     const path = visitors(event);
     if (!path || (event as PointerEvent).button !== 0) return;
-    const where = whereOf(path, { x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY });
+    const point = { x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY };
+    const where = whereOf(path, point);
     const el = path.find((node): node is Element => node instanceof Element && isControl(node)) ?? (where.onTarget ? target : undefined);
+    // A press on a dialog's backdrop: outside its box, whether the backdrop is a layer of the page's or the browser's own, which is the dialog itself.
+    const box = holder?.getBoundingClientRect();
+    const outsideHolder =
+      !!holder && (!path.includes(holder) || (path[0] === holder && !!box && (point.x < box.left || point.x > box.right || point.y < box.top || point.y > box.bottom)));
+    lastGesture = { at: performance.now(), kind: outsideHolder ? "outside" : "inside" };
     pressed = { x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY, ...(el ? { el } : {}) };
     feed({ type: "press", at: performance.now(), where });
   };
@@ -1941,6 +2052,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     const key = (event as KeyboardEvent).key ?? "";
     // The keys that open a field's list or calendar, or a menu, from the keyboard.
     if (path.includes(target) && (["F4", "ArrowDown", "ArrowUp", "Enter"].includes(key) || (event as KeyboardEvent).altKey)) keyed = performance.now();
+    lastGesture = { at: performance.now(), kind: key === "Escape" ? "escape" : "key" };
     feed({ type: "key", at: performance.now(), key: (event as KeyboardEvent).key ?? "", inTarget: path.includes(target), inTyped: on instanceof Element && isTyped(on) });
   };
   const onInput = (event: Event) => {
