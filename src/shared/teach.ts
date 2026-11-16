@@ -290,7 +290,7 @@ function promptStep(step: TaughtStep, before: TaughtStep | undefined): string {
     default:
       what = `use ${control}${step.row && step.label ? " in a row of the list" : ""}`;
   }
-  let line = lead.length ? `${lead.join(", ")}: ${what}` : capital(what);
+  let line = lead.length ? `${capital(lead.join(", "))}: ${what}` : capital(what);
   if (step.context) line += ` (${step.context})`;
   line += ".";
   if (step.leave) line += " The visitor makes this click.";
