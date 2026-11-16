@@ -499,6 +499,13 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
   page, the pointer goes to it with no caption, because the words are in the
   chat. A step's sentence stays in the caption beside the pointer. When Haptic
   can't help, the same Muted bubble holds one fixed sentence.
+- **A person is one button away, when Haptic can't help.** Under a reply that
+  says Haptic can't help, after a "No" to "Did this help?", and after three
+  questions with no "Yes", the chat shows one secondary button, "Contact
+  support". It opens a two-field form in the chat, the company's page, or the
+  visitor's mail program, whichever the company set. When the form is sent the
+  chat says "Sent to the team. A person will reply by email.", so nobody
+  thinks the AI is still the one answering.
 - **Say it is an AI.** One line of 12px Muted text sits under the ask box,
   "Haptic is an AI guide and can be wrong." It looks like plain text, with no
   underline. Its last words are a link to the page that says what Haptic reads

@@ -74,6 +74,32 @@ updated: 2026-10-02
 
 A doc fetched from a URL is linked to that URL. **Answers has not been tried with a real model yet.** Run the benchmark with `--answers` before switching it on for anyone (see [`eval/README.md`](eval/README.md)).
 
+**The way to a person.** A support chat is also an inbox someone watches, and Haptic is not one. When it can't help, it hands over to whatever the company already uses. The widget offers one button, "Contact support", in three cases: when Haptic has just said the docs don't cover a question or that it is one for a person, when a visitor answers "No" to "Did this help?", and when three questions in a row have ended without a "Yes". It is not offered after every reply.
+
+A site sets where the button leads, and the first of these that is set is used:
+
+```bash
+npm run tag -- --id site_ab12cd34ef \
+  --handoff-webhook https://example.com/hooks/haptic --handoff-secret "$SECRET" \
+  --handoff-url https://example.com/contact \
+  --handoff-email support@example.com
+```
+
+- **A webhook.** The widget shows a short form, an email address and a note. The server passes it on as JSON and keeps none of it: `kind` ("handoff"), `site`, `site_name`, `at`, `email`, `note`, `origin`, `page`, `guide`, `transcript` (each line has a `role`, its `text`, and for Haptic's lines the `kind` of reply), and `modes`, the kinds of reply used. With a secret set, the post carries `X-Haptic-Signature: sha256=` followed by the hex HMAC-SHA256 of the body, so the receiver can tell it came from Haptic. The address has to be https and on the public internet.
+- **A page**, opened in a new tab.
+- **An email address.** The visitor's own mail program opens, with the conversation in the message.
+
+A site with its own chat widget can take over instead. Before the button does anything it sends a `haptic:handoff` event on the document, whose `detail` has the `question`, the `path` and the `transcript`. Cancel it and Haptic does nothing more:
+
+```js
+document.addEventListener("haptic:handoff", (event) => {
+  event.preventDefault();
+  openOurChat({ prefill: event.detail.question });
+});
+```
+
+Creating the ticket in a helpdesk directly, through Zendesk's or Intercom's API, is not built.
+
 **What a step costs.** The rules and everything known about the site are the same on every step, so the model provider keeps them ready (a prompt cache) and charges a fraction of the price to read them again. They are kept for an hour after a site's last step. `HAPTIC_CACHE=5m` keeps them for five minutes, which is cheaper to write and only wins on a site that is never quiet that long. Every step logs how many tokens were read from the cache and how many had to be written.
 
 The crawl only sees HTML the server sends. Pages drawn by JavaScript or behind a login come back nearly empty, and the command says so when that happens. The widget reads each page live either way, so those sites lean on notes and docs for now.

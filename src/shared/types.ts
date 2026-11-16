@@ -35,6 +35,8 @@ export interface SiteContext {
   };
   /** Answers: replies in words from the help docs, beside the pointer. Off unless `enabled` is true. */
   answers?: AnswersConfig;
+  /** Where a visitor is sent when Haptic can't help. Without it the widget offers nothing. */
+  handoff?: Handoff;
   createdAt: string;
   updatedAt: string;
 }
@@ -91,12 +93,41 @@ export interface PageNode {
   fields: string[];
 }
 
+/**
+ * The way to a person, for when Haptic can't help. Haptic does not keep an
+ * inbox: it hands over to whatever the company already uses. Any of the three
+ * can be set, and the widget uses the first it finds in this order: the form,
+ * the page, the address.
+ */
+export interface Handoff {
+  /** The words on the button. "Contact support" when left out. */
+  label?: string;
+  /** Where the widget's own short form (an email address and a note) is posted, with the conversation and the page. Only the server ever sees this address. */
+  webhook?: string;
+  /** If set, each post to the webhook is signed with it, so the receiver can tell the post came from Haptic. */
+  secret?: string;
+  /** A page to open instead, like the company's contact form. */
+  url?: string;
+  /** An address to write to. The visitor's own mail program opens, with the conversation in the message. */
+  email?: string;
+}
+
+/** What the widget is told about the handoff. Never the webhook's address or its secret. */
+export interface PublicHandoff {
+  label: string;
+  /** True when the widget should show its own form and post it to the server. */
+  form?: true;
+  url?: string;
+  email?: string;
+}
+
 /** What the widget sends the server about the site on boot. */
 export interface PublicSiteConfig {
   name: string;
   appearance: Appearance;
   /** Set when Haptic is switched off here. The widget then draws nothing. */
   off?: true;
+  handoff?: PublicHandoff;
 }
 
 export interface SnapElement {
@@ -176,11 +207,33 @@ export type GuideOutcome = (typeof GUIDE_OUTCOMES)[number];
 /** A guide id, as the widget makes it with crypto.randomUUID(). */
 export const GUIDE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-/** What the widget sends when a guide ends, and again if the visitor says whether it helped. */
+/** What the widget sends when a guide ends, again if the visitor says whether it helped, and again if they ask for a person. */
 export interface GuideReport {
   site: string;
   outcome?: GuideOutcome;
   helped?: boolean;
+  /** The visitor used the way to a person. */
+  handoff?: true;
+}
+
+/** One line of the conversation, as it is handed to a person. */
+export interface TranscriptTurn {
+  role: "user" | "assistant";
+  text: string;
+  /** For Haptic's lines on a site with Answers on: what kind of reply it was. */
+  kind?: Mode;
+}
+
+/** What the widget's handoff form posts. The server passes it on to the company and keeps none of it. */
+export interface HandoffRequest {
+  site: string;
+  guide?: string;
+  /** Where the company should reply. */
+  email: string;
+  note: string;
+  /** The page the visitor is on. */
+  path: string;
+  transcript: TranscriptTurn[];
 }
 
 /**

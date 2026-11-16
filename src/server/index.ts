@@ -41,6 +41,7 @@ const app = createApp({
   widgetMaxAge: process.env.NODE_ENV === "production" ? 300 : 0,
   overLimit,
   isOff: () => process.env.HAPTIC_OFF === "1",
+  localWebhooks: process.env.NODE_ENV !== "production",
   budget: new MemoryBudget(process.env),
   onAlert: (site, alert) => console.warn(describeAlert(site, alert)),
   onTurn: (request, measure, _site, origin) => {

@@ -1,5 +1,5 @@
 import { DEFAULT_APPEARANCE, MODES, STREAM_TYPE, type Mode, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
-import { Guide, type Reporter, type Watch } from "./guide.ts";
+import { Guide, type HandoffWay, type Reporter, type Watch } from "./guide.ts";
 import { Ui } from "./ui.ts";
 
 // Entry point of the script customers paste into their site:
@@ -77,7 +77,15 @@ async function boot() {
     onAsk: (question) => guide.start(question),
     onStop: () => guide.stop(),
   });
-  const guide = new Guide(ui, sendTurn, report);
+  // The way to a person, when the site has one. The form goes to the server, which passes it on to the company.
+  const handoff: HandoffWay | undefined = config.handoff && {
+    config: config.handoff,
+    send: (form) =>
+      fetch(`${api}/v1/handoff`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, site }) })
+        .then((response) => response.ok)
+        .catch(() => false),
+  };
+  const guide = new Guide(ui, sendTurn, report, handoff);
   guide.resume();
 }
 
