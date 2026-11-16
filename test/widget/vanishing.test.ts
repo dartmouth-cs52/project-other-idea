@@ -160,6 +160,32 @@ test("Cancel in the dialog is another control, named as one", async () => {
   }
 });
 
+test("the browser's own modal dialog closed by a click on its backdrop, which lands on the dialog itself, is a click outside it", async () => {
+  // As Northpine draws its dialogs with lab.nativeDialogs=1: showModal(), and a click whose target is the dialog closes it.
+  const page = `<main><h1>Bills</h1><button id="pay" type="button">Pay</button></main>
+    <dialog id="dialog" aria-labelledby="title" style="width:480px;padding:16px"><h2 id="title">Pay Linden Logistics</h2><button type="button" id="continue">Continue</button></dialog>
+    <script>
+      const dialog = document.getElementById('dialog');
+      document.getElementById('pay').addEventListener('click', () => dialog.showModal());
+      dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+    </script>`;
+  const session = await start(page, payScript);
+  try {
+    await session.ask("Pay bill INV-46951");
+    await session.untilState("pointing");
+    await session.page.locator("#pay").click();
+    await session.until(async () => (await session.state()) === "pointing" && (await shown(session)).caption === CONTINUE, "the pointer on Continue");
+    await session.page.mouse.click(30, 760);
+    await letGo(session, CONTINUE, "the dialog closed");
+    const third = await session.untilAsked(3, 3000);
+    assert.equal(third.event, 'The user clicked outside the dialog "Pay Linden Logistics", which closed it without using button "Continue".');
+    await session.until(async () => (await session.state()) === "pointing" && (await shown(session)).caption === AGAIN, "the pointer back on Pay");
+    assert.deepEqual((await shown(session)).pointer, true);
+  } finally {
+    await session.close();
+  }
+});
+
 /** A menu of actions. `closes` says how it closes by itself, as well as on a press outside it. */
 const menuPage = (closes: "outside" | "mouse-leaves") => `<main><h1>Files</h1><p>Quarterly plan.docx</p>
   <div id="wrap" style="display:inline-block"><button id="actions" type="button" aria-haspopup="menu" aria-expanded="false">Actions</button>
