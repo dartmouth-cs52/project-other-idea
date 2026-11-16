@@ -671,3 +671,42 @@ test("a label that takes clicks for its field is not listed beside the field, un
   </form>`);
   assert.deepEqual(lines(snapshot), ['radio "Strong" [form]', 'radio "Weak" [form]', 'checkbox "Writing Templates" [form]', 'clickable "Only the label shows" [form]']);
 });
+
+test("a field is never named by the words that come after it", { skip }, async () => {
+  const snapshot = await read(`<main><h1>Records</h1>
+<p><textarea rows="2" cols="40"></textarea></p>
+<div role="article" onclick="void 0">Private message: salary is high for Dana</div>
+<p><input type="text"></p>
+<p>Weekly report for the team</p>
+<p><label><input type="checkbox"> Remember me</label></p>
+<p><input type="checkbox" id="terms"><span>I agree to the terms</span></p>
+</main>`);
+  const named = (role: string) => snapshot.elements.filter((element) => element.role === role).map((element) => element.label);
+  // Words that come after a text field belong to whatever comes next on the page.
+  assert.deepEqual(named("textbox"), ["", ""]);
+  // A tick box's caption does come after it.
+  assert.deepEqual(named("checkbox"), ["Remember me", "I agree to the terms"]);
+});
+
+test("a field is not named by a box before it that is listed as a control because it takes clicks", { skip }, async () => {
+  const snapshot = await read(`<main><h1>Records</h1>
+<div onclick="void 0">Open the inbox</div><p><input type="text"></p>
+<div style="cursor:pointer">Show archived</div><p><input type="text"></p>
+<div tabindex="0">Weekly summary</div><p><input type="text"></p>
+<div>Reference number</div><p><input type="text"></p>
+<p><input type="checkbox"><span style="cursor:pointer">Send me a copy</span></p>
+</main>`);
+  assert.deepEqual(lines(snapshot), [
+    'clickable "Open the inbox" [main › Records]',
+    'textbox [main › Records › 1 of 3]',
+    'clickable "Show archived" [main › Records]',
+    'textbox [main › Records › 2 of 3]',
+    'clickable "Weekly summary" [main › Records]',
+    'textbox [main › Records › 3 of 3]',
+    // Words before a field that are only words still name it.
+    'textbox "Reference number" [main › Records]',
+    // Words after a tick box that are pressed to tick it are its caption.
+    'checkbox "Send me a copy" [main › Records]',
+    'clickable "Send me a copy" [main › Records]',
+  ]);
+});

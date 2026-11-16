@@ -1227,6 +1227,21 @@ function holdsPressable(box: Element): boolean {
   return false;
 }
 
+/**
+ * Whether a box is pressed on its own, the way the widget tells a control from
+ * a box of words: it takes clicks, has a control's role, can be reached with
+ * the keyboard, or shows the pointer cursor from itself rather than from the
+ * box around it. Its words are then that control's name. A label is pressed
+ * for the field it names, so its words stay a caption.
+ */
+function pressedOnItsOwn(box: Element): boolean {
+  if (box.tagName === "LABEL") return false;
+  if (box.hasAttribute("onclick") || (box.getAttribute("role") ?? "").split(/\s+/).some((role) => INTERACTIVE_ROLES.has(role))) return true;
+  if (isFocusable(box) && !FOCUSABLE_NOT_CLICKABLE.has(box.tagName)) return true;
+  if (!MAYBE_CLICKABLE.has(box.tagName) || getComputedStyle(box).cursor !== "pointer") return false;
+  return !box.parentElement || getComputedStyle(box.parentElement).cursor !== "pointer";
+}
+
 function captionOf(el: Element, after: boolean): string {
   return captionNode(el, after).text;
 }
@@ -1238,8 +1253,10 @@ function captionOf(el: Element, after: boolean): string {
  */
 function captionNode(el: Element, after: boolean): { text: string; from?: Element } {
   // A box that is a control, or holds one, is not a caption: its words are that control's, or what a visitor typed into it.
+  // Before a field, that holds for a box listed as a control because it takes clicks as much as for a button. After a
+  // tick box, words that take clicks are usually its own caption, pressed to tick it.
   const wordsOf = (node: Element): string => {
-    if (holdsTyping(node) || node.matches(CONTROLS) || node.querySelector(CONTROLS) || holdsPressable(node)) return "";
+    if (holdsTyping(node) || node.matches(CONTROLS) || node.querySelector(CONTROLS) || (!after && pressedOnItsOwn(node)) || holdsPressable(node)) return "";
     const text = cleanText(wordsIn(node, 120), 61);
     return text.length > 60 ? "" : text.replace(/\s*[:*]+$/, "");
   };
