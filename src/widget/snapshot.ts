@@ -335,6 +335,8 @@ interface Candidate extends SnapElement {
   loose?: boolean;
   /** Why it cannot be used, when it cannot and the page says why: "Only Admin can do this." */
   why?: string;
+  /** Where in the window a control with no name and no picture sits: "top right". */
+  spot?: string;
 }
 
 /** Controls with a role of their own, whose words are theirs and not the words of a box around them. */
@@ -446,9 +448,9 @@ const MAX_CONTEXT = 120;
 function contextOf(c: Candidate): string {
   const region = c.region === "page" ? "" : c.region;
   const rest = [c.why ? `disabled: ${c.why}` : "", c.row ? `row: ${c.row}` : "", c.place ?? ""].filter(Boolean);
-  const room = MAX_CONTEXT - [region, ...rest].filter(Boolean).join(" › ").length - 3;
+  const room = MAX_CONTEXT - [region, c.spot ?? "", ...rest].filter(Boolean).join(" › ").length - 3;
   const heading = c.heading.length > room ? (room > 12 ? `${c.heading.slice(0, room - 1).trimEnd()}…` : "") : c.heading;
-  return [region, heading, ...rest].filter(Boolean).join(" › ");
+  return [region, heading, c.spot ?? "", ...rest].filter(Boolean).join(" › ");
 }
 
 interface Scope {
@@ -695,12 +697,18 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
         if (options.length) added.options = options;
         const icon = iconOf(el);
         if (icon) added.icon = icon;
+        // A menu button with no name and no picture, like an account menu that shows only initials hidden from screen
+        // readers, is named by the menu it opens or by the box just around it, when the page names either.
+        const unnamedMenu = !added.label && !icon && opens(el, role) === OPENS_A_MENU;
+        if (unnamedMenu) added.label = cleanText(nameOfWhatItOpens(el) || nameAround(el), 80);
         // A chart or a tile with no name of its own is known by the box that names it, and says so:
         // "part of Simple graph". Otherwise an event reads "The user clicked clickable."
         if (!added.label && !icon && scope.box && !SHOWS_A_VALUE.has(role)) {
           added.label = cleanText(`part of ${scope.box}`, 80);
           added.boxNamed = true;
         }
+        // One that is still nameless is known by where it sits, as a visitor would point it out: "top right".
+        if (unnamedMenu && !added.label) added.spot = spotOf(rect, viewportHeight);
         const state = stateOf(el, role);
         if (state.includes("disabled")) giveReason(added, reasonOf(el));
         // Fully transparent controls have always been listed: row actions that fade in. One that a stylesheet shows on hover says so.
@@ -844,7 +852,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   usable = [];
 
   const elements = new Map<string, Element>();
-  const strip = ({ el: _el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, pointer: _pointer, single: _single, loose: _loose, why: _why, ...element }: Candidate): SnapElement => element;
+  const strip = ({ el: _el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, pointer: _pointer, single: _single, loose: _loose, why: _why, spot: _spot, ...element }: Candidate): SnapElement => element;
   const listed = chosen.map((c, index) => {
     const element = strip(c);
     element.id = `e${index + 1}`;
@@ -1680,6 +1688,35 @@ function nameOfField(field: Element): string {
   return byIds || field.getAttribute("aria-label")?.trim() || labels || field.getAttribute("placeholder") || field.getAttribute("aria-placeholder") || field.getAttribute("title") || "";
 }
 
+/**
+ * The name of what a control opens, when it says what that is and the page
+ * names it: a menu labelled "Account". A menu named by the button that opens
+ * it says nothing more.
+ */
+function nameOfWhatItOpens(el: Element): string {
+  const root = el.getRootNode() as Document | ShadowRoot;
+  for (const id of (el.getAttribute("aria-controls") ?? "").split(/\s+/).slice(0, 3)) {
+    const opened = id ? root.getElementById?.(id) : null;
+    if (!opened || opened.contains(el)) continue;
+    const byIds = (opened.getAttribute("aria-labelledby") ?? "").split(/\s+/).filter(Boolean);
+    const name = byIds.includes(el.id) ? opened.getAttribute("aria-label")?.trim() ?? "" : nameOfBox(opened);
+    if (name) return name;
+  }
+  return "";
+}
+
+/**
+ * Where a box sits in the window, by thirds: "top right", "bottom left", or
+ * "middle". A box above or below the window is placed only from side to side.
+ */
+function spotOf(rect: DOMRect, viewportHeight: number): string {
+  const third = (at: number, size: number, ends: [string, string]) => (at < size / 3 ? ends[0] : at > (size * 2) / 3 ? ends[1] : "middle");
+  const across = third(rect.left + rect.width / 2, window.innerWidth, ["left", "right"]);
+  if (rect.bottom <= 0 || rect.top >= viewportHeight) return across === "middle" ? "" : across;
+  const down = third(rect.top + rect.height / 2, viewportHeight, ["top", "bottom"]);
+  return down === "middle" && across === "middle" ? "middle" : `${down} ${across}`;
+}
+
 /** The aria-label or aria-labelledby of the box just around a control, which some pages put there rather than on the control. */
 function nameAround(el: Element): string {
   for (let box = el.parentElement, depth = 0; box && box !== document.body && depth < 2; box = box.parentElement, depth++) {
@@ -1805,8 +1842,10 @@ function opens(el: Element, role: string): string {
   const popup = (el.getAttribute("aria-haspopup") ?? "").toLowerCase();
   if (!popup || popup === "false" || role === "combobox" || role === "textbox" || role === "searchbox" || role === "select") return "";
   if (popup === "dialog") return "opens a dialog";
-  return popup === "listbox" || popup === "tree" || popup === "grid" ? "opens a list" : "opens a menu";
+  return popup === "listbox" || popup === "tree" || popup === "grid" ? "opens a list" : OPENS_A_MENU;
 }
+
+const OPENS_A_MENU = "opens a menu";
 
 /** Roles a visitor fills in, picks from or ticks, which a form can require. */
 const CAN_BE_REQUIRED = new Set(["textbox", "searchbox", "combobox", "select", "spinbutton", "slider", "checkbox", "radio", "switch", "file-upload"]);

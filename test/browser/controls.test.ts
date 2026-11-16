@@ -151,3 +151,21 @@ test("a table row whose only words are its link's is no control of its own", { s
   const snapshot = await read(`<main><h1>Orders</h1><table><tbody><tr style="cursor:pointer"><td><a href="/orders/1">Order 1</a></td></tr><tr style="cursor:pointer"><td><a href="/orders/2">Order 2</a></td></tr></tbody></table></main>`);
   assert.deepEqual(lines(snapshot), ['link "Order 1" [main › Orders] → /orders/:id', 'link "Order 2" [main › Orders] → /orders/:id']);
 });
+
+// A button with no name -------------------------------------------------------------
+
+/** An account button that shows the visitor's initials, hidden from screen readers, as Northpine's header draws it. */
+const AVATAR = (attributes = "") =>
+  `<button type="button" id="avatar" aria-haspopup="menu" aria-expanded="false" ${attributes} style="width:30px;height:30px;border-radius:50%"><span aria-hidden="true">AS</span></button>`;
+
+test("a button that shows only initials hidden from screen readers is listed as a menu button with no name, where it sits", { skip }, async () => {
+  const snapshot = await read(`<header style="display:flex;justify-content:space-between;align-items:center;height:48px"><a href="/">Home</a>${AVATAR()}</header><main><h1>Dashboard</h1></main>`);
+  assert.deepEqual(lines(snapshot), ['link "Home" [header] → /', "button (opens a menu, collapsed) [header › top right]"]);
+});
+
+test("a button with no name is named by the menu it opens, or by the box around it, when the page names either", { skip }, async () => {
+  const snapshot = await read(`<header style="display:flex;justify-content:flex-end;height:48px">
+    ${AVATAR('aria-controls="account-menu"')}<div role="menu" id="account-menu" aria-label="Your account" style="display:none"></div>
+    <div aria-label="Workspace switcher"><button type="button" aria-haspopup="menu" style="width:30px;height:30px"><span aria-hidden="true">NP</span></button></div></header>`);
+  assert.deepEqual(lines(snapshot), ['button "Your account" (opens a menu, collapsed) [header]', 'button "Workspace switcher" (opens a menu) [header]']);
+});
