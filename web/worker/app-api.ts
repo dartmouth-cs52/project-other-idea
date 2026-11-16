@@ -15,20 +15,26 @@
 //   GET    /api/app/approve?key=…&sig=…         an access request, for the team's approve page
 //   POST   /api/app/approve                     approve it, and email the person a sign-in link
 //
+// The setup screens, the email to a developer and the dashboard's top numbers
+// are answered in setup-api.ts.
+//
 // Every site is looked up together with the caller's organization, so a site
 // id, which is public, is never enough to read or change someone's data.
 
 import { cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
 import { DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
+import { pageControls } from "../lib/setup";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
 import { groupGuides } from "./health";
 import { finishedCsv, finishedGuides, guideSteps, insights, monthOf } from "./insights";
 import { MAX_PAGES, readMore, startReading, type BrowserBinding, type Reading } from "./reader";
+import { readingExtras, setupOf, setupRoutes } from "./setup-api";
+import type { SendEnv } from "./sign-in-email";
 
-export interface AppEnv extends AuthEnv {
+export interface AppEnv extends AuthEnv, SendEnv {
   ACCESS_REQUESTS: { put(key: string, value: string): Promise<void>; get(key: string): Promise<string | null> };
   /** Neon's connection string. A secret. */
   DATABASE_URL?: string;
@@ -89,6 +95,8 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
     if (!org) throw new Refusal(403, "Your account isn't approved yet.");
 
     if (path === "/sites" && request.method === "POST") return reply(await addSite(sql, org, await body(request)), 201);
+    const more = await setupRoutes({ request, env, sql, org, user, path, url });
+    if (more) return reply(more.body, more.status);
 
     const match = /^\/sites\/([^/]+)(\/read|\/insights|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?)?$/.exec(path);
     if (match) {
@@ -268,7 +276,8 @@ function readingSummary(reading: Reading | null, pages: PageNode[]) {
     failed: reading.failed.length,
     thin: reading.thin.length,
     via: reading.via ?? null,
-    pages: pages.slice(0, 60).map((page) => ({ path: page.path, title: page.title })),
+    pages: pages.slice(0, 60).map((page) => ({ path: page.path, title: page.title, controls: pageControls(page) })),
+    ...readingExtras(reading, pages),
   };
 }
 
@@ -295,6 +304,7 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string) 
     corrections: site.context.corrections ?? [],
     blocked: site.context.blocked ?? [],
     reading: readingSummary(site.reading, site.context.pages ?? []),
+    setup: setupOf(site.context),
     appearance: { ...DEFAULT_APPEARANCE, ...site.context.appearance },
     notes: site.context.notes ?? "",
     docs: docsSummary(site.context.docs ?? []),
