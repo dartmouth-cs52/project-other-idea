@@ -27,7 +27,8 @@ import { DONE, type Guide, type GuideSet, type Reached, type Says, type Step } f
 // --id site_testbed --name Northpine --notes testbed/haptic-notes.md
 
 const ORIGIN = process.env.NORTHPINE_URL || "http://localhost:4200";
-const SITE = "site_testbed";
+/** The site the widget is put on the page with, and that its questions are asked for. Another copy of Northpine's site, like one with a taught route, can be named instead. */
+const SITE = process.env.NORTHPINE_SITE || "site_testbed";
 
 /** The app as a task finds it, before the task's own settings. */
 const BASE: Record<string, string> = { role: "admin", plan: "growth", nav: "classic", locale: "en", labButton: "0" };
