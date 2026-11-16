@@ -46,6 +46,10 @@ const COPY: Record<LinkType, { subject: string; heading: string; body: string; b
   },
 };
 
+// The inbox preview shows the hidden sentence first, then carries on into the email's
+// visible text, which repeats it. Invisible spacers fill the preview so it stops at the sentence.
+const PREVIEW_PADDING = "&#8199;&#847;&#65279;&#8203;".repeat(90);
+
 const FONT = "Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
 const type = (size: number, line: number, weight: 400 | 500) => `font-family:${FONT};font-size:${size}px;line-height:${line}px;font-weight:${weight};`;
 
@@ -74,7 +78,7 @@ a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !im
 </style>
 </head>
 <body class="page" style="margin:0;padding:0;background:#FAFAF9;">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escape(copy.body)}</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escape(copy.body)}${PREVIEW_PADDING}</div>
 <table role="presentation" class="page" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FAFAF9;">
 <tr><td align="center" style="padding:48px 16px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
