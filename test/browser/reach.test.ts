@@ -177,5 +177,21 @@ test("a modal dialog in a component is found when what shows at the middle of th
       });
     </script>`);
   assert.equal(snapshot.dialog, "Shoelace is now Web Awesome");
-  assert.deepEqual(lines(snapshot), ['button "No, thanks"']);
+  assert.deepEqual(lines(snapshot), ['button "No, thanks" [dialog]']);
+});
+
+test("what the page puts into a modal dialog drawn in a component's shadow root is in the dialog, as UI5 builds it", { skip }, async () => {
+  const snapshot = await read(`<button>Behind</button>
+    <x-modal><label>Name <input id="name"></label><button>Close</button></x-modal>
+    <script>
+      customElements.define("x-modal", class extends HTMLElement {
+        connectedCallback() {
+          const root = this.attachShadow({ mode: "open" });
+          root.innerHTML = '<dialog aria-label="Edit item"><slot></slot></dialog>';
+          root.querySelector("dialog").showModal();
+        }
+      });
+    </script>`);
+  assert.equal(snapshot.dialog, "Edit item");
+  assert.deepEqual(lines(snapshot), ['textbox "Name" [dialog]', 'button "Close" [dialog]']);
 });

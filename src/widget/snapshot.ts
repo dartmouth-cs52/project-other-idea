@@ -1013,6 +1013,14 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   // With a dialog open, the rest of the page counts only where it is drawn over the dialog. With a list
   // open over a layer that covers the window, only what is in the list's layer, or on top of it, can be
   // used, and the field the list belongs to, which has the keyboard and is typed in to narrow the list.
+  // A dialog drawn in a component's shadow root holds what the page put into the component, which is read where the
+  // page has it, before the dialog: it is drawn in the dialog all the same.
+  if (modal && isShadowRoot(modal.getRootNode())) {
+    for (const c of candidates) {
+      if (!c.outside || !drawnWithin(modal, c.el)) continue;
+      Object.assign(c, { outside: false, region: "dialog", heading: "", nav: false });
+    }
+  }
   const cover = modal ? undefined : coverOf(ignore, candidates);
   const inCover = (el: Element) => !!cover?.layer?.contains(el) || el === document.activeElement;
   // What no visitor can reach is left out, and what scrolling reaches says which way it is. A layer over the
