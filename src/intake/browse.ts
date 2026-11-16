@@ -1,4 +1,5 @@
 import { build } from "esbuild";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { renderSiteMap } from "../server/prompt.ts";
@@ -91,8 +92,9 @@ const FIELD_ROLES = new Set(["textbox", "searchbox", "combobox", "select", "chec
 /** True when Playwright and its browser can be loaded here. */
 export function canBrowse(): boolean {
   try {
-    createRequire(import.meta.url).resolve("playwright");
-    return true;
+    // The package alone is not enough: CI installs it without a browser.
+    const { chromium } = createRequire(import.meta.url)("playwright") as typeof import("playwright");
+    return existsSync(chromium.executablePath());
   } catch {
     return false;
   }

@@ -54,7 +54,7 @@ before(async () => {
 after(() => new Promise<void>((resolve) => server.close(() => resolve())));
 
 const options = { maxPages: 20, maxDepth: 3, paceMs: 0, skip: [], within: [], also: [] };
-const skip = canBrowse() ? false : "Playwright is not installed";
+const skip = canBrowse() ? false : "Playwright or its browser is not installed here.";
 
 test("the browser reader loads pages and follows links, and never presses, types or sends", { skip, timeout: 120_000 }, async () => {
   const result = await browseSite(`${origin}/`, options);

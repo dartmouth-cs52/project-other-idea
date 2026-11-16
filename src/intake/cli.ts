@@ -148,7 +148,7 @@ const pace = Number(values.pace ?? 1500);
 async function readPages(source: SiteSource): Promise<CrawlResult> {
   if (source.reader !== "text" && !canBrowse()) {
     if (source.reader === "browser") throw new Error("The browser reader needs Playwright: npm install --no-save playwright && npx playwright install chromium");
-    console.warn("Playwright isn't installed, so pages are read as the HTML the server sends. Pages drawn by JavaScript will come back empty.");
+    console.warn("Playwright or its browser isn't installed, so pages are read as the HTML the server sends. Pages drawn by JavaScript will come back empty.");
     source.reader = "text";
   }
   if (source.reader === "text") {
