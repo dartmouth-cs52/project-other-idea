@@ -243,7 +243,7 @@ function originList(input: unknown): string[] {
 
 async function addSite(sql: Sql, org: Organization, input: Record<string, unknown>) {
   const url = siteAddress(input.url);
-  const [{ count }] = (await sql`select count(*)::int as count from sites where company_id = ${org.id}`) as { count: number }[];
+  const [{ count } = { count: 0 }] = (await sql`select count(*)::int as count from sites where company_id = ${org.id}`) as { count: number }[];
   if (count >= MAX_SITES) throw new Refusal(400, `A company can have up to ${MAX_SITES} sites for now. Write to us if you need more.`);
   const id = `site_${[...crypto.getRandomValues(new Uint8Array(6))].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
   const now = new Date().toISOString();
