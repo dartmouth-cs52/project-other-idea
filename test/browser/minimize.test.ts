@@ -42,9 +42,11 @@ for (const name of BROWSERS) {
       await tab.locator("haptic-root .launcher").hover();
       await settled(tab);
       assert.equal(await hide.evaluate((el) => getComputedStyle(el).opacity), "1");
-      // It sits on the launcher's top left corner, so it never covers the word.
+      // It sits on the launcher's outer bottom corner, the right one for a launcher on the right, clear of the word.
       const [button, launcher] = await Promise.all([hide.boundingBox(), tab.locator("haptic-root .launcher").boundingBox()]);
-      assert.ok(button!.x < launcher!.x && button!.y < launcher!.y, JSON.stringify({ button, launcher }));
+      const right = (box: { x: number; width: number }) => box.x + box.width;
+      const bottom = (box: { y: number; height: number }) => box.y + box.height;
+      assert.ok(right(button!) > right(launcher!) && bottom(button!) > bottom(launcher!), JSON.stringify({ button, launcher }));
     });
 
     test("turns the launcher into a dot, which opens up a little under the pointer and comes back on a click", async () => {
@@ -68,6 +70,40 @@ for (const name of BROWSERS) {
       // Bringing it back doesn't open the panel as well. The next click does.
       assert.equal(await tab.locator("haptic-root .panel").isHidden(), true);
       assert.equal(await tab.locator("haptic-root .launcher").getAttribute("aria-label"), null);
+    });
+
+    test("stays a small dot under the pointer that just minimized it, until the pointer leaves", async () => {
+      await tab.locator("haptic-root .launcher").hover();
+      await tab.locator("haptic-root .hide").click();
+      await settled(tab);
+      assert.deepEqual(await size(tab, "haptic-root .launcher"), { width: 14, height: 14 });
+      await tab.mouse.move(10, 10);
+      await tab.locator("haptic-root .launcher").hover();
+      await settled(tab);
+      assert.deepEqual(await size(tab, "haptic-root .launcher"), { width: 32, height: 32 });
+    });
+
+    test("holds still with the pointer resting on the dot's edge", async () => {
+      await tab.locator("haptic-root .launcher").hover();
+      await tab.locator("haptic-root .hide").click();
+      await tab.mouse.move(10, 10);
+      await settled(tab);
+      const dot = (await tab.locator("haptic-root .launcher").boundingBox())!;
+      // Each edge of the small dot, and a corner of the area it grows into.
+      for (const [x, y] of [[dot.x + 7, dot.y + dot.height - 0.5], [dot.x + 0.5, dot.y + 7], [dot.x + 7, dot.y + 0.5], [dot.x - 17, dot.y - 17]]) {
+        await tab.mouse.move(10, 10);
+        await settled(tab);
+        await tab.mouse.move(x!, y!);
+        const sizes: string[] = [];
+        for (let look = 0; look < 8; look++) {
+          await tab.waitForTimeout(90);
+          sizes.push(JSON.stringify(await size(tab, "haptic-root .launcher")));
+        }
+        // Once it has opened up, it stays open: no going back to small while the pointer hasn't moved.
+        const opened = sizes.indexOf(JSON.stringify({ width: 32, height: 32 }));
+        assert.ok(opened >= 0 && opened <= 4, `${x},${y}: ${sizes.join(" ")}`);
+        assert.ok(sizes.slice(opened).every((seen) => seen === sizes[opened]), `${x},${y}: ${sizes.join(" ")}`);
+      }
     });
 
     test("stays minimized on the next page, and comes back for good once restored", async () => {
