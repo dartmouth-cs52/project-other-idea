@@ -1,4 +1,4 @@
-import type { Appearance } from "../shared/types.ts";
+import type { Appearance, Source, TurnReply } from "../shared/types.ts";
 
 // Everything Haptic draws: the launcher, the ask box, the pointer, the
 // highlight ring and the caption. It all lives in one shadow root on one host
@@ -49,6 +49,15 @@ button { font: inherit; cursor: pointer; }
   border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; }
 .caption .close:hover { background: rgba(250,250,249,.25); }
 .caption .close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.thread { display: flex; flex-direction: column; gap: 8px; max-height: min(360px, calc(100vh - 220px)); overflow-y: auto; padding: 4px 4px 10px; }
+.thread p { margin: 0; overflow-wrap: anywhere; }
+.asked { align-self: flex-end; max-width: 85%; background: #1c1917; color: #fafaf9; border-radius: 14px; padding: 6px 12px; }
+.reply { align-self: flex-start; background: #f5f5f4; border-radius: 14px; padding: 8px 12px; }
+.sources { margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid #e7e5e4; list-style: none; font-size: 12px; line-height: 16px; color: #78716c; }
+.sources li + li { margin-top: 6px; }
+.sources .from { margin-bottom: 4px; }
+.sources .title { display: block; color: #1c1917; font-weight: 500; text-decoration: none; }
+.sources a.title:hover, .sources a.title:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
 .helped { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 2px 8px 12px; }
 .helped span { margin-right: auto; color: #78716c; }
 .helped button { display: inline-flex; align-items: center; justify-content: center; height: 32px; border: 0; border-radius: 999px; padding: 0 14px;
@@ -84,6 +93,7 @@ export class Ui {
   private readonly caption: HTMLElement;
   private readonly captionText: HTMLElement;
   private readonly helped: HTMLElement;
+  private readonly thread: HTMLElement;
   private onHelped?: (helped: boolean) => void;
   private target?: Element;
   private frame = 0;
@@ -101,6 +111,7 @@ export class Ui {
       <div class="cursor" hidden><svg viewBox="0 0 24 24" width="24" height="24"><path d="${POINTER_PATH}"/></svg></div>
       <div class="dock ${side}">
         <div class="panel" hidden>
+          <div class="thread" hidden><p class="asked"></p><div class="reply"><p></p><ul class="sources" hidden></ul></div></div>
           <div class="helped" hidden></div>
           <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
           <div class="status" hidden><span></span><button class="stop" type="button">Stop</button></div>
@@ -118,6 +129,7 @@ export class Ui {
     this.cursor = pick(".cursor");
     this.caption = pick(".caption");
     this.captionText = pick(".caption span");
+    this.thread = pick(".thread");
     this.helped = pick(".helped");
     this.helped.addEventListener("click", (event) => {
       const answer = (event.target as Element).closest("button")?.dataset.helped;
@@ -193,6 +205,29 @@ export class Ui {
 
   closePanel() {
     this.panel.hidden = true;
+  }
+
+  /**
+   * Shows the question and its reply in the panel: an answer from the help
+   * docs with the articles it rests on, or the sentence that says Haptic can't
+   * help. Every word is set as text, and a link is only made for an http or
+   * https address.
+   */
+  showAnswer(question: string, reply: Pick<TurnReply, "say" | "sources">) {
+    const [asked, text, list] = [".asked", ".reply p", ".sources"].map((selector) => this.thread.querySelector(selector) as HTMLElement);
+    asked!.textContent = question;
+    text!.textContent = reply.say;
+    const sources = reply.sources ?? [];
+    // Says where the words came from, then each article.
+    list!.replaceChildren(Object.assign(document.createElement("li"), { className: "from", textContent: "From the help docs" }), ...sources.map(sourceRow));
+    list!.hidden = sources.length === 0;
+    this.thread.hidden = false;
+    this.panel.hidden = false;
+    this.thread.scrollTop = 0;
+  }
+
+  clearAnswer() {
+    this.thread.hidden = true;
   }
 
   /** Move the pointer to an element and show the caption beside it. With no text yet, the pointer goes alone. */
@@ -298,4 +333,28 @@ export class Ui {
     this.caption.style.left = `${left}px`;
     this.caption.style.top = `${top}px`;
   };
+}
+
+/** One article under an answer: its title, linked when it has an address, and when it was last changed. */
+function sourceRow(source: Source): HTMLElement {
+  const row = document.createElement("li");
+  const title = document.createElement(webAddress(source.url) ? "a" : "span");
+  title.className = "title";
+  title.textContent = source.title;
+  if (title instanceof HTMLAnchorElement) Object.assign(title, { href: source.url, target: "_blank", rel: "noopener noreferrer" });
+  row.append(title);
+  const changed = source.updated ? new Date(`${source.updated}T00:00:00`) : undefined;
+  if (changed && !Number.isNaN(changed.getTime())) {
+    const day = changed.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    row.append(source.stale ? `Updated ${day}. It may be out of date.` : `Updated ${day}`);
+  }
+  return row;
+}
+
+function webAddress(url: string | undefined): boolean {
+  try {
+    return /^https?:$/.test(new URL(url ?? "").protocol);
+  } catch {
+    return false;
+  }
 }

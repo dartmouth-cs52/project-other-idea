@@ -2,9 +2,14 @@
 // server records. Every query is limited to one site and a time window.
 //
 // What "unanswered" means: a guide that got stuck (nothing to point at, a loop,
-// out of steps, an error), that was abandoned, or that the visitor said did not
-// help. A visitor saying it helped always takes a guide off that list. Whether
-// an answer was right cannot be known directly; this is the nearest honest proxy.
+// out of steps, an error), a question the help docs did not cover, one that was
+// abandoned, or one the visitor said did not help. A visitor saying it helped
+// always takes a guide off that list. Whether an answer was right cannot be
+// known directly; this is the nearest honest proxy.
+//
+// A question left for a person (prices, refunds, the visitor's own account) and
+// one that had nothing to do with the site are not counted: no change to the
+// product or its help docs would have answered them.
 
 import type { Sql } from "./db";
 
@@ -17,7 +22,7 @@ const OUTCOME = `case
   when coalesce(g.last_step_at, g.started_at) < now() - interval '${ABANDONED_AFTER}' then 'abandoned'
   else 'under_way' end`;
 
-const UNANSWERED = `(g.helped is distinct from true and (g.helped = false or (${OUTCOME}) in ('nothing_to_point_at', 'loop', 'step_limit', 'error', 'abandoned')))`;
+const UNANSWERED = `(g.helped is distinct from true and (g.helped = false or (${OUTCOME}) in ('nothing_to_point_at', 'loop', 'step_limit', 'error', 'not_covered', 'abandoned')))`;
 
 export async function insights(sql: Sql, site: string, days: number) {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();

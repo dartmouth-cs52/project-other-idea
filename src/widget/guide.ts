@@ -6,6 +6,7 @@ import {
   type GuideOutcome,
   type GuideReport,
   type HistoryTurn,
+  type Mode,
   type SnapElement,
   type Snapshot,
   type TurnReply,
@@ -19,6 +20,8 @@ import type { Ui } from "./ui.ts";
 
 const MAX_STEPS = 20;
 const MAX_HISTORY = 12;
+/** How much of the conversation before this question is sent with it: the last three questions answered in words, and their answers. */
+const MAX_THREAD = 6;
 /** A field counts as filled in once typing pauses this long. */
 const TYPING_PAUSE_MS = 1200;
 const STORAGE_KEY = "haptic.guide";
@@ -66,6 +69,8 @@ interface SavedGuide {
   id?: string;
   goal: string;
   history: HistoryTurn[];
+  /** Earlier questions that were answered in words, so a guide that follows from one still knows what it was about. */
+  thread?: HistoryTurn[];
   step: number;
   path: string;
   /** What the visitor did just before the page unloaded, if we saw it. */
@@ -75,11 +80,19 @@ interface SavedGuide {
   savedAt: number;
 }
 
+/** What the guide is told while a reply is still on its way. */
+export interface Watch {
+  /** The kind of reply, on a site with Answers on. */
+  onMode?(mode: Mode): void;
+  /** The control it will point at. */
+  onTarget?(id: string): void;
+}
+
 /** Says how a guide went. Sent once per ending, and again when the visitor answers "Did this help?". */
 export type Reporter = (guide: string, report: Omit<GuideReport, "site">) => void;
 
 /** Endings worth asking "Did this help?" about. A stop or a failure already says no. */
-const ASK_IF_HELPED: GuideOutcome[] = ["finished", "shown", "nothing_to_point_at", "loop", "step_limit"];
+const ASK_IF_HELPED: GuideOutcome[] = ["finished", "shown", "nothing_to_point_at", "loop", "step_limit", "answered"];
 
 export class Guide {
   /** Empty when no guide is under way, or once the current one has reported how it ended. */
@@ -92,6 +105,12 @@ export class Guide {
   private unconfirmed?: GuideOutcome;
   private goal = "";
   private history: HistoryTurn[] = [];
+  /**
+   * Questions answered in words, and their answers. It outlives a question, so
+   * "and who can remove them?" is read with what came before. Pressing Stop
+   * clears it.
+   */
+  private thread: HistoryTurn[] = [];
   private step = 0;
   private previous?: Snapshot;
   /** The element the last step pointed at, and whether the visitor used it. */
@@ -104,7 +123,7 @@ export class Guide {
 
   constructor(
     private readonly ui: Ui,
-    private readonly sendTurn: (request: Omit<TurnRequest, "site">, onTarget?: (id: string) => void) => Promise<TurnReply>,
+    private readonly sendTurn: (request: Omit<TurnRequest, "site">, watch?: Watch) => Promise<TurnReply>,
     private readonly report: Reporter = () => {},
   ) {}
 
@@ -130,7 +149,9 @@ export class Guide {
   stop() {
     this.end(this.unconfirmed ?? "stopped");
     this.reset();
+    this.thread = [];
     this.ui.clear();
+    this.ui.clearAnswer();
     this.ui.setBusy("");
   }
 
@@ -142,6 +163,7 @@ export class Guide {
     this.id = saved.id ?? newGuideId();
     this.goal = saved.goal;
     this.history = saved.history;
+    this.thread = saved.thread ?? [];
     this.step = saved.step;
     this.strayed = saved.strayed === true;
     const here = normalizePath(location.pathname);
@@ -191,7 +213,12 @@ export class Guide {
           waiting.acted = what;
           // If this click loads a new page before the reply is in, the next page still needs to know about it.
           this.strayed = !what.onTarget;
-          this.save(what.event);
+          // The step was shown and acted on, though its sentence is not in yet. Saved as done, so a page this
+          // click loads asks the next step and does not ask this one again over the top of it.
+          this.save(what.event, {
+            user: this.step === 0 ? this.goal : (event ?? "The page changed."),
+            assistant: listed ? `Pointed at ${describeElement(listed)}.` : "Pointed at a control.",
+          });
           whenActed?.(what);
         }),
       };
@@ -214,13 +241,17 @@ export class Guide {
           ...(this.id ? { guide: this.id } : {}),
           goal: this.asked,
           step: this.step,
-          history: this.history.slice(-MAX_HISTORY),
+          history: [...this.thread, ...this.history].slice(-MAX_HISTORY),
           snapshot: page.snapshot,
           ...(event ? { event } : {}),
           ...(change ? { change } : {}),
           ...(this.strayed ? { offTrack: true } : {}),
         },
-        pointEarly,
+        {
+          onTarget: pointEarly,
+          // An answer takes a moment longer than a pointer, so say what the wait is for.
+          onMode: (mode) => run === this.run && mode === "answer" && ui.setBusy("Reading the help docs…"),
+        },
       );
     } catch (error) {
       if (run !== this.run) return;
@@ -263,6 +294,21 @@ export class Guide {
     this.last = listed ? { key: elementKey(listed), used: false } : undefined;
     this.strayed = false;
 
+    // An answer in words, or a fixed sentence saying Haptic can't help, is read
+    // in the panel, where there is room for it and for the articles it rests on.
+    // A step's sentence stays beside the pointer, in the caption.
+    const inPanel = reply.mode === "answer" || reply.mode === "cannot_help";
+    if (inPanel) {
+      // Earlier questions go to the model with the next one, so they are masked like it.
+      this.thread = [...this.thread, { role: "user" as const, text: this.asked }, { role: "assistant" as const, text: reply.say }].slice(-MAX_THREAD);
+      ui.showAnswer(this.goal, reply);
+    } else ui.clearAnswer();
+
+    if (inPanel && (!el || !el.isConnected)) {
+      dropEarly();
+      return this.conclude(reply.mode === "answer" ? "answered" : (reply.reason ?? "not_covered"));
+    }
+
     // Only a finished guide is billed. It is finished when the visitor followed the steps and is now
     // where they asked to be, or when they used the control the last answer pointed at. A first answer
     // that the visitor did not act on, or that only needed words, was shown, and is free.
@@ -280,13 +326,13 @@ export class Guide {
       dropEarly();
       if (listed?.offscreen) el.scrollIntoView({ block: "center", behavior: "smooth" });
     }
-    // If they have already used it, the caption would only flash.
-    if (!early?.acted) ui.pointAt(el, reply.say);
+    // If they have already used it, the caption would only flash. An answer's words are in the panel, so its pointer goes alone.
+    if (!early?.acted) ui.pointAt(el, inPanel ? "" : reply.say);
 
     if (reply.status === "done") {
       // The last answer points at something. Leave it up until they click anywhere but on Haptic itself.
       ui.setBusy("");
-      ui.closePanel();
+      if (!inPanel) ui.closePanel();
       forget();
       const dismiss = (event: MouseEvent) => {
         if (event.composedPath().includes(ui.host)) return;
@@ -294,6 +340,14 @@ export class Guide {
         if (run === this.run) ui.clear();
       };
       document.addEventListener("click", dismiss, true);
+
+      // An answer in words that also points ends as answered, whatever the visitor does next. Answers are not billed.
+      if (inPanel) {
+        early?.stop();
+        this.end("answered");
+        this.stopWaiting = () => document.removeEventListener("click", dismiss, true);
+        return;
+      }
 
       // After following steps, the visitor is on the screen they asked for.
       if (arrived) {
@@ -329,10 +383,13 @@ export class Guide {
       return;
     }
 
-    ui.closePanel();
+    if (inPanel) ui.setBusy("");
+    else ui.closePanel();
     this.save();
     const acted = (what: Acted) => {
       this.stopWaiting = undefined;
+      // From here it is a guide. The answer has been read, and the pointer needs the room.
+      ui.clearAnswer();
       if (this.last && what.onTarget) this.last.used = true;
       this.strayed = !what.onTarget;
       // Saved straight away: if this click loads a new page, the next page needs to know about it.
@@ -347,6 +404,16 @@ export class Guide {
     if (early?.acted) acted(early.acted);
     else if (early) whenActed = acted;
     else this.stopWaiting = waitForAction(el, listed, ui.host, acted);
+  }
+
+  /** Ends a question whose reply is in the panel: nothing to wait for, and the ask box comes back under the answer. */
+  private conclude(outcome: GuideOutcome) {
+    this.stopWaiting?.();
+    this.stopWaiting = undefined;
+    forget();
+    this.ui.clear();
+    this.ui.setBusy("");
+    this.end(outcome);
   }
 
   private finish(text: string, outcome: GuideOutcome) {
@@ -387,12 +454,17 @@ export class Guide {
     if (ASK_IF_HELPED.includes(outcome)) this.ui.askIfHelped((helped) => this.report(id, { helped }));
   }
 
-  private save(event?: string) {
+  /** Saves the guide for the next page. `shown` is a step pointed at whose reply is still coming, counted as done. */
+  private save(event?: string, shown?: { user: string; assistant: string }) {
+    const history: HistoryTurn[] = shown
+      ? [...this.history, { role: "user", text: shown.user }, { role: "assistant", text: shown.assistant }]
+      : this.history;
     const saved: SavedGuide = {
       ...(this.id ? { id: this.id } : {}),
       goal: this.goal,
-      history: this.history.slice(-MAX_HISTORY),
-      step: this.step,
+      history: history.slice(-MAX_HISTORY),
+      ...(this.thread.length ? { thread: this.thread } : {}),
+      step: shown ? this.step + 1 : this.step,
       path: normalizePath(location.pathname),
       savedAt: Date.now(),
       ...(event ? { event } : {}),
