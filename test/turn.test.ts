@@ -69,22 +69,13 @@ test("the model is told to say so when a click goes off the way", () => {
 
 const rules = buildSystemPrompt(site);
 
-test("the model is told it sees the page after the last click too (jira 13 of 13: 'done' while pointing at a control nobody had used yet)", () => {
-  assert.match(rules, /You see the page again after every click, including the last\./);
-  // OrangeHRM, 5 of 15 early endings: "done", pointing at the Mobile field, saying "Update your number in the Mobile field, then click Save".
-  assert.match(rules, /"done" is wrong while you point at a control the visitor still has to use: a field or a dropdown is never the last step\./);
-  assert.match(rules, /It is wrong too whenever "say" tells them to do something after the target\./);
-  // toolshop pay-in-instalments: "done" on the instalments dropdown in 5 of 7 runs, Confirm never pointed at.
-  assert.match(rules, /When the visitor asks how to do something, take them through it until it is done on the page\./);
+test("the model is told it sees the page after the last click too (toolshop pay-in-instalments: 'done' on the instalments dropdown in 5 of 7 runs, Confirm never pointed at)", () => {
+  assert.match(rules, /You see the page again after every click, including the last: a field or a dropdown is never the last step\./);
   // The owner decided on 15 November that a correct answer in words is a finished guide.
   assert.match(rules, /A question about what the site has or shows, like whether something can be done or which items match, can be answered in one sentence from the page\./);
   assert.match(rules, /point at the last button too when it pays, orders, sends or deletes, and say plainly what it will do\./);
-  assert.match(rules, /Never describe as done what a click has not yet done\./);
 });
 
-test("the model is told the pointer and the sentence must be about the same control (orangehrm: 'click page 2' with the pointer on page 1; wikipedia: it named Applications and pointed elsewhere)", () => {
-  assert.match(rules, /- "target": [^\n]* It must be the very element "say" names, not one beside it\.\n/);
-});
 
 test("the model is told to point at nothing more once the goal is reached (10 single steps, and 28 of 177 finished guides, pointed at an extra)", () => {
   assert.match(rules, /the goal is complete: reply "done" with target null\. What they might want next but did not ask for is not a step: never point at an optional extra\./);
@@ -133,17 +124,7 @@ test("the model is told not to answer what has nothing to do with the site (aske
   assert.match(buildSystemPrompt({ ...site, name: "" }), /finding things on this website\./);
 });
 
-test("the model is told to go where an action's options are when the visitor wants it done a particular way (grafana: asked for a link that keeps a relative time range, it pointed at Copy link)", () => {
-  assert.match(rules, /When the visitor wants something done a particular way, like an export in a certain format or a link with certain settings, point at what opens that action's options, not at a button that does it in one click\./);
-});
 
-test("the model is told to state only what it was shown (grafana: 'the link will keep showing the last hour', and 'the list is now filtered' after the page reported the filter gone)", () => {
-  assert.match(rules, /State as fact only what the page or the site's own notes and docs show\./);
-  assert.match(rules, /Don't promise what a control will do unless its name or the page says so\./);
-  assert.match(rules, /When what changed doesn't show that the goal was reached, say what to check, not that it worked\./);
-  // It is about the sentence, so it sits with the rules for writing it.
-  assert.ok(rules.indexOf("State as fact only") > rules.indexOf('Writing "say"'));
-});
 
 test("the new marks on a control are printed as sent, and the two that are not plain are explained (backstage: 'Next' was pointed at while required choices were empty)", () => {
   const page = buildUserMessage({
@@ -393,4 +374,15 @@ test("a sentence is cut at a sentence end when it is too long to show", async ()
   // Short forms with full stops in them do not count as sentence ends.
   const short = "Pick a format, e.g. the CSV one. It opens in Excel, i.e. as a spreadsheet. Then save it.";
   assert.equal(tidySay(short), short);
+});
+
+test("rules added in round 2 with no measured benefit are not in the instructions", () => {
+  // Measured on staging on 16 November over 469 single steps and whole guides: none of these
+  // changed the share of right pointers, and "done is wrong while pointing" raised the number
+  // of replies that end on "done" with a pointer (19 without it, 31 to 33 with it).
+  assert.doesNotMatch(rules, /It must be the very element "say" names/);
+  assert.doesNotMatch(rules, /done a particular way/);
+  assert.doesNotMatch(rules, /State as fact only/);
+  assert.doesNotMatch(rules, /"done" is wrong while you point at a control/);
+  assert.doesNotMatch(rules, /take them through it until it is done on the page/);
 });
