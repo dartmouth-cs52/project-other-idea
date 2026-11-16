@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { AlertCircleIcon } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { cn } from "cn";
+import { FieldError, FieldLabel, FormAlert, failureFrom, useFieldErrors, type Failure } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,34 +34,50 @@ export function controlName(control: ControlName): string {
 const inputClass = "h-11 bg-card px-3.5 md:text-base";
 const selectClass = "h-11 rounded-lg border border-input bg-card px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
-function Failure({ message }: { message: string | null }) {
-  if (!message) return null;
-  return (
-    <Alert variant="destructive">
-      <AlertCircleIcon />
-      <AlertDescription>{message}</AlertDescription>
-    </Alert>
-  );
-}
+/** The same words the server uses when a control has no name. */
+const NO_LABEL = "Name the control by the words on it.";
 
-/** A control typed by hand: the words on it and, if it helps, its kind. */
-function ControlFields({ id, value, onChange }: { id: string; value: ControlName; onChange: (value: ControlName) => void }) {
+/** What ties the words box to its error, from useFieldErrors. */
+type ControlProps = { id: string; "aria-invalid"?: boolean; "aria-describedby"?: string };
+
+/**
+ * A control typed by hand: the words on it and, if it helps, its kind. `button`,
+ * if given, sits beside the two on a wide screen and under them on a phone. The
+ * error line stays right under the words on every screen.
+ */
+function ControlFields({
+  id,
+  value,
+  onChange,
+  error,
+  control,
+  button,
+}: {
+  id: string;
+  value: ControlName;
+  onChange: (value: ControlName) => void;
+  error?: string;
+  control: ControlProps;
+  button?: ReactNode;
+}) {
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-      <div className="flex flex-1 flex-col gap-2">
-        <Label htmlFor={`${id}-label`}>Words on the control</Label>
-        <Input id={`${id}-label`} value={value.label} maxLength={80} onChange={(event) => onChange({ ...value, label: event.target.value })} className={inputClass} />
-      </div>
-      <div className="flex flex-col gap-2">
-        <Label htmlFor={`${id}-kind`}>Kind</Label>
-        <select id={`${id}-kind`} value={value.role ?? ""} onChange={(event) => onChange({ ...value, role: event.target.value || undefined })} className={selectClass}>
-          {KINDS.map((kind) => (
-            <option key={kind.role} value={kind.role}>
-              {kind.name}
-            </option>
-          ))}
-        </select>
-      </div>
+    <div className={cn("grid gap-2", button ? "sm:grid-cols-[minmax(0,1fr)_auto_auto]" : "sm:grid-cols-[minmax(0,1fr)_auto]")}>
+      <FieldLabel htmlFor={control.id} required className="sm:col-start-1 sm:row-start-1">
+        Words on the control
+      </FieldLabel>
+      <Input {...control} required value={value.label} maxLength={80} onChange={(event) => onChange({ ...value, label: event.target.value })} className={cn(inputClass, "sm:col-start-1 sm:row-start-2")} />
+      <FieldError id={control.id} error={error} className="sm:col-start-1 sm:row-start-3" />
+      <Label htmlFor={`${id}-kind`} className="sm:col-start-2 sm:row-start-1">
+        Kind
+      </Label>
+      <select id={`${id}-kind`} value={value.role ?? ""} onChange={(event) => onChange({ ...value, role: event.target.value || undefined })} className={cn(selectClass, "sm:col-start-2 sm:row-start-2")}>
+        {KINDS.map((kind) => (
+          <option key={kind.role} value={kind.role}>
+            {kind.name}
+          </option>
+        ))}
+      </select>
+      {button && <div className="grid sm:col-start-3 sm:row-start-2">{button}</div>}
     </div>
   );
 }
@@ -76,9 +92,11 @@ export function PointHereInstead({ siteId, guideId, step, path, onSaved }: { sit
   const [controls, setControls] = useState<ControlName[] | null>(null);
   const [filter, setFilter] = useState("");
   const [typed, setTyped] = useState<ControlName>({ label: "" });
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const [saved, setSaved] = useState<ControlName | null>(null);
   const [busy, setBusy] = useState(false);
+  const formId = `fix-${guideId}-${step}`;
+  const fields = useFieldErrors({ label: `${formId}-label` });
 
   useEffect(() => {
     if (!open || controls) return;
@@ -90,16 +108,18 @@ export function PointHereInstead({ siteId, guideId, step, path, onSaved }: { sit
 
   const shown = useMemo(() => (controls ?? []).filter((control) => control.label.toLowerCase().includes(filter.trim().toLowerCase())).slice(0, 30), [controls, filter]);
 
-  async function save(right: ControlName) {
+  /** Saves the control picked from the list, or the one typed by hand, whose words can be refused under the field. */
+  async function save(right: ControlName, byHand: boolean) {
     setBusy(true);
-    setError(null);
+    setFailure(null);
+    if (!byHand) fields.show({});
     try {
       const result = await api<{ corrections: Correction[] }>(`/sites/${siteId}/corrections`, { method: "POST", body: { guide: guideId, step, right } });
       setSaved(right);
       setOpen(false);
       onSaved(result.corrections);
     } catch (failure) {
-      setError((failure as Error).message);
+      if (!(byHand && fields.showRefusal(failure))) setFailure(failureFrom("Couldn't save the correction", failure));
     } finally {
       setBusy(false);
     }
@@ -124,7 +144,7 @@ export function PointHereInstead({ siteId, guideId, step, path, onSaved }: { sit
           <ul className="flex max-h-56 flex-col overflow-y-auto">
             {shown.map((control) => (
               <li key={`${control.role} ${control.label}`}>
-                <button type="button" disabled={busy} onClick={() => save(control)} className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted">
+                <button type="button" disabled={busy} onClick={() => save(control, false)} className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted">
                   <span className="min-w-0 truncate">{control.label}</span>
                   <span className="shrink-0 text-muted-foreground">{KINDS.find((kind) => kind.role === control.role)?.name ?? control.role}</span>
                 </button>
@@ -137,22 +157,34 @@ export function PointHereInstead({ siteId, guideId, step, path, onSaved }: { sit
       )}
       <form
         className="flex flex-col gap-3"
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          if (typed.label.trim()) void save(typed);
+          setFailure(null);
+          if (fields.show({ label: typed.label.trim() ? undefined : NO_LABEL })) return;
+          void save(typed, true);
         }}
       >
-        <ControlFields id={`fix-${guideId}-${step}`} value={typed} onChange={setTyped} />
+        <ControlFields
+          id={formId}
+          value={typed}
+          onChange={(next) => {
+            if (next.label !== typed.label) fields.clear("label");
+            setTyped(next);
+          }}
+          error={fields.errors.label}
+          control={fields.control("label")}
+        />
         <div className="flex gap-2">
           <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button type="submit" variant="secondary" disabled={busy || !typed.label.trim()}>
+          <Button type="submit" variant="secondary" disabled={busy}>
             Save
           </Button>
         </div>
       </form>
-      <Failure message={error} />
+      <FormAlert failure={failure} />
     </div>
   );
 }
@@ -169,14 +201,14 @@ export function GuidingRules({ site, onChange }: { site: Site; onChange: (site: 
 }
 
 function Corrections({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
   async function remove(correction: Correction) {
-    setError(null);
+    setFailure(null);
     try {
       const result = await api<{ corrections: Correction[] }>(`/sites/${site.id}/corrections/${correction.id}`, { method: "DELETE" });
       onChange({ ...site, corrections: result.corrections });
     } catch (failure) {
-      setError((failure as Error).message);
+      setFailure(failureFrom("Couldn't remove the correction", failure));
     }
   }
   return (
@@ -205,29 +237,38 @@ function Corrections({ site, onChange }: { site: Site; onChange: (site: Site) =>
           for the same question, questions like it, and other questions on that page.
         </p>
       )}
-      <Failure message={error} />
+      <FormAlert failure={failure} />
     </div>
   );
 }
 
 function NeverPointAt({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
   const [adding, setAdding] = useState<ControlName>({ label: "" });
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const fields = useFieldErrors({ label: `blocked-${site.id}-label` });
   async function save(blocked: ControlName[]) {
-    setError(null);
+    const result = await api<{ blocked: ControlName[] }>(`/sites/${site.id}/blocked`, { method: "PUT", body: { controls: blocked } });
+    onChange({ ...site, blocked: result.blocked });
+  }
+  async function remove(control: ControlName) {
+    setFailure(null);
     try {
-      const result = await api<{ blocked: ControlName[] }>(`/sites/${site.id}/blocked`, { method: "PUT", body: { controls: blocked } });
-      onChange({ ...site, blocked: result.blocked });
-      return true;
+      await save(site.blocked.filter((item) => item !== control));
     } catch (failure) {
-      setError((failure as Error).message);
-      return false;
+      setFailure(failureFrom(`Couldn't remove ${controlName(control)}`, failure));
     }
   }
   async function add(event: FormEvent) {
     event.preventDefault();
-    if (!adding.label.trim()) return;
-    if (await save([...site.blocked, { ...adding, label: adding.label.trim() }])) setAdding({ label: "" });
+    setFailure(null);
+    const label = adding.label.trim();
+    if (fields.show({ label: label ? undefined : NO_LABEL })) return;
+    try {
+      await save([...site.blocked, { ...adding, label }]);
+      setAdding({ label: "" });
+    } catch (failure) {
+      if (!fields.showRefusal(failure)) setFailure(failureFrom("Couldn't add the control", failure));
+    }
   }
   return (
     <div className="flex flex-col gap-3">
@@ -241,22 +282,31 @@ function NeverPointAt({ site, onChange }: { site: Site; onChange: (site: Site) =
           {site.blocked.map((control) => (
             <li key={`${control.role} ${control.label}`} className="flex items-center justify-between gap-4 px-4 py-2 text-sm">
               <span>{controlName(control)}</span>
-              <Button variant="ghost" size="sm" onClick={() => save(site.blocked.filter((item) => item !== control))}>
+              <Button variant="ghost" size="sm" onClick={() => remove(control)}>
                 Remove
               </Button>
             </li>
           ))}
         </ul>
       )}
-      <form onSubmit={add} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <ControlFields id={`blocked-${site.id}`} value={adding} onChange={setAdding} />
-        </div>
-        <Button type="submit" variant="secondary" size="xl" disabled={!adding.label.trim()}>
-          Add
-        </Button>
+      <form onSubmit={add} noValidate>
+        <ControlFields
+          id={`blocked-${site.id}`}
+          value={adding}
+          onChange={(next) => {
+            if (next.label !== adding.label) fields.clear("label");
+            setAdding(next);
+          }}
+          error={fields.errors.label}
+          control={fields.control("label")}
+          button={
+            <Button type="submit" variant="secondary" size="xl">
+              Add
+            </Button>
+          }
+        />
       </form>
-      <Failure message={error} />
+      <FormAlert failure={failure} />
     </div>
   );
 }

@@ -103,14 +103,9 @@ export function Field({
 }) {
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      <Label htmlFor={id} className="gap-0.5">
+      <FieldLabel htmlFor={id} required={required}>
         {label}
-        {required && (
-          <span aria-hidden className="text-destructive">
-            *
-          </span>
-        )}
-      </Label>
+      </FieldLabel>
       {children}
       <FieldError id={id} error={error} />
       {hint && (
@@ -119,6 +114,20 @@ export function Field({
         </p>
       )}
     </div>
+  );
+}
+
+/** A field's label, with the red star after it when the field must be filled in. Field draws it, so use this only where Field does not fit. */
+export function FieldLabel({ htmlFor, required, className, children }: { htmlFor: string; required?: boolean; className?: string; children: ReactNode }) {
+  return (
+    <Label htmlFor={htmlFor} className={cn("gap-0.5", className)}>
+      {children}
+      {required && (
+        <span aria-hidden className="text-destructive">
+          *
+        </span>
+      )}
+    </Label>
   );
 }
 

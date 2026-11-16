@@ -135,7 +135,7 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
           if (match[4] && request.method === "DELETE") return reply({ corrections: await removeCorrection(sql, site, org.id, match[4]) });
           if (sub === "/blocked" && request.method === "PUT") return reply({ blocked: await setBlocked(sql, id, org.id, (await body(request)).controls) });
         } catch (error) {
-          if (error instanceof Invalid) throw new Refusal(400, error.message);
+          if (error instanceof Invalid) throw new Refusal(400, error.message, error.field);
           throw error;
         }
       }

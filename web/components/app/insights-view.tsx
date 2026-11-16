@@ -317,12 +317,14 @@ function CantFind({ siteId, days, rows, ranges, onOpen }: { siteId: string; days
 
 function GroupGuides({ siteId, days, groupKey, onOpen }: { siteId: string; days: number; groupKey: string; onOpen: (guide: string) => void }) {
   const [guides, setGuides] = useState<GroupGuide[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api<{ guides: GroupGuide[] }>(`/sites/${siteId}/groups?key=${encodeURIComponent(groupKey)}&days=${days}`).then(
-      (result) => setGuides(result.guides),
-      () => setGuides([]),
+      (result) => (setGuides(result.guides), setError(null)),
+      (failure: Error) => setError(failure.message),
     );
   }, [siteId, days, groupKey]);
+  if (error) return <p className="text-sm text-muted-foreground">The guides didn&apos;t load. {error}</p>;
   if (!guides) return <p className="text-sm text-muted-foreground">Loading the guides</p>;
   return (
     <ul className="flex flex-col rounded-lg border">
