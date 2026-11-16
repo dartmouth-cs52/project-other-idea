@@ -10,7 +10,7 @@ import type { Ceiling } from "./budget.ts";
 import { judgeNamed, namedButNotDone, namedButNotDoneNote, namedButNotPointed, namedButNotPointedNote, pressLeftToVisitor, wantsTheWay, type NamedVerdict } from "./check.ts";
 import { costOf } from "./prices.ts";
 import { answersOn, articlesOf, buildSystemPrompt, buildUserMessage } from "./prompt.ts";
-import { checkSay, SAY_MAX_CHARS, SAY_MAX_SENTENCES, SAY_WITHOUT_WORDS, tidySay, type Rule } from "./rules.ts";
+import { checkSay, SAY_MAX_CHARS, SAY_MAX_SENTENCES, SAY_WITHOUT_WORDS, tidySay, withoutBlame, type Rule } from "./rules.ts";
 
 export { SAY_MAX_CHARS, SAY_MAX_SENTENCES, SAY_WITHOUT_WORDS, tidySay };
 
@@ -469,6 +469,8 @@ export async function measureTurn(
     // An answer's reply is already only its own fields (answers.ts). A guide's is its three.
     if (!answers) reply = asGuide(reply);
     if (actingMeasure) answer.acting = actingMeasure;
+    // "Not that one." is for a visitor who used something else, which the widget says. One who did the step shown is not told so (rules.ts).
+    reply = { ...reply, say: withoutBlame(reply.say, request.event) };
   }
   // A control the site's owner ruled out: nothing is pointed at, nothing is done, and the visitor reads a fixed sentence.
   let overruled = finished.overruled;

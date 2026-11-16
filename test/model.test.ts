@@ -356,6 +356,30 @@ test("on a site with Answers on, an answer in words to a how-to question is not 
   assert.deepEqual(again.reply, { target: "e30", status: "continue", say: "Click Freeze card.", mode: "guide" });
 });
 
+test('"Not that one." is said only to a visitor who used something other than the step shown', async () => {
+  // Northpine's Bills, 16 November: the model pointed at the Vendor column's button, the visitor clicked it, and was told "Not that one."
+  const blames: TurnReply = { target: "e17", status: "continue", say: "Not that one. Click People in the sidebar." };
+  const didTheStep: TurnRequest = { ...atBudgets, event: 'The user clicked link "Budgets". It is e14 in the list now, and looks unchanged.' };
+  delete didTheStep.closing;
+  use([{ reply: blames }], "ask");
+  assert.equal((await measureTurn(site, didTheStep)).reply.say, "Click People in the sidebar.");
+  // The visitor used something else, or went elsewhere, and the widget says so: the opening stays, as the instructions ask.
+  for (const event of ['The user clicked button "Show only these" instead of link "Budgets".', 'The user went to /people without using link "Budgets".']) {
+    use([{ reply: blames }], "ask");
+    assert.equal((await measureTurn(site, { ...didTheStep, offTrack: true, event })).reply.say, "Not that one. Click People in the sidebar.", event);
+  }
+  // They closed the dialog the control was in. That is off the way, and there was still no other one.
+  use([{ reply: blames }], "ask");
+  const closed = await measureTurn(site, { ...didTheStep, offTrack: true, event: 'The user clicked outside the dialog "Pay Brightdesk", which closed it without using button "Continue".' });
+  assert.equal(closed.reply.say, "Click People in the sidebar.");
+  // On a site with Answers on it is the same sentence and the same rule.
+  use([{ reply: written({ target: "e17", status: "continue", say: "Not that one. click People in the sidebar." }) }], "ask");
+  assert.equal((await measureTurn(withDocs, { ...didTheStep, site: withDocs.id })).reply.say, "Click People in the sidebar.");
+  // A sentence that is nothing but the opening is left as it is, rather than shown empty.
+  use([{ reply: { target: "e17", status: "continue", say: "Not that one." } }], "ask");
+  assert.equal((await measureTurn(site, didTheStep)).reply.say, "Not that one.");
+});
+
 test("when asking again fails, the first reply still reaches the visitor", async () => {
   const refused = new Anthropic.BadRequestError(400, { type: "error", error: { type: "invalid_request_error", message: "bad" } }, undefined, new Headers());
   use([{ reply: namesFaq }, { fails: refused }], "ask");
