@@ -28,6 +28,11 @@ on:
       repeat:
         description: "Times to ask each case. More gives steadier timings and costs more."
         default: "1"
+      suite:
+        description: "guides: the right pointer. guides-with-answers: the same cases, asked as a site with Answers on. answers: the Answers benchmark, with the judge."
+        type: choice
+        options: [guides, guides-with-answers, answers]
+        default: guides
 
 # Lets the run ask GitHub for the token that proves which repository and branch it is.
 permissions:
@@ -42,6 +47,7 @@ jobs:
     env:
       MODELS: ${{ inputs.models }}
       REPEAT: ${{ inputs.repeat }}
+      SUITE: ${{ inputs.suite }}
     steps:
       # Each setting is passed on only when it has a value. An empty key would
       # still take the place of federation, and an empty workspace would be sent as one.
@@ -95,9 +101,17 @@ jobs:
           fetch
           (while sleep 180; do fetch; done) &
 
+      # The Answers benchmark checks its judge against the labelled answers first, so the table that follows can be believed.
       - name: Run the benchmark
         run: |
-          npm run -s eval -- --models "$MODELS" --repeat "$REPEAT" --yes | tee benchmark.txt
+          case "$SUITE" in
+            answers)
+              { npm run -s eval:answers -- --check-judge --yes; npm run -s eval:answers -- --models "$MODELS" --judge --yes; } | tee benchmark.txt ;;
+            guides-with-answers)
+              npm run -s eval -- --models "$MODELS" --repeat "$REPEAT" --answers --yes | tee benchmark.txt ;;
+            *)
+              npm run -s eval -- --models "$MODELS" --repeat "$REPEAT" --yes | tee benchmark.txt ;;
+          esac
           { echo '```'; cat benchmark.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Keep every answer

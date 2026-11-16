@@ -84,6 +84,12 @@ export default function Privacy() {
         when the day ends. The address is not kept with their questions.
       </p>
       <p>
+        When Haptic cannot help, it may offer a way to reach the company. If you use its form, the email address and
+        note you type are passed to that company with the conversation so far, as you typed it, so that a person
+        there can reply. We do not keep the email address or the note. The company can tell which guide in its
+        dashboard the message came from.
+      </p>
+      <p>
         We keep the record of each guide until the company asks us to delete it. Nothing deletes it on a schedule yet:
         a person at {site.company} does it on request. We do not use it to train AI models.
       </p>

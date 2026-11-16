@@ -68,7 +68,21 @@ export interface Site {
   reading: Reading | null;
 }
 
-export type Outcome = "finished" | "shown" | "stopped" | "nothing_to_point_at" | "loop" | "step_limit" | "error" | "abandoned" | "under_way";
+export type Outcome =
+  | "finished"
+  | "shown"
+  | "stopped"
+  | "nothing_to_point_at"
+  | "loop"
+  | "step_limit"
+  | "error"
+  // On a site with Answers on: answered in words, or declined for one of three reasons. None is billed.
+  | "answered"
+  | "not_covered"
+  | "sensitive"
+  | "off_topic"
+  | "abandoned"
+  | "under_way";
 
 export interface Insights {
   days: number;
@@ -129,6 +143,10 @@ export const OUTCOME_LABEL: Record<Outcome, string> = {
   loop: "Went in a loop",
   step_limit: "Ran out of steps",
   error: "Error",
+  answered: "Answered from the help docs",
+  not_covered: "Not in the help docs",
+  sensitive: "Left for a person",
+  off_topic: "Off topic",
   abandoned: "Abandoned",
   under_way: "Under way",
 };

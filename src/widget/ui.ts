@@ -1,4 +1,4 @@
-import type { Appearance } from "../shared/types.ts";
+import type { Appearance, Source, TurnReply } from "../shared/types.ts";
 
 // Everything Haptic draws: the launcher, the ask box, the pointer, the
 // highlight ring and the caption. It all lives in one shadow root on one host
@@ -27,10 +27,10 @@ button { font: inherit; cursor: pointer; }
 .panel { width: min(320px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 14px;
   padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.16); }
 [hidden] { display: none !important; }
-.panel form { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 10px; background: #f5f5f4; }
-.panel form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
-.panel input { width: 100%; height: 40px; font: inherit; color: inherit; padding: 4px 12px 0; border: 0; background: transparent; outline: none; }
-.panel input::placeholder { color: #78716c; }
+.ask { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 10px; background: #f5f5f4; }
+.ask:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+.ask input { width: 100%; height: 40px; font: inherit; color: inherit; padding: 4px 12px 0; border: 0; background: transparent; outline: none; }
+.panel ::placeholder { color: #78716c; }
 .panel .send { display: inline-flex; align-items: center; justify-content: center; align-self: flex-end; width: 32px; height: 32px; margin: 6px 10px 8px; border: 0;
   border-radius: 999px; background: #1c1917; color: #fafaf9; }
 .panel .send svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -49,11 +49,32 @@ button { font: inherit; cursor: pointer; }
   border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; }
 .caption .close:hover { background: rgba(250,250,249,.25); }
 .caption .close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.thread { display: flex; flex-direction: column; gap: 8px; max-height: min(360px, calc(100vh - 220px)); overflow-y: auto; padding: 4px 4px 10px; }
+.thread p { margin: 0; overflow-wrap: anywhere; }
+.asked { align-self: flex-end; max-width: 85%; background: #1c1917; color: #fafaf9; border-radius: 14px; padding: 6px 12px; }
+.reply { align-self: flex-start; background: #f5f5f4; border-radius: 14px; padding: 8px 12px; }
+.sources { margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid #e7e5e4; list-style: none; font-size: 12px; line-height: 16px; color: #78716c; }
+.sources li + li { margin-top: 6px; }
+.sources .from { margin-bottom: 4px; }
+.reply .missing { margin-top: 8px; font-size: 12px; line-height: 16px; color: #78716c; }
+.sources .title { display: block; color: #1c1917; font-weight: 500; text-decoration: none; }
+.sources a.title:hover, .sources a.title:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
 .helped { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 2px 8px 12px; }
 .helped span { margin-right: auto; color: #78716c; }
 .helped button { display: inline-flex; align-items: center; justify-content: center; height: 32px; border: 0; border-radius: 999px; padding: 0 14px;
   background: #e7e5e4; color: #1c1917; font-weight: 500; }
 .helped button:hover { background: #d6d3d1; }
+.handoff { display: flex; flex-direction: column; gap: 8px; padding: 0 2px 8px 12px; }
+.handoff .row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 32px; }
+.handoff .row span { margin-right: auto; color: #78716c; }
+.handoff button { display: inline-flex; align-items: center; justify-content: center; height: 32px; border: 0; border-radius: 999px; padding: 0 14px;
+  background: #e7e5e4; color: #1c1917; font-weight: 500; }
+.handoff button:hover { background: #d6d3d1; }
+.handoff button.go { background: #1c1917; color: #fafaf9; }
+.handoff button:disabled { opacity: .5; cursor: default; }
+.person { display: flex; flex-direction: column; gap: 8px; margin-left: -10px; }
+.person input, .person textarea { width: 100%; font: inherit; color: inherit; padding: 8px 12px; border: 1px solid #e7e5e4; border-radius: 10px; background: #fff; outline: none; resize: none; }
+.person input:focus, .person textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 .note { margin: 0; padding: 8px 12px 4px; font-size: 12px; line-height: 16px; color: #78716c; }
 .note a { color: inherit; text-decoration: none; }
 .note a:hover, .note a:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
@@ -84,6 +105,8 @@ export class Ui {
   private readonly caption: HTMLElement;
   private readonly captionText: HTMLElement;
   private readonly helped: HTMLElement;
+  private readonly thread: HTMLElement;
+  private readonly handoff: HTMLElement;
   private onHelped?: (helped: boolean) => void;
   private target?: Element;
   private frame = 0;
@@ -101,8 +124,17 @@ export class Ui {
       <div class="cursor" hidden><svg viewBox="0 0 24 24" width="24" height="24"><path d="${POINTER_PATH}"/></svg></div>
       <div class="dock ${side}">
         <div class="panel" hidden>
+          <div class="thread" hidden><p class="asked"></p><div class="reply"><p></p><ul class="sources" hidden></ul><p class="missing" hidden></p></div></div>
           <div class="helped" hidden></div>
-          <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
+          <div class="handoff" hidden>
+            <div class="row offer"><span></span><button type="button" class="open"></button></div>
+            <form class="person" hidden>
+              <input type="email" required maxlength="200" placeholder="Your email" aria-label="Your email">
+              <textarea rows="2" maxlength="1000" placeholder="Anything to add" aria-label="Anything to add"></textarea>
+              <div class="row"><span></span><button type="button" class="cancel">Cancel</button><button type="submit" class="go">Send</button></div>
+            </form>
+          </div>
+          <form class="ask"><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
           <div class="status" hidden><span></span><button class="stop" type="button">Stop</button></div>
           <p class="note">Haptic <a href="${ABOUT_URL}" target="_blank" rel="noopener noreferrer">is an AI guide and can be wrong.</a></p>
         </div>
@@ -110,14 +142,16 @@ export class Ui {
       </div>`;
     const pick = <T extends Element>(selector: string) => root.querySelector(selector) as T;
     this.panel = pick(".panel");
-    this.form = pick("form");
-    this.input = pick("input");
+    this.form = pick(".ask");
+    this.input = pick(".ask input");
+    this.handoff = pick(".handoff");
     this.status = pick(".status");
     this.statusText = pick(".status span");
     this.ring = pick(".ring");
     this.cursor = pick(".cursor");
     this.caption = pick(".caption");
     this.captionText = pick(".caption span");
+    this.thread = pick(".thread");
     this.helped = pick(".helped");
     this.helped.addEventListener("click", (event) => {
       const answer = (event.target as Element).closest("button")?.dataset.helped;
@@ -188,11 +222,88 @@ export class Ui {
     if (text) {
       this.panel.hidden = false;
       this.hideHelped();
+      this.hideHandoff();
     } else this.input.value = "";
   }
 
   closePanel() {
     this.panel.hidden = true;
+  }
+
+  /**
+   * Shows the question and its reply in the panel: an answer from the help
+   * docs with the articles it rests on, or the sentence that says Haptic can't
+   * help. Every word is set as text, and a link is only made for an http or
+   * https address.
+   */
+  showAnswer(question: string, reply: Pick<TurnReply, "say" | "sources" | "missing">) {
+    const [asked, text, list, missing] = [".asked", ".reply p", ".sources", ".missing"].map((selector) => this.thread.querySelector(selector) as HTMLElement);
+    asked!.textContent = question;
+    text!.textContent = reply.say;
+    const sources = reply.sources ?? [];
+    // Says where the words came from, then each article.
+    list!.replaceChildren(Object.assign(document.createElement("li"), { className: "from", textContent: "From the help docs" }), ...sources.map(sourceRow));
+    list!.hidden = sources.length === 0;
+    // A control the article names that isn't in the product any more, as far as Haptic can see. Better said than left for the visitor to hunt for.
+    const gone = (reply.missing ?? []).slice(0, 2).map((label) => `"${label}"`);
+    missing!.textContent = gone.length ? `I can't see ${gone.join(" or ")} on this page or the others I know, so this may no longer be right.` : "";
+    missing!.hidden = gone.length === 0;
+    this.thread.hidden = false;
+    this.panel.hidden = false;
+    this.thread.scrollTop = 0;
+  }
+
+  clearAnswer() {
+    this.thread.hidden = true;
+    this.hideHandoff();
+  }
+
+  /**
+   * Offers the way to a person, as one button under the reply. `open` is
+   * called when it is pressed. With `form`, pressing it shows a short form
+   * instead, and `send` is called with what the visitor typed: it resolves to
+   * true when the company got it.
+   */
+  offerHandoff(label: string, open: () => void, send?: (email: string, note: string) => Promise<boolean>) {
+    const pick = <T extends HTMLElement>(selector: string) => this.handoff.querySelector(selector) as T;
+    const [offer, form] = [pick(".offer"), pick<HTMLFormElement>(".person")];
+    const [button, said, email, note, go, formSaid] = [pick<HTMLButtonElement>(".open"), pick(".offer span"), pick<HTMLInputElement>(".person input"), pick<HTMLTextAreaElement>("textarea"), pick<HTMLButtonElement>(".go"), pick(".person .row span")];
+    const show = (which: "offer" | "form") => {
+      offer.hidden = which !== "offer";
+      form.hidden = which !== "form";
+    };
+    button.textContent = label;
+    button.hidden = false;
+    said.textContent = "";
+    formSaid.textContent = "";
+    show("offer");
+    button.onclick = () => {
+      if (!send) return open();
+      show("form");
+      email.focus();
+    };
+    pick<HTMLButtonElement>(".cancel").onclick = () => show("offer");
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      if (!send || !email.reportValidity()) return;
+      go.disabled = true;
+      formSaid.textContent = "Sending…";
+      const sent = await send(email.value.trim(), note.value.trim());
+      go.disabled = false;
+      if (!sent) return void (formSaid.textContent = "That didn't send. Try again.");
+      // It is with a person now, and the widget says so: from here on they are not talking to the AI about this.
+      email.value = note.value = "";
+      show("offer");
+      button.hidden = true;
+      said.textContent = "Sent to the team. A person will reply by email.";
+    };
+    this.handoff.hidden = false;
+    this.panel.hidden = false;
+    if (!this.target && !this.caption.hidden) this.placeAboveDock();
+  }
+
+  hideHandoff() {
+    this.handoff.hidden = true;
   }
 
   /** Move the pointer to an element and show the caption beside it. With no text yet, the pointer goes alone. */
@@ -298,4 +409,28 @@ export class Ui {
     this.caption.style.left = `${left}px`;
     this.caption.style.top = `${top}px`;
   };
+}
+
+/** One article under an answer: its title, linked when it has an address, and when it was last changed. */
+function sourceRow(source: Source): HTMLElement {
+  const row = document.createElement("li");
+  const title = document.createElement(webAddress(source.url) ? "a" : "span");
+  title.className = "title";
+  title.textContent = source.title;
+  if (title instanceof HTMLAnchorElement) Object.assign(title, { href: source.url, target: "_blank", rel: "noopener noreferrer" });
+  row.append(title);
+  const changed = source.updated ? new Date(`${source.updated}T00:00:00`) : undefined;
+  if (changed && !Number.isNaN(changed.getTime())) {
+    const day = changed.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    row.append(source.stale ? `Updated ${day}. It may be out of date.` : `Updated ${day}`);
+  }
+  return row;
+}
+
+function webAddress(url: string | undefined): boolean {
+  try {
+    return /^https?:$/.test(new URL(url ?? "").protocol);
+  } catch {
+    return false;
+  }
 }

@@ -5,9 +5,13 @@ import {
   normalizePath,
   type GuideOutcome,
   type GuideReport,
+  type HandoffRequest,
   type HistoryTurn,
+  type Mode,
+  type PublicHandoff,
   type SnapElement,
   type Snapshot,
+  type TranscriptTurn,
   type TurnReply,
   type TurnRequest,
 } from "../shared/types.ts";
@@ -19,6 +23,8 @@ import type { Ui } from "./ui.ts";
 
 const MAX_STEPS = 20;
 const MAX_HISTORY = 12;
+/** How much of the conversation before this question is sent with it: the last three questions answered in words, and their answers. */
+const MAX_THREAD = 6;
 /** A field counts as filled in once typing pauses this long. */
 const TYPING_PAUSE_MS = 1200;
 const STORAGE_KEY = "haptic.guide";
@@ -66,6 +72,8 @@ interface SavedGuide {
   id?: string;
   goal: string;
   history: HistoryTurn[];
+  /** Earlier questions that were answered in words, so a guide that follows from one still knows what it was about. */
+  thread?: HistoryTurn[];
   step: number;
   path: string;
   /** What the visitor did just before the page unloaded, if we saw it. */
@@ -75,11 +83,31 @@ interface SavedGuide {
   savedAt: number;
 }
 
+/** What the guide is told while a reply is still on its way. */
+export interface Watch {
+  /** The kind of reply, on a site with Answers on. */
+  onMode?(mode: Mode): void;
+  /** The control it will point at. */
+  onTarget?(id: string): void;
+}
+
 /** Says how a guide went. Sent once per ending, and again when the visitor answers "Did this help?". */
 export type Reporter = (guide: string, report: Omit<GuideReport, "site">) => void;
 
+/** The way to a person, when the site has one: what the widget was told about it, and how its form is posted. */
+export interface HandoffWay {
+  config: PublicHandoff;
+  /** Posts the widget's form. Resolves to true when the company got it. */
+  send(form: Omit<HandoffRequest, "site">): Promise<boolean>;
+}
+
+/** Questions in a row that ended without the visitor saying it helped, after which a person is offered. */
+const OFFER_PERSON_AFTER = 3;
+/** How much of the conversation goes to a person with a handoff. */
+const MAX_TRANSCRIPT = 16;
+
 /** Endings worth asking "Did this help?" about. A stop or a failure already says no. */
-const ASK_IF_HELPED: GuideOutcome[] = ["finished", "shown", "nothing_to_point_at", "loop", "step_limit"];
+const ASK_IF_HELPED: GuideOutcome[] = ["finished", "shown", "nothing_to_point_at", "loop", "step_limit", "answered"];
 
 export class Guide {
   /** Empty when no guide is under way, or once the current one has reported how it ended. */
@@ -92,6 +120,16 @@ export class Guide {
   private unconfirmed?: GuideOutcome;
   private goal = "";
   private history: HistoryTurn[] = [];
+  /**
+   * Questions answered in words, and their answers. It outlives a question, so
+   * "and who can remove them?" is read with what came before. Pressing Stop
+   * clears it.
+   */
+  private thread: HistoryTurn[] = [];
+  /** Everything said since the visitor last pressed Stop, for handing to a person. */
+  private transcript: TranscriptTurn[] = [];
+  /** Questions in a row that ended without a "Yes" to "Did this help?". */
+  private misses = 0;
   private step = 0;
   private previous?: Snapshot;
   /** The element the last step pointed at, and whether the visitor used it. */
@@ -104,8 +142,9 @@ export class Guide {
 
   constructor(
     private readonly ui: Ui,
-    private readonly sendTurn: (request: Omit<TurnRequest, "site">, onTarget?: (id: string) => void) => Promise<TurnReply>,
+    private readonly sendTurn: (request: Omit<TurnRequest, "site">, watch?: Watch) => Promise<TurnReply>,
     private readonly report: Reporter = () => {},
+    private readonly handoff?: HandoffWay,
   ) {}
 
   /**
@@ -130,7 +169,11 @@ export class Guide {
   stop() {
     this.end(this.unconfirmed ?? "stopped");
     this.reset();
+    this.thread = [];
+    this.transcript = [];
+    this.misses = 0;
     this.ui.clear();
+    this.ui.clearAnswer();
     this.ui.setBusy("");
   }
 
@@ -142,6 +185,7 @@ export class Guide {
     this.id = saved.id ?? newGuideId();
     this.goal = saved.goal;
     this.history = saved.history;
+    this.thread = saved.thread ?? [];
     this.step = saved.step;
     this.strayed = saved.strayed === true;
     const here = normalizePath(location.pathname);
@@ -219,13 +263,17 @@ export class Guide {
           ...(this.id ? { guide: this.id } : {}),
           goal: this.asked,
           step: this.step,
-          history: this.history.slice(-MAX_HISTORY),
+          history: [...this.thread, ...this.history].slice(-MAX_HISTORY),
           snapshot: page.snapshot,
           ...(event ? { event } : {}),
           ...(change ? { change } : {}),
           ...(this.strayed ? { offTrack: true } : {}),
         },
-        pointEarly,
+        {
+          onTarget: pointEarly,
+          // An answer takes a moment longer than a pointer, so say what the wait is for.
+          onMode: (mode) => run === this.run && mode === "answer" && ui.setBusy("Reading the help docs…"),
+        },
       );
     } catch (error) {
       if (run !== this.run) return;
@@ -262,11 +310,30 @@ export class Guide {
       return this.turn(run, `${event} ${nudge}`, true);
     }
 
-    this.history.push({ role: "user", text: this.step === 0 ? this.asked : (event ?? "The page changed.") }, { role: "assistant", text: reply.say });
+    // The model is sent the question with addresses and numbers masked. The transcript is the visitor's own
+    // words, kept in the browser, and only goes anywhere if they ask for a person.
+    const did = this.step === 0 ? this.goal : (event ?? "The page changed.");
+    this.history.push({ role: "user", text: this.step === 0 ? this.asked : did }, { role: "assistant", text: reply.say });
+    this.transcript = [...this.transcript, { role: "user" as const, text: did }, { role: "assistant" as const, text: reply.say, ...(reply.mode ? { kind: reply.mode } : {}) }].slice(-MAX_TRANSCRIPT);
     this.step++;
     this.previous = page.snapshot;
     this.last = listed ? { key: elementKey(listed), used: false } : undefined;
     this.strayed = false;
+
+    // An answer in words, or a fixed sentence saying Haptic can't help, is read
+    // in the panel, where there is room for it and for the articles it rests on.
+    // A step's sentence stays beside the pointer, in the caption.
+    const inPanel = reply.mode === "answer" || reply.mode === "cannot_help";
+    if (inPanel) {
+      // Earlier questions go to the model with the next one, so they are masked like it.
+      this.thread = [...this.thread, { role: "user" as const, text: this.asked }, { role: "assistant" as const, text: reply.say }].slice(-MAX_THREAD);
+      ui.showAnswer(this.goal, reply);
+    } else ui.clearAnswer();
+
+    if (inPanel && (!el || !el.isConnected)) {
+      dropEarly();
+      return this.conclude(reply.mode === "answer" ? "answered" : (reply.reason ?? "not_covered"));
+    }
 
     // Only a finished guide is billed. It is finished when the visitor followed the steps and is now
     // where they asked to be, or when they used the control the last answer pointed at. A first answer
@@ -285,13 +352,13 @@ export class Guide {
       dropEarly();
       if (listed?.offscreen) el.scrollIntoView({ block: "center", behavior: "smooth" });
     }
-    // If they have already used it, the caption would only flash.
-    if (!early?.acted) ui.pointAt(el, reply.say);
+    // If they have already used it, the caption would only flash. An answer's words are in the panel, so its pointer goes alone.
+    if (!early?.acted) ui.pointAt(el, inPanel ? "" : reply.say);
 
     if (reply.status === "done") {
       // The last answer points at something. Leave it up until they click anywhere but on Haptic itself.
       ui.setBusy("");
-      ui.closePanel();
+      if (!inPanel) ui.closePanel();
       forget();
       const dismiss = (event: MouseEvent) => {
         if (event.composedPath().includes(ui.host)) return;
@@ -299,6 +366,14 @@ export class Guide {
         if (run === this.run) ui.clear();
       };
       document.addEventListener("click", dismiss, true);
+
+      // An answer in words that also points ends as answered, whatever the visitor does next. Answers are not billed.
+      if (inPanel) {
+        early?.stop();
+        this.end("answered");
+        this.stopWaiting = () => document.removeEventListener("click", dismiss, true);
+        return;
+      }
 
       // After following steps, the visitor is on the screen they asked for.
       if (arrived) {
@@ -334,10 +409,13 @@ export class Guide {
       return;
     }
 
-    ui.closePanel();
+    if (inPanel) ui.setBusy("");
+    else ui.closePanel();
     this.save();
     const acted = (what: Acted) => {
       this.stopWaiting = undefined;
+      // From here it is a guide. The answer has been read, and the pointer needs the room.
+      ui.clearAnswer();
       if (this.last && what.onTarget) this.last.used = true;
       this.strayed = !what.onTarget;
       // Saved straight away: if this click loads a new page, the next page needs to know about it.
@@ -352,6 +430,16 @@ export class Guide {
     if (early?.acted) acted(early.acted);
     else if (early) whenActed = acted;
     else this.stopWaiting = waitForAction(el, listed, ui.host, acted);
+  }
+
+  /** Ends a question whose reply is in the panel: nothing to wait for, and the ask box comes back under the answer. */
+  private conclude(outcome: GuideOutcome) {
+    this.stopWaiting?.();
+    this.stopWaiting = undefined;
+    forget();
+    this.ui.clear();
+    this.ui.setBusy("");
+    this.end(outcome);
   }
 
   private finish(text: string, outcome: GuideOutcome) {
@@ -389,7 +477,47 @@ export class Guide {
     if (!id) return;
     this.id = "";
     this.report(id, { outcome });
-    if (ASK_IF_HELPED.includes(outcome)) this.ui.askIfHelped((helped) => this.report(id, { helped }));
+    // A finished guide is one the visitor followed to the end, which says as much as a "Yes".
+    if (outcome === "finished") this.misses = 0;
+    else if (outcome !== "stopped") this.misses++;
+    if (ASK_IF_HELPED.includes(outcome)) {
+      this.ui.askIfHelped((helped) => {
+        this.report(id, { helped });
+        if (helped) this.misses = 0;
+        // "No" is the plainest sign that a person is needed.
+        else this.offerPerson(id);
+      });
+    }
+    // A person is offered when Haptic has just said it can't help, and when a few questions in a row have got nowhere.
+    // Not after every reply: most questions don't need one. And not for a question that had nothing to do with the site.
+    if (outcome === "not_covered" || outcome === "sensitive" || (this.misses >= OFFER_PERSON_AFTER && outcome !== "off_topic")) this.offerPerson(id);
+  }
+
+  /**
+   * Shows the button that leads to a person, if the site has such a way.
+   *
+   * The page hears about it first, as a "haptic:handoff" event on the
+   * document, with the conversation and the page. A site that cancels the
+   * event (preventDefault) has taken over, say by opening its own chat with
+   * the conversation filled in, and the widget does nothing more.
+   */
+  private offerPerson(guide: string) {
+    const way = this.handoff;
+    if (!way) return;
+    const { config } = way;
+    const transcript = this.transcript;
+    const path = normalizePath(location.pathname);
+    const took = () => this.report(guide, { handoff: true });
+    const open = () => {
+      const heard = new CustomEvent("haptic:handoff", { cancelable: true, detail: { question: this.goal, path, transcript } });
+      if (!document.dispatchEvent(heard)) return took();
+      if (config.url) window.open(config.url, "_blank", "noopener");
+      else if (config.email) location.href = mailTo(config.email, transcript, path);
+      took();
+    };
+    // The server records that the form was used when it passes it on, so the widget doesn't report it twice.
+    const send = config.form ? (email: string, note: string) => way.send({ guide, email, note, path, transcript }) : undefined;
+    this.ui.offerHandoff(config.label, open, send);
   }
 
   /** Saves the guide for the next page. `shown` is a step pointed at whose reply is still coming, counted as done. */
@@ -401,6 +529,7 @@ export class Guide {
       ...(this.id ? { id: this.id } : {}),
       goal: this.goal,
       history: history.slice(-MAX_HISTORY),
+      ...(this.thread.length ? { thread: this.thread } : {}),
       step: shown ? this.step + 1 : this.step,
       path: normalizePath(location.pathname),
       savedAt: Date.now(),
@@ -413,6 +542,18 @@ export class Guide {
       // Storage full or blocked. The guide just won't survive a page load.
     }
   }
+}
+
+/** A link that opens the visitor's own mail program, with the conversation written into the message. */
+function mailTo(address: string, transcript: TranscriptTurn[], path: string): string {
+  const lines = transcript.map((turn) => `${turn.role === "user" ? "Me" : "Haptic"}: ${turn.text}`);
+  // Mail programs give up on a very long link, so the oldest lines go first.
+  let body = "";
+  for (const line of lines.reverse()) {
+    if (body.length + line.length > 1500) break;
+    body = `${line}\n${body}`;
+  }
+  return `mailto:${address}?subject=${encodeURIComponent("A question Haptic couldn't answer")}&body=${encodeURIComponent(`\n\n---\nI was on ${location.origin}${path} and asked Haptic:\n${body}`)}`;
 }
 
 /** A random v4 UUID. crypto.randomUUID exists only on https pages, and some customers test on plain http. */

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { extractPage } from "../src/intake/crawl.ts";
+import { day, fromHtml, fromText } from "../src/intake/docs.ts";
 import { buildSystemPrompt, buildUserMessage, renderSiteMap } from "../src/server/prompt.ts";
 import { DEFAULT_APPEARANCE, normalizePath, cleanText, questionKey, type PageNode, type SiteContext } from "../src/shared/types.ts";
 
@@ -71,4 +72,19 @@ test("the first turn carries the question, later turns carry what happened", () 
 test("the same question asked two ways groups together, with emails and numbers masked first", () => {
   assert.equal(questionKey("How do I change my billing info?"), questionKey("how do i change my  billing info"));
   assert.equal(questionKey("Email sam@acme.com my invoice 4421987!"), "email [email] my invoice [number]");
+});
+
+test("a help doc can say where it lives and when it last changed", () => {
+  const doc = fromText('---\ntitle: Inviting teammates\nurl: https://help.acme.test/inviting\nupdated: "2026-10-02"\nowner: support\n---\n# Invite people\n\nGo to Team.\n', "help/inviting.md", "inviting");
+  assert.deepEqual(doc, { title: "Inviting teammates", source: "help/inviting.md", text: "# Invite people\n\nGo to Team.", url: "https://help.acme.test/inviting", updated: "2026-10-02" });
+  // Without those lines it is read as it always was, and a line of dashes further down is left alone.
+  assert.deepEqual(fromText("# Plain\n\nText.\n---\nMore.", "plain.md", "plain"), { title: "Plain", source: "plain.md", text: "# Plain\n\nText.\n---\nMore." });
+  // An address that is not a web address, and a date that is not a date, are dropped.
+  assert.deepEqual(fromText("---\nurl: javascript:alert(1)\nupdated: soon\n---\nText.", "x.md", "x"), { title: "x", source: "x.md", text: "Text." });
+
+  const html = fromHtml('<html><head><title>T</title><link rel="canonical" href="https://help.acme.test/api-keys"><meta property="article:modified_time" content="2026-09-01T10:00:00Z"></head><body><main><h1>API keys</h1><p>Create one.</p></main></body></html>', "api-keys.html");
+  assert.equal(html.url, "https://help.acme.test/api-keys");
+  assert.equal(html.updated, "2026-09-01");
+  assert.equal(day("Tue, 03 Nov 2026 08:00:00 GMT"), "2026-11-03");
+  assert.equal(day(""), undefined);
 });
