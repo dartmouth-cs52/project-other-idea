@@ -17,10 +17,15 @@
   "build": { "command": "npm run build" },
   // The same sites as the live server, read only.
   "kv_namespaces": [{ "binding": "SITES", "id": "b481eb9c6ba24efe9889ef52a4f17e8a" }],
-  // A benchmark asks faster than a visitor does, so four times the live limit
-  // for each site and caller. It is still a limit: the server spends the same
-  // model key as the live one.
-  "ratelimits": [{ "name": "TURN_LIMIT", "namespace_id": "1003", "simple": { "limit": 120, "period": 60 } }],
+  "ratelimits": [
+    // A benchmark asks faster than a visitor does, so four times the live limit
+    // for each site and caller. It is still a limit: the server spends the same
+    // model key as the live one.
+    { "name": "TURN_LIMIT", "namespace_id": "1003", "simple": { "limit": 120, "period": 60 } },
+    // Teach mode: one caller gets 20 token checks and step posts a minute, whatever the site. Tokens are 32 random
+    // bytes, so this is not what stops guessing; it keeps a caller from making the server look tokens up all day.
+    { "name": "TEACH_LIMIT", "namespace_id": "1005", "simple": { "limit": 20, "period": 60 } }
+  ],
   // The live server's budget meter (worker/budget.ts), in a Durable Object of this Worker's own. Its address is in the
   // repository and anyone can call it, so it is held to a small budget: see the vars below.
   "durable_objects": { "bindings": [{ "name": "BUDGET", "class_name": "BudgetMeter" }] },

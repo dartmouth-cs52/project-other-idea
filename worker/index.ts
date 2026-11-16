@@ -4,6 +4,7 @@ import { Store } from "../src/server/db.ts";
 import { labelThreshold } from "../src/server/learned.ts";
 import { configure } from "../src/server/model.ts";
 import { createSiteCache } from "../src/server/site-cache.ts";
+import { NeonTeachStore } from "../src/server/teach.ts";
 import type { SiteContext } from "../src/shared/types.ts";
 import widget from "../dist/widget.txt";
 
@@ -30,6 +31,8 @@ export interface Env {
   DATABASE_URL?: string;
   /** Slows down anyone asking for steps too fast. */
   TURN_LIMIT?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+  /** Slows down anyone checking teach tokens or posting taught steps too fast. TURN_LIMIT when it is not bound. */
+  TEACH_LIMIT?: { limit(options: { key: string }): Promise<{ success: boolean }> };
   /** What each site has spent on the model this hour and today. One object per site, in worker/budget.ts. */
   BUDGET?: {
     idFromName(name: string): unknown;
@@ -72,6 +75,14 @@ const sites = createSiteCache({ keepMs: 60_000, maxStaleMs: 10 * 60_000 });
 
 /** One per isolate, so its note of which origins were seen lately is shared by every request. */
 let store: { url: string; store: Store } | undefined;
+let teachStore: { url: string; store: NeonTeachStore } | undefined;
+/** Teach sessions are in Neon, beside the sites (db/migrations/0012). Without the database there is no teach mode. */
+function teachFor(env: Env): NeonTeachStore | undefined {
+  if (!env.DATABASE_URL) return undefined;
+  if (teachStore?.url !== env.DATABASE_URL) teachStore = { url: env.DATABASE_URL, store: new NeonTeachStore(env.DATABASE_URL) };
+  return teachStore.store;
+}
+
 function storeFor(env: Env): Store | undefined {
   if (!env.DATABASE_URL) return undefined;
   if (store?.url !== env.DATABASE_URL) store = { url: env.DATABASE_URL, store: new Store(env.DATABASE_URL, labelThreshold({ HAPTIC_LABEL_THRESHOLD: env.HAPTIC_LABEL_THRESHOLD, HAPTIC_PRODUCTION: "1" })) };
@@ -203,6 +214,11 @@ export default {
       widget: async () => widget,
       widgetMaxAge: 300,
       overLimit: async (key) => (env.TURN_LIMIT ? !(await env.TURN_LIMIT.limit({ key })).success : false),
+      overTeachLimit: async (key) => {
+        const limit = env.TEACH_LIMIT ?? env.TURN_LIMIT;
+        return limit ? !(await limit.limit({ key })).success : false;
+      },
+      teach: teachFor(env),
       isOff: (site) => isOff(env, site.id),
       budget: budgetFor(env),
       onAlert: (site, alert) => ctx.waitUntil(sendAlert(env, describeAlert(site, alert))),

@@ -20,6 +20,7 @@ import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
 import { parseOutlineReport, visitorHash } from "./learned.ts";
 import { ceilingFor, measureTurn, TurnCancelled, TurnError } from "./model.ts";
 import type { TurnMeasure } from "./model.ts";
+import { teachCall, type TeachStore } from "./teach.ts";
 
 // What the Haptic server answers: the widget file, each site's public
 // settings, and the one endpoint the widget calls for every step of a guide.
@@ -80,6 +81,10 @@ export interface AppParts {
   fetch?: typeof fetch;
   /** True on a developer's machine, where a webhook may be on the same machine. */
   localWebhooks?: boolean;
+  /** Where teach sessions are kept (src/server/teach.ts). Without one, teach mode is refused. */
+  teach?: TeachStore;
+  /** True when this caller has made too many teach calls lately. `overLimit` when not given. */
+  overTeachLimit?(key: string): boolean | Promise<boolean>;
 }
 
 const MAX_BODY_BYTES = 512 * 1024;
@@ -232,6 +237,18 @@ export function createApp(parts: AppParts) {
       if (form.guide) parts.onReport?.(site, form.guide, { site: site.id, handoff: true });
       return json(200, { ok: true });
     }
+
+    // Teach mode: a person at the company showing Haptic a task in their own app. Never a model call.
+    const teaching = await teachCall(
+      { loadSite: (id) => parts.loadSite(id), teach: parts.teach, overLimit: (key) => (parts.overTeachLimit ?? parts.overLimit)(key) },
+      request,
+      url,
+      origin,
+      caller,
+      () => readJson(request),
+      json,
+    );
+    if (teaching) return teaching;
 
     return undefined;
   };
