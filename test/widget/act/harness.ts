@@ -42,7 +42,8 @@ const testBuild: Plugin = {
 };
 
 let engine: Promise<string> | undefined;
-function engineBundle(): Promise<string> {
+/** The engine as these tests build it, with the stub gate and the guide's hearing, as one script for a page. */
+export function engineBundle(): Promise<string> {
   engine ??= build({ entryPoints: [`${HERE}driver.ts`], bundle: true, format: "iife", target: "es2020", write: false, plugins: [testBuild] }).then((result) => result.outputFiles[0]?.text ?? "");
   return engine;
 }

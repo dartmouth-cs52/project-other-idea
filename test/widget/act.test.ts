@@ -773,3 +773,157 @@ test("a click-opened menu is opened, its submenu opened by resting on its entry,
     assert.equal(picked.kind, "done", json(picked));
     assert.equal(await page.text("#done"), "Email");
   }));
+
+// What the real MUI and Ant Design demos showed ----------------------------------------
+
+test("a pick made in two steps, the list opened and then the option pressed, is named by the field, not by the words it shows after", () =>
+  on(MUI_SELECT, async (page) => {
+    const opened = await page.run({ target: "#age", act: "click", control: "combobox", role: "combobox", name: "Age" });
+    assert.equal(opened.kind, "done", json(opened));
+    assert.equal(opened.opened, true);
+    await page.page.locator('li[role="option"]', { hasText: "Thirty" }).evaluate((el: Element) => (el.id = "thirty"));
+    const pickedOne = await page.run({ target: "#thirty", act: "click", control: "option", role: "option" });
+    assert.equal(pickedOne.kind, "done", json(pickedOne));
+    assert.equal(pickedOne.event, 'You chose "Thirty" from the list that "Age" opened.');
+    assert.equal(await page.text("#model"), "30");
+  }));
+
+test("a list that stays open and draws itself again after a pick is checked by the chip the pick added", () =>
+  on(
+    `<label id="tags-label">Tags</label>
+    <div id="box" style="display:flex;gap:4px;align-items:center;border:1px solid #999;padding:4px;width:400px">
+      <span id="chips" style="display:contents"></span>
+      <input id="tags" role="combobox" aria-labelledby="tags-label" aria-expanded="false" aria-autocomplete="list" style="border:0;outline:0;width:60px">
+    </div>
+    <script>
+      // As Ant Design's multiple select does: the search is cleared after a pick, the list stays open and is drawn afresh, scrolled elsewhere.
+      const all = Array.from({ length: 40 }, (_, i) => String.fromCharCode(97 + (i % 26)) + (10 + i));
+      const input = document.getElementById('tags');
+      const chosen = [];
+      let list;
+      function draw() {
+        list?.remove();
+        list = document.createElement('div');
+        list.style.cssText = 'position:absolute;top:80px;left:24px;width:300px;max-height:160px;overflow:auto;border:1px solid #999;background:#fff';
+        list.addEventListener('mousedown', (event) => event.preventDefault());
+        for (const name of all.filter((name) => name.includes(input.value))) {
+          const item = document.createElement('div');
+          item.className = 'item' + (chosen.includes(name) ? ' item-option-selected' : '');
+          item.textContent = name; item.style.cssText = 'padding:6px;cursor:pointer';
+          item.addEventListener('click', () => {
+            chosen.push(name);
+            const chip = document.createElement('span'); chip.textContent = name; chip.style.cssText = 'background:#eee;padding:2px 4px';
+            document.getElementById('chips').append(chip);
+            input.value = '';
+            draw();
+            list.scrollTop = 120;
+          });
+          list.append(item);
+        }
+        document.body.append(list);
+        input.setAttribute('aria-expanded', 'true');
+      }
+      input.addEventListener('mousedown', () => { if (!list) draw(); });
+      input.addEventListener('input', draw);
+      input.addEventListener('keydown', (event) => { if (event.key === 'Escape') { list?.remove(); list = undefined; input.setAttribute('aria-expanded', 'false'); } });
+    </script>`,
+    async (page) => {
+      const outcome = await page.run({ target: "#tags", act: "choose", control: "combobox", value: "b11", role: "combobox", name: "Tags" });
+      assert.equal(outcome.kind, "done", json(outcome));
+      assert.equal(await page.text("#chips"), "b11");
+      assert.equal(await page.page.getAttribute("#tags", "aria-expanded"), "false", "the list was closed once the pick was checked");
+    },
+  ));
+
+test("an option whose words carry a row number the field never shows is checked by the words asked for", () =>
+  on(
+    `<label for="code">Code</label> <input id="code" role="combobox" aria-expanded="false" aria-controls="codes">
+    <script>
+      // MUI's virtualised Autocomplete demo draws each row as "#<row> - <value>" and puts only the value in the field.
+      const values = ['k7Fq2', 'Zr81p', 'm0Xa9', 'Qe5tT'];
+      const input = document.getElementById('code');
+      let list;
+      function draw() {
+        list?.remove();
+        list = document.createElement('ul'); list.id = 'codes'; list.setAttribute('role', 'listbox');
+        list.style.cssText = 'position:absolute;top:60px;left:24px;margin:0;padding:0;list-style:none;border:1px solid #999;background:#fff';
+        list.addEventListener('mousedown', (event) => event.preventDefault());
+        values.filter((value) => value.toLowerCase().includes(input.value.toLowerCase())).forEach((value, row) => {
+          const option = document.createElement('li'); option.setAttribute('role', 'option'); option.textContent = '#' + row + ' - ' + value; option.style.padding = '6px';
+          option.addEventListener('click', () => { input.value = value; list.remove(); list = undefined; input.setAttribute('aria-expanded', 'false'); });
+          list.append(option);
+        });
+        document.body.append(list);
+        input.setAttribute('aria-expanded', 'true');
+      }
+      input.addEventListener('input', draw);
+    </script>`,
+    async (page) => {
+      const outcome = await page.run({ target: "#code", act: "choose", control: "combobox", value: "m0Xa9", role: "combobox", name: "Code" });
+      assert.equal(outcome.kind, "done", json(outcome));
+      assert.equal(await page.page.inputValue("#code"), "m0Xa9");
+    },
+  ));
+
+test("an accordion whose headers are tabs that say they are expanded, as Ant Design's are, counts as open when it expands", () =>
+  on(
+    `<div role="tablist">
+      <div role="tab" id="h1" aria-expanded="true" tabindex="0">This is panel header 1</div><div id="b1">Panel one</div>
+      <div role="tab" id="h2" aria-expanded="false" tabindex="0">This is panel header 2</div><div id="b2" hidden>Panel two</div>
+    </div>
+    <script>
+      for (const [header, body] of [['h1', 'b1'], ['h2', 'b2']]) document.getElementById(header).addEventListener('click', () => {
+        for (const [other, otherBody] of [['h1', 'b1'], ['h2', 'b2']]) { document.getElementById(other).setAttribute('aria-expanded', String(other === header)); document.getElementById(otherBody).hidden = other !== header; }
+      });
+    </script>`,
+    async (page) => {
+      const outcome = await page.run({ target: "#h2", act: "click", control: "tab", role: "tab" });
+      assert.equal(outcome.kind, "done", json(outcome));
+      assert.equal(await page.page.isVisible("#b2"), true);
+    },
+  ));
+
+test("something that comes on show while the pointer rests on a control is not taken for what the control opened", () =>
+  on(
+    `<button id="filters" type="button" aria-expanded="false">Filters</button><section id="panel" hidden><a href="#">Status</a></section>
+    <script>
+      const button = document.getElementById('filters');
+      // A banner of the page's own, drawn over it, that has nothing to do with the button.
+      button.addEventListener('mouseenter', () => setTimeout(() => {
+        const banner = document.createElement('div'); banner.textContent = 'New: saved views'; banner.style.cssText = 'position:fixed;bottom:10px;left:10px;padding:8px;background:#ffd';
+        document.body.append(banner);
+      }, 50), { once: true });
+      button.addEventListener('click', () => { const panel = document.getElementById('panel'); panel.hidden = !panel.hidden; button.setAttribute('aria-expanded', String(!panel.hidden)); });
+    </script>`,
+    async (page) => {
+      const outcome = await page.run({ target: "#filters", act: "click", control: "button", role: "button" });
+      assert.equal(outcome.kind, "done", json(outcome));
+      assert.equal(outcome.event, 'You clicked button "Filters".', "it was pressed, not taken as opened by the pointer resting on it");
+      assert.equal(await page.page.isVisible("#panel"), true);
+      assert.equal(outcome.opened, false, "the banner is not what the button opened");
+    },
+  ));
+
+test('an option marked data-disabled="false", as cmdk marks every one, is a candidate, and one marked disabled is not', () =>
+  on(
+    `<button id="pick" type="button" aria-haspopup="listbox" aria-expanded="false">Owner</button>
+    <script>
+      const trigger = document.getElementById('pick');
+      trigger.addEventListener('click', () => {
+        const list = document.createElement('div'); list.setAttribute('role', 'listbox'); list.style.cssText = 'position:absolute;top:60px;left:24px;background:#fff;border:1px solid #999';
+        for (const [name, off] of [['Sam Okafor', 'false'], ['Sam Lindqvist', '']]) {
+          const option = document.createElement('div'); option.setAttribute('role', 'option'); option.setAttribute('data-disabled', off); option.textContent = name; option.style.padding = '6px';
+          option.addEventListener('click', () => { if (off === '') return; trigger.textContent = name; list.remove(); trigger.setAttribute('aria-expanded', 'false'); });
+          list.append(option);
+        }
+        document.body.append(list);
+        trigger.setAttribute('aria-expanded', 'true');
+      });
+    </script>`,
+    async (page) => {
+      // "Sam" fits both, but the second is disabled: the first is the only choice.
+      const outcome = await page.run({ target: "#pick", act: "choose", control: "combobox", value: "Sam", role: "combobox", name: "Owner" });
+      assert.equal(outcome.kind, "done", json(outcome));
+      assert.equal(await page.text("#pick"), "Sam Okafor");
+    },
+  ));

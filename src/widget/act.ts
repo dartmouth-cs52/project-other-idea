@@ -325,20 +325,27 @@ async function act(run: Run): Promise<Outcome> {
  */
 async function pressAndLook(run: Run, kind: "link" | "button"): Promise<Outcome> {
   const el = run.plan.el;
-  const watch = watchPopups(el);
-  run.onEnd(() => watch.stop());
+  // What comes on show while the pointer rests on the control, and what comes on show once it is pressed, are watched apart:
+  // a banner or a tooltip that appeared while the pointer was on its way is not what the press opened.
+  const resting = watchPopups(el);
+  let pressing: Popups | undefined;
+  run.onEnd(() => {
+    resting.stop();
+    pressing?.stop();
+  });
   run.listen(el);
   const confirmBefore = openConfirmation(run.session.host);
   let before: Signs | undefined;
   const ready = () => {
     before = pageSigns(run, el);
+    pressing = watchPopups(el);
   };
 
   if (opener(el) && !expanded(el)) {
     const point = await getThere(run, el, run.plan, EYE_MS);
     await hoverTo(run, point.x, point.y);
     await run.pause(MENU_HOVER_MS);
-    const popup = findOpened(run, el, watch);
+    const popup = openedBy(run, el, resting, false);
     if (popup) {
       run.session.opened = { from: el, popup };
       return run.done(`You pointed at ${run.name}, and it opened.`);
@@ -346,13 +353,15 @@ async function pressAndLook(run: Run, kind: "link" | "button"): Promise<Outcome>
     await press(run, el, run.plan, 0, ready);
   } else await press(run, el, run.plan, EYE_MS, ready);
   const signs = before ?? pageSigns(run, el);
+  const watch = pressing ?? resting;
 
   const seen = await waitForSign(run, el, signs, watch, kind);
   const confirmation = openConfirmation(run.session.host);
   if (confirmation && confirmation !== confirmBefore) {
     return { kind: "stop", reason: "confirmation", say: SAYS.confirmation, el: confirmation, event: `You clicked ${run.name}, and the page asked to confirm.` };
   }
-  if (seen.popup) run.session.opened = { from: el, popup: seen.popup };
+  const opened = seen.popup && openedBy(run, el, watch, true);
+  if (opened) run.session.opened = { from: el, popup: opened };
   if (seen.any) return run.done(`You clicked ${run.name}.`);
 
   // A control drawn as a button that only listens for keys.
@@ -361,7 +370,8 @@ async function pressAndLook(run: Run, kind: "link" | "button"): Promise<Outcome>
     keyPress(run, el, " ");
     keyPress(run, el, "Enter");
     const again = await waitForSign(run, el, signs, watch, kind);
-    if (again.popup) run.session.opened = { from: el, popup: again.popup };
+    const openedNow = again.popup && openedBy(run, el, watch, true);
+    if (openedNow) run.session.opened = { from: el, popup: openedNow };
     if (again.any) return run.done(`You clicked ${run.name}.`);
   }
   // Nothing visible came of it. A press the hearing heard is reported as such, and the model decides; one nobody heard is the visitor's.
@@ -401,15 +411,15 @@ async function pressOption(run: Run): Promise<Outcome> {
     const point = await getThere(run, el, run.plan, EYE_IN_LIST_MS);
     await hoverTo(run, point.x, point.y);
     await run.pause(MENU_HOVER_MS);
-    let popup = findOpened(run, el, watch);
+    let popup = openedBy(run, el, watch, false);
     if (!popup) {
       await press(run, el, run.plan, 0);
-      popup = await waitFor(run, () => findOpened(run, el, watch), 600);
+      popup = await waitFor(run, () => openedBy(run, el, watch, true), 600);
     }
     if (!popup) {
       focusOn(el);
       keyPress(run, el, "ArrowRight");
-      popup = await waitFor(run, () => findOpened(run, el, watch), 600);
+      popup = await waitFor(run, () => openedBy(run, el, watch, true), 600);
     }
     if (!popup) return run.failed(el, undefined, "open");
     run.session.opened = { from: el, popup };
@@ -417,20 +427,26 @@ async function pressOption(run: Run): Promise<Outcome> {
   }
   run.listen(from ?? el);
   if (from && list && choosesFor(from, list)) {
-    const shown = shownWords(from);
+    const shown = shownOf(from);
     const words = optionWords(el);
+    // Named before the pick: after it, a select's words are the choice.
+    const [fromName, fromLabel] = [nameOf(run, from), listedName(run, from)];
     await press(run, el, run.plan, EYE_IN_LIST_MS);
     if (!(await waitFor(run, () => picked(el, list, from, shown, words), CHECK_MS))) return run.failed(el, undefined, "choose");
     if (!isDrawn(list) || !expanded(from)) run.session.opened = undefined;
-    return run.done(`You chose "${cleanText(words, 60)}" from the list that ${nameOf(run, from)} opened.`, { did: { el: from, name: listedName(run, from), value: words, ...(run.plan.mine ? { mine: true } : {}) } });
+    return run.done(`You chose "${cleanText(words, 60)}" from the list that ${fromName} opened.`, { did: { el: from, name: fromLabel, value: words, ...(run.plan.mine ? { mine: true } : {}) } });
   }
   let before: Signs | undefined;
+  let pressing: Popups | undefined;
+  run.onEnd(() => pressing?.stop());
   await press(run, el, run.plan, EYE_IN_LIST_MS, () => {
     before = pageSigns(run, el);
+    pressing = watchPopups(el);
   });
-  const seen = await waitForSign(run, el, before ?? pageSigns(run, el), watch, "button");
+  const seen = await waitForSign(run, el, before ?? pageSigns(run, el), pressing ?? watch, "button");
   if (list && !isDrawn(list)) run.session.opened = undefined;
-  if (seen.popup) run.session.opened = { from: el, popup: seen.popup };
+  const opened = seen.popup && openedBy(run, el, pressing ?? watch, true);
+  if (opened) run.session.opened = { from: el, popup: opened };
   if (seen.any) return run.done(`You clicked ${run.name}.`);
   if (await run.heard(300)) return run.done(`You clicked ${run.name}.`, { nothingChanged: true });
   return run.failed(el, undefined, "click");
@@ -442,7 +458,9 @@ async function pressTab(run: Run): Promise<Outcome> {
   if (el.getAttribute("aria-selected") === "true") return run.done(`${capital(run.name)} was already open.`);
   const panel = panelOf(el);
   const panelBefore = panel ? panelLook(panel) : "";
-  const selected = () => el.getAttribute("aria-selected") === "true" || (!!panel && panelLook(panel) !== panelBefore);
+  const wasExpanded = expanded(el);
+  // A tab is open when it says it is selected, when its panel changed, or, for the headers of an accordion that some toolkits make tabs, when it says it is expanded.
+  const selected = () => el.getAttribute("aria-selected") === "true" || (!!panel && panelLook(panel) !== panelBefore) || (!wasExpanded && expanded(el));
   run.listen(el);
   await press(run, el, run.plan);
   if (await waitFor(run, selected, CHECK_MS)) return run.done(`You clicked ${run.name}.`);
@@ -588,9 +606,10 @@ async function typeStep(run: Run, field: HTMLInputElement | HTMLTextAreaElement)
  * the browser will not edit the field, the field's own value setter and an
  * input event stand in, and a change event follows at the end.
  */
-async function typeInto(run: Run, field: HTMLInputElement | HTMLTextAreaElement, plan: ActPlan, raw: string): Promise<{ text: string; fallback: boolean }> {
+async function typeInto(run: Run, field: HTMLInputElement | HTMLTextAreaElement, plan: ActPlan, raw: string, ready?: () => void): Promise<{ text: string; fallback: boolean }> {
   const text = field instanceof HTMLTextAreaElement ? raw : raw.replace(/[\r\n]+/g, " ");
-  if (!holdsFocus(field)) await press(run, field, plan);
+  if (!holdsFocus(field)) await press(run, field, plan, EYE_MS, ready);
+  else ready?.();
   if (!holdsFocus(field)) focusOn(field);
   run.check();
   run.count();
@@ -721,8 +740,13 @@ async function chooseCustom(run: Run): Promise<Outcome> {
   const value = (run.plan.value ?? "").trim();
   const label = cleanText(run.plan.name, 60);
   if (!value) return run.failed(trigger, undefined, "choose in");
-  const watch = watchPopups(trigger);
+  let watch = watchPopups(trigger);
   run.onEnd(() => watch.stop());
+  // Watched afresh from the press that opens it, so that nothing that came on show while the pointer was on its way is taken for the list.
+  const fromHere = () => {
+    watch.stop();
+    watch = watchPopups(trigger);
+  };
   run.listen(trigger);
   const typable = isTextField(trigger) && !isReadOnly(trigger);
   const words = searchWords(value);
@@ -738,10 +762,10 @@ async function chooseCustom(run: Run): Promise<Outcome> {
   }
   if (typable) {
     searched = words[0] ?? value;
-    await typeInto(run, trigger, run.plan, searched);
+    await typeInto(run, trigger, run.plan, searched, popup ? undefined : fromHere);
     popup = await waitFor(run, () => findOpened(run, trigger, watch, true), OPEN_MS);
   } else if (!popup) {
-    await press(run, trigger, run.plan);
+    await press(run, trigger, run.plan, EYE_MS, fromHere);
     popup = await waitFor(run, () => findOpened(run, trigger, watch, true), OPEN_MS);
     if (!popup) popup = await openByKeys(run, trigger, watch);
   }
@@ -781,7 +805,7 @@ async function chooseCustom(run: Run): Promise<Outcome> {
   if (wire) run.onEnd(() => wire.stop());
   const startedAt = Date.now();
   // What the field shows now, typed search included, so that a pick that changed nothing is not taken for one that took.
-  const shownBefore = shownWords(trigger);
+  const shownBefore = shownOf(trigger);
   let pressedOk = true;
   try {
     option.scrollIntoView({ block: "nearest" });
@@ -792,14 +816,15 @@ async function chooseCustom(run: Run): Promise<Outcome> {
     pressedOk = false;
     if (!(await pickByKeys(run, popup, option))) throw error;
   }
-  let took = await waitFor(run, () => picked(option, popup, trigger, shownBefore, optionText), CHECK_MS);
+  let took = await waitFor(run, () => picked(option, popup, trigger, shownBefore, optionText, value), CHECK_MS);
   if (!took && pressedOk && isDrawn(popup) && option.isConnected) {
     await pickByKeys(run, popup, option);
-    took = await waitFor(run, () => picked(option, popup, trigger, shownBefore, optionText), 800);
+    took = await waitFor(run, () => picked(option, popup, trigger, shownBefore, optionText, value), 800);
   }
   if (!took) return run.failed(trigger, undefined, "choose in");
   // A list that lets several be picked stays open. One pick per step, then it is closed.
-  if (isDrawn(popup) && (multiple || expanded(trigger))) {
+  // The field saying it is still open decides, since such a list may have drawn itself again as a new element.
+  if ((isDrawn(popup) && multiple) || expanded(trigger)) {
     const on = deepActive() ?? trigger;
     keyPress(run, popup.contains(on) || on === trigger ? on : trigger, "Escape");
     await waitFor(run, () => !isDrawn(popup) || !expanded(trigger), 400);
@@ -851,22 +876,63 @@ function highlighted(option: Element, active: Element | undefined): boolean {
   return Array.from(option.classList).some((token) => /(?:^|[-_])(?:focused|active|highlighted)$/i.test(token));
 }
 
-/** Whether a pick took: the list closed or marks the option chosen, and the field shows the option's words. */
-function picked(option: Element, popup: Element, trigger: Element, shownBefore: string, optionText: string): boolean {
-  const closed = !isDrawn(popup) || trigger.getAttribute("aria-expanded") === "false";
-  const marked = option.isConnected && (option.getAttribute("aria-selected") === "true" || option.getAttribute("aria-checked") === "true");
-  return (closed || marked) && shows(trigger, optionText, shownBefore);
+/** A class word that marks an option as the chosen one: "is-selected", "ant-select-item-option-selected", "Mui-selected". Not "active", which most lists use for the one under the pointer. */
+const CHOSEN_TOKEN = /(?:^|[-_]|is)(?:selected|checked)$/i;
+
+/** Whether a list marks this option as the chosen one. */
+function markedChosen(option: Element): boolean {
+  for (let at: Element | null = option, depth = 0; at && depth < 2; at = at.parentElement, depth++) {
+    if (at.getAttribute("aria-selected") === "true" || at.getAttribute("aria-checked") === "true" || at.getAttribute("data-state") === "checked") return true;
+    if (Array.from(at.classList).some((token) => CHOSEN_TOKEN.test(token))) return true;
+  }
+  return false;
+}
+
+/** What a field shows: everything, its inputs' values included, and its own words alone, which a typed search is not part of. Read here, never kept or sent. */
+interface Shown {
+  all: string;
+  text: string;
+}
+
+function shownOf(trigger: Element): Shown {
+  const box = fieldBox(trigger);
+  const values = Array.from(box.querySelectorAll("input, textarea"))
+    .concat(box.matches("input, textarea") ? [box] : [])
+    .map((input) => ((input as HTMLInputElement).type === "hidden" ? "" : (input as HTMLInputElement).value));
+  const text = ((box as HTMLElement).innerText ?? box.textContent ?? "").replace(/\s+/g, " ").trim();
+  return { all: [text, ...values].join(" ").replace(/\s+/g, " ").trim(), text };
 }
 
 /**
- * Whether the field now shows the option's words, as its text, its value, or
- * a chip inside its box. An option can carry more than the field shows
- * ("Malika Cummerata Finance", shown as "Malika Cummerata"), so the words
- * that came on show since `before` count too when the option holds them all.
- * Read here, never kept.
+ * Whether a pick took. Any of:
+ * - the list closed or marks the option chosen, and the field shows the
+ *   option's words;
+ * - the field's own words (not a search typed into it) now hold the
+ *   option's words and did not before: its text, or a chip added to it;
+ * - the list closed after the press, and the field shows the very words
+ *   asked for, for an option that carries words the field never shows (a
+ *   row number, a hint).
  */
-function shows(trigger: Element, optionText: string, before: string): boolean {
-  const now = shownWords(trigger);
+function picked(option: Element, popup: Element, trigger: Element, before: Shown, optionText: string, value = ""): boolean {
+  const want = squash(optionText);
+  const now = shownOf(trigger);
+  if (want && squash(now.text).includes(want) && !squash(before.text).includes(want)) return true;
+  const closed = !isDrawn(popup) || trigger.getAttribute("aria-expanded") === "false";
+  // A list that stays open may draw itself again after a pick (a search box cleared): the option is then found again by its words.
+  const again = option.isConnected ? option : !closed ? optionCandidates(popup).find((other) => squash(optionWords(other)) === want) : undefined;
+  const marked = !!again && markedChosen(again);
+  if (!closed && !marked) return false;
+  if (shows(now.all, optionText, before.all)) return true;
+  return closed && !!squash(value) && squash(now.all).includes(squash(value));
+}
+
+/**
+ * Whether a field's words show the option's words. An option can carry more
+ * than the field shows ("Malika Cummerata Finance", shown as "Malika
+ * Cummerata"), so the words that came on show since `before` count too when
+ * the option holds them all.
+ */
+function shows(now: string, optionText: string, before: string): boolean {
   const want = squash(optionText);
   if (!want) return false;
   if (squash(now).includes(want)) return true;
@@ -879,16 +945,6 @@ function shows(trigger: Element, optionText: string, before: string): boolean {
   return added.length >= 2 && want.includes(added);
 }
 
-/** The words a field shows, with the values of the inputs in its box. Read here, never kept or sent. */
-function shownWords(trigger: Element): string {
-  const box = fieldBox(trigger);
-  const values = Array.from(box.querySelectorAll("input, textarea"))
-    .concat(box.matches("input, textarea") ? [box] : [])
-    .map((input) => ((input as HTMLInputElement).type === "hidden" ? "" : (input as HTMLInputElement).value));
-  const text = (box as HTMLElement).innerText ?? box.textContent ?? "";
-  return [text, ...values].join(" ").replace(/\s+/g, " ").trim();
-}
-
 /** The small box a field is drawn in: the field and what shows its value, such as a select's words beside a hidden input, or chips. */
 function fieldBox(trigger: Element): Element {
   const own = trigger.getBoundingClientRect();
@@ -896,7 +952,8 @@ function fieldBox(trigger: Element): Element {
   let at = trigger.parentElement;
   for (let depth = 0; at && at !== document.body && depth < 4; depth++, at = at.parentElement) {
     const rect = at.getBoundingClientRect();
-    if (rect.height > Math.max(own.height * 2.5, own.height + 48) || rect.width > Math.max(own.width * 2, own.width + 160)) break;
+    // A field's box is about a row high, however wide; a search input in a box of chips can be a few pixels wide.
+    if (rect.height > Math.max(own.height * 2.5, own.height + 48)) break;
     const fields = at.querySelectorAll('input:not([type="hidden"]), select, textarea, [role="combobox"]');
     if (Array.from(fields).some((field) => field !== trigger && !trigger.contains(field) && !field.contains(trigger) && isDrawn(field) && field.getBoundingClientRect().width > 4)) break;
     box = at;
@@ -947,6 +1004,23 @@ function findOpened(run: Run, from: Element, watch: Popups, choices = false): El
     if (layer && fits(layer)) return layer;
   }
   return undefined;
+}
+
+/**
+ * What a control opened, for `session.opened`, which tells the gate where an
+ * option may be pressed, so only what the control is tied to: what it says it
+ * controls, or what came on show once it says it is expanded. After a press,
+ * which is what made it, a new list, menu or dialog counts too. Something
+ * that merely came on show while the pointer rested on a control (a tooltip,
+ * a banner, the page's own news) is not what the control opened.
+ */
+function openedBy(run: Run, el: Element, watch: Popups, pressed: boolean): Element | undefined {
+  const own = watch.popupOf();
+  if (own && isDrawn(own) && hasBox(own)) return own;
+  if (expanded(el)) return findOpened(run, el, watch);
+  if (!pressed) return undefined;
+  const popup = findOpened(run, el, watch);
+  return popup && (popup.matches(POPUP_ROLES) || popup.querySelector(`${POPUP_ROLES}, ${OPTIONS}`)) ? popup : undefined;
 }
 
 /** The first box drawn over the page inside `el`, looking at a few dozen elements at most. */
@@ -1146,6 +1220,8 @@ async function quiet(run: Run, el: Element): Promise<void> {
 interface Signs {
   address: string;
   dialog: Element | undefined;
+  /** The list or menu Haptic opened, if one was open: one that closes, if only by a class, is something the press did. */
+  list: Element | undefined;
   look: string;
   changed: () => boolean;
   leaving: () => boolean;
@@ -1181,6 +1257,7 @@ function pageSigns(run: Run, control: Element): Signs {
   return {
     address: location.href,
     dialog: findOpenModal(host),
+    list: run.session.opened?.popup && isDrawn(run.session.opened.popup) ? run.session.opened.popup : undefined,
     look: lookOf(control),
     changed: () => {
       if (!changed) for (const record of observer.takeRecords()) if (!(record.target === host || host.contains(record.target))) changed = true;
@@ -1200,6 +1277,7 @@ async function waitForSign(run: Run, control: Element, before: Signs, watch: Pop
       popup ??= findOpened(run, control, watch);
       if (popup) return true;
       if (findOpenModal(run.session.host) !== before.dialog) return true;
+      if (before.list && !isDrawn(before.list)) return true;
       if (control.isConnected && lookOf(control) !== before.look) return true;
       return before.changed();
     },
@@ -1597,11 +1675,30 @@ function capital(text: string): string {
 function nameOf(run: Run, el: Element): string {
   const listed = run.ctx.listing.get(el);
   if (listed) return describeElement(listed);
-  const words = cleanText(el.getAttribute("aria-label") ?? optionWords(el), 60);
+  const words = fieldName(el);
   return words ? `"${words}"` : "the field";
 }
 
 /** A control's name as the visitor sees it, for "What I did". */
 function listedName(run: Run, el: Element): string {
-  return cleanText(run.ctx.listing.get(el)?.label ?? el.getAttribute("aria-label") ?? optionWords(el), 60);
+  return cleanText(run.ctx.listing.get(el)?.label ?? fieldName(el), 60);
+}
+
+/**
+ * What names a field that the reading did not list: its aria-label, what its
+ * aria-labelledby points at, or its label. Never its own words, which for a
+ * select are the choice it shows, not its name.
+ */
+function fieldName(el: Element): string {
+  const given = el.getAttribute("aria-label");
+  if (given?.trim()) return cleanText(given, 60);
+  const named = (el.getAttribute("aria-labelledby") ?? "")
+    .split(/\s+/)
+    .map((id) => (id ? document.getElementById(id) : null))
+    .filter((part): part is HTMLElement => !!part && part !== el && !part.contains(el))
+    .map((part) => optionWords(part))
+    .join(" ");
+  if (named.trim()) return cleanText(named, 60);
+  const label = (el as HTMLInputElement).labels?.[0];
+  return label ? cleanText(optionWords(label), 60) : "";
 }
