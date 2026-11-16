@@ -12,6 +12,8 @@ export interface SiteContext {
   /** Origins the widget may call the API from. */
   allowedOrigins: string[];
   appearance: Appearance;
+  /** "Do it with me": whether Haptic may use the page's controls itself. Absent: it may not. */
+  acting?: ActingSettings;
   /** Free-form notes from the company about their product. */
   notes: string;
   /** Help docs the company supplied. */
@@ -75,7 +77,116 @@ export interface PageNode {
 export interface PublicSiteConfig {
   name: string;
   appearance: Appearance;
+  /** Present only when the site has acting on. The widget shows the Do it button only then. */
+  acting?: Omit<ActingSettings, "enabled">;
 }
+
+// Acting ("do it with me") ----------------------------------------------------
+
+/**
+ * A company's settings for "do it with me", where Haptic uses the page's
+ * controls itself while the visitor watches and always leaves the click that
+ * commits to them. Off unless the company turns it on.
+ */
+export interface ActingSettings {
+  enabled: boolean;
+  /** Path prefixes where Haptic may act, like "/cards". Empty or absent: anywhere on the site's allowed origins. */
+  paths?: string[];
+  /** The company's own words for controls that commit, added to the built-in list: "Book", "Lodge claim". */
+  commitWords?: string[];
+  /** Most actions in one request. Default `ACTING_LIMITS.actions`; never more than `ACTING_LIMITS.actionsCeiling`. */
+  maxActions?: number;
+  /** Show the one-line explanation the first time a visitor uses Do it. Default true. */
+  confirmFirst?: boolean;
+}
+
+/** The limits on acting, shared by the widget and the server. */
+export const ACTING_LIMITS = {
+  /** Actions in one request when the site sets none. */
+  actions: 25,
+  /** The most actions in one request any site may allow. */
+  actionsCeiling: 40,
+  /** Model turns in one acting request. Guides keep their own limit. */
+  turns: 30,
+  /** In act mode the server answers "done" once `step` passes the site's actions plus this. */
+  stepAllowance: 10,
+  /** Characters Haptic types in one request, all fields together. */
+  typedChars: 400,
+  /** Actions on one control with no change to the page in between. */
+  sameControl: 2,
+  /** "I couldn't do this one" hand-backs in a row before acting ends and the guide goes on as a guide. */
+  failuresInARow: 3,
+} as const;
+
+/** How many actions a site allows in one request: its own number, kept between 1 and the ceiling, or the default. */
+export function actionsAllowed(acting: Pick<ActingSettings, "maxActions"> | undefined): number {
+  const asked = acting?.maxActions;
+  if (typeof asked !== "number" || !Number.isFinite(asked)) return ACTING_LIMITS.actions;
+  return Math.min(Math.max(Math.floor(asked), 1), ACTING_LIMITS.actionsCeiling);
+}
+
+/** Whether a page's path is one where the site lets Haptic act. No paths, or an empty list, means anywhere. */
+export function actingAllowedAt(acting: Pick<ActingSettings, "paths"> | undefined, path: string): boolean {
+  const prefixes = (acting?.paths ?? []).filter((prefix) => typeof prefix === "string" && prefix.trim());
+  if (!prefixes.length) return true;
+  return prefixes.some((prefix) => {
+    const clean = "/" + prefix.trim().replace(/^\/+|\/+$/g, "");
+    return clean === "/" || path === clean || path.startsWith(clean + "/") || path.startsWith(clean + "#") || path.startsWith(clean + "?");
+  });
+}
+
+/** What Haptic does to the target itself, in act mode. `press_enter` is only for a search box that has no button. */
+export const ACTS = ["click", "type", "choose", "check", "uncheck", "press_enter"] as const;
+export type Act = (typeof ACTS)[number];
+
+/**
+ * Why Haptic did not do a step it was asked to do. The widget's gate gives one
+ * with every step it declines, and the server counts the ones its own check
+ * removed. Each is one rule of the gate (DESIGN section 4).
+ */
+export type Refusal =
+  /** Rule 0: a press would land on something other than the control, its label or its own part. */
+  | "covered"
+  /** Rule 1: the company marked it `data-haptic-commit`, or its name holds one of the site's `commitWords`. */
+  | "marked"
+  /** Rule 1: inside `data-haptic-act="off"`. */
+  | "off"
+  /** Rule 2: a password, payment, one-time code, secret, file or type-to-confirm field, or a field in a confirmation. */
+  | "secret"
+  /** Rule 3: another origin, another tab or window, a download, or an address that is not a web page. */
+  | "leaves"
+  /** Rule 4: a native form submit, or a control the page marks as sending a write (`data-method`, `hx-post`, `data-confirm`, ...). */
+  | "writes"
+  /** Rule 5: a confirmation dialog is open. */
+  | "confirmation"
+  /** Rule 6: its words say it commits: delete, pay, sign out, send, save, export, reveal, ... */
+  | "words"
+  /** Rule 7: it is styled as destructive: red, or a toolkit's danger class. */
+  | "styled"
+  /** Rule 10: nothing says it is safe, so it is not acted on. */
+  | "unknown"
+  /** A field that may save the moment it changes: nothing around it waits for a later click. */
+  | "live"
+  /** The text to type, or the choice to pick, is not in the visitor's own words. */
+  | "ungrounded"
+  /** Enter, outside a search box and outside a list Haptic opened. */
+  | "enter"
+  /** The act does not fit the control, or is one Haptic does not do in this version (sliders, uploads, dates, editors). */
+  | "unfit"
+  /** The reply gave a `do` together with `commits: true`. Treated as a hand-over. */
+  | "contradiction"
+  /** 4.5: the commit deletes, spends, signs in or out, or reveals a secret, and the visitor asked for nothing of that kind. */
+  | "class"
+  /** The control is gone, or is no longer the one the reply named. The widget asks again. */
+  | "changed"
+  /** 4.2: a cap on actions, turns, typing or repeats was reached. */
+  | "cap"
+  /** The site, the page or the path does not allow acting, or the reply did not carry `mode: "act"`. */
+  | "acting-off"
+  /** After Haptic set a field, the page sent a request or showed a status at once: it may have saved. */
+  | "tripwire"
+  /** The engine did the step but could not see that it took, or could not do it at all. */
+  | "failed";
 
 export interface SnapElement {
   /** Short handle like "e12", valid for one snapshot only. */
@@ -118,10 +229,13 @@ export interface HistoryTurn {
  * Which shape of turn request a widget sends. A widget from before the number
  * existed sends none, and counts as version 1. Version 2 is the first that
  * asks a closing question (`closing`) and sends the visitor's date (`today`).
+ * Version 3 is the first that understands act replies (`ACT_VERSION`).
  * Raise it whenever a server would have to know what the widget in front of it
  * can do.
  */
-export const TURN_VERSION = 2;
+export const TURN_VERSION = 3;
+/** The first `TURN_VERSION` that understands act replies. A server reads `mode: "act"` only from a widget at this version or later. */
+export const ACT_VERSION = 3;
 
 export interface TurnRequest {
   site: string;
@@ -139,19 +253,54 @@ export interface TurnRequest {
   change?: string;
   /** Set when the visitor has done what was called the last step, and this question is the look at what came of it. */
   closing?: true;
+  /**
+   * "act": the visitor pressed Do it, and Haptic may use the controls itself.
+   * Read by a server only as this exact string, from a widget at `ACT_VERSION`
+   * or later, on a site with acting on at this path. Absent: a guide.
+   */
+  mode?: "act";
   snapshot: Snapshot;
 }
 
 /** The format a step is streamed in: one JSON value per line. The widget asks for it in its Accept header. */
 export const STREAM_TYPE = "application/x-ndjson";
 
+/**
+ * One step. In a guide only `target`, `status` and `say` are used. In act mode
+ * (the reply carries `mode: "act"`) the rest say what Haptic does:
+ *
+ * | Reply                                              | In act mode                                                       |
+ * |----------------------------------------------------|-------------------------------------------------------------------|
+ * | `continue` + target + `do`                         | Haptic does it, then asks again.                                  |
+ * | `continue` + target, no `do`                       | The visitor does this one; acting resumes when they have.         |
+ * | `done` + target + `commits: true`, no `do`         | The hand-over: the visitor makes the click that commits.          |
+ * | `done`, no target                                  | Finished, or nothing can be done.                                 |
+ * | `do` together with `commits: true`                 | A contradiction, treated as the hand-over.                        |
+ *
+ * The model writes the fields in this order: target, do, enter, commits,
+ * status, say. `target` stays first so the pointer can start early.
+ */
 export interface TurnReply {
   /** Element id from the snapshot to point at, or null. */
   target: string | null;
+  /** Act mode: what Haptic does to the target. Absent or null: the visitor uses the target, as in a guide. */
+  do?: Act | null;
+  /** The exact text to type or the choice to pick, written as the visitor wrote it. Null when there is nothing to enter. */
+  enter?: string | null;
+  /** Using the target saves, sends, submits, pays, approves, deletes, signs in or out, invites, issues or publishes. */
+  commits?: boolean;
   /** "continue": the user must act on the target, then we go again. "done": nothing left to wait for. */
   status: "continue" | "done";
   /** One or two sentences shown next to the pointer. */
   say: string;
+  /** Set by a server that answered in act mode. The widget acts only on a reply that carries it. */
+  mode?: "act";
+  /**
+   * Set by the server when its own check (`checkAction`) removed the `do` the
+   * model gave: why. `say` then describes an action that was not taken, so the
+   * widget speaks for that step in its own words instead.
+   */
+  withheld?: Refusal;
 }
 
 // Paths ---------------------------------------------------------------------
