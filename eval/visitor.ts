@@ -10,8 +10,10 @@ import type { SnapElement } from "../src/shared/types.ts";
 //   the one the sentence names, or else the one the script picks next.
 // - A text field is clicked and typed into on the keyboard, key by key. What is
 //   typed is, in this order: the script's value for that very field, the text
-//   the sentence puts in quotes, a value that suits the field (a date in the
-//   form the field shows, a number, an email), and only then a neutral word.
+//   the sentence asks for (in quotes of any kind, or straight after "type"
+//   with none, as in "type Notebook Basic 17"), a value that suits the field
+//   (a date in the form the field shows, a number, an email), and only then
+//   a neutral text.
 // - A native <select> gets the choice the script names, or else the choice the
 //   sentence names, or else another choice than the one showing.
 // - Anything else is clicked with the real mouse, at a spot a person could
@@ -61,27 +63,77 @@ export interface Hints {
   near: string;
 }
 
-const NEUTRAL = "Test";
+/**
+ * What a visitor types when nothing says what. Long enough for a field that
+ * wants a few words: "Test" was too short for a description that needs five
+ * characters, and a run went in circles on it.
+ */
+export const NEUTRAL = "Sample text";
 /** The date a visitor enters when nobody said which. */
 const A_DATE = { year: 2026, month: 12, day: 1 };
 
 /**
- * The text a sentence asks the visitor to type: what it puts in double quotes,
- * unless that is only the name of the field itself. 'Type "KAFKA-1" in the
- * search box' gives KAFKA-1. 'Click the "Search" box' gives nothing.
+ * Every pair of quotation marks a sentence may put text in: double and single,
+ * straight and curly, guillemets, German and corner brackets. A straight single
+ * quote opens only where no letter comes before it and closes only where none
+ * comes after, so "don't" and "the users' list" open nothing.
  */
-export function quoted(say: string, label = "", placeholder = ""): string | undefined {
+const QUOTED = /"([^"]{1,80})"|“([^“”"]{1,80})[”"]|‘([^‘’]{1,80})’|(?<![\p{L}\p{N}])'([^']{1,80})'(?![\p{L}\p{N}])|«\s?([^«»]{1,80}?)\s?»|„([^„“”]{1,80})[“”]|「([^「」]{1,80})」/gu;
+
+/** The verbs a sentence asks for typing with, in the languages the guides are asked in. "Enter" after "press" is a key, not a verb. */
+const TYPE_VERB = /(?<![\p{L}\p{N}])(?<!\b(?:press|hit|tap|pressing|hitting|the)\s+)(?:type|enter|write|input|search for|fill in|put|escribe|escriba|ingresa|ingrese|introduce|introduzca|tapez|saisissez|entrez|écrivez|tippe|tippen sie|gib|geben sie)(?:\s+in)?(?:\s*:\s*|\s+)/giu;
+
+/** The first word of a description of what to type, not of the text itself: "type your email", "type a longer text", "escribe tu número". */
+const DESCRIBES =
+  /^(?:the|a|an|your|my|his|her|their|its|our|this|that|these|those|some|any|another|one|more|something|anything|whatever|what|which|it|them|in|into|on|at|to|here|there|and|or|then|el|la|los|las|un|una|unos|unas|tu|tus|su|sus|le|les|une|des|du|de|votre|vos|ton|ta|tes|son|sa|ses|ce|cette|der|die|das|den|dem|ein|eine|einen|ihr|ihre|ihren|dein|deine|etwas)(?![\p{L}\p{N}])/iu;
+
+/** Where unquoted text to type ends: at a word that goes on with the sentence, a comma or bracket, or the end of the sentence. */
+const TYPED_ENDS = /\s+(?:in|into|on|at|to|and|then|so|for|en|dans|sur|et|puis|y|luego|und|dann|ins)(?![\p{L}\p{N}])|\s*[,;(]|[.!?](?:\s|$)|$/iu;
+
+/**
+ * The text a sentence asks the visitor to type, unless that is only the name of
+ * the field itself. In order: text in quotes straight after a verb of typing,
+ * text with no quotes straight after one, then text in quotes anywhere.
+ * 'Type "KAFKA-1" in the search box' and "type KAFKA-1 into the search box"
+ * give KAFKA-1; "type: created >= -7d (with the project)" gives created >= -7d;
+ * "type a longer text, like 'template change'" gives template change. 'Click
+ * the "Search" box' and "Type your email" give nothing.
+ *
+ * Text with no quotes is taken only when it looks like the text itself and not
+ * a description of it: at most six words, not starting with a word like "the",
+ * "your" or "a", and with a capital, a digit or a sign in it. So "type
+ * Notebook Basic 17" gives Notebook Basic 17, and "type text here" gives nothing.
+ */
+export function valueAsked(say: string, label = "", placeholder = ""): string | undefined {
   const names = [label, placeholder].map((name) => name.trim().toLowerCase()).filter(Boolean);
-  const found: { text: string; typed: boolean }[] = [];
-  for (const match of say.matchAll(/["“]([^"“”]{1,80})["”]/g)) {
-    const text = match[1]!.trim();
+  // The field's own name, or most of it, is how a sentence says which field. 'Type "Kafka search"' still names something to type in a field called "Search".
+  const isName = (text: string) => {
     const lower = text.toLowerCase();
-    // The field's own name, or most of it, is how a sentence says which field. 'Type "Kafka search"' still names something to type in a field called "Search".
-    if (!text || names.some((name) => name.includes(lower) || (lower.includes(name) && name.length * 2 > lower.length))) continue;
-    const before = say.slice(0, match.index).toLowerCase();
-    found.push({ text, typed: /\b(type|enter|write|input|search for|fill in|put)\s*(in\s*)?$/.test(before) });
+    return names.some((name) => name.includes(lower) || (lower.includes(name) && name.length * 2 > lower.length));
+  };
+  const afterVerb = (at: number) => {
+    const before = say.slice(0, at);
+    for (const verb of before.matchAll(TYPE_VERB)) if (verb.index + verb[0].length === before.length) return true;
+    return false;
+  };
+  const quoted: { text: string; typed: boolean }[] = [];
+  for (const match of say.matchAll(QUOTED)) {
+    const text = (match.slice(1).find((group) => group !== undefined) ?? "").trim();
+    if (!text || isName(text)) continue;
+    quoted.push({ text, typed: afterVerb(match.index) });
   }
-  return (found.find((one) => one.typed) ?? found[0])?.text;
+  const typed = quoted.find((one) => one.typed);
+  if (typed) return typed.text;
+
+  for (const verb of say.matchAll(TYPE_VERB)) {
+    const rest = say.slice(verb.index + verb[0].length);
+    if (!rest || /^["“‘'«„「]/.test(rest) || DESCRIBES.test(rest)) continue;
+    const end = TYPED_ENDS.exec(rest);
+    const text = rest.slice(0, end ? end.index : rest.length).trim();
+    const looksLikeText = /[\p{Lu}\p{N}]|[^\p{L}\p{N}\s]/u.test(text);
+    if (text && looksLikeText && text.split(/\s+/).length <= 6 && !isName(text)) return text;
+  }
+  return quoted[0]?.text;
 }
 
 /** A date written the way a field shows it should be: "MM-DD-YYYY" gives "12-01-2026". Undefined when no form is shown. */
@@ -414,7 +466,7 @@ export async function use(page: Loose, element: Loose, shown: Shown): Promise<Us
 
   const typable = control.takesText && !control.readOnly;
   // What to type, when somebody has said: the script for this very field, or the sentence in quotes.
-  let value = typable ? (shown.scripted?.fill ?? quoted(shown.say, hints.label, hints.placeholder)) : undefined;
+  let value = typable ? (shown.scripted?.fill ?? valueAsked(shown.say, hints.label, hints.placeholder)) : undefined;
   let source = value === undefined ? "" : shown.scripted?.fill !== undefined ? "" : ", which the sentence asks for";
 
   const pressed = await press(page, element, control.nativePicker);

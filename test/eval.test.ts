@@ -5,6 +5,7 @@ import { findListed, KINDS, loadCaseFiles, matches, plausibleRange, score, type 
 import { saidOrWhy } from "../eval/browser.ts";
 import { DONE, faults, type Guide, type GuideSet } from "../eval/guide.ts";
 import { judge, Net, onlyQueries } from "../eval/net.ts";
+import { NEUTRAL, valueAsked } from "../eval/visitor.ts";
 
 const item: Case = {
   id: "sample-1",
@@ -274,4 +275,25 @@ test("an answer in words passes only when it says the true answer, and nothing w
   const page = { shown: ["This page was last edited on 20 September 2026, at 19:55 (UTC)."] };
   assert.equal(saidOrWhy(when, "The latest edit is from September 20, 2026, by Quivico.", page), "");
   assert.match(saidOrWhy(when, "The latest edit is from 19 September 2026.", page), /does not say "20 September 2026"/);
+});
+
+test("the visitor types what the sentence asks for, in quotes of any kind or after \"type\" with none", () => {
+  // Seen on staging: an unquoted name sent the visitor's "Test" into UI5's search ("No products found"), a value in
+  // single quotes was never typed into Ant Design's description (eight times round), and a query after "type:" never
+  // reached Jira's query box.
+  assert.equal(valueAsked("Click the Search box and type Notebook Basic 17 to find it.", "Search"), "Notebook Basic 17");
+  assert.equal(valueAsked("Click Rule Description and type a longer text, like 'template change', then we'll continue.", "Rule Description"), "template change");
+  assert.equal(valueAsked("Click the Advanced Query box and type: created >= -7d (you can add project = KAFKA before it).", "Advanced Query"), "created >= -7d");
+  assert.equal(valueAsked("Type ‘Kafka’ to find the project.", "Find Projects..."), "Kafka");
+  assert.equal(valueAsked("Tapez « Shortlisted » dans le champ.", "Status"), "Shortlisted");
+  assert.equal(valueAsked('Type "KAFKA-1" in the search box.', "Search"), "KAFKA-1");
+  assert.equal(valueAsked("Click Timespan and type 7, then choose days.", "Timespan"), "7");
+  // Text in quotes straight after "type" wins over any other, and text after "type" over quotes elsewhere.
+  assert.equal(valueAsked('Click the Timespan box under "Within the last" and type 7.', "Timespan"), "7");
+  // A description of what to type, the field's own name, a key to press and an apostrophe give nothing.
+  for (const say of ["Type your work email.", "Enter a name for the rule.", "Escribe tu nuevo número en el campo Phone #.", "Type text here and press Enter.", "Fill in Rule Description, then click Next.", 'Click the "Search" box.', "Click the users' list, then type the name."]) {
+    assert.equal(valueAsked(say, say.includes("Rule Description") ? "Rule Description" : "Search"), undefined, say);
+  }
+  // With nothing asked for, the made-up text is long enough for a field that wants five characters.
+  assert.ok(NEUTRAL.length >= 5);
 });
