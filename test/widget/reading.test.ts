@@ -131,3 +131,52 @@ test("the first reading waits while the page shows its spinner, though its frame
     await session.close();
   }
 });
+
+/**
+ * A page far longer than the 300 controls the widget lists, like a Wikipedia
+ * article: forty parts, each with a heading, a paragraph and a dozen links.
+ * The list keeps what is on screen first, so scrolling alone changes what is
+ * listed while nothing on the page changes.
+ */
+const LONG = `<header><button type="button">Settings</button></header><main>${Array.from(
+  { length: 40 },
+  (_, part) =>
+    `<h2>Part ${part + 1}</h2><p>These are the words of part ${part + 1}, long enough to be read as a sentence of their own.</p><p>${Array.from(
+      { length: 12 },
+      (_, link) => `<a href="/part/${part + 1}/page/${link + 1}">Page ${link + 1} of part ${part + 1}</a> `,
+    ).join("")}</p>`,
+).join("")}</main>`;
+
+test("scrolling a long page while the model answers is not a change: the answer is shown and nothing is asked again", async () => {
+  const session = await start(LONG, async (request) => {
+    // The visitor scrolls to the foot of the page while the model is answering.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return point(request, "Settings", "Click Settings at the top of the page.");
+  });
+  try {
+    await session.ask("where are the settings");
+    await session.untilAsked(1);
+    await session.page.waitForTimeout(300);
+    await session.page.mouse.wheel(0, 40_000);
+    await session.untilState("pointing", 8000);
+    await session.page.waitForTimeout(2500);
+    assert.equal(session.requests.length, 1, `asked again: ${session.requests[1]?.event ?? ""}`);
+  } finally {
+    await session.close();
+  }
+});
+
+test("a key that only scrolls a long page, pressed while a sentence is up, is not taken for the step", async () => {
+  const session = await start(LONG, (request, index) => (index === 0 ? words("Press Enter to open the settings.", "continue") : words("The settings are open.")));
+  try {
+    await session.ask("where are the settings");
+    await session.untilState("watching");
+    // Space scrolls the page a screen at a time. Nothing on the page changes.
+    for (let press = 0; press < 6; press++) await session.page.keyboard.press("Space");
+    await session.page.waitForTimeout(3000);
+    assert.equal(session.requests.length, 1, `asked again: ${session.requests[1]?.event ?? ""}`);
+    assert.equal(await session.state(), "watching");
+  } finally {
+    await session.close();
+  }
+});

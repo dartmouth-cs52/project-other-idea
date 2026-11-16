@@ -574,6 +574,13 @@ test("scrolling a long page alone changes no control, though it changes which ar
   assert.match(await change((page) => page.evaluate("window.scrollTo(0, document.body.scrollHeight); document.getElementById('more').click()")), /^New: button "Added"\.$/m);
 });
 
+test("scrolling a page with more headings than are sent brings in no new text", { skip }, async () => {
+  // Only twelve headings are sent, the ones on screen first, so a scroll changes which.
+  const parts = Array.from({ length: 40 }, (_, i) => `<h3>Part ${i + 1}</h3><p>Words of part ${i + 1} that make a sentence.</p><div style="height:300px"></div>`).join("");
+  const change = await browser!.change(`<main>${parts}</main>`, async (page) => void (await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")));
+  assert.equal(change, "Nothing visible on the page changed.");
+});
+
 // Forms built from boxes, with captions in labels tied to nothing (OrangeHRM) --------------------------
 
 /** OrangeHRM's markup: captions in <label>s tied to no field, custom selects, date fields, chips, sortable headings, a pager and a dialog. */

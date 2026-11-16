@@ -1,6 +1,6 @@
 import { cleanText, describeElement, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { hear, keyName, keysAsked, nothingHeard, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "./observe.ts";
-import { currentPath, describeChange, elementKey, findOpenModal, isField, NOTHING_CHANGED, takeSnapshot, type PageSnapshot } from "./snapshot.ts";
+import { currentPath, describeChange, elementKey, findOpenModal, isField, NOTHING_CHANGED, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
 import type { Ui } from "./ui.ts";
 
 // Runs one guide: ask the model for a step, point at it, wait for the visitor
@@ -710,8 +710,9 @@ function nameOf(listed: SnapElement): string {
 }
 
 /** Everything about a page that using a control could change, as one string: where it is, its dialog, its controls and their states. */
+/** The page's address, dialog, and every control on it with its state: not only those listed, which on a long page change with a scroll. */
 function pageState(snapshot: Snapshot): string {
-  return [snapshot.path, snapshot.dialog ?? "", ...snapshot.elements.map((element) => `${elementKey(element)}|${(element.state ?? []).join(",")}`)].join("\n");
+  return [snapshot.path, snapshot.dialog ?? "", ...wholePage(snapshot).elements.map((element) => `${elementKey(element)}|${(element.state ?? []).join(",")}`)].join("\n");
 }
 
 /** Whether the element is in the page and drawn. */
@@ -1196,15 +1197,22 @@ function loaded(maxMs = 4000): Promise<void> {
   });
 }
 
-/** How many controls one list has that the other does not, counting controls that are listed alike. `main` is how many of those added are outside the page's furniture. */
+/**
+ * How many controls one page has that the other does not, counting controls
+ * that are listed alike. `main` is how many of those added are outside the
+ * page's furniture. The whole of each page is compared, not only what was
+ * listed: a long page lists what is on screen first, so a scroll alone would
+ * add and remove controls.
+ */
 function listDifference(asked: Snapshot, now: Snapshot): { added: number; removed: number; main: number; after: Map<string, number> } {
   const count = (elements: SnapElement[]) => {
     const counts = new Map<string, number>();
     for (const element of elements) counts.set(elementKey(element), (counts.get(elementKey(element)) ?? 0) + 1);
     return counts;
   };
-  const before = count(asked.elements);
-  const after = count(now.elements);
+  const whole = wholePage(now).elements;
+  const before = count(wholePage(asked).elements);
+  const after = count(whole);
   let added = 0;
   let removed = 0;
   for (const [key, n] of after) added += Math.max(0, n - (before.get(key) ?? 0));
@@ -1213,7 +1221,7 @@ function listDifference(asked: Snapshot, now: Snapshot): { added: number; remove
   const furniture = /^(?:header|nav|aside|footer|menu|tabs|toolbar)\b/;
   const unmatched = new Map(before);
   let main = 0;
-  for (const element of now.elements) {
+  for (const element of whole) {
     const key = elementKey(element);
     const n = unmatched.get(key) ?? 0;
     if (n) unmatched.set(key, n - 1);
@@ -1225,12 +1233,13 @@ function listDifference(asked: Snapshot, now: Snapshot): { added: number; remove
 /** Text with its numbers taken out, so that a clock, a counter or a "5 seconds ago" that ticks reads the same from one moment to the next. */
 const withoutNumbers = (text: string) => text.replace(/\d+/g, "#");
 
-/** Whether the page says something now that it did not say before: a new heading, or new text of more than a few words. A clock that ticks is not that. */
+/** Whether the page says something now that it did not say before, anywhere on it: a new heading, or new text of more than a few words. A clock that ticks is not that. */
 function saysMore(asked: Snapshot, now: Snapshot): boolean {
-  if (now.headings.map(withoutNumbers).join("|") !== asked.headings.map(withoutNumbers).join("|")) return true;
-  const had = new Set(asked.text.map(withoutNumbers));
+  const [was, is] = [wholePage(asked), wholePage(now)];
+  if (is.headings.map(withoutNumbers).join("|") !== was.headings.map(withoutNumbers).join("|")) return true;
+  const had = new Set(was.text.map(withoutNumbers));
   let fresh = 0;
-  for (const text of now.text) if (!had.has(withoutNumbers(text))) fresh += text.length;
+  for (const text of is.text) if (!had.has(withoutNumbers(text))) fresh += text.length;
   return fresh >= 20;
 }
 
@@ -1246,10 +1255,11 @@ function sharedInOrder(list: string[], other: string[]): string[] {
   });
 }
 
-/** Whether what both readings show is in a different order: a sort, or a filter, that landed. Controls and text both count. */
+/** Whether what both readings found on the whole page is in a different order: a sort, or a filter, that landed. Controls and text both count. */
 function reordered(asked: Snapshot, now: Snapshot): boolean {
+  const [was, is] = [wholePage(asked), wholePage(now)];
   const differ = (a: string[], b: string[]) => sharedInOrder(a, b).join("\n") !== sharedInOrder(b, a).join("\n");
-  return differ(asked.elements.map(elementKey), now.elements.map(elementKey)) || differ(asked.text.map(withoutNumbers), now.text.map(withoutNumbers));
+  return differ(was.elements.map(elementKey), is.elements.map(elementKey)) || differ(was.text.map(withoutNumbers), is.text.map(withoutNumbers));
 }
 
 /** Whether the page is different in a way that matters: its controls, their order or their states, its dialog, or what it says. Numbers that tick do not count. */

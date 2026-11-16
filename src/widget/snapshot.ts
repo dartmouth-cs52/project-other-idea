@@ -656,7 +656,7 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
   // the rest in page order. A region that is one long run of links, like a box
   // of related pages, does not get to crowd out everything after it.
   // Kept beside the reading, and never sent, so that what changed is told from the whole page and not from what was cut.
-  const everything = { elements: usable.map((c) => ({ ...c })), text: texts.map((block) => block.text) };
+  const everything = { elements: usable.map((c) => ({ ...c })), text: texts.map((block) => block.text), headings: [...new Set(headings.map((heading) => heading.text))] };
   let chosen = usable;
   if (usable.length > MAX_ELEMENTS) {
     const perRegion = new Map<string, number>();
@@ -692,17 +692,32 @@ export function takeSnapshot(ignore: Element, question: string, near = (ignore a
     truncated: chosen.length < candidates.filter((c) => !c.outside).length && chosen.length >= MAX_ELEMENTS,
   };
   if (modal) snapshot.dialog = dialogLabel(modal);
-  uncut.set(snapshot, { elements: everything.elements.map(strip), text: everything.text });
+  uncut.set(snapshot, { elements: everything.elements.map(strip), text: everything.text, headings: everything.headings });
   return { snapshot, elements };
 }
 
 /**
- * Every control and piece of text a reading found, before the list was cut to
- * its limit. A long page lists the controls on screen first, so scrolling
- * alone moves controls in and out of the list without anything on the page
- * changing.
+ * Every control, piece of text and heading a reading found, before what is
+ * sent was cut to its limits. A long page sends what is on screen first, so
+ * scrolling alone moves controls, text and headings in and out of what is
+ * sent without anything on the page changing.
  */
-const uncut = new WeakMap<Snapshot, { elements: SnapElement[]; text: string[] }>();
+const uncut = new WeakMap<Snapshot, WholePage>();
+
+export interface WholePage {
+  elements: SnapElement[];
+  text: string[];
+  headings: string[];
+}
+
+/**
+ * The whole page as a reading found it, which is what two readings are
+ * compared by: whether the page changed, and how. A reading made elsewhere,
+ * with nothing kept beside it, is its own whole.
+ */
+export function wholePage(snapshot: Snapshot): WholePage {
+  return uncut.get(snapshot) ?? { elements: snapshot.elements, text: snapshot.text, headings: snapshot.headings };
+}
 
 /** Identifies the same control across two snapshots, where ids differ. */
 export function elementKey(element: Pick<SnapElement, "role" | "label" | "icon" | "href" | "context">): string {
@@ -751,8 +766,8 @@ export function describeChange(before: Snapshot, after: Snapshot): string {
     if (removed.length) lines.push(`Gone: ${listSome(removed)}.`);
     lines.push(...stateChanges(whole ? was.elements : before.elements, whole ? now.elements : after.elements).slice(0, 8));
   }
-  const beforeText = [...before.headings, ...(whole ? was.text : before.text)];
-  const afterText = [...after.headings, ...(whole ? now.text : after.text)];
+  const beforeText = whole ? [...was.headings, ...was.text] : [...before.headings, ...before.text];
+  const afterText = whole ? [...now.headings, ...now.text] : [...after.headings, ...after.text];
   const newText = without(afterText, beforeText, (text) => text);
   if (newText.length) lines.push(`New text: ${newText.slice(0, 5).map((text) => `"${text.slice(0, 100)}"`).join(", ")}.`);
   else if (!lines.length && without(beforeText, afterText, (text) => text).length) lines.push("Some text on the page went away.");
