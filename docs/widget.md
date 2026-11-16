@@ -20,6 +20,10 @@ The crawl builds the first map of a site, but it can't sign in, and it can't ope
 
 Each label is counted by distinct visitor (`src/server/learned.ts`). The widget keeps a random id in the site's `localStorage`, and the server keeps only a hash of it made with the site's id, up to ten per label, in `outline_labels`. A browser that keeps no storage has no id, and what it sends is not used: a hash of a network address could be turned back into the address. A label reaches the prompt only once enough different visitors have seen it: 3 online, 1 on your own machine, or `HAPTIC_LABEL_THRESHOLD`. That keeps one person's own data, like the name of their project, out of everyone's prompt. What is learned is merged with the crawl's pages when a site is read from the database, so a step never waits on it. The crawl's pages come first, pages only traffic knows follow, navigation that is on most pages is listed once, and each page lists at most 24 buttons. Learned labels are listed in a fixed order, so a count going up does not change the prompt the model provider keeps cached. A site whose context has `"learn": false` sends no outlines.
 
+## Putting the launcher away
+
+A visitor who doesn't want the launcher in the corner can minimize it. A small button with a minus shows on the launcher's corner while the mouse is over it or it has focus, and turns it into a dot. The dot opens up a little to show the pointer when the mouse is over it, and a click brings the launcher back. The choice is kept in the site's `localStorage` as `haptic.minimized`, so it holds on the next page. Where storage is blocked, the launcher is minimized on that page only. `test/browser/minimize.test.ts` covers it in all three browsers.
+
 ## Testing in browsers
 
 `npm run test:browser` runs the widget in Chromium, Firefox and WebKit, on small pages made for each test, against a stand-in server that answers each step from a script (`test/browser/harness.ts`). It needs Playwright's browsers once: `npx playwright install chromium firefox webkit`. `BROWSERS=chromium npm run test:browser` runs one.
