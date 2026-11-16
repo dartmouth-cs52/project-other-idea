@@ -25,9 +25,12 @@ import { DONE, type Guide, type GuideSet, type Reached, type Says, type Step } f
 //
 // Recording needs the site's context first: npm run tag -- --url <origin>
 // --id site_testbed --name Northpine --notes testbed/haptic-notes.md
+//
+// NORTHPINE_SITE names another site id to run them as, like one built with the
+// help docs as testbed/README.md has it, so that Answers is on.
 
 const ORIGIN = process.env.NORTHPINE_URL || "http://localhost:4200";
-const SITE = "site_testbed";
+const SITE = process.env.NORTHPINE_SITE || "site_testbed";
 
 /** The app as a task finds it, before the task's own settings. */
 const BASE: Record<string, string> = { role: "admin", plan: "growth", nav: "classic", locale: "en", labButton: "0" };
