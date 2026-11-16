@@ -22,7 +22,8 @@
     "eval:import": "tsx eval/import.ts",
     "test:widget": "tsx --test --test-concurrency=1 test/widget/*.test.ts",
     "eval:toolkits": "tsx eval/toolkits/run.ts",
-    "eval:acts": "tsx eval/acts.ts"
+    "eval:acts": "tsx eval/acts.ts",
+    "eval:sweep": "tsx eval/sweep/run.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

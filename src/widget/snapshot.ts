@@ -6,6 +6,16 @@ import { cleanText as maskAndTrim, describeElement, normalizePath, namedIn, type
 // the page goes through `wordsIn`, which passes over both.
 
 const MAX_ELEMENTS = 300;
+
+// A frame from the page's own origin is read as part of the page, and what is in it comes from another window. So
+// what a node is, is told from the node itself, never from which window's constructor made it.
+const isElement = (node: unknown): node is Element => (node as Node | null | undefined)?.nodeType === 1;
+const isDocument = (node: unknown): node is Document => (node as Node | null | undefined)?.nodeType === 9;
+const isShadowRoot = (node: unknown): node is ShadowRoot => (node as Node | null | undefined)?.nodeType === 11 && !!(node as ShadowRoot).host;
+const HTML = "http://www.w3.org/1999/xhtml";
+function isTag<K extends keyof HTMLElementTagNameMap>(node: unknown, tag: K): node is HTMLElementTagNameMap[K] {
+  return isElement(node) && node.namespaceURI === HTML && node.localName === tag;
+}
 const MAX_TEXT_CHARS = 2500;
 const MAX_VISITED = 15000;
 
@@ -103,7 +113,7 @@ function wordsIn(el: Element, max = 200, skip = "", except?: Element, unseenToo 
       text += node.textContent ?? "";
       return;
     }
-    if (!(node instanceof Element) || node === except) return;
+    if (!isElement(node) || node === except) return;
     if (NOT_WORDS.has(node.tagName) || holdsTyping(node) || choiceBoxes.has(node) || node.getAttribute("aria-hidden") === "true" || (skip && node.matches(skip))) return;
     if (!unseenToo && unseen(node)) return;
     // Words in a box of their own are apart from the words before and after it, as the accessibility tree has them:
@@ -129,16 +139,17 @@ function boxOfItsOwn(el: Element): boolean {
 }
 
 /**
- * What is shown inside an element. A <slot> in a component's shadow root
- * shows what the page put into the component, the words of an option among
- * them, and its own content only when the page put nothing there.
+ * What is shown inside an element. A component with a shadow root shows what
+ * its shadow root holds, and what the page put into the component is shown
+ * where a <slot> in there says: the words of an option among them, and the
+ * slot's own content only when the page put nothing there.
  */
 function shownChildren(el: Element): Iterable<Node> {
   if (el.tagName === "SLOT") {
     const assigned = (el as HTMLSlotElement).assignedNodes?.({ flatten: true }) ?? [];
     if (assigned.length) return assigned;
   }
-  return el.childNodes;
+  return el.shadowRoot?.childNodes ?? el.childNodes;
 }
 
 /**
@@ -296,7 +307,7 @@ function revealsIn(root: Document | ShadowRoot): Reveal[] {
  */
 function shownWhenOver(el: Element, hiddenByVisibility: boolean, seeThrough: boolean): DOMRect | undefined {
   const root = el.getRootNode();
-  if (!(root instanceof Document) && !(root instanceof ShadowRoot)) return undefined;
+  if (!isDocument(root) && !isShadowRoot(root)) return undefined;
   let box: Element | undefined;
   let visibility = false;
   let opacity = false;
@@ -352,6 +363,24 @@ interface Candidate extends SnapElement {
   why?: string;
   /** Where in the window a control with no name and no picture sits: "top right". */
   spot?: string;
+  /** Its box when it was read, in its own document's window. */
+  rect: DOMRect;
+  /** The frame it is in, when it is in a frame of the page's own origin. */
+  frame?: FrameView;
+}
+
+/** A frame of the page's own origin being read: where its window starts in the page's window, and how large it is. */
+interface FrameView {
+  el: Element;
+  dx: number;
+  dy: number;
+  width: number;
+  height: number;
+}
+
+/** A box of a frame's document, where it lies in the page's window. */
+function inPageWindow(rect: DOMRect, frame: FrameView | undefined): DOMRect {
+  return frame ? new DOMRect(rect.x + frame.dx, rect.y + frame.dy, rect.width, rect.height) : rect;
 }
 
 /** Controls with a role of their own, whose words are theirs and not the words of a box around them. */
@@ -423,7 +452,7 @@ function sentenceOf(el: Element, taken: WeakSet<Element>): string {
         const words = child.textContent ?? "";
         text += words;
         if (!inControl && /[\p{L}\p{N}]/u.test(words)) own = true;
-      } else if (child instanceof Element) {
+      } else if (isElement(child)) {
         if (NOT_WORDS.has(child.tagName) || holdsTyping(child) || choiceBoxes.has(child) || child.getAttribute("aria-hidden") === "true" || getComputedStyle(child).display !== "inline") {
           text += " ";
           continue;
@@ -576,14 +605,41 @@ const NOT_TYPED_IN = new Set(["checkbox", "radio", "button", "submit", "reset", 
 const MIN_ECHO = 3;
 const MAX_TYPED_FIELDS = 50;
 
+/** How many frames from the page's own origin are read as part of the page. */
+const MAX_FRAMES = 10;
+
+/**
+ * The page's document and the documents of its frames from the page's own
+ * origin, which are read as part of the page: an editor in a frame, a demo, a
+ * wall of cookie choices drawn in a frame of the page's own. A frame from
+ * another origin cannot be read by any script on the page, and is not.
+ */
+function documentsOfPage(): Document[] {
+  const documents = [document];
+  for (const frame of Array.from(document.querySelectorAll("iframe, frame"))) {
+    if (documents.length > MAX_FRAMES) break;
+    try {
+      const inner = (frame as HTMLIFrameElement).contentDocument;
+      if (inner?.body && !documents.includes(inner)) documents.push(inner);
+    } catch {
+      // A frame from another origin.
+    }
+  }
+  return documents;
+}
+
+/** The documents being read: the page's, and its frames' from its own origin. Set for one reading. */
+let pageDocuments: Document[] = [];
+
 /** What the fields and editors on the page hold now, each as one lower-case line of words. */
 function typedValues(): string[] {
   const values: string[] = [];
-  for (const field of Array.from(document.querySelectorAll("input, textarea, [contenteditable]")).slice(0, 400)) {
+  const fields = pageDocuments.flatMap((doc) => Array.from(doc.querySelectorAll("input, textarea, [contenteditable]")));
+  for (const field of fields.slice(0, 400)) {
     let value = "";
-    if (field instanceof HTMLInputElement) value = NOT_TYPED_IN.has(field.type) ? "" : field.value;
-    else if (field instanceof HTMLTextAreaElement) value = field.value;
-    else if ((field as HTMLElement).isContentEditable && !insideEditor(field.parentElement ?? document.body)) value = field.textContent ?? "";
+    if (isTag(field, "input")) value = NOT_TYPED_IN.has(field.type) ? "" : field.value;
+    else if (isTag(field, "textarea")) value = field.value;
+    else if ((field as HTMLElement).isContentEditable && !insideEditor(field.parentElement ?? field.ownerDocument.body)) value = field.textContent ?? "";
     value = value.replace(/\s+/g, " ").trim().toLowerCase();
     if (value.length >= MIN_ECHO) values.push(value);
     if (values.length >= MAX_TYPED_FIELDS) break;
@@ -621,9 +677,9 @@ const CHOICE_FIELDS = 'input[role="combobox"], input[aria-haspopup="listbox"], i
  */
 function choiceBoxesOf(): WeakSet<Element> {
   const boxes = new WeakSet<Element>();
-  for (const field of Array.from(document.querySelectorAll(CHOICE_FIELDS)).slice(0, 200)) {
+  for (const field of pageDocuments.flatMap((doc) => Array.from(doc.querySelectorAll(CHOICE_FIELDS))).slice(0, 200)) {
     const box = field.parentElement;
-    if (!box || box === document.body || box.tagName === "LABEL" || box.querySelectorAll("input, select, textarea, label").length > 1) continue;
+    if (!box || box === field.ownerDocument.body || box.tagName === "LABEL" || box.querySelectorAll("input, select, textarea, label").length > 1) continue;
     const outer = box.getBoundingClientRect();
     const inner = field.getBoundingClientRect();
     if (outer.width * outer.height > 0 && inner.width * inner.height >= (outer.width * outer.height) / 2) boxes.add(box);
@@ -644,7 +700,8 @@ const cleanText = (text: string, max = 80): string => maskAndTrim(text, max, own
  */
 export function takeSnapshot(ignore: Element, question = "", near = (ignore as Element & { pointedAt?: Element }).pointedAt): PageSnapshot {
   own = namedIn(question);
-  untiedLabels = Array.from(document.querySelectorAll("label")).some((label) => !label.hasAttribute("for") && !(label as HTMLLabelElement).control);
+  pageDocuments = documentsOfPage();
+  untiedLabels = pageDocuments.some((doc) => Array.from(doc.querySelectorAll("label")).some((label) => !label.hasAttribute("for") && !(label as HTMLLabelElement).control));
   choiceBoxes = choiceBoxesOf();
   typed = typedValues();
   const candidates: Candidate[] = [];
@@ -660,6 +717,49 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   let keysBoxes = 0;
   /** Where in the page's text the control last used sits, if it was given. */
   let nearAt = -1;
+  /** How far apart the places of pieces of text are. A part of the page read later fits its pieces between two places. */
+  let orderStep = 1;
+  const nextOrder = () => {
+    const at = order;
+    order += orderStep;
+    return at;
+  };
+  // A page with more elements than one reading visits is read where the visitor is first. A part of it wholly above
+  // or below the window waits, and is read once the rest has been, with what is left of the budget, in its place.
+  let deferring = document.getElementsByTagName("*").length > MAX_VISITED;
+  /** The frame being read, while the reading is inside one. */
+  let frame: FrameView | undefined;
+  /** Whether a box is out of view: out of the frame's own window first, when it is in a frame, then out of the page's. */
+  const outOfView = (rect: DOMRect): "above" | "below" | undefined => {
+    if (frame && rect.bottom <= 0) return "above";
+    if (frame && rect.top >= frame.height) return "below";
+    const box = inPageWindow(rect, frame);
+    return box.bottom <= 0 ? "above" : box.top >= viewportHeight ? "below" : undefined;
+  };
+  /** Reads a frame from the page's own origin as part of the page, where it is drawn. A page that is all one editor, as a rich text field's frame is, is named by the frame. */
+  const readFrame = (el: Element, scope: Scope, outside: boolean) => {
+    let inner: Document | null = null;
+    try {
+      inner = (el as HTMLIFrameElement).contentDocument;
+    } catch {
+      inner = null;
+    }
+    if (frame || !inner?.body || !pageDocuments.includes(inner) || !isRendered(el)) return;
+    const box = el.getBoundingClientRect();
+    if (box.width < 2 || box.height < 2) return;
+    const style = getComputedStyle(el);
+    const [left, top] = [el.clientLeft + parseFloat(style.paddingLeft || "0"), el.clientTop + parseFloat(style.paddingTop || "0")];
+    frame = { el, dx: box.left + left, dy: box.top + top, width: el.clientWidth - left + el.clientLeft - parseFloat(style.paddingRight || "0"), height: el.clientHeight - top + el.clientTop - parseFloat(style.paddingBottom || "0") };
+    const before = candidates.length;
+    try {
+      visit(inner.body, { ...scope }, false, false, false, outside);
+    } finally {
+      frame = undefined;
+    }
+    const name = cleanText(nameOfBox(el) || el.getAttribute("title") || "", 80);
+    for (const c of candidates.slice(before)) if (!c.label && name && (c.el === inner.body || c.el === inner.documentElement)) c.label = name;
+  };
+  const later: { el: Element; scope: Scope; parentPointer: boolean; outside: boolean; at: number; headingAt: number; orderAt: number }[] = [];
 
   // With a modal open only the modal is usable, so only the modal is listed,
   // along with anything drawn on top of it: many apps put the list that a
@@ -675,13 +775,25 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   // lies inside the box, so that the visitor's mouse arriving at the pointer
   // is what shows it. A menu that opens somewhere else stays unlisted until it is open.
   const visit = (el: Element, scope: Scope, parentPointer: boolean, insideControl: boolean, inSvg = false, outside = !!modal, held?: TextBlock[], hoverBox?: DOMRect) => {
-    if (visited++ > MAX_VISITED || el === ignore || SKIP_TAGS.has(el.tagName)) return;
+    if (visited++ > MAX_VISITED || el === ignore) return;
+    if ((el.tagName === "IFRAME" || el.tagName === "FRAME") && !insideControl && !hoverBox) return readFrame(el, scope, outside);
+    if (SKIP_TAGS.has(el.tagName)) return;
+    // Only a part that is not inside a control or a box being read as one waits: what is around it does not depend on it.
+    if (deferring && !frame && el.firstElementChild && el !== root && !insideControl && !held && !hoverBox && !inSvg && keysBoxes === 0) {
+      const box = el.getBoundingClientRect();
+      if (box.width > 0 && box.height > 0 && (box.bottom < 0 || box.top > viewportHeight)) {
+        later.push({ el, scope: { ...scope }, parentPointer, outside, at: candidates.length, headingAt: headings.length, orderAt: order });
+        order += 1;
+        visited--;
+        return;
+      }
+    }
     if (el === near) nearAt = order;
     /** Hidden from screen readers, but there for the mouse: a search box's magnifying glass. */
     let pressableOnly = false;
     if (el.hasAttribute("inert") || el.hasAttribute("data-haptic-ignore") || el.getAttribute("aria-hidden") === "true") {
       // An app hides the page behind its dialog this way, and the dialog itself is inside what it hid only by mistake.
-      if (!modal || !el.contains(modal) || el === modal) {
+      if (!modal || !drawnWithin(el, modal) || el === modal) {
         const forMouse = !el.hasAttribute("inert") && !el.hasAttribute("data-haptic-ignore") && !insideControl && !parentPointer && !outside && !hoverBox;
         if (!forMouse || !pressableThoughHidden(el, ignore)) return;
         pressableOnly = true;
@@ -724,7 +836,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
         scope.heading = text;
         const level = Number(el.getAttribute("aria-level")) || Number(headingTag?.[1]) || 2;
         const rect = el.getBoundingClientRect();
-        if (headings.length < 200) headings.push({ text, level, visible: rect.bottom > 0 && rect.top < viewportHeight });
+        if (headings.length < 200) headings.push({ text, level, visible: !outOfView(rect) });
       }
     }
 
@@ -749,7 +861,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
     if (role) {
       const rect = el.getBoundingClientRect();
       if (hasRealBox(el, rect) && (!hoverBox || liesInside(rect, hoverBox))) {
-        added = { el, id: "", role, label: labelOf(el, role), nav: ["nav", "header", "aside", "menu", "tabs", "footer"].includes(scope.region), region: scope.region, heading: scope.heading, outside };
+        added = { el, id: "", role, label: labelOf(el, role), nav: ["nav", "header", "aside", "menu", "tabs", "footer"].includes(scope.region), region: scope.region, heading: scope.heading, outside, rect };
         if (role === "clickable" && pointerStarts) {
           added.pointer = true;
           // Found only because the box around it is one the keyboard moves through. It stays if that box is a grid of such things.
@@ -770,7 +882,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
           added.boxNamed = true;
         }
         // One that is still nameless is known by where it sits, as a visitor would point it out: "top right".
-        if (unnamedMenu && !added.label) added.spot = spotOf(rect, viewportHeight);
+        if (unnamedMenu && !added.label) added.spot = spotOf(inPageWindow(rect, frame), viewportHeight);
         const state = stateOf(el, role);
         if (state.includes("disabled")) giveReason(added, reasonOf(el));
         // Fully transparent controls have always been listed: row actions that fade in. One that a stylesheet shows on hover says so.
@@ -779,8 +891,9 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
         if (state.length) added.state = state;
         const href = hrefOf(el);
         if (href) added.href = href;
-        if (rect.bottom <= 0) added.offscreen = "above";
-        else if (rect.top >= viewportHeight) added.offscreen = "below";
+        const away = outOfView(rect);
+        if (away) added.offscreen = away;
+        if (frame) added.frame = frame;
         candidates.push(added);
       }
     } else if ((!insideControl || held) && !svg && !outside && !hoverBox && (TEXT_TAGS.has(el.tagName) || isRow) && !taken.has(el) && (held ?? texts).length < MAX_TEXT_BLOCKS) {
@@ -789,7 +902,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
       // Words that repeat what the visitor typed in a field are theirs, wherever the page shows them.
       if (words && !echoesTyping(words)) {
         const rect = el.getBoundingClientRect();
-        (held ?? texts).push({ text: cleanText(words, isRow ? 200 : 160), visible: rect.bottom > 0 && rect.top < viewportHeight, order: order++ });
+        (held ?? texts).push({ text: cleanText(words, isRow ? 200 : 160), visible: !outOfView(rect), order: nextOrder() });
       }
     }
 
@@ -859,6 +972,11 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
       // frame, an arrow that says it opens a list, goes with the control.
       wrapper = true;
       if (!inner.icon && added.icon) inner.icon = added.icon;
+    } else if (added && pointerOnly(added) && !added.label && !added.icon && (within.length > 0 || !iconSized(added.rect))) {
+      // A box that only the pointer marks, that says nothing and shows no picture, is no control a visitor can tell:
+      // the gap between two cards that takes a dragged card, or a panel around controls of its own. One the size of
+      // an icon, drawn by its stylesheet, is still a control.
+      wrapper = true;
     }
     if (added && wrapper) {
       candidates.splice(candidates.indexOf(added), 1);
@@ -873,17 +991,48 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   };
 
   if (root) visit(root, { region: "page", heading: "" }, false, false);
+  deferring = false;
+  let shifted = 0;
+  let headingsShifted = 0;
+  // What is out of the window is read until there are twice as many controls as are listed: more would only be cut.
+  for (const part of later) {
+    if (visited > MAX_VISITED || candidates.length >= MAX_ELEMENTS * 2) break;
+    const before = candidates.length;
+    const headingsBefore = headings.length;
+    order = part.orderAt;
+    orderStep = 1 / (MAX_TEXT_BLOCKS + 1);
+    visit(part.el, part.scope, part.parentPointer, false, false, part.outside);
+    const found = candidates.splice(before);
+    candidates.splice(part.at + shifted, 0, ...found);
+    shifted += found.length;
+    const named = headings.splice(headingsBefore);
+    headings.splice(part.headingAt + headingsShifted, 0, ...named);
+    headingsShifted += named.length;
+  }
 
   // With a dialog open, the rest of the page counts only where it is drawn over the dialog. With a list
   // open over a layer that covers the window, only what is in the list's layer, or on top of it, can be
   // used, and the field the list belongs to, which has the keyboard and is typed in to narrow the list.
+  // A dialog drawn in a component's shadow root holds what the page put into the component, which is read where the
+  // page has it, before the dialog: it is drawn in the dialog all the same.
+  if (modal && isShadowRoot(modal.getRootNode())) {
+    for (const c of candidates) {
+      if (!c.outside || !drawnWithin(modal, c.el)) continue;
+      Object.assign(c, { outside: false, region: "dialog", heading: "", nav: false });
+    }
+  }
   const cover = modal ? undefined : coverOf(ignore, candidates);
   const inCover = (el: Element) => !!cover?.layer?.contains(el) || el === document.activeElement;
-  let usable = mergeCells(
-    modal ? candidates.filter((c) => !c.outside || onTop(c.el, ignore))
-    : cover ? candidates.filter((c) => inCover(c.el) || onTop(c.el, ignore))
+  // What no visitor can reach is left out, and what scrolling reaches says which way it is. A layer over the
+  // middle of the window, like a wall of cookie choices, is then the part of the page that can be used.
+  const reach = keepReachable(
+    modal ? candidates.filter((c) => !c.outside || onTop(c.el, ignore, c.frame))
+    : cover ? candidates.filter((c) => inCover(c.el) || onTop(c.el, ignore, c.frame))
     : candidates,
+    ignore,
+    !modal && !cover,
   );
+  let usable = mergeCells(reach.kept);
   markChosen(usable);
   nameRows(usable);
   tellTwinsApart(usable);
@@ -915,7 +1064,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   usable = [];
 
   const elements = new Map<string, Element>();
-  const strip = ({ el: _el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, pointer: _pointer, single: _single, loose: _loose, why: _why, spot: _spot, ...element }: Candidate): SnapElement => element;
+  const strip = ({ el: _el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, pointer: _pointer, single: _single, loose: _loose, why: _why, spot: _spot, rect: _rect, frame: _frame, ...element }: Candidate): SnapElement => element;
   const listed = chosen.map((c, index) => {
     const element = strip(c);
     element.id = `e${index + 1}`;
@@ -932,6 +1081,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
     truncated: chosen.length < candidates.filter((c) => !c.outside).length && chosen.length >= MAX_ELEMENTS,
   };
   if (modal) snapshot.dialog = dialogLabel(modal);
+  else if (reach.layer) snapshot.dialog = layerLabel(reach.layer);
   uncut.set(snapshot, { elements: everything.elements.map(strip), text: everything.text, headings: everything.headings });
   // What the fields held is let go with the reading.
   typed = [];
@@ -1119,7 +1269,7 @@ function roleOf(el: Element, explicitRole: string, pointerStartsHere: boolean): 
 
 /** Elements HTML lets a <label> name: its fields, and its buttons. */
 function isLabelable(el: Element): el is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement {
-  return el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement || el instanceof HTMLButtonElement;
+  return isTag(el, "input") || isTag(el, "select") || isTag(el, "textarea") || isTag(el, "button");
 }
 
 /** Whether an element says by its role that it is a control. */
@@ -1229,10 +1379,16 @@ function scrolls(el: Element): boolean {
  * are looked through: they sit over the very control they point at, and
  * exactly where a list opens under it.
  */
-function onTop(el: Element, ignore: Element): boolean {
+function onTop(el: Element, ignore: Element, frame?: FrameView): boolean {
   const rect = el.getBoundingClientRect();
   const x = rect.left + rect.width / 2;
   const y = rect.top + rect.height / 2;
+  if (frame) {
+    // In a frame, the click has to land in the frame's window, and the frame has to be what the page draws there.
+    if (x < 0 || y < 0 || x > frame.width || y > frame.height || x + frame.dx > window.innerWidth || y + frame.dy > window.innerHeight) return false;
+    const hit = hitFor(el, x, y, ignore, frame);
+    return !!hit && (drawnWithin(el, hit) || drawnWithin(hit, el));
+  }
   if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return false;
   const hit = document.elementsFromPoint(x, y).find((over) => over !== ignore && !ignore.contains(over));
   return !!hit && (el.contains(hit) || hit.contains(el));
@@ -1247,12 +1403,21 @@ function onTop(el: Element, ignore: Element): boolean {
 function hasRealBox(el: Element, rect: DOMRect): boolean {
   if (rect.width >= 2 && rect.height >= 2) return true;
   // A switch drawn by its label, around a button the size of a pixel, is pressed through the label too.
-  if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement || el instanceof HTMLButtonElement)) return false;
+  if (!(isTag(el, "input") || isTag(el, "select") || isTag(el, "textarea") || isTag(el, "button"))) return false;
   return Array.from(el.labels ?? []).some((label) => {
     const box = label.getBoundingClientRect();
     return box.width >= 2 && box.height >= 2;
   });
 }
+
+/** Whether a control was taken for one only because the pointer cursor starts on it: it has no role, takes no keyboard and says it takes no click. */
+function pointerOnly(c: Candidate): boolean {
+  return c.role === "clickable" && !!c.pointer && !c.el.hasAttribute("onclick") && !isFocusable(c.el);
+}
+
+/** The largest box drawn as an icon. */
+const ICON_SIZE = 64;
+const iconSized = (rect: DOMRect) => rect.width <= ICON_SIZE && rect.height <= ICON_SIZE;
 
 /**
  * Whether a box is part of a label tied to a field that can be seen, like the
@@ -1284,21 +1449,565 @@ function pressableThoughHidden(el: Element, ignore: Element): boolean {
  */
 function coverOf(ignore: Element, candidates: Candidate[]): { el: Element; layer?: Element } | undefined {
   for (const [x, y] of [[0.5, 0.5], [0.1, 0.1], [0.9, 0.1], [0.1, 0.9], [0.9, 0.9]] as const) {
-    const top = document.elementsFromPoint(window.innerWidth * x, window.innerHeight * y).find((el) => el !== ignore && !ignore.contains(el));
+    const top = hitFor(document.documentElement, window.innerWidth * x, window.innerHeight * y, ignore);
     if (!top || top === document.body || top === document.documentElement) continue;
     const box = top.getBoundingClientRect();
     if (box.width < window.innerWidth * 0.95 || box.height < window.innerHeight * 0.95) continue;
     const position = getComputedStyle(top).position;
-    if ((position !== "fixed" && position !== "absolute") || candidates.some((c) => top.contains(c.el))) continue;
+    if ((position !== "fixed" && position !== "absolute") || candidates.some((c) => drawnWithin(top, c.el))) continue;
     const parent = top.parentElement;
     return { el: top, layer: parent && parent !== document.body && parent !== document.documentElement ? parent : undefined };
   }
   return undefined;
 }
 
+// What a visitor can reach ------------------------------------------------------
+
+/** The state of a control that comes into view when the keyboard reaches it, like a link that skips to the page's content. */
+const SHOWS_ON_FOCUS = "shows on focus";
+
+/**
+ * The parent of a node as the page is drawn: a node put into a <slot> is
+ * drawn in the slot, a shadow root in its host, and the document of a frame
+ * in the frame.
+ */
+function drawnParent(node: Node): Node | null {
+  return (node as Element | Text).assignedSlot ?? node.parentNode ?? (isShadowRoot(node) ? node.host : isDocument(node) ? (node.defaultView?.frameElement ?? null) : null);
+}
+
+/** Whether an element is its own document's body or root, past which a box is the window's and not the page's. */
+const isPageEdge = (node: Element) => node === node.ownerDocument.body || node === node.ownerDocument.documentElement;
+
+/** Whether `inner` is drawn inside `outer`, across shadow roots and slots. */
+function drawnWithin(outer: Element, inner: Node | null): boolean {
+  for (let node = inner, depth = 0; node && depth < 200; node = drawnParent(node), depth++) if (node === outer) return true;
+  return false;
+}
+
+/** What decides how a box clips what is inside it. Read once a reading for each box, since controls share their boxes. */
+interface BoxFacts {
+  position: string;
+  overflowX: string;
+  overflowY: string;
+  /** Lays out positioned boxes inside it from itself even when it is not positioned: a transform, a filter, containment. */
+  makesBlock: boolean;
+  /** Clipped to nothing, the way words meant only for screen readers are hidden. */
+  clippedAway: boolean;
+  rtl: boolean;
+  /** Its box, once it has been needed. */
+  box?: DOMRect;
+}
+
+function factsOf(el: Element, facts: Map<Element, BoxFacts>): BoxFacts {
+  let known = facts.get(el);
+  if (!known) {
+    const style = getComputedStyle(el);
+    known = {
+      position: style.position,
+      overflowX: style.overflowX,
+      overflowY: style.overflowY,
+      makesBlock: style.transform !== "none" || style.filter !== "none" || /paint|layout|strict|content/.test(style.contain) || style.willChange.includes("transform"),
+      clippedAway: clippedToNothing(style),
+      rtl: style.direction === "rtl",
+    };
+    facts.set(el, known);
+  }
+  return known;
+}
+
+/** `clip: rect(0 0 0 0)`, `clip: rect(1px, 1px, 1px, 1px)`, `clip-path: inset(50%)` and the like: a box cut down to nothing. */
+function clippedToNothing(style: CSSStyleDeclaration): boolean {
+  const path = style.clipPath;
+  if (path && path !== "none" && /^(?:inset\(\s*50%|circle\(\s*0(?:px)?\s*(?:at\b|\))|polygon\(\s*0(?:px)?\s+0(?:px)?\s*,\s*0(?:px)?\s+0(?:px)?\s*,\s*0(?:px)?\s+0(?:px)?\s*\))/.test(path)) return true;
+  // `clip` applies only to a box positioned absolutely.
+  if ((style.position !== "absolute" && style.position !== "fixed") || !style.clip || style.clip === "auto") return false;
+  const [top, right, bottom, left] = (style.clip.match(/-?[\d.]+/g) ?? []).map(Number);
+  return left !== undefined && (bottom! - top! <= 1 || right! - left <= 1);
+}
+
+/** Whether a box is one that positioned boxes of this kind inside it are laid out from, which is what lets it clip them. */
+function laysOut(box: BoxFacts, position: string): boolean {
+  if (position === "fixed") return box.makesBlock;
+  if (position === "absolute") return box.position !== "static" || box.makesBlock;
+  return true;
+}
+
+const scrollsBy = (overflow: string) => overflow === "auto" || overflow === "scroll";
+
+/** Where a control is, as far as the boxes around it let it be seen. */
+interface Seen {
+  /** Nothing of it can be seen or brought into view: clipped away by a box that does not scroll, or cut down to nothing. */
+  hidden?: boolean;
+  /** It is scrolled out of a box that scrolls: before or after what that box shows. */
+  scroll?: "above" | "below";
+  /** The part of its box that is drawn. */
+  rect?: DOMRect;
+  /** It stays where it is in the window when the page scrolls. */
+  fixed?: boolean;
+}
+
+/**
+ * Where a control is drawn once the boxes around it have clipped it, as the
+ * browser draws it: a box clips only what is laid out from it, so a list
+ * placed over the page from a box of no height is still seen. A control cut
+ * away by a box that scrolls is reached by scrolling that box, and is said to
+ * be before ("above") or after ("below") what the box shows, across as well as
+ * down. One cut away by a box that only clips, like a strip of slides moved by
+ * its own arrows, cannot be reached at all.
+ */
+function seenOf(el: Element, rect: DOMRect, facts: Map<Element, BoxFacts>): Seen {
+  const own = factsOf(el, facts);
+  if (own.clippedAway) return { hidden: true };
+  let [left, top, right, bottom] = [rect.left, rect.top, rect.right, rect.bottom];
+  let position = own.position;
+  let scroll: Seen["scroll"];
+  for (let node = drawnParent(el), depth = 0; node && depth < 100; node = drawnParent(node), depth++) {
+    if (!isElement(node)) continue;
+    // The page's own scrolling is the window's, and is told from where the control is in the window. A frame's is the frame's.
+    if (isPageEdge(node)) break;
+    const box = factsOf(node, facts);
+    if (!laysOut(box, position)) continue;
+    if (box.position !== "static" || position === "fixed") position = box.position === "static" ? "relative" : box.position;
+    if (box.clippedAway) return { hidden: true };
+    if (box.overflowX === "visible" && box.overflowY === "visible") continue;
+    const clip = (box.box ??= node.getBoundingClientRect());
+    const [wasLeft, wasTop, wasRight] = [left, top, right];
+    if (box.overflowX !== "visible") [left, right] = [Math.max(left, clip.left), Math.min(right, clip.right)];
+    if (box.overflowY !== "visible") [top, bottom] = [Math.max(top, clip.top), Math.min(bottom, clip.bottom)];
+    const acrossGone = right - left <= 0;
+    const downGone = bottom - top <= 0;
+    if (!acrossGone && !downGone) continue;
+    if ((downGone && !(scrollsBy(box.overflowY) && node.scrollHeight > node.clientHeight + 1)) || (acrossGone && !(scrollsBy(box.overflowX) && node.scrollWidth > node.clientWidth + 1))) return { hidden: true };
+    scroll ??= downGone ? (wasTop < clip.top ? "above" : "below") : (box.rtl ? wasLeft >= clip.right : wasRight <= clip.left) ? "above" : "below";
+    // Scrolled into view, it is as far into view as the box it scrolls in.
+    [left, top, right, bottom] = [clip.left, clip.top, clip.right, clip.bottom];
+    position = box.position;
+  }
+  if (scroll) return { scroll };
+  return { rect: new DOMRect(left, top, right - left, bottom - top), fixed: position === "fixed" };
+}
+
+/**
+ * Whether a box lies where no scrolling can bring it: above the top of the
+ * page, or before its start, as a link that skips to the content is parked
+ * until the keyboard reaches it. A box pinned to the window has to be in it.
+ */
+function parkedOutside(rect: DOMRect, fixed: boolean, rtl: boolean, view: Window): boolean {
+  if (fixed) return rect.bottom <= 0 || rect.right <= 0 || rect.left >= view.innerWidth || rect.top >= view.innerHeight;
+  if (rect.bottom + view.scrollY <= 0) return true;
+  return rtl ? rect.left + view.scrollX >= view.document.documentElement.clientWidth : rect.right + view.scrollX <= 0;
+}
+
+/**
+ * What a click at a point lands on, as the tree `el` is in sees it: the page,
+ * or the shadow root `el` is in, which sees what is drawn in its own tree and
+ * around it, and a component inside it as that component. That is one hit
+ * test however deep `el` is, and enough to tell whether the click reaches it.
+ * Haptic's own element is looked through. A point in a frame being read is in
+ * the frame's window: the click lands in the frame only if the frame is what
+ * the page draws there.
+ */
+function hitFor(el: Element, x: number, y: number, ignore: Element, frame?: FrameView): Element | undefined {
+  if (frame) {
+    const outer = hitFor(frame.el, x + frame.dx, y + frame.dy, ignore);
+    if (outer !== frame.el) return outer;
+  }
+  const scope = el.getRootNode() as Document | ShadowRoot;
+  if (typeof scope.elementFromPoint !== "function") return undefined;
+  let hit: Element | null | undefined = scope.elementFromPoint(x, y);
+  if (hit && (hit === ignore || ignore.contains(hit))) hit = scope.elementsFromPoint(x, y).find((other) => other !== ignore && !ignore.contains(other));
+  return hit ?? undefined;
+}
+
+/** What is really drawn at a point inside an element: through the open shadow roots of the components there. */
+function deepest(hit: Element, x: number, y: number): Element {
+  for (let depth = 0; hit.shadowRoot && depth < 30; depth++) {
+    const inner: Element | null = hit.shadowRoot.elementFromPoint(x, y);
+    if (!inner || inner === hit) break;
+    hit = inner;
+  }
+  return hit;
+}
+
+/**
+ * Whether a click that lands on `hit` reaches the control: on it or a part of
+ * it, on its label, or in a box around it of about its size, which is the
+ * control's own frame, as a label around a tick box is, or the box of a select
+ * that draws the chosen value over a see-through field. A large box around it
+ * takes a click that lands there for itself.
+ */
+function reaches(el: Element, area: number, hit: Element | undefined): boolean {
+  if (!hit) return false;
+  if (drawnWithin(el, hit)) return true;
+  if (isLabelable(el) && Array.from(el.labels ?? []).some((label) => drawnWithin(label, hit))) return true;
+  const most = Math.max(4 * area, 2500);
+  for (let node = drawnParent(el), depth = 0; node && depth < 4; node = drawnParent(node), depth++) {
+    if (!isElement(node)) continue;
+    if (isPageEdge(node)) return false;
+    const box = node.getBoundingClientRect();
+    if (box.width * box.height > most) return false;
+    if (drawnWithin(node, hit)) return true;
+  }
+  return false;
+}
+
+/** Where a click is tried on a control: its middle, and then four points around it. */
+const MIDDLE: [number, number][] = [[0.5, 0.5]];
+const AROUND: [number, number][] = [[0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]];
+
+/**
+ * What a click on a control in the window lands on, when that is not the
+ * control: what is in front of it at its middle. Nothing when a click at any
+ * of the points tried reaches it.
+ */
+function inFrontOf(el: Element, seen: DOMRect, ignore: Element, frame: FrameView | undefined, points: [number, number][]): Element | undefined {
+  // What can be clicked is in the window, and in a frame, in the frame's window too.
+  const [dx, dy] = frame ? [frame.dx, frame.dy] : [0, 0];
+  const left = Math.max(seen.left, -dx, frame ? 0 : -Infinity);
+  const right = Math.min(seen.right, window.innerWidth - dx, frame ? frame.width : Infinity);
+  const top = Math.max(seen.top, -dy, frame ? 0 : -Infinity);
+  const bottom = Math.min(seen.bottom, window.innerHeight - dy, frame ? frame.height : Infinity);
+  if (right - left < 1 || bottom - top < 1) return undefined;
+  const area = (right - left) * (bottom - top);
+  let first: Element | undefined;
+  for (const [fx, fy] of points) {
+    const hit = hitFor(el, left + (right - left) * fx, top + (bottom - top) * fy, ignore, frame);
+    if (reaches(el, area, hit)) return undefined;
+    first ??= hit;
+  }
+  // What it is under, as drawn: a bar pinned to the window can be inside a component.
+  return first && first.ownerDocument === el.ownerDocument ? deepest(first, (left + right) / 2, (top + bottom) / 2) : first;
+}
+
+/** Controls that hold a value or a tick, which a page often draws with a box of its own around a field it hides. */
+const HOLDS_A_VALUE = 'input, select, textarea, [role="slider"], [role="checkbox"], [role="radio"], [role="switch"], [role="spinbutton"]';
+
+/**
+ * Whether a field that cannot be seen itself is drawn by a box around it of
+ * about its size that can be: a slider's thumb around its input, a tick box's
+ * square around its checkbox.
+ */
+function drawnByItsBox(el: Element, facts: Map<Element, BoxFacts>): boolean {
+  if (!el.matches(HOLDS_A_VALUE)) return false;
+  const own = el.getBoundingClientRect();
+  const most = Math.max(4 * own.width * own.height, 2500);
+  for (let node = drawnParent(el), depth = 0; node && depth < 3; node = drawnParent(node), depth++) {
+    if (!isElement(node)) continue;
+    if (isPageEdge(node)) return false;
+    const box = node.getBoundingClientRect();
+    if (box.width * box.height > most) return false;
+    if (box.width >= 2 && box.height >= 2 && !seenOf(node, box, facts).hidden) return true;
+  }
+  return false;
+}
+
+/** Whether a control has a <label> that can be seen, which is pressed for it. */
+function shownLabel(el: Element, facts: Map<Element, BoxFacts>): boolean {
+  return labelsOf(el).some((label) => {
+    const box = label.getBoundingClientRect();
+    return box.width >= 2 && box.height >= 2 && !seenOf(label, box, facts).hidden;
+  });
+}
+
+/** The box, at or around an element, that stays put in the window or in its scrolling box when the page scrolls. */
+function pinnedBoxOf(el: Element, facts: Map<Element, BoxFacts>): Element | undefined {
+  for (let node: Node | null = el, depth = 0; node && depth < 100; node = drawnParent(node), depth++) {
+    if (!isElement(node) || isPageEdge(node)) continue;
+    const position = factsOf(node, facts).position;
+    if (position === "fixed" || position === "sticky") return node;
+  }
+  return undefined;
+}
+
+/** The nearest box around an element that the visitor can scroll up and down. */
+function scrollBoxOf(el: Element, facts: Map<Element, BoxFacts>): Element | undefined {
+  for (let node = drawnParent(el), depth = 0; node && depth < 100; node = drawnParent(node), depth++) {
+    if (!isElement(node)) continue;
+    if (isPageEdge(node)) return undefined;
+    if (scrollsBy(factsOf(node, facts).overflowY) && node.scrollHeight > node.clientHeight + 1) return node;
+  }
+  return undefined;
+}
+
+/** The box in an element's ancestry, itself included, that draws it fully see-through, if one does. */
+function seeThroughBox(el: Element): Element | undefined {
+  for (let node: Node | null = el, depth = 0; node && depth < 100; node = drawnParent(node), depth++) {
+    if (isElement(node) && getComputedStyle(node).opacity === "0") return node;
+  }
+  return undefined;
+}
+
+/** Whether something is on its way into view: it, or the see-through box around it, is fading in. */
+function fadingIn(box: Element): boolean {
+  try {
+    return typeof box.getAnimations === "function" && box.getAnimations().some((animation) => animation.playState === "running");
+  } catch {
+    return false;
+  }
+}
+
+/** How long a reading may spend trying where a click on the controls in the window lands. */
+const MAX_TRYING_MS = 8;
+/** How many hidden controls are checked against the stylesheets' rules for focus while one page is read. */
+const MAX_FOCUS_CHECKED = 100;
+/** Properties a rule sets to bring a box into view, or to take it out of view until it has the keyboard. */
+const PLACING = ["opacity", "visibility", "clip", "clip-path", "transform", "translate", "top", "left", "right", "bottom", "inset-inline-start", "inset-block-start", "width", "height", "margin-top", "margin-left", "margin-inline-start"];
+const FOCUSED = /:(?:focus|focus-visible|focus-within)(?![\w-])/;
+const EVERY_FOCUSED = new RegExp(FOCUSED.source, "g");
+/** A rule's selector that names a kind of thing, not every link or every box. */
+const NAMES_A_KIND = /[.#[]/;
+/** A selector for what a rule shows when it, or a box around it, has the keyboard, or hides until then. */
+interface FocusRule {
+  selector: string;
+  /** The keyboard may be anywhere inside the box the selector picks, not only on the control itself. */
+  within: boolean;
+}
+const FOCUS_RULES = new WeakMap<Document | ShadowRoot, { stamp: string; rules: FocusRule[] }>();
+
+/**
+ * The rules, among the stylesheets of a document or a shadow root, that move
+ * something into view when the keyboard reaches it: `.skip:focus { top: 0 }`,
+ * `.links:focus-within { opacity: 1 }`, or the other way about,
+ * `.skip:not(:focus) { clip: rect(0 0 0 0) }`.
+ */
+function focusRulesIn(root: Document | ShadowRoot): FocusRule[] {
+  const lists: CSSRuleList[] = [];
+  let stamp = "";
+  for (const sheet of [...Array.from(root.styleSheets ?? []), ...(root.adoptedStyleSheets ?? [])]) {
+    try {
+      const rules = sheet.cssRules;
+      lists.push(rules);
+      stamp += `${rules.length},`;
+    } catch {
+      stamp += "x,";
+    }
+  }
+  const known = FOCUS_RULES.get(root);
+  if (known?.stamp === stamp) return known.rules;
+  const found: FocusRule[] = [];
+  let read = 0;
+  const walk = (rules: CSSRuleList, depth: number) => {
+    for (let i = 0; i < rules.length && read < MAX_RULES_READ; i++) {
+      const rule = rules[i] as CSSRule & { selectorText?: string; style?: CSSStyleDeclaration; cssRules?: CSSRuleList; media?: MediaList };
+      read++;
+      const selector = rule.selectorText;
+      if (typeof selector === "string") {
+        if (!rule.style || selector.indexOf(":focus") < 0 || !PLACING.some((name) => rule.style!.getPropertyValue(name) !== "")) continue;
+        for (const part of selectorParts(selector)) {
+          const within = part.includes(":focus-within");
+          // Hidden until it has the keyboard: the whole selector matches it while it does not.
+          if (/:not\([^)]*:focus/.test(part)) found.push({ selector: part.trim(), within });
+          else if (FOCUSED.test(part)) {
+            const shown = part.replace(EVERY_FOCUSED, "").trim();
+            if (shown && NAMES_A_KIND.test(shown) && !/[>+~]$/.test(shown)) found.push({ selector: shown, within });
+          }
+        }
+      } else if (depth < 3 && rule.cssRules) {
+        if (rule.media?.mediaText && !window.matchMedia(rule.media.mediaText).matches) continue;
+        walk(rule.cssRules, depth + 1);
+      }
+    }
+  };
+  try {
+    for (const rules of lists) walk(rules, 0);
+  } catch {
+    // A rule this browser cannot be asked about. What was found so far stands.
+  }
+  FOCUS_RULES.set(root, { stamp, rules: found });
+  return found;
+}
+
+/** Whether the keyboard can land on a control: a field, a button or a link that is not disabled, or a box given a place in the tab order. */
+function takesTheKeyboard(el: Element): boolean {
+  const tabindex = el.getAttribute("tabindex");
+  if (tabindex !== null) return Number(tabindex) >= 0;
+  return isNative(el) && !(el as HTMLButtonElement).disabled;
+}
+
+/** Whether a stylesheet brings a hidden control into view when the keyboard reaches it, or a box around it. */
+function shownOnFocus(el: Element): boolean {
+  if (!takesTheKeyboard(el)) return false;
+  const root = el.getRootNode();
+  if (!isDocument(root) && !isShadowRoot(root)) return false;
+  for (const rule of focusRulesIn(root)) {
+    try {
+      // Only the control itself takes the keyboard, unless the rule is for the keyboard anywhere inside a box around it.
+      if (rule.within ? el.closest(rule.selector) : el.matches(rule.selector)) return true;
+    } catch {
+      // A selector that cannot be read once the condition is taken out of it.
+    }
+  }
+  return false;
+}
+
+/**
+ * A layer pinned to the window over the middle of it, covering nearly all of
+ * it, which holds what is drawn there: a wall of cookie choices, a dialog's
+ * backdrop that says nothing of being one, or a frame over the whole window.
+ * The innermost such box comes first.
+ */
+function layersOverPage(ignore: Element): Element[] {
+  const top = hitFor(document.documentElement, window.innerWidth / 2, window.innerHeight / 2, ignore);
+  const layers: Element[] = [];
+  for (let node: Element | null = top ?? null; node && node !== document.body && node !== document.documentElement; node = node.parentElement) {
+    const position = getComputedStyle(node).position;
+    if (position !== "fixed" && !(node === top && node.matches("iframe, frame") && position === "absolute")) continue;
+    const box = node.getBoundingClientRect();
+    if (box.width >= window.innerWidth * 0.9 && box.height >= window.innerHeight * 0.9) layers.push(node);
+  }
+  return layers;
+}
+
+/** What a layer over the page is called: the dialog in it, its own name, a frame's title, or its first words. */
+function layerLabel(layer: Element): string {
+  const dialog = layer.matches(DIALOGS) ? layer : layer.querySelector(DIALOGS);
+  if (dialog) return dialogLabel(dialog);
+  // A layer that is a frame, or holds one, is named by the dialog drawn in the frame, or by the frame.
+  const frame = layer.matches("iframe, frame") ? layer : layer.querySelector("iframe, frame");
+  if (frame) {
+    let inner: Document | null = null;
+    try {
+      inner = (frame as HTMLIFrameElement).contentDocument;
+    } catch {
+      inner = null;
+    }
+    const drawn = inner?.querySelector(DIALOGS);
+    const named = drawn ? dialogLabel(drawn) : cleanText(nameOfBox(frame) || frame.getAttribute("title") || "", 60);
+    if (named) return named;
+  }
+  return dialogLabel(layer);
+}
+
+/**
+ * The controls a visitor can reach, out of those found. One that nothing of
+ * can be seen or scrolled to is left out: clipped away, cut down to nothing,
+ * parked outside the page, or drawn see-through with something else taking
+ * the click. Such a one is kept, and says so, when the mouse or the keyboard
+ * brings it into view. One scrolled out of a box that scrolls, or lying under
+ * a bar pinned to the window, is kept and said to be above or below, as one
+ * out of the window is: scrolling brings it out. A layer that covers the
+ * middle of the window and hides controls under it is, for as long as it is
+ * there, all of the page that can be used, as a dialog that shuts out the page
+ * is. `findLayer` is false when a dialog or an open list already decided that.
+ */
+function keepReachable(candidates: Candidate[], ignore: Element, findLayer: boolean): { kept: Candidate[]; layer?: Element } {
+  const facts = new Map<Element, BoxFacts>();
+  const rtl = getComputedStyle(document.documentElement).direction === "rtl";
+  const under: { c: Candidate; blocker: Element }[] = [];
+  let checked = 0;
+  const showsAnyway = (c: Candidate, box?: Element): boolean => {
+    if (checked >= MAX_FOCUS_CHECKED) return false;
+    checked++;
+    const shownWhenOverIt = box && shownWhenOver(box, false, true);
+    if (shownWhenOverIt && liesInside(c.rect, shownWhenOverIt)) c.state = [...(c.state ?? []), SHOWS_ON_HOVER];
+    else if (shownOnFocus(c.el)) {
+      c.state = [...(c.state ?? []), SHOWS_ON_FOCUS];
+      // It comes into view where the keyboard brings it, wherever it is parked now.
+      delete c.offscreen;
+    } else return false;
+    return true;
+  };
+  /** Controls in the window to try a click on, and the part of each that is drawn. */
+  const toTry: { c: Candidate; seen: DOMRect; clear: boolean }[] = [];
+  const left = new Set<Candidate>();
+  for (const c of candidates) {
+    // One wholly above or below the window is said to be so already. Only one level with it can be clipped out of view
+    // across it, or lie under something: the boxes around the others are not looked at, which on a long page is most.
+    // One that looks parked outside the page may be scrolled out of a box that is, and is looked at too.
+    const view = c.el.ownerDocument.defaultView ?? window;
+    const pageRtl = c.frame ? getComputedStyle(c.el.ownerDocument.documentElement).direction === "rtl" : rtl;
+    const level = c.rect.bottom > 0 && c.rect.top < view.innerHeight;
+    const seen: Seen = level || parkedOutside(c.rect, false, pageRtl, view) ? seenOf(c.el, c.rect, facts) : { rect: c.rect };
+    const hover = !!c.state?.includes(SHOWS_ON_HOVER);
+    if (seen.scroll) {
+      c.offscreen ??= seen.scroll;
+      continue;
+    }
+    if (seen.hidden || parkedOutside(c.rect, !!seen.fixed, pageRtl, view)) {
+      // A tick box or a switch hidden away and drawn by its label is pressed through the label, and a field cut down to
+      // nothing inside the box that draws it, like a slider's input in its thumb, is that box's control.
+      if (!shownLabel(c.el, facts) && !drawnByItsBox(c.el, facts) && (hover || !showsAnyway(c))) left.add(c);
+      continue;
+    }
+    // The field that has the keyboard is typed in, whatever is drawn over it, like the list it opened.
+    if (!hover && !c.offscreen && seen.rect && c.el !== document.activeElement) {
+      const clear = typeof c.el.checkVisibility === "function" && !c.el.checkVisibility({ opacityProperty: true });
+      toTry.push({ c, seen: seen.rect, clear });
+    }
+  }
+  // A click is tried on each, while the time allowed lasts: a page can make every try slow. A see-through one first,
+  // since only a try tells whether it is drawn over its own picture, then the nearest to the top and the foot of the
+  // window, where bars are pinned.
+  const edge = (r: DOMRect) => Math.min(Math.max(r.top, 0), Math.max(window.innerHeight - r.bottom, 0));
+  toTry.sort((a, b) => Number(b.clear) - Number(a.clear) || edge(a.seen) - edge(b.seen));
+  // Each is tried at its middle first, and only one a click there misses is tried around it.
+  const started = performance.now();
+  const missed: { c: Candidate; seen: DOMRect; clear: boolean; blocker: Element }[] = [];
+  /** Controls a click was seen to reach. */
+  const reached = new Set<Candidate>();
+  for (const one of toTry) {
+    if (performance.now() - started > MAX_TRYING_MS) break;
+    const blocker = inFrontOf(one.c.el, one.seen, ignore, one.c.frame, MIDDLE);
+    if (blocker) missed.push({ ...one, blocker });
+    else reached.add(one.c);
+  }
+  for (const { c, seen, clear, blocker } of missed) {
+    if (performance.now() - started > MAX_TRYING_MS) break;
+    if (!inFrontOf(c.el, seen, ignore, c.frame, AROUND)) {
+      reached.add(c);
+      continue;
+    }
+    // See-through and under something else: nobody sees it, and a click there takes the other thing. One fading in is on
+    // its way. A field that is see-through itself, over the box of about its size that draws it, as a styled tick box is,
+    // is seen as that box: if a list that opened lies over it, it is under the list like any other control.
+    const box = clear ? seeThroughBox(c.el) : undefined;
+    if (box && !fadingIn(box) && !(box === c.el && drawnByItsBox(c.el, facts))) {
+      if (!showsAnyway(c, box)) left.add(c);
+      continue;
+    }
+    under.push({ c, blocker });
+  }
+  const kept = left.size ? candidates.filter((c) => !left.has(c)) : candidates.slice();
+  if (!under.length) return { kept };
+  if (findLayer) {
+    for (const layer of layersOverPage(ignore)) {
+      // A layer over the page hides more of the page's controls than it holds. A layout pinned to the window holds the page.
+      const inside = new Set(kept.filter((c) => drawnWithin(layer, c.el)));
+      const hides = under.filter((u) => drawnWithin(layer, u.blocker)).length;
+      if (!hides || hides < inside.size) continue;
+      // Only what is in the layer, or what a click was seen to reach over it, can be used: nothing out of the window can
+      // be scrolled to past it, and nothing hidden can be shown under it.
+      return { kept: kept.filter((c) => inside.has(c) || reached.has(c)), layer };
+    }
+  }
+  // Under a bar that stays put while the page scrolls, as headers and cookie notices do: scrolling brings it out.
+  // Nothing comes out from under one as tall as the window.
+  const buried = new Set<Candidate>();
+  for (const { c, blocker } of under) {
+    const bar = pinnedBoxOf(blocker, facts);
+    if (bar && !drawnWithin(bar, c.el)) {
+      const box = inPageWindow(bar.getBoundingClientRect(), bar.ownerDocument === document ? undefined : c.frame);
+      // A bar sticks in the box it scrolls with, or spans the window. A small box pinned over the page, like a menu that
+      // is open, is no bar: what is under it is only under it while it is there.
+      const spans = factsOf(bar, facts).position === "sticky" || box.width >= window.innerWidth / 2 || box.height >= window.innerHeight / 2;
+      if (!spans) continue;
+      if (box.top <= 0 && box.bottom >= window.innerHeight) buried.add(c);
+      else c.offscreen = box.top + box.height / 2 < window.innerHeight / 2 ? "above" : "below";
+      continue;
+    }
+    // At the edge of the box it scrolls in, under what that box draws over its edge, like a fading border: scrolling the box brings it out.
+    const scroller = scrollBoxOf(c.el, facts);
+    if (scroller && drawnWithin(blocker, scroller)) {
+      const box = scroller.getBoundingClientRect();
+      c.offscreen = c.rect.top + c.rect.height / 2 < box.top + box.height / 2 ? "above" : "below";
+    }
+  }
+  return { kept: buried.size ? kept.filter((c) => !buried.has(c)) : kept };
+}
+
 /** The choices of a real <select>. They are the page's own words, not the visitor's: which one is chosen is never read. */
 function optionsOf(el: Element): string[] {
-  if (!(el instanceof HTMLSelectElement)) return [];
+  if (!isTag(el, "select")) return [];
   return Array.from(el.options)
     .map((option) => cleanText(option.label || option.text, MAX_OPTION_CHARS))
     .filter(Boolean)
@@ -1441,7 +2150,7 @@ function isHeaderRow(row: Element): boolean {
 /** An entry of a numbered list starts with its number, which is how a visitor refers to it: "3. Mobile devices". */
 function entryNumber(row: Element): string {
   const list = row.parentElement;
-  if (row.tagName !== "LI" || !(list instanceof HTMLOListElement)) return "";
+  if (row.tagName !== "LI" || !isTag(list, "ol")) return "";
   const value = (row as HTMLLIElement).getAttribute("value");
   if (value && /^\d+$/.test(value)) return `${value}. `;
   const index = Array.from(list.children).filter((entry) => entry.tagName === "LI").indexOf(row);
@@ -1540,7 +2249,7 @@ function rowPieces(row: Element): Piece[] {
       if (text.length > 1) pieces.push({ text, node });
       return;
     }
-    if (!(node instanceof Element) || node.getAttribute("aria-hidden") === "true") return;
+    if (!isElement(node) || node.getAttribute("aria-hidden") === "true") return;
     if (["BUTTON", "SELECT", "SCRIPT", "STYLE", "svg"].includes(node.tagName) || holdsTyping(node) || choiceBoxes.has(node) || unseen(node)) return;
     for (const child of node.childNodes) walk(child);
   };
@@ -1651,7 +2360,7 @@ function captionNode(el: Element, after: boolean): { text: string; from?: Elemen
         if (text) tried++;
         continue;
       }
-      if (!(beside instanceof Element)) continue;
+      if (!isElement(beside)) continue;
       tried++;
       // A heading names the part of the page the field is in, and what comes before it belongs to other parts.
       if (beside.matches(HEADINGS)) return { text: "" };
@@ -1669,7 +2378,7 @@ function captionNode(el: Element, after: boolean): { text: string; from?: Elemen
 
 /** The `<label>` a caption was read from, when it was one, or the only one in its box, and is tied to no field. */
 function untiedLabel(from: Element | undefined): HTMLLabelElement | undefined {
-  const label = from instanceof HTMLLabelElement ? from : from?.querySelectorAll("label").length === 1 ? from.querySelector("label") : null;
+  const label = isTag(from, "label") ? from : from?.querySelectorAll("label").length === 1 ? from.querySelector("label") : null;
   return label && !label.control && !label.hasAttribute("for") ? label : undefined;
 }
 
@@ -1686,8 +2395,8 @@ function wordsOfName(name: string): string {
 
 /** True for fields the user fills in or picks from, where a click alone isn't the action. */
 export function isField(el: Element): boolean {
-  if (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return true;
-  if (el instanceof HTMLInputElement) return !["checkbox", "radio", "button", "submit", "reset", "image"].includes(el.type);
+  if (isTag(el, "textarea") || isTag(el, "select")) return true;
+  if (isTag(el, "input")) return !["checkbox", "radio", "button", "submit", "reset", "image"].includes(el.type);
   return (el as HTMLElement).isContentEditable;
 }
 
@@ -1749,7 +2458,7 @@ function nameOfField(field: Element): string {
     .map((named) => (named && !holdsTyping(named) && !named.contains(field) ? wordsIn(named, 200, "", undefined, true) : ""))
     .join(" ")
     .trim();
-  const labels = field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement ? Array.from(field.labels ?? []).map(labelWords).join(" ").trim() : "";
+  const labels = isTag(field, "input") || isTag(field, "textarea") ? Array.from(field.labels ?? []).map(labelWords).join(" ").trim() : "";
   return byIds || field.getAttribute("aria-label")?.trim() || labels || field.getAttribute("placeholder") || field.getAttribute("aria-placeholder") || field.getAttribute("title") || "";
 }
 
@@ -1823,17 +2532,17 @@ function labelOf(el: Element, role: string): string {
   // A button, or a control by its role, that a <label> names: a switch or a tick box drawn as a button, or the button
   // of a date picker. The label is its name, as the accessibility tree has it, even when only a screen reader can
   // see it. The words the button shows are not added: a picker's are the date the visitor chose.
-  if (!raw && !(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
+  if (!raw && !(isTag(el, "input") || isTag(el, "select") || isTag(el, "textarea"))) {
     raw = labelsOf(el)
       .map((label) => labelWords(label) || label.getAttribute("aria-label") || "")
       .join(" ")
       .trim();
   }
-  if (!raw && (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
+  if (!raw && (isTag(el, "input") || isTag(el, "select") || isTag(el, "textarea"))) {
     // A label can carry its words as an aria-label of its own.
     raw = Array.from(el.labels ?? []).map((label) => labelWords(label) || label.getAttribute("aria-label") || "").join(" ").trim();
     // A button's value is its caption, not user data.
-    if (!raw && el instanceof HTMLInputElement && role === "button") raw = el.value || el.type;
+    if (!raw && isTag(el, "input") && role === "button") raw = el.value || el.type;
     if (!raw && ticks) raw = captionOf(el, true) || captionOf(el, false);
     // A placeholder is often a hint ("yyyy-dd-mm", "Type for hints...") and the page's caption sits in a
     // <label> beside the field, tied to nothing. Then the caption is the name and the hint follows it, so
@@ -1863,7 +2572,7 @@ function labelOf(el: Element, role: string): string {
   if (!raw && typedIn) raw = el.getAttribute("placeholder") || el.getAttribute("aria-placeholder") || el.getAttribute("data-placeholder") || "";
   raw ||= el.getAttribute("title") || "";
   // A select can show its choice as a picture, a flag for a country, whose words are that choice too.
-  if (!raw && !typedIn && !choice) raw = (el instanceof HTMLImageElement ? el.alt : el.querySelector("img[alt]")?.getAttribute("alt")) || el.querySelector("svg title")?.textContent || "";
+  if (!raw && !typedIn && !choice) raw = pictureName(el) || drawnWords(el);
   // A custom field or tick box, built from boxes with no words of its own.
   // A tick box is captioned by the words after it. A field that is typed in or chosen from is captioned by the words
   // before it only: the words after it belong to whatever comes next, a paragraph or the next part of the page.
@@ -1871,6 +2580,78 @@ function labelOf(el: Element, role: string): string {
   // Some pages hand over text that has been escaped twice.
   raw = raw.replace(/&amp;/g, "&").replace(/&#x2F;/gi, "/").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
   return cleanText(raw, 80);
+}
+
+/** Pictures that can carry a name: an image, a drawing, or a box that says it is a picture. */
+const PICTURES = 'img, svg, [role="img"]';
+/** How many pictures inside a control are looked at for a name. */
+const MAX_PICTURES = 4;
+
+/**
+ * The name of the picture a control shows, when the page gives it one and the
+ * control has no words: an image's alt text, or the aria-label, the
+ * aria-labelledby or the <title> of a drawing or of a box that says it is a
+ * picture. That is how the accessibility tree names a button that shows only
+ * an icon. Pictures in a component's shadow root are looked at too, and one
+ * hidden from screen readers is passed over.
+ */
+function pictureName(el: Element): string {
+  const named = (picture: Element): string => {
+    if (picture.closest('[aria-hidden="true"]') && picture.closest('[aria-hidden="true"]') !== el.closest('[aria-hidden="true"]')) return "";
+    const root = picture.getRootNode() as Document | ShadowRoot;
+    const byIds = (picture.getAttribute("aria-labelledby") ?? "")
+      .split(/\s+/)
+      .map((id) => (id ? root.getElementById?.(id) : null))
+      .map((node) => (node && !holdsTyping(node) ? wordsIn(node, 120, "", undefined, true) : ""))
+      .join(" ")
+      .trim();
+    if (byIds) return byIds;
+    const label = picture.getAttribute("aria-label")?.trim();
+    // A label that only says the icon's own name, as a library of icons gives each one, is the icon, which is listed as such.
+    if (label) return label.toLowerCase().replace(/\s+/g, "-") === iconOf(picture) ? "" : label;
+    if (isTag(picture, "img")) return picture.alt.trim();
+    const title = picture.tagName === "svg" ? Array.from(picture.children).find((child) => child.tagName === "title") : undefined;
+    return title?.textContent?.trim() ?? "";
+  };
+  if (el.matches(PICTURES)) return named(el);
+  let looked = 0;
+  const look = (root: Element | ShadowRoot, depth: number): string => {
+    for (const picture of Array.from(root.querySelectorAll(PICTURES))) {
+      if (looked++ >= MAX_PICTURES) return "";
+      const name = named(picture);
+      if (name) return name;
+    }
+    // A picture drawn by a component inside the control, like an icon element, is in that component's shadow root.
+    if (depth < 2) {
+      for (const host of Array.from(root.querySelectorAll("*")).slice(0, 20)) {
+        if (!host.shadowRoot || host.getAttribute("aria-hidden") === "true") continue;
+        const name = (host.getAttribute("role") === "img" && host.getAttribute("aria-label")?.trim()) || look(host.shadowRoot, depth + 1);
+        if (name) return name;
+      }
+    }
+    return "";
+  };
+  return look(el.shadowRoot ?? el, 0);
+}
+
+/** Characters a font of icons draws pictures with, which are no words: the Unicode range set aside for private use. */
+const ICON_GLYPHS = /^[\uE000-\uF8FF\s]*$/u;
+
+/**
+ * Words a stylesheet writes into an empty control before or after its
+ * content, like the "§" of a link to a section of a long document. A screen
+ * reader reads them, and a visitor sees them. A character of a font of icons
+ * says nothing.
+ */
+function drawnWords(el: Element): string {
+  if (el.childElementCount > 2) return "";
+  let words = "";
+  for (const pseudo of ["::before", "::after"]) {
+    const content = getComputedStyle(el, pseudo).content;
+    const quoted = /^"((?:[^"\\]|\\.)*)"$/.exec(content);
+    if (quoted) words += quoted[1]!.replace(/\\(.)/g, "$1");
+  }
+  return ICON_GLYPHS.test(words) ? "" : words.trim();
 }
 
 /** The words a control shows, or failing those the words it has for screen readers only, like an icon button's name. */
@@ -1886,7 +2667,7 @@ function iconOf(el: Element): string | undefined {
   // Nothing inside an editor is the page's own, its pictures included.
   if ((el as HTMLElement).isContentEditable) return undefined;
   // The pencil on a table row's edit button is that button's picture, and the tick in its tick box is the tick box's.
-  const pictures = Array.from(el.querySelectorAll("svg, i, [class*='icon']"));
+  const pictures = Array.from(el.querySelectorAll("svg, i, [class*='icon'], [class*='material-symbols']"));
   const owner = (picture: Element) => picture.parentElement?.closest(`${CONTROLS}, label, ${TICKS}`);
   const own = isRowOfTable(el) ? pictures.filter((picture) => !el.contains(owner(picture) ?? null)) : pictures;
   for (const candidate of [el, ...own.slice(0, 4)]) {
@@ -1894,9 +2675,18 @@ function iconOf(el: Element): string | undefined {
     if (dataIcon) return dataIcon;
     const match = ICON_CLASS.exec(candidate.getAttribute("class") ?? "");
     if (match?.[1]) return match[1];
+    // A font of icons that draws each icon from its name written out, as Google's Material Icons does: "account_circle".
+    if (LIGATURE_FONT.test(candidate.getAttribute("class") ?? "")) {
+      const name = (candidate.textContent ?? "").trim();
+      if (LIGATURE.test(name)) return name.replace(/_/g, "-");
+    }
   }
   return undefined;
 }
+
+/** The class of an element drawn by a font of icons from the icon's name, and what such a name looks like. */
+const LIGATURE_FONT = /(?:^|\s)material-(?:icons|symbols)(?:-[a-z]+)?(?:\s|$)/;
+const LIGATURE = /^[a-z][a-z0-9_]{1,40}$/;
 
 /**
  * What using a control opens, when the page says so: a menu, a list or a
@@ -1930,7 +2720,7 @@ function markedRequired(name: Element): boolean {
   const walk = (node: Node) => {
     if (visited++ > 60 || text.length > 200) return;
     if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
-    else if (node instanceof Element && !holdsTyping(node) && !NOT_WORDS.has(node.tagName)) for (const child of node.childNodes) walk(child);
+    else if (isElement(node) && !holdsTyping(node) && !NOT_WORDS.has(node.tagName)) for (const child of node.childNodes) walk(child);
   };
   walk(name);
   if (REQUIRED_MARK.test(text.replace(/\s+/g, " ").trim())) return true;
@@ -2034,14 +2824,14 @@ function stateOf(el: Element, role: string): string[] {
   if (current && current !== "false") state.push("current");
   if (el.getAttribute("aria-selected") === "true") state.push("selected");
   if (el.getAttribute("aria-pressed") === "true") state.push("pressed");
-  const checkable = el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio");
+  const checkable = isTag(el, "input") && (el.type === "checkbox" || el.type === "radio");
   if ((checkable && el.checked) || el.getAttribute("aria-checked") === "true") state.push("checked");
-  if (el instanceof HTMLDetailsElement ? el.open : el.tagName === "SUMMARY" && (el.parentElement as HTMLDetailsElement | null)?.open) state.push("expanded");
+  if (isTag(el, "details") ? el.open : el.tagName === "SUMMARY" && (el.parentElement as HTMLDetailsElement | null)?.open) state.push("expanded");
   return state;
 }
 
 function hrefOf(el: Element): string | undefined {
-  if (!(el instanceof HTMLAnchorElement)) return undefined;
+  if (!isTag(el, "a")) return undefined;
   // A link that opens a menu or unfolds a section does that when clicked. The
   // address it carries is for a browser without scripts, and would be taken for where a click leads.
   if (el.hasAttribute("aria-expanded") || !["", "false"].includes((el.getAttribute("aria-haspopup") ?? "").toLowerCase())) return undefined;
@@ -2086,7 +2876,51 @@ export function findOpenModal(ignore: Element): Element | undefined {
     const modal = el.getAttribute("aria-modal");
     if (modal === "true" || (modal !== "false" && coversThePage(el, ignore))) modals.push(el);
   });
-  return modals[modals.length - 1];
+  return modals[modals.length - 1] ?? modalInShadow(ignore);
+}
+
+const DIALOGS = 'dialog, [role="dialog"], [role="alertdialog"]';
+
+/** Whether a dialog says it is modal, or the browser shows it as modal. */
+function isModalDialog(dialog: Element): boolean {
+  if (dialog.getAttribute("aria-modal") === "true") return true;
+  try {
+    return dialog.matches(":modal");
+  } catch {
+    // :modal unsupported. What the dialog says of itself stands.
+    return false;
+  }
+}
+
+/**
+ * A modal dialog drawn inside a component's open shadow root, which a search
+ * of the page does not see into. It is looked for where a dialog that shuts
+ * out the page is seen, at the middle of the window: around what is drawn
+ * there, which may be the words the page put into the dialog's slot, and
+ * beside it in the shadow roots it is drawn in, where a backdrop lies beside
+ * its dialog. Only one that says it is modal, or that the browser shows as
+ * modal, counts.
+ */
+function modalInShadow(ignore: Element): Element | undefined {
+  const x = window.innerWidth / 2;
+  const y = window.innerHeight / 2;
+  let hit: Element | undefined = document.elementFromPoint(x, y) ?? undefined;
+  if (hit && (hit === ignore || ignore.contains(hit))) hit = document.elementsFromPoint(x, y).find((el) => el !== ignore && !ignore.contains(el));
+  for (let depth = 0; hit?.shadowRoot && depth < 30; depth++) {
+    const outer: Element = hit;
+    const inner: Element | undefined = outer.shadowRoot!.elementsFromPoint(x, y).find((el) => el !== outer);
+    if (!inner) break;
+    hit = inner;
+  }
+  const roots: ShadowRoot[] = [];
+  for (let node: Node | null = hit ?? null, depth = 0; node && depth < 200; node = drawnParent(node), depth++) {
+    if (isShadowRoot(node)) roots.push(node);
+    else if (isElement(node) && node.matches(DIALOGS) && isModalDialog(node) && isRendered(node)) return node;
+  }
+  for (const root of roots) {
+    for (const dialog of Array.from(root.querySelectorAll(DIALOGS))) if (isRendered(dialog) && isModalDialog(dialog)) return dialog;
+  }
+  return undefined;
 }
 
 /** Whether what is drawn at the middle of the part of a box that is in the window is that box, or in it. */
