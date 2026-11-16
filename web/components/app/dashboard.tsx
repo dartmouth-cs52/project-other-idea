@@ -82,7 +82,7 @@ function SiteSwitch({ me, chosen }: { me: Me; chosen: string | null }) {
           ))}
         </nav>
       )}
-      <SiteView key={current.id} siteId={current.id} />
+      <SiteView key={current.id} siteId={current.id} onDeleted={() => window.location.replace("/dashboard/")} />
     </>
   );
 }

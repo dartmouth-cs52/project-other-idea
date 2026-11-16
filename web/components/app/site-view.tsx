@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { api, type Reading, type Site } from "@/lib/app-api";
 import { InstallOptions } from "./install-options";
 import { InsightsView } from "./insights-view";
+import { SiteSettings } from "./site-settings";
 import { Card, CardTitle, CopyButton, DoneMark, StepMark, when } from "./parts";
 
 /** How often the page asks whether the script has been seen, while waiting for it. */
@@ -16,8 +17,9 @@ const WAITING_MS = 5_000;
 const CONNECTED_MS = 60_000;
 
 /** One site: the three setup steps until it connects, then what its users asked. */
-export function SiteView({ siteId }: { siteId: string }) {
+export function SiteView({ siteId, onDeleted }: { siteId: string; onDeleted: () => void }) {
   const [site, setSite] = useState<Site | null>(null);
+  const [view, setView] = useState<"overview" | "settings">("overview");
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -52,12 +54,37 @@ export function SiteView({ siteId }: { siteId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-4xl font-medium tracking-[-0.03em]">{site.name}</h1>
-        <p className="text-base text-muted-foreground">{site.origin}</p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-4xl font-medium tracking-[-0.03em]">{site.name}</h1>
+          <p className="text-base text-muted-foreground">{site.origin}</p>
+        </div>
+        <div role="tablist" aria-label="Site" className="flex gap-2">
+          {(
+            [
+              ["overview", "Overview"],
+              ["settings", "Settings"],
+            ] as const
+          ).map(([value, name]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={view === value}
+              onClick={() => setView(value)}
+              className={`inline-flex h-8 items-center rounded-full px-3.5 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${
+                view === value ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-secondary"
+              }`}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {site.connected ? (
+      {view === "settings" ? (
+        <SiteSettings site={site} onChange={setSite} onDeleted={onDeleted} />
+      ) : site.connected ? (
         <>
           <InsightsView siteId={site.id} refreshKey={refreshKey} />
           <InstallHealth site={site} reading={pages.reading} onChange={setSite} />
