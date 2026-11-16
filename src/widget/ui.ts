@@ -32,14 +32,39 @@ button { font: inherit; cursor: pointer; }
 .panel form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 .panel input { width: 100%; height: 40px; font: inherit; color: inherit; padding: 4px 12px 0; border: 0; background: transparent; outline: none; }
 .panel input::placeholder { color: #78716c; }
-.panel .send { display: inline-flex; align-items: center; justify-content: center; align-self: flex-end; width: 32px; height: 32px; margin: 6px 10px 8px; border: 0;
+.panel .row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 6px 10px 8px; }
+.panel .send { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0;
   border-radius: 999px; background: #1c1917; color: #fafaf9; }
 .panel .send svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.status { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 36px; padding: 0 2px 0 12px; }
-.status span { color: #78716c; }
-.stop { height: 28px; border: 1px solid #e7e5e4; background: #fff; color: #78716c; border-radius: 999px; padding: 0 12px; font-size: 13px; }
+.panel .doit { display: none; height: 32px; border: 1px solid #e7e5e4; border-radius: 999px; padding: 0 14px; background: #fff; color: #1c1917; font-size: 13px; font-weight: 500;
+  transition: background-color .2s, border-color .2s, color .2s; }
+.panel.acts .doit { display: inline-flex; align-items: center; }
+.panel.nudged .doit { background: var(--accent); border-color: var(--accent); color: #fff; }
+.first { display: flex; align-items: center; gap: 10px; padding: 8px 4px 4px 12px; color: #44403c; font-size: 13px; line-height: 18px; }
+.first .go { flex: none; height: 28px; border: 0; border-radius: 999px; padding: 0 14px; background: #1c1917; color: #fafaf9; font-size: 13px; }
+.status { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 2px 0 12px; }
+.status span { flex: 1; color: #78716c; }
+.stop, .resume { flex: none; height: 28px; border: 1px solid #e7e5e4; background: #fff; color: #78716c; border-radius: 999px; padding: 0 12px; font-size: 13px; }
+.resume { border-color: #1c1917; background: #1c1917; color: #fafaf9; }
+.status:not(.paused) .resume { display: none; }
+.note { padding: 0 12px 6px; color: #78716c; font-size: 13px; line-height: 18px; }
+.did { padding: 4px 4px 2px; }
+.did h2 { margin: 4px 8px 6px; font-size: 13px; line-height: 18px; font-weight: 600; color: #1c1917; }
+.did ul { list-style: none; margin: 0; padding: 0; }
+.did .line { display: flex; width: 100%; gap: 10px; align-items: baseline; border: 0; border-radius: 8px; padding: 4px 8px; background: transparent; color: #44403c;
+  font-size: 13px; line-height: 18px; text-align: left; }
+.did .line:hover { background: #f5f5f4; }
+.did .name { flex: none; max-width: 45%; color: #78716c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.did .value { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.did .mine { flex: none; color: #78716c; font-style: italic; }
+.did p { margin: 6px 8px 4px; color: #78716c; font-size: 13px; line-height: 18px; }
 .ring { position: fixed; border: 2px solid var(--accent); border-radius: 10px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
   transition: opacity .2s; }
+.ring.turn { animation: breathe 1.6s ease-in-out infinite; }
+@keyframes breathe { 50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 12%, transparent); } }
+.ripple { position: fixed; width: 28px; height: 28px; margin: -14px 0 0 -14px; border: 2px solid var(--accent); border-radius: 999px; pointer-events: none;
+  animation: ripple .25s ease-out forwards; }
+@keyframes ripple { from { transform: scale(.35); opacity: .9; } to { transform: scale(1.3); opacity: 0; } }
 .cursor { position: fixed; left: 0; top: 0; width: 24px; height: 24px; transition: transform .55s cubic-bezier(.2,.8,.2,1);
   filter: drop-shadow(0 1px 1px rgba(0,0,0,.3)) drop-shadow(0 5px 9px rgba(0,0,0,.26)); will-change: transform; }
 .cursor svg { display: block; overflow: visible; }
@@ -50,7 +75,7 @@ button { font: inherit; cursor: pointer; }
   border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; pointer-events: auto; }
 .caption .close:hover { background: rgba(250,250,249,.25); }
 .caption .close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
-@media (prefers-reduced-motion: reduce) { .cursor { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .cursor { transition: none; } .ring.turn { animation: none; } .ripple { display: none; } }
 `;
 
 /**
@@ -60,14 +85,89 @@ button { font: inherit; cursor: pointer; }
  * - "asking": a question has been sent and the answer is not yet on show.
  * - "pointing": a pointer is on show and the widget is waiting for the visitor to use it.
  * - "watching": a sentence is on show with no pointer, and the widget is waiting for the visitor to do what it says.
+ * - "acting": Haptic is using a control itself ("Do it"). The visitor watches, and can stop it.
+ * - "paused": the visitor touched the page while Haptic was acting. Nothing more is done until they carry on or stop.
  * - "finished": the guide is over. Its last sentence may still be on show. It stays this way until the next question.
+ * While Haptic acts, a step it gives the visitor, and the hand-over at the end, are "pointing".
  */
-export type GuideState = "idle" | "asking" | "pointing" | "watching" | "finished";
+export type GuideState = "idle" | "asking" | "pointing" | "watching" | "acting" | "paused" | "finished";
 
 export interface UiHandlers {
-  onAsk: (question: string) => void;
+  /** A question, with `act` set when the visitor pressed Do it (and, the first time, Go). */
+  onAsk: (question: string, act: boolean) => void;
   onStop: () => void;
+  /** The visitor let Haptic carry on after it paused for them. */
+  onCarryOn?: () => void;
 }
+
+/** What the widget knows of the site's acting, when the site has it on and the page allows it. */
+export interface UiActing {
+  /** The site's id, for remembering that the visitor has seen the first-use line. */
+  site: string;
+  /** Show the one-line explanation the first time a visitor uses Do it. */
+  confirmFirst: boolean;
+  /** Whether the site allows acting on the page the visitor is on now. Do it shows only where it does. */
+  allowedHere: () => boolean;
+}
+
+/** One line of "What I did", as the panel shows it. */
+export interface DidShown {
+  name: string;
+  value?: string;
+  /** Haptic set it though the visitor did not say so. */
+  mine?: boolean;
+  /** Typing that Stop or the visitor's own hand cut short. */
+  partly?: boolean;
+}
+
+/** The first-use line, and what the status says while Haptic acts. English in this version, like the gate's sentences. */
+export const ACTING_WORDS = {
+  first: "I'll click and type on this page while you watch, and stop before anything is saved. Stop at any time.",
+  doing: "Doing it",
+  starting: "I'll do this with you and stop before anything is saved.",
+  yourTurn: "Your turn",
+  ready: "Ready for you",
+  stopped: "Stopped",
+  did: "What I did",
+  mine: "my choice, check it",
+  partly: "stopped part way",
+  nothingSaved: (name: string) => `Nothing is saved until you click ${name}.`,
+} as const;
+
+/**
+ * Whether a question reads as a request to do something rather than to be
+ * shown how: "can you…", "please…", "do it for me", in the languages the
+ * act rules ship. It only colours the Do it button. Words never start
+ * acting by themselves: "give Maya a card" is as often typed meaning "how do I".
+ */
+export function asksToDo(question: string): boolean {
+  const text = ` ${question.toLowerCase().normalize("NFD").replace(/\p{M}+/gu, "").replace(/\s+/g, " ").trim()} `;
+  return DO_IT_WORDS.test(text) || DO_IT_SCRIPT.test(question);
+}
+
+const DO_IT_WORDS = new RegExp(
+  [
+    // English
+    "can you", "could you", "would you", "will you", "please", "pls", "for me", "do it", "do this", "do that",
+    // Spanish
+    "puedes", "podrias", "podria", "puede usted", "por favor", "hazlo", "hazme", "por mi",
+    // French
+    "peux-tu", "peux tu", "pouvez-vous", "pouvez vous", "pourrais-tu", "pourriez-vous", "s'il te plait", "s'il vous plait", "stp", "svp", "fais-le", "faites-le", "pour moi",
+    // German
+    "kannst du", "konnen sie", "konntest du", "konnten sie", "bitte", "fur mich", "mach das", "mach es", "erledige",
+    // Portuguese
+    "pode ", "podes", "poderia", "voce pode", "faz isso", "faca isso", "para mim",
+    // Italian
+    "puoi", "potresti", "per favore", "fallo", "per me",
+    // Dutch
+    "kun je", "kunt u", "kan je", "zou je", "alsjeblieft", "alstublieft", "voor mij", "doe het",
+  ]
+    .map((phrase) => `(?:^|[^\\p{L}])${phrase.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+")}(?=$|[^\\p{L}])`)
+    .join("|"),
+  "u",
+);
+/** Japanese and Chinese, which are written without spaces between words. */
+const DO_IT_SCRIPT = /ください|してくれ|やって|お願い|帮我|替我|请你|請你|你能|你可以|能不能/;
 
 export class Ui {
   readonly host: HTMLElement;
@@ -104,7 +204,20 @@ export class Ui {
   private captor?: Element;
   private frame = 0;
   /** What each of our buttons does, by its class. */
-  private buttons!: Record<"launcher" | "send" | "stop" | "close", () => void>;
+  private buttons!: Record<"launcher" | "send" | "stop" | "close" | "doit" | "go" | "resume", () => void>;
+  private readonly first: HTMLElement;
+  private readonly note: HTMLElement;
+  private readonly did: HTMLElement;
+  /** Set when the site has acting on and the page allows it: the Do it button shows. */
+  private readonly acting?: UiActing;
+  /** Haptic is acting: the keyboard moving into the page is its own doing, not a menu taking it. */
+  private actingNow = false;
+  /** What a click on a line of "What I did" does. */
+  private onLine?: (index: number) => void;
+  /** A point the pointer was sent to by `glideTo`, held until it is sent to a control again. */
+  private held?: { x: number; y: number };
+  /** The caption is on show with nothing to point at (`say`). */
+  private saying = false;
   /** The timer that keeps our element placed, while it is in use. */
   private placing?: ReturnType<typeof setInterval>;
   /** Watches what our element is inside, when that is something of the page's. */
@@ -114,7 +227,7 @@ export class Ui {
   /** Where the pointer last was, so each move starts from there. */
   private at: { x: number; y: number };
 
-  constructor(appearance: Appearance, handlers: UiHandlers) {
+  constructor(appearance: Appearance, handlers: UiHandlers, acting?: UiActing) {
     this.host = document.createElement("haptic-root");
     this.host.style.setProperty("--accent", appearance.accent);
     const root = this.host.attachShadow({ mode: "open" });
@@ -125,8 +238,11 @@ export class Ui {
       <div class="cursor" hidden><svg viewBox="0 0 24 24" width="24" height="24"><path d="${POINTER_PATH}"/></svg></div>
       <div class="dock ${side}">
         <div class="panel" hidden>
-          <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><button class="send" type="button" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
-          <div class="status" hidden><span></span><button class="stop" type="button">Stop</button></div>
+          <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><div class="row"><button class="doit" type="button" title="Do it with me (Ctrl+Enter)">Do it</button><button class="send" type="button" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div></form>
+          <div class="first" hidden><span></span><button class="go" type="button">Go</button></div>
+          <div class="status" hidden><span></span><button class="resume" type="button">Carry on</button><button class="stop" type="button">Stop</button></div>
+          <div class="note" hidden></div>
+          <div class="did" hidden><h2></h2><ul></ul><p></p></div>
         </div>
         <button class="launcher" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${POINTER_PATH}"/></svg><span></span></button>
       </div>`;
@@ -141,7 +257,19 @@ export class Ui {
     this.caption = pick(".caption");
     this.captionText = pick(".caption span");
     this.dock = pick(".dock");
+    this.first = pick(".first");
+    this.note = pick(".note");
+    this.did = pick(".did");
     this.side = side;
+    this.acting = acting;
+    pick(".first span").textContent = ACTING_WORDS.first;
+    pick(".did h2").textContent = ACTING_WORDS.did;
+    if (acting) {
+      this.showActs();
+      // Enter shows the way; Do it is beside it.
+      pick(".send").setAttribute("aria-label", "Show me");
+      pick(".send").setAttribute("title", "Show me (Enter)");
+    }
     pick(".launcher span").textContent = appearance.launcherLabel;
     this.at = { x: side === "left" ? 60 : window.innerWidth - 60, y: window.innerHeight - 40 };
 
@@ -149,6 +277,7 @@ export class Ui {
     this.buttons = {
       launcher: () => {
         this.panel.hidden = !this.panel.hidden;
+        this.showActs();
         this.keepPlaced();
         // Nothing kept our element in place while it was not in use. A dialog may have opened since.
         this.place();
@@ -157,11 +286,30 @@ export class Ui {
       send: () => this.form.requestSubmit(),
       stop: handlers.onStop,
       close: handlers.onStop,
+      doit: () => this.doIt(handlers),
+      go: () => {
+        const question = this.input.value.trim();
+        this.first.hidden = true;
+        remember(this.acting);
+        if (question) handlers.onAsk(question, true);
+      },
+      resume: () => handlers.onCarryOn?.(),
     };
     this.form.addEventListener("submit", (event) => {
       event.preventDefault();
       const question = this.input.value.trim();
-      if (question) handlers.onAsk(question);
+      this.first.hidden = true;
+      if (question) handlers.onAsk(question, false);
+    });
+    // Ctrl or Cmd and Enter is Do it. The visitor's own words only colour the button.
+    this.input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || !(event.ctrlKey || event.metaKey) || !this.panel.classList.contains("acts")) return;
+      event.preventDefault();
+      this.doIt(handlers);
+    });
+    this.input.addEventListener("input", () => {
+      this.panel.classList.toggle("nudged", !!this.acting && asksToDo(this.input.value));
+      this.first.hidden = true;
     });
 
     // Typing in the ask box mustn't trigger the page's keyboard shortcuts or
@@ -216,6 +364,7 @@ export class Ui {
    * neither is the case, so the timer stops then.
    */
   private keepPlaced() {
+    this.placeSaid();
     const inUse = this.inUse();
     if (inUse && this.placing === undefined) this.placing = setInterval(this.place, 500);
     else if (!inUse && this.placing !== undefined) {
@@ -228,7 +377,7 @@ export class Ui {
 
   /** The visitor is using the widget: the ask box is open, or a guide runs. */
   private inUse(): boolean {
-    return !this.panel.hidden || this.state === "asking" || this.state === "pointing" || this.state === "watching";
+    return !this.panel.hidden || this.state === "asking" || this.state === "pointing" || this.state === "watching" || this.state === "acting" || this.state === "paused";
   }
 
   /**
@@ -344,7 +493,8 @@ export class Ui {
     const root = this.host.shadowRoot!;
     const buttonOf = (event: Event) => event.composedPath().find((node): node is HTMLButtonElement => node instanceof HTMLButtonElement);
     const act = (button: HTMLButtonElement) => {
-      const name = (["launcher", "send", "stop", "close"] as const).find((name) => button.classList.contains(name));
+      if (button.classList.contains("line")) return this.onLine?.(Number(button.dataset.index));
+      const name = (["launcher", "send", "stop", "close", "doit", "go", "resume"] as const).find((name) => button.classList.contains(name));
       if (name) this.buttons[name]();
     };
     let pressed: HTMLButtonElement | undefined;
@@ -401,6 +551,8 @@ export class Ui {
       if (!event.relatedTarget) this.lostAt = performance.now();
     });
     this.input.addEventListener("focusout", (event) => {
+      // While Haptic acts it moves the keyboard into the page itself.
+      if (this.actingNow) return;
       const to = event.relatedTarget;
       const now = performance.now();
       if (!(to instanceof Element) || to === this.captor || to.contains(this.host) || (now - wanted > 500 && now - typed > 1500) || now - tabbed < 500) return;
@@ -413,14 +565,158 @@ export class Ui {
     });
   }
 
-  /** Show the ask box busy with a message, or back to the input when `text` is empty. */
-  setBusy(text: string) {
+  /** Show the ask box busy with a message, or back to the input when `text` is empty. `paused` adds Carry on beside Stop. */
+  setBusy(text: string, paused = false) {
     this.form.hidden = text !== "";
     this.status.hidden = text === "";
     this.statusText.textContent = text;
+    this.status.classList.toggle("paused", paused && text !== "");
+    this.first.hidden = true;
     if (text) this.panel.hidden = false;
-    else this.input.value = "";
+    else {
+      this.input.value = "";
+      this.panel.classList.remove("nudged");
+      this.setNote("");
+      this.showActs();
+    }
     this.keepPlaced();
+  }
+
+  /** A line under the status, in the widget's own words. */
+  setNote(text: string) {
+    this.note.textContent = text;
+    this.note.hidden = text === "";
+  }
+
+  /**
+   * Haptic is acting, or has stopped. While it acts the panel stays open with
+   * Stop, and the keyboard moving into the page is not taken for the page
+   * taking it from the ask box.
+   */
+  setActing(on: boolean) {
+    this.actingNow = on;
+    if (on) this.panel.hidden = false;
+    this.keepPlaced();
+  }
+
+  /** Do it shows when the site has acting on and allows it on this page. Looked at whenever the ask box comes back. */
+  private showActs() {
+    let allowed = false;
+    try {
+      allowed = !!this.acting && this.acting.allowedHere();
+    } catch {
+      allowed = false;
+    }
+    this.panel.classList.toggle("acts", allowed);
+  }
+
+  /** The pointer's ring breathes slowly: it is the visitor's turn. */
+  yourTurn(on: boolean) {
+    this.ring.classList.toggle("turn", on);
+  }
+
+  /**
+   * "What I did", in the panel: one line per field Haptic set, written from
+   * what it did, and a closing line. A click on a line calls `onLine` with
+   * its index. Nothing here is read from the page. An empty list hides it.
+   */
+  showDid(lines: DidShown[], closing: string, onLine?: (index: number) => void) {
+    const list = this.did.querySelector("ul")!;
+    list.replaceChildren();
+    this.onLine = onLine;
+    for (const [index, line] of lines.entries()) {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "line";
+      button.dataset.index = String(index);
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = line.name;
+      const value = document.createElement("span");
+      value.className = "value";
+      value.textContent = line.value ?? "";
+      button.append(name, value);
+      const aside = line.partly ? ACTING_WORDS.partly : line.mine ? ACTING_WORDS.mine : "";
+      if (aside) {
+        const note = document.createElement("span");
+        note.className = "mine";
+        note.textContent = aside;
+        button.append(note);
+      }
+      item.append(button);
+      list.append(item);
+    }
+    this.did.querySelector("p")!.textContent = closing;
+    this.did.hidden = lines.length === 0 && closing === "";
+    if (!this.did.hidden) this.panel.hidden = false;
+    this.keepPlaced();
+  }
+
+  hideDid() {
+    this.did.hidden = true;
+    this.onLine = undefined;
+    this.placeSaid();
+  }
+
+  /**
+   * Draws a press: an accent ring that grows from the point and fades in a
+   * quarter of a second. Nothing under reduced motion.
+   */
+  ripple(x: number, y: number) {
+    if (lessMotion()) return;
+    const ring = document.createElement("div");
+    ring.className = "ripple";
+    ring.style.left = `${x}px`;
+    ring.style.top = `${y}px`;
+    this.host.shadowRoot!.append(ring);
+    setTimeout(() => ring.remove(), 300);
+  }
+
+  /**
+   * Glides the pointer to a point of the page, where Haptic is about to press,
+   * and resolves once it is there: at once under reduced motion. The ring
+   * stays on the control; the pointer stays at the point until it is sent to
+   * a control again.
+   */
+  glideTo(x: number, y: number): Promise<void> {
+    const far = Math.hypot(x - this.at.x, y - this.at.y);
+    this.held = { x, y };
+    this.at = { x, y };
+    this.cursor.hidden = false;
+    this.cursor.style.transform = `translate(${x - POINTER_TIP.x}px, ${y - POINTER_TIP.y}px)`;
+    if (lessMotion() || far < 2) return Promise.resolve();
+    // The glide's own length, a little less for a short way.
+    return new Promise((resolve) => setTimeout(resolve, far < 80 ? 250 : GLIDE_MS));
+  }
+
+  /** Between two of Haptic's steps: the caption and the ring go, and the pointer rests where it is, so the next glide starts there. */
+  rest() {
+    this.pointed = undefined;
+    this.target = undefined;
+    this.tip = undefined;
+    this.under = undefined;
+    this.mark(undefined);
+    cancelAnimationFrame(this.frame);
+    this.ring.hidden = true;
+    this.caption.hidden = true;
+  }
+
+  /**
+   * Do it: the question goes with acting asked for. The first time on a site,
+   * unless the site turned it off, a line says what will happen, and Go
+   * starts it.
+   */
+  private doIt(handlers: UiHandlers) {
+    const question = this.input.value.trim();
+    if (!this.acting || !this.panel.classList.contains("acts")) return;
+    if (!question) return this.input.focus();
+    if (this.acting.confirmFirst && !remembered(this.acting)) {
+      this.first.hidden = false;
+      this.keepPlaced();
+      return;
+    }
+    handlers.onAsk(question, true);
   }
 
   closePanel() {
@@ -430,8 +726,10 @@ export class Ui {
 
   /** Move the pointer to an element and show the caption beside it. With no text yet, the pointer goes alone. */
   pointAt(el: Element, text: string) {
+    this.saying = false;
     if (el !== this.pointed) {
       this.pointed = el;
+      this.held = undefined;
       this.tip = undefined;
       this.captionAbove = false;
       this.under = undefined;
@@ -451,14 +749,24 @@ export class Ui {
     this.clearPointer();
     this.captionText.textContent = text;
     this.caption.hidden = false;
+    this.saying = true;
+    this.placeSaid();
+  }
+
+  /** Places a caption with nothing to point at above the launcher, and above the panel when it is open. */
+  private placeSaid() {
+    if (!this.saying || this.caption.hidden) return;
     const box = this.caption.getBoundingClientRect();
+    const dock = this.dock.getBoundingClientRect();
     const left = this.host.shadowRoot?.querySelector(".dock.left") ? 20 : window.innerWidth - box.width - 20;
     this.caption.style.left = `${Math.max(12, left)}px`;
-    this.caption.style.top = `${Math.max(12, window.innerHeight - box.height - 76)}px`;
+    this.caption.style.top = `${Math.max(12, Math.min(window.innerHeight - box.height - 76, dock.top - box.height - 16))}px`;
   }
 
   clearPointer() {
+    this.saying = false;
     this.pointed = undefined;
+    this.held = undefined;
     this.target = undefined;
     this.tip = undefined;
     this.under = undefined;
@@ -537,7 +845,7 @@ export class Ui {
     this.ring.style.width = `${rect.width + pad * 2}px`;
     this.ring.style.height = `${rect.height + pad * 2}px`;
 
-    this.at = this.tipOn(el, rect);
+    this.at = this.held ?? this.tipOn(el, rect);
     this.cursor.style.transform = `translate(${this.at.x - POINTER_TIP.x}px, ${this.at.y - POINTER_TIP.y}px)`;
 
     // The caption goes below the control, or above it when there is no room below or when something opened below.
@@ -617,6 +925,38 @@ export class Ui {
     if (this.dock.classList.contains(side)) return;
     this.dock.classList.remove("left", "right");
     this.dock.classList.add(side);
+  }
+}
+
+/** The pointer's glide, as `.cursor`'s transition sets it. */
+const GLIDE_MS = 550;
+
+function lessMotion(): boolean {
+  try {
+    return matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+}
+
+/** Where the visitor's "I've seen the first-use line" is kept: this browser only, for this site. */
+const seenKey = (acting: UiActing) => `haptic.acting.seen.${acting.site}`;
+
+/** Whether this visitor has pressed Go on this site before. Storage that fails counts as no: the line simply shows again. */
+function remembered(acting: UiActing): boolean {
+  try {
+    return localStorage.getItem(seenKey(acting)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function remember(acting: UiActing | undefined) {
+  if (!acting) return;
+  try {
+    localStorage.setItem(seenKey(acting), "1");
+  } catch {
+    // Not kept. The line shows again next time.
   }
 }
 

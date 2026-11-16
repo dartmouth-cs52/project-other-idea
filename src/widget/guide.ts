@@ -1,8 +1,10 @@
-import { cleanText, describeElement, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { ACTING_LIMITS, cleanText, describeElement, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { perform, type DidLine, type Heard as HeardStep, type Listening } from "./act.ts";
+import { planFor, SAYS, type ActPlan, type GateConfig, type GateSession, type Plan, type StopPlan, type VisitorPlan } from "./gate.ts";
 import { hear, isOwn, keyName, keysAsked, nothingHeard, OWN_TYPING_PAUSE_MS, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "./observe.ts";
 import { isDrawn, POPUP_ROLES, watchPopups } from "./popups.ts";
 import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
-import type { Ui } from "./ui.ts";
+import { ACTING_WORDS, type DidShown, type Ui } from "./ui.ts";
 
 // Runs one guide: ask the model for a step, point at it, wait for the visitor
 // to act, let the page settle, and go again until the model has nothing more
@@ -36,6 +38,21 @@ const WATCH_MS = 90_000;
 const MAX_WATCH_RETRIES = 2;
 /** How long a site's data requests take, until it has made a few that say otherwise. */
 const DATA_FLOOR_MS = 700;
+/**
+ * While Haptic acts, how many times in a row it asks again because the
+ * control a reply named had changed or gone before it could act (the gate's
+ * "again"). A page that keeps changing under it has to stop somewhere.
+ */
+const MAX_AGAIN = 2;
+/** How the visitor is named to the model while Haptic acts: Haptic's own steps are "You". */
+const VISITOR = "The visitor";
+/** The widget's own sentences while acting that the gate does not have. English in this version. */
+const ACT_SAYS = {
+  changing: "The page kept changing under me, so I've stopped. Here's what I did.",
+  failing: "You stopped doing it yourself, since several steps could not be done. Show the visitor the way from here.",
+  carryOn: "The visitor took over for a moment and then let you carry on. Look at the page as it is now.",
+  check: (name: string, commit: string) => (commit ? `This is ${name}. Click ${commit} when it looks right.` : `This is ${name}.`),
+} as const;
 /** However slow a site's requests, a click is not waited on longer than this for one to come back. */
 const MAX_PACE_MS = 2500;
 
@@ -111,11 +128,50 @@ interface EarlyPointer {
   acted?: Acted;
 }
 
+/** One line of "What I did" as it is kept: the words only, since the element is gone after a page load. */
+interface DidKept {
+  name: string;
+  value?: string;
+  mine?: boolean;
+  partly?: boolean;
+}
+
+/**
+ * "Do it with me" for one request (DESIGN 3 to 5): what the gate decides
+ * with, what Haptic did, the caps, and whether the visitor's own hand has
+ * paused it. It lives as long as Haptic acts; the hand-over, Stop, and every
+ * way acting ends, end it.
+ */
+interface ActSession {
+  gate: GateSession;
+  /** What Haptic did, one line per control, in order. A line's element is gone after a page load. */
+  did: (DidKept & { el?: WeakRef<Element> })[];
+  /** Questions asked in act mode. */
+  turns: number;
+  /** "Again" plans in a row. */
+  again: number;
+  /** The page as it was read before Haptic's last action, to tell whether the next one on the same control comes after a change. */
+  before?: string;
+  /** The visitor's own hand paused it. */
+  paused: boolean;
+  /** The question in flight, aborted by Stop and by a pause. */
+  abort?: AbortController;
+  /** Stops listening for the visitor's own hand, for Escape and for Back. */
+  unwatch?: () => void;
+}
+
 interface SavedGuide {
   goal: string;
   history: HistoryTurn[];
   step: number;
   path: string;
+  /**
+   * Set while Haptic was acting: its counts and what it did. `expectLoadUntil`
+   * is set while a page load may follow from Haptic's own press, or from the
+   * visitor doing the step acting gave them. A page that loads by then
+   * carries on acting; any other ends it.
+   */
+  acting?: { actions: number; typed: number; failures: number; turns: number; did: DidKept[]; expectLoadUntil?: number };
   /** What the visitor did just before the page unloaded, if we saw it. */
   event?: string;
   /** Set when that was something other than the step they were shown. */
@@ -169,18 +225,31 @@ export class Guide {
   private stopField?: () => void;
   /** That field was left while a question was on its way, so the answer is checked against the page more strictly. */
   private fieldLeft = false;
+  /** Set while Haptic acts with the visitor ("Do it"). */
+  private acting?: ActSession;
+  /** A page load may follow until then, from Haptic's own press or from the visitor doing the step acting gave them. */
+  private expectLoadUntil = 0;
+  /** The act session whose "What I did" is on show, so a line that comes in late is added to it. */
+  private didOnShow?: { session: ActSession; closing: string; commit: string };
 
   constructor(
     private readonly ui: Ui,
-    private readonly sendTurn: (request: Omit<TurnRequest, "site">, onTarget?: (id: string) => void) => Promise<TurnReply>,
+    private readonly sendTurn: (request: Omit<TurnRequest, "site">, onTarget?: (id: string) => void, signal?: AbortSignal) => Promise<TurnReply>,
+    /** The site's acting settings, when it has acting on, and whether the page turned it off. */
+    private readonly config: GateConfig = {},
   ) {}
 
-  start(goal: string) {
+  /** A question. `act` is set when the visitor pressed Do it, and Haptic then acts if the site and the page allow it. */
+  start(goal: string, act = false) {
     this.reset();
     this.goal = goal;
+    if (act && this.config.acting && !this.config.pageOff) this.beginActing();
     this.watchPage(true);
     this.ui.setState("asking");
-    this.ui.setBusy("Finding it…");
+    if (this.acting) {
+      this.ui.setBusy(ACTING_WORDS.doing);
+      this.ui.setNote(ACTING_WORDS.starting);
+    } else this.ui.setBusy("Finding it…");
     // The page is given the same chance to finish drawing before the first reading as before any other.
     const run = this.run;
     void settle(this.ui.host).then(() => {
@@ -201,15 +270,163 @@ export class Guide {
     requests.watch(on);
   }
 
-  /** The visitor called the guide off. */
+  /** The visitor called the guide off: Stop, the caption's cross, or Escape while Haptic acts. What Haptic did stays listed. */
   stop() {
+    const session = this.acting;
     this.reset();
     this.ui.clear();
     this.ui.setBusy("");
+    if (session?.did.length) this.showDid(session, ACTING_WORDS.stopped);
+    // Typing that Stop cut short is reported by the engine a moment later, and shown then.
+    else if (session) this.didOnShow = { session, closing: ACTING_WORDS.stopped, commit: "" };
     if (this.ui.state !== "idle") this.ui.setState("finished");
   }
 
-  /** Pick up a guide that a full page load interrupted. */
+  /** The visitor let Haptic carry on after it paused for their own hand. The page is read afresh. */
+  carryOn() {
+    const session = this.acting;
+    if (!session?.paused) return;
+    session.paused = false;
+    const run = this.run;
+    this.ui.setState("asking");
+    this.ui.setBusy(ACTING_WORDS.doing);
+    void settle(this.ui.host).then(() => {
+      if (run === this.run && this.acting === session) void this.turn(run, { event: ACT_SAYS.carryOn });
+    });
+  }
+
+  /** Starts acting for this request, afresh or carried over from the page before a load. */
+  private beginActing(kept?: NonNullable<SavedGuide["acting"]>) {
+    const session: ActSession = {
+      gate: { words: this.goal, host: this.ui.host, actions: kept?.actions ?? 0, typed: kept?.typed ?? 0, failures: kept?.failures ?? 0 },
+      did: (kept?.did ?? []).map((line) => ({ ...line })),
+      turns: kept?.turns ?? 0,
+      again: 0,
+      paused: false,
+    };
+    this.acting = session;
+    this.ui.hideDid();
+    this.ui.setActing(true);
+    this.watchHand(session);
+  }
+
+  /** Acting is over. Whatever is on show stays; the guide may go on as a guide. */
+  private endActing() {
+    const session = this.acting;
+    if (!session) return;
+    session.unwatch?.();
+    session.abort?.abort();
+    this.acting = undefined;
+    this.expectLoadUntil = 0;
+    this.ui.setActing(false);
+    this.ui.yourTurn(false);
+  }
+
+  /**
+   * While Haptic acts or waits for its next step, the visitor's own hand wins
+   * (DESIGN 4.3): a press or a key of theirs anywhere on the page pauses it,
+   * and Escape stops it and still reaches the page, so an open menu closes.
+   * Back or Forward ends it. Only events the browser marks as the visitor's
+   * own count; what Haptic and the page dispatch does not. These listeners
+   * live only as long as acting does.
+   */
+  private watchHand(session: ActSession) {
+    const host = this.ui.host;
+    const ours = () => this.acting === session;
+    const onHand = safely((event: Event) => {
+      if (!event.isTrusted || !ours()) return;
+      const state = this.ui.state;
+      const key = event.type === "keydown" ? ((event as KeyboardEvent).key ?? "") : "";
+      if (key === "Escape" && (state === "asking" || state === "acting" || state === "paused")) return this.stop();
+      if (session.paused || (state !== "asking" && state !== "acting") || event.composedPath().includes(host)) return;
+      // A modifier on its own, as in Ctrl+Enter on Do it, is not taking over.
+      if (["Shift", "Control", "Alt", "Meta", "CapsLock", "Fn"].includes(key)) return;
+      this.pause();
+    });
+    const onHistory = safely(() => {
+      // A jump within the page that Haptic's own press made is its step. Anything else is the visitor moving away.
+      if (ours() && this.ui.state !== "acting") this.stopActing(SAYS.moved);
+    });
+    document.addEventListener("pointerdown", onHand, true);
+    document.addEventListener("keydown", onHand, true);
+    window.addEventListener("popstate", onHistory);
+    session.unwatch = () => {
+      document.removeEventListener("pointerdown", onHand, true);
+      document.removeEventListener("keydown", onHand, true);
+      window.removeEventListener("popstate", onHistory);
+    };
+  }
+
+  /** The visitor touched the page while Haptic acted: nothing more is done or asked until they say so. */
+  private pause() {
+    const session = this.acting;
+    if (!session || session.paused) return;
+    session.paused = true;
+    // The engine stops before its next event, and the answer on its way is dropped.
+    this.run++;
+    session.abort?.abort();
+    this.stopWaiting?.();
+    this.stopWaiting = undefined;
+    this.stopField?.();
+    this.expectLoadUntil = 0;
+    this.ui.rest();
+    this.ui.setState("paused");
+    this.ui.setBusy(SAYS.tookOver, true);
+    this.save();
+  }
+
+  /** Ends acting on a sentence, with the pointer on what it is about when there is something, and "What I did". */
+  private stopActing(say: string, el?: Element) {
+    const session = this.acting;
+    this.endRun();
+    const { ui } = this;
+    if (el?.isConnected) {
+      ui.pointAt(el, say);
+      ui.yourTurn(true);
+      // Shown until the visitor clicks anywhere, as the last pointer of a guide is.
+      const ended = this.run;
+      const dismiss = () => ended === this.run && ui.clear();
+      document.addEventListener("click", dismiss, { capture: true, once: true });
+      this.stopWaiting = () => document.removeEventListener("click", dismiss, true);
+    } else ui.say(say);
+    if (session?.did.length) this.showDid(session, "");
+    ui.setState("finished");
+  }
+
+  /** "What I did" in the panel. A line, clicked, points at its field while it is still on the page. */
+  private showDid(session: ActSession, closing: string, commit = "") {
+    this.didOnShow = { session, closing, commit };
+    const lines: DidShown[] = session.did.map(({ name, value, mine, partly }) => ({ name, ...(value !== undefined ? { value } : {}), ...(mine ? { mine } : {}), ...(partly ? { partly } : {}) }));
+    this.ui.showDid(lines, closing, (index) => {
+      const line = session.did[index];
+      const el = line?.el?.deref();
+      if (!line || !el?.isConnected) return;
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      this.ui.pointAt(el, ACT_SAYS.check(line.name, commit));
+    });
+  }
+
+  /** Adds or updates a line of "What I did": a control set twice keeps its last value. */
+  private noteDid(session: ActSession, did: DidLine, partly = false) {
+    const line = { name: did.name || "Field", ...(did.value !== undefined ? { value: did.value } : {}), ...(did.mine ? { mine: true } : {}), ...(partly ? { partly: true } : {}), el: new WeakRef(did.el) };
+    const at = session.did.findIndex((kept) => kept.el?.deref() === did.el);
+    if (at >= 0) session.did[at] = line;
+    else session.did.push(line);
+    const shown = this.didOnShow;
+    if (shown?.session === session) this.showDid(session, shown.closing, shown.commit);
+  }
+
+  /** A page load may follow from what was just done: kept with the saved guide for a few seconds. */
+  private expectLoad() {
+    this.expectLoadUntil = Date.now() + LEAVING_WAIT_MS;
+  }
+
+  /**
+   * Pick up a guide that a full page load interrupted. Acting carries on only
+   * when the load was one it expected, from Haptic's own press or the
+   * visitor's step, and only within a few seconds of it (DESIGN 4.6). Any
+   * other load ends it with a sentence.
+   */
   resume() {
     const saved = load();
     if (!saved) return;
@@ -219,15 +436,31 @@ export class Guide {
     this.step = saved.step;
     this.strayed = saved.strayed === true;
     this.closings = saved.closings ?? 0;
+    const here = currentPath();
+    if (saved.acting) {
+      const expected = (saved.acting.expectLoadUntil ?? 0) >= Date.now();
+      if (!expected) {
+        // The visitor went somewhere, or the page did: acting is over, and says so.
+        this.beginActing(saved.acting);
+        const session = this.acting!;
+        this.endActing();
+        forget();
+        this.ui.say(SAYS.moved);
+        if (session.did.length) this.showDid(session, "");
+        this.ui.setState("finished");
+        return;
+      }
+      if (this.config.acting && !this.config.pageOff) this.beginActing(saved.acting);
+    }
     // A page that loaded after the last step was used is what that step led to: look at it.
     const closing = saved.closing === true && !this.strayed;
     if (closing) this.closings++;
-    const here = currentPath();
-    const moved = saved.path === here ? "The page reloaded." : `A new page loaded: the user went from ${saved.path} to ${here}.`;
+    const moved = saved.path === here ? "The page reloaded." : this.acting ? `A new page loaded: ${here}.` : `A new page loaded: the user went from ${saved.path} to ${here}.`;
     const run = this.run;
     this.watchPage(true);
     this.ui.setState("asking");
-    this.ui.setBusy(this.strayed ? OFF_TRACK : "Looking at this page…");
+    if (this.acting) this.ui.setBusy(ACTING_WORDS.doing);
+    else this.ui.setBusy(this.strayed ? OFF_TRACK : "Looking at this page…");
     // The script tag can run before the page has finished arriving, let alone drawn itself.
     void loaded()
       .then(() => settle(this.ui.host, { since: performance.now(), fetches: true }))
@@ -236,6 +469,9 @@ export class Guide {
 
   private reset() {
     this.run++;
+    this.endActing();
+    this.didOnShow = undefined;
+    this.ui.hideDid();
     this.watchPage(false);
     this.stopWaiting?.();
     this.stopWaiting = undefined;
@@ -265,10 +501,27 @@ export class Guide {
 
   private async askFor(run: number, asking: Asking): Promise<void> {
     const { ui } = this;
-    const { event, followed, reread = false, closing = false, retries = 0 } = asking;
-    if (this.step >= MAX_STEPS) return this.finish("That's as far as I can take this one. Ask again to keep going.");
+    const { followed, reread = false, closing = false, retries = 0 } = asking;
+    let { event } = asking;
+    let acting = this.acting;
+    if (acting) {
+      if (acting.turns >= ACTING_LIMITS.turns) return this.stopActing(SAYS.cap);
+      // Several steps in a row that could not be done: acting ends, and the guide goes on as a guide (DESIGN 4.2).
+      if (acting.gate.failures >= ACTING_LIMITS.failuresInARow) {
+        this.endActing();
+        acting = undefined;
+        event = [event, ACT_SAYS.failing].filter(Boolean).join(" ");
+      }
+    }
+    if (!acting && this.step >= MAX_STEPS) return this.finish("That's as far as I can take this one. Ask again to keep going.");
     ui.setState("asking");
-    ui.setBusy(this.step === 0 ? "Finding it…" : this.strayed ? OFF_TRACK : closing ? "Checking…" : "Next step…");
+    if (acting) ui.setBusy(ACTING_WORDS.doing);
+    else ui.setBusy(this.step === 0 ? "Finding it…" : this.strayed ? OFF_TRACK : closing ? "Checking…" : "Next step…");
+    // Still on the same page: a load that Haptic's last press might have started did not come.
+    if (this.expectLoadUntil) {
+      this.expectLoadUntil = 0;
+      this.save(event);
+    }
 
     ui.place();
     let page = takeSnapshot(ui.host, this.goal);
@@ -307,12 +560,18 @@ export class Guide {
       const node = page.elements.get(element.id);
       if (node) listing.set(node, element);
     }
+    // While Haptic acts the pointer goes early too, but nothing is listened for: Haptic is the one about to use it.
+    let pointedEarly: Element | undefined;
     const pointEarly = (id: string) => {
       const el = page.elements.get(id);
-      if (run !== this.run || early || !el?.isConnected || currentPath() !== page.snapshot.path) return;
+      if (run !== this.run || early || pointedEarly || !el?.isConnected || currentPath() !== page.snapshot.path) return;
       const listed = page.snapshot.elements.find((element) => element.id === id);
       if (listed?.offscreen) el.scrollIntoView({ block: "center", behavior: "smooth" });
       ui.pointAt(el, "");
+      if (acting) {
+        pointedEarly = el;
+        return;
+      }
       const shown: EarlyPointer = {
         el,
         stop: waitForAction(el, listed, ui.host, listing, how, (what) => {
@@ -335,6 +594,14 @@ export class Guide {
       ui.clearPointer();
     };
 
+    // While Haptic acts: a page that changed since its last action on a control makes the next action on it a fresh one.
+    const pageNow = acting ? pageState(page.snapshot) : "";
+    if (acting && acting.before !== pageNow) acting.gate.repeats = undefined;
+    const abort = acting ? new AbortController() : undefined;
+    if (acting) {
+      acting.abort = abort;
+      acting.turns++;
+    }
     let reply: TurnReply;
     try {
       reply = await this.sendTurn(
@@ -346,8 +613,10 @@ export class Guide {
           ...(told ? { event: told } : {}),
           ...(change ? { change } : {}),
           ...(closing ? { closing: true as const } : {}),
+          ...(acting ? { mode: "act" as const } : {}),
         },
         pointEarly,
+        abort?.signal,
       );
     } catch (error) {
       if (run !== this.run) return;
@@ -359,9 +628,13 @@ export class Guide {
     }
     if (run !== this.run) return;
     if (isLeaving()) return this.askAgainIfStaying(run, asking, dropEarly);
+    // The line that said what Doing it means has been read by now.
+    ui.setNote("");
 
     // The answer is about a page the visitor has already left. Start over from where they are now.
     const here = currentPath();
+    // While Haptic acts, nothing of its own was going on while it waited: someone else moved the page, and acting ends.
+    if (here !== page.snapshot.path && acting) return this.stopActing(SAYS.moved);
     if (here !== page.snapshot.path) {
       dropEarly();
       await settle(ui.host);
@@ -401,11 +674,50 @@ export class Guide {
       return this.turn(run, { ...asking, reread: true });
     }
 
+    // While Haptic acts, the gate decides on the live control what becomes of the reply (DESIGN 4).
+    let plan: Plan | undefined;
+    if (acting && reply.mode !== "act") {
+      // An older server, or a site that turned acting off: the way is shown instead, and that is said once.
+      this.endActing();
+      acting = undefined;
+      reply = { ...reply, say: `${SAYS.actingOff} ${reply.say}`.trim() };
+    } else if (acting && reply.target) {
+      plan = planFor(reply, el, listed, acting.gate, this.config);
+      if (plan.kind === "again") {
+        // The control changed or went before Haptic could use it: the page is read again and the question asked again, a few times at most.
+        if (++acting.again > MAX_AGAIN) return this.stopActing(ACT_SAYS.changing);
+        await settle(ui.host);
+        if (run !== this.run) return;
+        return this.turn(run, { ...asking, reread: true });
+      }
+      acting.again = 0;
+      if (plan.kind === "visitor" && plan.reason === "acting-off") {
+        this.endActing();
+        acting = undefined;
+        plan = undefined;
+        reply = { ...reply, say: `${SAYS.actingOff} ${reply.say}`.trim() };
+      }
+    }
+
     this.history.push({ role: "user", text: this.step === 0 ? this.goal : [event, became.kept, followed].filter(Boolean).join(" ") || "The page changed." }, { role: "assistant", text: reply.say });
     this.step++;
     this.previous = page.snapshot;
     this.last = listed ? { listed, used: false, page: pageState(page.snapshot), ...(el ? { el: new WeakRef(el) } : {}) } : undefined;
     this.strayed = false;
+
+    /** The hand-over: the visitor makes the click that commits, with "What I did" on show. Acting ends here, and the click is listened for as a guide's last step. */
+    let handover: { session: ActSession; commit: string } | undefined;
+    if (acting && plan) {
+      if (plan.kind === "act" || plan.kind === "visitor" || plan.kind === "stop") return this.carryOut(run, plan, reply, listing, listed, pageNow);
+      if (plan.kind === "handover") {
+        handover = { session: acting, commit: (listed?.label || nameOfClicked(plan.el, listing) || "it").slice(0, 60) };
+        this.endActing();
+        acting = undefined;
+        el = plan.el;
+        reply = { ...reply, say: plan.say, status: "done" };
+      }
+    }
+    if (acting && !el && reply.status === "done") return this.finishActing(reply.say);
 
     if (!el) {
       dropEarly();
@@ -421,7 +733,11 @@ export class Guide {
     // If they have already used it, the caption would only flash.
     if (!acted) ui.pointAt(target, reply.say);
 
-    ui.closePanel();
+    if (handover) {
+      ui.setBusy("");
+      ui.yourTurn(true);
+      this.showDid(handover.session, ACTING_WORDS.nothingSaved(handover.commit), handover.commit);
+    } else ui.closePanel();
     // "done" with a pointer is the model calling this the last step. It has
     // not seen what the step does: the click may open a menu, or a field that
     // still needs typing. So it is listened for like any other step, and when
@@ -439,7 +755,8 @@ export class Guide {
       return;
     }
     this.showingLast = last;
-    how.anyClick = last;
+    // At the hand-over the visitor may go back to a field to check it: only the commit, or leaving, ends it.
+    how.anyClick = last && !handover;
     how.keys = keysAsked(reply.say);
     this.save();
     ui.setState("pointing");
@@ -451,6 +768,15 @@ export class Guide {
       // Nothing was done: the page drew the control again. Find it and carry on with the same step.
       if (what.how === "redrawn") return findAgain(0);
       if (this.last && what.onTarget) this.last.used = true;
+      if (handover && !what.onTarget && what.how !== "left") {
+        this.stopWaiting = listen(on);
+        return;
+      }
+      if (handover) {
+        this.didOnShow = undefined;
+        ui.hideDid();
+        ui.yourTurn(false);
+      }
       // The last step was there to be used or left. Doing something else puts it away, with no more questions.
       if (last && !what.onTarget) return this.end();
       this.strayed = what.strayed;
@@ -505,6 +831,183 @@ export class Guide {
     else this.stopWaiting = listen(target);
   }
 
+  /** A step while Haptic acts that is not the hand-over: Haptic does it, gives it to the visitor, or stops. */
+  private carryOut(run: number, plan: ActPlan | VisitorPlan | StopPlan, reply: TurnReply, listing: Map<Element, SnapElement>, listed: SnapElement | undefined, pageNow: string): Promise<void> | void {
+    switch (plan.kind) {
+      case "stop":
+        return this.stopActing(plan.say, plan.el);
+      case "visitor":
+        return this.visitorTurn(run, plan.el, listing, plan.say, plan.event);
+      case "act":
+        return this.doStep(run, plan, reply, listing, listed, pageNow);
+    }
+  }
+
+  /**
+   * Haptic does one step itself (DESIGN 3): the pointer on the control with
+   * the model's sentence, the engine's events, and a check that it took. Then
+   * the page settles and the next step is asked for, told in Haptic's own
+   * words what it did. A step the engine could not do or see take goes to the
+   * visitor; what it saw that ends acting, ends it.
+   */
+  private async doStep(run: number, plan: ActPlan, reply: TurnReply, listing: Map<Element, SnapElement>, listed: SnapElement | undefined, pageNow: string): Promise<void> {
+    const session = this.acting!;
+    const { ui } = this;
+    // At most two actions on one control with nothing on the page changing in between (DESIGN 4.2).
+    const again = session.gate.repeats?.el === plan.el && session.before === pageNow;
+    session.gate.repeats = { el: plan.el, count: again ? session.gate.repeats!.count + 1 : 1 };
+    session.before = pageNow;
+    ui.setState("acting");
+    ui.setBusy(ACTING_WORDS.doing);
+    ui.yourTurn(false);
+    ui.pointAt(plan.el, reply.say);
+    // A press that may load another page: the page after it carries on acting, if it comes soon.
+    if (plan.navigates) this.expectLoad();
+    this.save();
+    const since = performance.now();
+    const outcome = await perform(
+      { plan, ...(listed && listing.get(plan.el) === listed ? { listed } : {}) },
+      {
+        alive: () => run === this.run,
+        session: session.gate,
+        config: this.config,
+        listing,
+        ui: { glideTo: (x, y) => ui.glideTo(x, y), ripple: (x, y) => ui.ripple(x, y) },
+        listen: (target) => this.hearHaptic(target, listing),
+      },
+    );
+    if (run !== this.run) {
+      // Stopped or paused part way. Typing cut short stays as it is, and "What I did" says so.
+      if (outcome.kind === "stopped" && outcome.partly) this.noteDid(session, outcome.partly, true);
+      return;
+    }
+    switch (outcome.kind) {
+      case "stopped":
+        return;
+      case "stop":
+        return this.stopActing(outcome.say, outcome.el);
+      case "visitor":
+        if (outcome.reason === "failed") session.gate.failures++;
+        return this.visitorTurn(run, outcome.el, listing, outcome.say, outcome.event);
+      case "done": {
+        session.gate.failures = 0;
+        if (outcome.did) this.noteDid(session, outcome.did);
+        if (this.last) this.last.used = true;
+        const event = outcome.nothingChanged ? `${outcome.event} ${NOTHING_CHANGED}` : outcome.event;
+        // Saved at once: if the press is loading a new page, the next page needs to know what it was.
+        this.save(event);
+        ui.rest();
+        ui.setState("asking");
+        void settle(ui.host, { since, used: plan.el }).then(() =>
+          onceStaying(() => {
+            if (run === this.run) void this.turn(run, { event });
+          }),
+        );
+        return;
+      }
+    }
+  }
+
+  /**
+   * One step of an act request that the visitor does: a value they did not
+   * give, a control the gate keeps for them, a step the engine could not do.
+   * The pointer stays, its ring breathes, and acting carries on when the
+   * hearing hears them do it. Haptic does not pause for their hand now: it is
+   * their turn.
+   */
+  private visitorTurn(run: number, el: Element, listing: Map<Element, SnapElement>, say: string, event: string) {
+    const { ui } = this;
+    const session = this.acting;
+    const listed = listing.get(el);
+    const name = listed ? nameOf(listed) : "the control";
+    ui.setState("pointing");
+    ui.setBusy(ACTING_WORDS.yourTurn);
+    ui.pointAt(el, say);
+    ui.yourTurn(true);
+    this.save();
+    const how: Hearing = { anyClick: false, keys: keysAsked(say), subject: VISITOR };
+    const onHeard = (what: Acted, on: Element) => {
+      this.stopWaiting = undefined;
+      if (run !== this.run || this.acting !== session) return;
+      if (what.how === "redrawn") {
+        // The page drew the control again: the same step, on its new node.
+        const again = listed ? sameControl(this.previous ?? takeSnapshot(ui.host, this.goal).snapshot, listed, takeSnapshot(ui.host, this.goal)) : undefined;
+        if (again) {
+          ui.pointAt(again, say);
+          this.stopWaiting = waitForAction(again, listed, ui.host, listing, how, (next) => onHeard(next, again));
+          return;
+        }
+      }
+      // They went to another page with nothing done here: acting ends.
+      if (what.how === "left") return this.stopActing(SAYS.moved);
+      // Their step may load a page, which then carries on acting.
+      if (what.onTarget) this.expectLoad();
+      if (this.last && what.onTarget) this.last.used = true;
+      const told = [event, what.event].filter(Boolean).join(" ");
+      this.save(told);
+      ui.yourTurn(false);
+      ui.rest();
+      ui.setState("asking");
+      ui.setBusy(ACTING_WORDS.doing);
+      const since = performance.now();
+      if (what.how === "filled" && isTyped(on) && holdsFocus(on)) this.watchField(run, on, name);
+      void settle(ui.host, { since, used: on }).then(() =>
+        onceStaying(() => {
+          if (run === this.run && this.acting === session) void this.turn(run, { event: told });
+        }),
+      );
+    };
+    this.stopWaiting = waitForAction(el, listed, ui.host, listing, how, (what) => onHeard(what, el));
+  }
+
+  /** Hears a control Haptic is acting on, the way a visitor's step is heard, with Haptic as the actor (DESIGN 3.5). */
+  private hearHaptic(target: Element, listing: Map<Element, SnapElement>): Listening {
+    let heard: HeardStep | undefined;
+    let wake: (() => void) | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stopHearing = waitForAction(target, listing.get(target), this.ui.host, listing, { anyClick: false, keys: [], actor: "haptic", subject: VISITOR }, (what) => {
+      heard = { how: what.how, onTarget: what.onTarget, event: what.event };
+      wake?.();
+    });
+    return {
+      next: (ms) =>
+        new Promise((resolve) => {
+          if (heard) return resolve(heard);
+          timer = setTimeout(() => resolve(undefined), ms);
+          wake = () => {
+            clearTimeout(timer);
+            resolve(heard);
+          };
+        }),
+      stop: () => {
+        stopHearing();
+        // Nothing of ours is left waiting once the step is over.
+        clearTimeout(timer);
+        wake?.();
+      },
+    };
+  }
+
+  /** Acting ends because the model says it is done, with nothing to point at: its sentence, and "What I did". */
+  private finishActing(say: string) {
+    const session = this.acting;
+    this.finish(say);
+    if (session?.did.length) this.showDid(session, "");
+  }
+
+  /** What is kept of an act session across a page load. */
+  private kept(session: ActSession): NonNullable<SavedGuide["acting"]> {
+    const { gate } = session;
+    return {
+      actions: gate.actions,
+      typed: gate.typed,
+      failures: gate.failures,
+      turns: session.turns,
+      did: session.did.map(({ name, value, mine, partly }) => ({ name, ...(value !== undefined ? { value } : {}), ...(mine ? { mine } : {}), ...(partly ? { partly } : {}) })),
+      ...(this.expectLoadUntil > Date.now() ? { expectLoadUntil: this.expectLoadUntil } : {}),
+    };
+  }
+
   /**
    * A reply of "continue" with nothing to point at: "Press Enter", "Press Tab
    * to leave the field". The sentence stays up and the page is watched. If it
@@ -515,8 +1018,13 @@ export class Guide {
    */
   private watch(run: number, page: PageSnapshot, listing: Map<Element, SnapElement>, say: string, retries: number) {
     const { ui } = this;
-    ui.setBusy("");
-    ui.closePanel();
+    // While Haptic acts this is the visitor's turn, and Stop stays on show.
+    const acting = !!this.acting;
+    if (acting) ui.setBusy(ACTING_WORDS.yourTurn);
+    else {
+      ui.setBusy("");
+      ui.closePanel();
+    }
     ui.say(say);
     ui.setState("watching");
     this.save();
@@ -533,7 +1041,7 @@ export class Guide {
       this.save(event);
       ui.clear();
       ui.setState("asking");
-      ui.setBusy("Next step…");
+      ui.setBusy(acting ? ACTING_WORDS.doing : "Next step…");
       void settle(ui.host, { since: performance.now() }).then(() =>
         onceStaying(() => {
           if (run === this.run) void this.turn(run, { event });
@@ -651,6 +1159,7 @@ export class Guide {
   /** Stops everything a running guide keeps going. Whatever is on show stays. */
   private endRun() {
     this.run++;
+    this.endActing();
     this.stopWaiting?.();
     this.stopWaiting = undefined;
     this.stopField?.();
@@ -686,6 +1195,7 @@ export class Guide {
       ...(this.strayed ? { strayed: true } : {}),
       ...(this.showingLast ? { closing: true } : {}),
       ...(this.closings ? { closings: this.closings } : {}),
+      ...(this.acting ? { acting: this.kept(this.acting) } : {}),
     };
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(saved));

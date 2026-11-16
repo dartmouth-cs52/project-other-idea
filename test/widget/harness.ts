@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { ask, launch, open, type Browser, type Page } from "../../eval/browser.ts";
-import type { SnapElement, TurnReply, TurnRequest } from "../../src/shared/types.ts";
+import type { PublicSiteConfig, SnapElement, TurnReply, TurnRequest } from "../../src/shared/types.ts";
 
 // What the widget's browser tests share: small pages served from this
 // machine, the real widget put on them, and a model whose answers the test
@@ -14,7 +14,7 @@ import type { SnapElement, TurnReply, TurnRequest } from "../../src/shared/types
 export type Asked = Omit<TurnRequest, "site">;
 /** Gives the reply to the nth question the widget asks, counting from 0. */
 export type Script = (request: Asked, index: number) => TurnReply | Promise<TurnReply>;
-export type GuideState = "idle" | "asking" | "pointing" | "watching" | "finished";
+export type GuideState = "idle" | "asking" | "pointing" | "watching" | "acting" | "paused" | "finished";
 
 /** The id a request's list gives the control with this label, and this role when one is named. */
 export function idOf(request: Asked, label: string, role?: string): string {
@@ -41,9 +41,20 @@ export interface Session {
   until(check: () => unknown | Promise<unknown>, what: string | (() => string), ms?: number): Promise<void>;
   untilAsked(count: number, ms?: number): Promise<Asked>;
   untilState(state: GuideState, ms?: number): Promise<void>;
-  ask(goal: string): Promise<void>;
+  /**
+   * Asks a question as a visitor does: Enter, or with `act` the Do it button,
+   * and Go when the first-use line shows, unless `go` is false.
+   */
+  ask(goal: string, how?: { act?: boolean; go?: boolean }): Promise<void>;
+  /** The status line of the ask box, or "" when it is hidden. */
+  status(): Promise<string>;
+  /** The lines of "What I did" on show, as "name: value" with any aside, and its closing line. Empty when hidden. */
+  did(): Promise<{ lines: string[]; closing: string }>;
   close(): Promise<void>;
 }
+
+/** What a test page's site says about acting, as the server sends it: on, with nothing else set. */
+export const ACTING_ON: NonNullable<PublicSiteConfig["acting"]> = { maxActions: 25, confirmFirst: true };
 
 let browser: Promise<Browser> | undefined;
 /** One browser for every test in a file. */
@@ -62,7 +73,7 @@ const page = (body: string) => `<!doctype html><html><head><meta charset="utf-8"
  * Opens a local page with the widget on it. `pages` maps a path to the HTML
  * of its body, or to a whole document when it starts with "<!doctype".
  */
-export async function start(pages: string | Record<string, string>, script: Script, path = "/"): Promise<Session> {
+export async function start(pages: string | Record<string, string>, script: Script, path = "/", settings: { acting?: PublicSiteConfig["acting"] } = {}): Promise<Session> {
   const served = typeof pages === "string" ? { "/": pages } : pages;
   const server: Server = createServer((request, response) => {
     const asked = (request.url ?? "/").split(/[?#]/)[0] ?? "/";
@@ -82,10 +93,17 @@ export async function start(pages: string | Record<string, string>, script: Scri
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const requests: Asked[] = [];
-  const opened = await open(await sharedBrowser(), { siteId: "site_widget_test", origin, hasTag: false, guides: [] }, path, (request) => {
-    requests.push(request);
-    return script(request, requests.length - 1);
-  });
+  const opened = await open(
+    await sharedBrowser(),
+    { siteId: "site_widget_test", origin, hasTag: false, guides: [] },
+    path,
+    (request) => {
+      requests.push(request);
+      return script(request, requests.length - 1);
+    },
+    undefined,
+    settings.acting ? { acting: settings.acting } : {},
+  );
   const until: Session["until"] = async (check, what, ms = 8000) => {
     for (const deadline = Date.now() + ms; Date.now() < deadline; ) {
       if (await check()) return;
@@ -119,7 +137,30 @@ export async function start(pages: string | Record<string, string>, script: Scri
         throw new Error(`${error.message} It was "${seen}".`);
       });
     },
-    ask: (goal) => ask(opened.page, goal),
+    ask: async (goal, how = {}) => {
+      if (!how.act) return ask(opened.page, goal);
+      const page = opened.page;
+      await page.locator("haptic-root .launcher").click();
+      await page.locator("haptic-root .panel input").fill(goal);
+      await page.locator("haptic-root .panel .doit").click();
+      const go = page.locator("haptic-root .panel .first .go");
+      if (how.go !== false && (await go.isVisible())) await go.click();
+    },
+    status: () =>
+      opened.page.evaluate(() => {
+        const status = document.querySelector("haptic-root")?.shadowRoot?.querySelector(".status") as HTMLElement | null;
+        return status && !status.hidden ? (status.querySelector("span")?.textContent ?? "") : "";
+      }),
+    did: () =>
+      opened.page.evaluate(() => {
+        const did = document.querySelector("haptic-root")?.shadowRoot?.querySelector(".did") as HTMLElement | null;
+        if (!did || did.hidden) return { lines: [], closing: "" };
+        const lines = Array.from(did.querySelectorAll(".line")).map((line) => {
+          const [name, value, aside] = [".name", ".value", ".mine"].map((part) => line.querySelector(part)?.textContent ?? "");
+          return `${name}: ${value}${aside ? ` (${aside})` : ""}`;
+        });
+        return { lines, closing: did.querySelector("p")?.textContent ?? "" };
+      }),
     close: async () => {
       await opened.close().catch(() => undefined);
       await new Promise((resolve) => server.close(resolve));

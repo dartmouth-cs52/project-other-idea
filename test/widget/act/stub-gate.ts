@@ -10,7 +10,8 @@ import type { ActPlan, GateSession, Reach, StopPlan, Tripwire, VisitorPlan } fro
 // Every call is written down in `window.__gate.calls`, so a test can check
 // that each element pressed was asked about first.
 
-export { SAYS } from "../../../src/widget/gate.ts";
+// The guide plans with the real gate; these tests run the engine alone, never the guide's planning.
+export { planFor, SAYS } from "../../../src/widget/gate.ts";
 
 interface Stub {
   calls: { fn: string; el: Element; key?: string }[];

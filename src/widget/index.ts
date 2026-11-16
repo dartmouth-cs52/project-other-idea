@@ -1,10 +1,15 @@
-import { DEFAULT_APPEARANCE, localDate, STREAM_TYPE, TURN_VERSION, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { actingAllowedAt, DEFAULT_APPEARANCE, localDate, STREAM_TYPE, TURN_VERSION, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { Guide } from "./guide.ts";
+import { currentPath } from "./snapshot.ts";
 import { Ui } from "./ui.ts";
 
 // Entry point of the script customers paste into their site:
 //   <script src="https://<haptic-host>/widget.js" data-site="site_..." async></script>
 // It runs on someone else's page, so nothing here may throw into it.
+//
+// A site with "do it with me" on shows a Do it button beside the ask box. A
+// page can switch that off for itself, never on, with data-acting="off" on
+// the script tag: a company may want it for some of its pages only.
 
 const script = document.currentScript as HTMLScriptElement | null;
 
@@ -25,12 +30,15 @@ async function boot() {
   }
 
   // The reply comes as lines of JSON. The first names the control to point at,
-  // as soon as the model has decided. The last is the whole reply.
-  const sendTurn = async (request: Omit<TurnRequest, "site">, onTarget?: (id: string) => void): Promise<TurnReply> => {
+  // as soon as the model has decided. The last is the whole reply. `request`
+  // carries `mode: "act"` when the visitor pressed Do it; the version says
+  // this widget understands an act reply. Stop aborts the request in flight.
+  const sendTurn = async (request: Omit<TurnRequest, "site">, onTarget?: (id: string) => void, signal?: AbortSignal): Promise<TurnReply> => {
     const response = await fetch(`${api}/v1/turn`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: STREAM_TYPE },
       body: JSON.stringify({ ...request, site, version: TURN_VERSION, today: localDate() }),
+      ...(signal ? { signal } : {}),
     });
     if (!response.ok) throw new Error(`Turn failed with ${response.status}: ${await response.text()}`);
     if (!response.body || !(response.headers.get("Content-Type") ?? "").includes(STREAM_TYPE)) return response.json();
@@ -57,11 +65,19 @@ async function boot() {
     return reply;
   };
 
-  const ui: Ui = new Ui(config.appearance, {
-    onAsk: (question) => guide.start(question),
-    onStop: () => guide.stop(),
-  });
-  const guide = new Guide(ui, sendTurn);
+  // Acting is on only where the site turned it on, and the page did not turn it off.
+  const pageOff = (script.dataset.acting ?? "").trim().toLowerCase() === "off";
+  const acting = config.acting && typeof config.acting === "object" && !pageOff ? config.acting : undefined;
+  const ui: Ui = new Ui(
+    config.appearance,
+    {
+      onAsk: (question, act) => guide.start(question, act),
+      onStop: () => guide.stop(),
+      onCarryOn: () => guide.carryOn(),
+    },
+    acting ? { site, confirmFirst: acting.confirmFirst !== false, allowedHere: () => actingAllowedAt(acting, currentPath()) } : undefined,
+  );
+  const guide = new Guide(ui, sendTurn, { ...(acting ? { acting } : {}), ...(pageOff ? { pageOff } : {}) });
   guide.resume();
 }
 

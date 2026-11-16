@@ -1,7 +1,8 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { loadSite, SITES_DIR } from "../src/server/sites.ts";
-import { DEFAULT_APPEARANCE, STREAM_TYPE, type SiteContext, type TurnReply, type TurnRequest } from "../src/shared/types.ts";
+import { publicActing } from "../src/server/acting.ts";
+import { DEFAULT_APPEARANCE, STREAM_TYPE, type PublicSiteConfig, type SiteContext, type TurnReply, type TurnRequest } from "../src/shared/types.ts";
 import { bundleWidget } from "../src/widget/build.ts";
 import { CASES_DIR, type CaseFile } from "./cases.ts";
 import { faults, reachedList, type Act, type GuideSet, type Reached, type ReadAnswer, type Says } from "./guide.ts";
@@ -137,9 +138,11 @@ export interface Opened {
 /**
  * Opens a page of the site the way a visitor with Haptic installed would see
  * it: signed in if the site needs that, banners clicked away, the widget up.
- * `answer` is asked for every step.
+ * `answer` is asked for every step. The widget is told the site's settings as
+ * the server would tell it: its look, and its acting when the site has it on.
+ * `config` puts other settings in their place, such as acting for a test page.
  */
-export async function open(browser: Browser, set: GuideSet, path: string, answer: Answer, site?: SiteContext): Promise<Opened> {
+export async function open(browser: Browser, set: GuideSet, path: string, answer: Answer, site?: SiteContext, config?: Partial<PublicSiteConfig>): Promise<Opened> {
   // A site that forbids scripts from elsewhere would block the tag. Its owner would allow it; here the rule is set aside.
   // On a site other people use, a service worker could send requests the net below never sees, so none is allowed to start.
   const context = await browser.newContext({ bypassCSP: true, viewport: { width: 1366, height: 800 }, ...(set.sandbox ? {} : { serviceWorkers: "block" }) });
@@ -150,9 +153,9 @@ export async function open(browser: Browser, set: GuideSet, path: string, answer
 
   const widget = await widgetSource();
   await context.route(`${api}/widget.js`, (route: Page) => route.fulfill({ status: 200, contentType: "text/javascript", headers: CORS, body: widget }));
-  await context.route(`${api}/v1/sites/**`, (route: Page) =>
-    route.fulfill({ status: 200, contentType: "application/json", headers: CORS, body: JSON.stringify({ name: site?.name ?? "", appearance: site?.appearance ?? DEFAULT_APPEARANCE }) }),
-  );
+  const acting = site ? publicActing(site) : undefined;
+  const served: PublicSiteConfig = { name: site?.name ?? "", appearance: site?.appearance ?? DEFAULT_APPEARANCE, ...(acting ? { acting } : {}), ...config };
+  await context.route(`${api}/v1/sites/**`, (route: Page) => route.fulfill({ status: 200, contentType: "application/json", headers: CORS, body: JSON.stringify(served) }));
   // A click that loads a new page leaves the old one alive until the new one
   // starts to arrive, and the widget may ask for a step from it in that time.
   // A real server has not answered by then, so the request dies with the page
