@@ -8,6 +8,11 @@ dist/
 /data/
 # Benchmark runs. The cases in eval/cases are kept; each run's numbers are not.
 eval/results/
+# The same for the any-website sweep and the toolkit suite: a sweep's write-up (.md) is kept, and of the
+# toolkit runs only the one other runs are compared with.
+eval/sweep/results/*.json
+eval/toolkits/results/*.json
+!eval/toolkits/results/before.json
 # Wrangler's local state.
 .wrangler/
 .dev.vars
