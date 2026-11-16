@@ -23,28 +23,26 @@ function includes(plan: Plan): string {
 export function Pricing() {
   return (
     <section id="pricing" className="mx-auto w-full max-w-5xl scroll-mt-8 px-6 pt-20 md:pt-32">
-      <div className="grid gap-4 md:grid-cols-2 md:gap-8">
-        <h2 className="text-4xl font-medium tracking-[-0.03em]">Pricing</h2>
-        <p className="text-lg text-balance text-muted-foreground">{pricing.lead}</p>
-      </div>
+      <h2 className="text-4xl font-medium tracking-[-0.03em]">Pricing</h2>
+      {/*
+        Each card takes four rows of the list's grid and shares them with the cards beside it, so the
+        names, the prices, what each includes and who it is for start at the same height across a row.
+        The list's 16px gap is the space between those four inside a card, and between cards.
+      */}
       <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {pricing.plans.map((plan) => (
-          <li key={plan.id} className="rounded-xl border bg-muted p-6">
+          <li key={plan.id} className="row-span-4 grid grid-rows-subgrid rounded-xl border bg-muted p-6">
             <h3 className="font-medium">{plan.name}</h3>
-            <p className="mt-4 text-2xl leading-8 font-medium tracking-[-0.02em]">
+            <p className="text-2xl leading-8 font-medium tracking-[-0.02em]">
               {price(plan)}
               {plan.monthlyUsd ? <span className="text-base font-normal tracking-normal text-muted-foreground"> a month</span> : null}
             </p>
-            <p className="mt-4">{includes(plan)}</p>
-            <p className="mt-2 text-muted-foreground">{plan.detail}</p>
+            <p className="text-pretty">{includes(plan)}</p>
+            <p className="-mt-2 text-pretty text-muted-foreground">{plan.detail}</p>
           </li>
         ))}
       </ul>
-      <div className="mt-6 max-w-[65ch] space-y-1 text-sm text-muted-foreground">
-        {pricing.notes.map((note) => (
-          <p key={note}>{note}</p>
-        ))}
-      </div>
+      <p className="mt-6 text-sm text-pretty text-muted-foreground">{pricing.lead}</p>
     </section>
   );
 }

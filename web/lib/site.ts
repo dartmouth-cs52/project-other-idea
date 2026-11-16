@@ -61,13 +61,8 @@ export const pricing = {
       monthlyUsd: null,
       includedGuides: null,
       overageUsd: null,
-      detail: "For larger rollouts. Tell us what your security and compliance teams need, and we will say plainly what we support today.",
+      detail: "For larger rollouts.",
     },
-  ],
-  notes: [
-    "A guide is finished when the visitor uses the last control Haptic pointed at, or reaches the screen they asked for.",
-    "Haptic is free during early access, and billing starts after it. Every guide we count will be listed in your dashboard, so you can check the bill.",
-    "Prices are in US dollars and may change before general release.",
   ],
 } as const;
 
