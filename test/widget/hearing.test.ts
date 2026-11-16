@@ -220,3 +220,26 @@ test("a form the browser would not send says so, naming the first field and noth
     await session.close();
   }
 });
+
+test("a click the page makes by script while the visitor presses the pointed field is not the visitor's, and not a wrong click", async () => {
+  // Jira's Created filter: pressing the "Within the last" box makes the page click the row's radio button through its label.
+  const page = `<h1>Search</h1>
+    <div style="padding:8px">
+      <label for="withinRadio" style="position:absolute;left:-9999px">Within the last Timespan Time measurement</label><input type="radio" id="withinRadio">Within the last
+      <label for="withinValue" style="position:absolute;left:-9999px">Timespan</label><input id="withinValue" type="text" maxlength="15">
+      <label><span style="position:absolute;left:-9999px">Time measurement</span><select><option>minutes</option><option>days</option></select></label>
+    </div><button type="button">Update</button>
+    <script>
+      document.getElementById('withinValue').addEventListener('mousedown', () => document.querySelector('label[for="withinRadio"]').click());
+    </script>`;
+  const session = await pointing(page, "Timespan", (request, index) => (index === 1 ? words("Now click Update.", "continue") : words("Done.")));
+  try {
+    const box = (await session.page.locator("#withinValue").boundingBox())!;
+    await session.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await session.page.keyboard.type("7");
+    const second = await session.untilAsked(2, 6000);
+    assert.match(second.event ?? "", /^The user filled in textbox "Timespan"/);
+  } finally {
+    await session.close();
+  }
+});

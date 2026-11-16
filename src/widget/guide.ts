@@ -989,8 +989,15 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     const path = event.composedPath();
     return path.includes(host) ? undefined : path;
   };
+  /**
+   * A press or a click the visitor made. A page's script can click too: Jira,
+   * as the mouse goes down in a box of its date filter, clicks the label of
+   * the row's radio button. That is the page at work, not the visitor, and
+   * was heard as a click on the radio button instead of the box.
+   */
+  const visitors = (event: Event) => (event.isTrusted ? outside(event) : undefined);
   const onPress = (event: Event) => {
-    const path = outside(event);
+    const path = visitors(event);
     if (!path || (event as PointerEvent).button !== 0) return;
     const where = whereOf(path, { x: (event as PointerEvent).clientX, y: (event as PointerEvent).clientY });
     const el = path.find((node): node is Element => node instanceof Element && isControl(node)) ?? (where.onTarget ? target : undefined);
@@ -1004,7 +1011,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   const onRelease = () => feed({ type: "release", at: performance.now() });
   const onCancel = () => feed({ type: "cancel", at: performance.now() });
   const onClick = (event: Event) => {
-    const path = outside(event);
+    const path = visitors(event);
     if (path) feed({ type: "click", at: performance.now(), where: whereOf(path, { x: (event as MouseEvent).clientX, y: (event as MouseEvent).clientY }) });
   };
   const onKey = (event: Event) => {
@@ -1087,7 +1094,8 @@ function watchFor(
     return path.includes(host) ? undefined : path;
   };
   const onPress = safely((event: Event) => {
-    const path = outside(event);
+    // Only the visitor's own presses: a page's script pressing something is not the visitor doing what the sentence says.
+    const path = event.isTrusted ? outside(event) : undefined;
     if (!path) return;
     const on = path.find((node): node is Element => node instanceof Element && (listing.has(node) || node.matches(CLICKABLE)));
     const listed = on && listing.get(on);
