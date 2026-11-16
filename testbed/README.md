@@ -32,6 +32,10 @@ Then reload the app and press Ask. The crawl only sees the empty HTML shell, bec
 
 To load the app without Haptic, add `?lab.widget=0`.
 
+## Online
+
+Northpine runs at https://demo.joinhaptic.com with Haptic on, so anyone can open it and press Ask. Its site is `site_5a6c4cb3e840`, on the Haptic company's account in the dashboard, with `haptic-notes.md` as its notes and a limit of 60 steps per visitor a day. It was built with `npm run tag -- --url https://demo.joinhaptic.com --name Northpine --notes testbed/haptic-notes.md --visitor-steps 60` and made live with `npm run site:publish -- site_5a6c4cb3e840`. To change what Haptic knows, edit the notes and run both again with `--id site_5a6c4cb3e840`. `wrangler.jsonc` says how to build and deploy the app itself.
+
 ## The test panel
 
 The flask button at the bottom left, or Ctrl+Shift+L, opens the test panel. Every setting can also be set from the URL with `?lab.<name>=<value>`, which is how tasks open a page in a known state.
