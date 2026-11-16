@@ -39,6 +39,8 @@ const REGION_SHARE = 40;
 
 /** Tags whose contents are never words on the page: code, a drawing, a dropdown's choices. */
 const NOT_WORDS = new Set(["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT", "SELECT", "svg"]);
+/** Tags whose contents are code or markup for later, never words, wherever they stand. */
+const CODE_TAGS = new Set(["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT"]);
 /** Tags that only style a few words within a sentence, so no space is owed after them. */
 const WITHIN_A_SENTENCE = new Set(["B", "I", "EM", "STRONG", "U", "S", "SUB", "SUP", "MARK", "SMALL", "CODE", "ABBR", "CITE", "Q", "VAR", "KBD", "WBR"]);
 
@@ -90,7 +92,8 @@ function unseen(el: Element): boolean {
  * `except` one element to pass over. Reading stops once `max` characters are in hand.
  */
 function wordsIn(el: Element, max = 200, skip = "", except?: Element, unseenToo = false): string {
-  if (holdsTyping(el) || insideEditor(el)) return "";
+  // A script beside a field is code, not its caption. A select's choice is the visitor's.
+  if (CODE_TAGS.has(el.tagName) || holdsTyping(el) || insideEditor(el) || choiceBoxes.has(el)) return "";
   let text = "";
   let visited = 0;
   const walk = (node: Node) => {
@@ -101,13 +104,26 @@ function wordsIn(el: Element, max = 200, skip = "", except?: Element, unseenToo 
       return;
     }
     if (!(node instanceof Element) || node === except) return;
-    if (NOT_WORDS.has(node.tagName) || holdsTyping(node) || node.getAttribute("aria-hidden") === "true" || (skip && node.matches(skip))) return;
+    if (NOT_WORDS.has(node.tagName) || holdsTyping(node) || choiceBoxes.has(node) || node.getAttribute("aria-hidden") === "true" || (skip && node.matches(skip))) return;
     if (!unseenToo && unseen(node)) return;
-    for (const child of node.childNodes) walk(child);
+    for (const child of shownChildren(node)) walk(child);
     if (!WITHIN_A_SENTENCE.has(node.tagName)) text += " ";
   };
-  for (const child of el.childNodes) walk(child);
+  for (const child of shownChildren(el)) walk(child);
   return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * What is shown inside an element. A <slot> in a component's shadow root
+ * shows what the page put into the component, the words of an option among
+ * them, and its own content only when the page put nothing there.
+ */
+function shownChildren(el: Element): Iterable<Node> {
+  if (el.tagName === "SLOT") {
+    const assigned = (el as HTMLSlotElement).assignedNodes?.({ flatten: true }) ?? [];
+    if (assigned.length) return assigned;
+  }
+  return el.childNodes;
 }
 
 /**
@@ -116,6 +132,21 @@ function wordsIn(el: Element, max = 200, skip = "", except?: Element, unseenToo 
  */
 export function shownWords(el: Element, max = 60): string {
   return cleanText(wordsIn(el, max * 2) || wordsIn(el, max * 2, "", undefined, true), max);
+}
+
+/**
+ * What a reading would call a day picked in a calendar that a field opened
+ * after the page was read: a cell a pointer starts on, in a row of at least
+ * three like it. Empty for anything else, and above all for an entry of a
+ * list, which can repeat what the visitor typed into the field that opened
+ * it. A calendar's days are its own words. The name is masked like every name.
+ */
+export function nameOfPicked(el: Element): string {
+  if (!el.matches('td, [role="gridcell"], [role="cell"]') || holdsTyping(el) || insideEditor(el)) return "";
+  const startsPointer = (cell: Element) => getComputedStyle(cell).cursor === "pointer" && !!cell.parentElement && getComputedStyle(cell.parentElement).cursor !== "pointer";
+  if (!startsPointer(el)) return "";
+  const like = Array.from(el.parentElement?.children ?? []).filter((cell) => cell.tagName === el.tagName && startsPointer(cell));
+  return like.length >= MIN_ROW_OF_LIKE ? cleanText(labelOf(el, "clickable"), 60) : "";
 }
 
 // Controls that show only while the mouse is over the box around them --------
@@ -296,6 +327,49 @@ interface Candidate extends SnapElement {
   outside: boolean;
   /** Its name is the name of the box it is in, as it has none of its own. */
   boxNamed?: boolean;
+  /** Taken for a control because the pointer cursor starts on it. */
+  pointer?: boolean;
+  /** One of the like things a box the keyboard moves through holds, each a control of its own: a calendar's day. */
+  single?: boolean;
+}
+
+/** Controls with a role of their own, whose words are theirs and not the words of a box around them. */
+const HAS_A_ROLE = '[role]:not([role="presentation"]):not([role="none"]), input, select, textarea, button, a[href]';
+
+/** The control with a role of its own inside `outer`, when `outer` says nothing but what the controls inside it say. */
+function framed(outer: Candidate, within: Candidate[]): Candidate | undefined {
+  const inner = within.find((c) => c.role !== "clickable");
+  return inner && !wordsIn(outer.el, 160, HAS_A_ROLE) ? inner : undefined;
+}
+
+/** The one control inside `outer`, when it is a real button or link and the two show the same words. */
+function onlyLinkSayingTheSame(outer: Candidate, within: Candidate[]): Candidate | undefined {
+  const only = within.length === 1 ? within[0] : undefined;
+  if (!only || !isNative(only.el) || holdsTyping(only.el)) return undefined;
+  const shown = wordsOfLabel(wordsIn(only.el, 160)).join(" ");
+  return shown && shown === wordsOfLabel(wordsIn(outer.el, 160)).join(" ") ? only : undefined;
+}
+
+/** A clickable box inside `outer`, named otherwise, that shows the words `outer` is named by. */
+function showingTheSame(outer: Candidate, within: Candidate[]): Candidate | undefined {
+  if (!outer.label) return undefined;
+  return within.find((c) => c.role === "clickable" && !c.boxNamed && c.label !== outer.label && saysMostOf(visibleText(c.el), outer.label));
+}
+
+/** Whether controls a pointer goes to lie in rows of at least this many alike, as a calendar's days do. */
+const MIN_ROW_OF_LIKE = 3;
+
+/** Whether some of these controls, found by the pointer starting on them, sit side by side in a row of like things. */
+function keyedGrid(within: Candidate[]): boolean {
+  const rows = new Map<Element, number>();
+  for (const c of within) {
+    const parent = c.el.parentElement;
+    if (!c.pointer || !parent) continue;
+    const count = (rows.get(parent) ?? 0) + 1;
+    if (count >= MIN_ROW_OF_LIKE) return true;
+    rows.set(parent, count);
+  }
+  return false;
 }
 
 /** A piece of page text, whether it is on screen, and its place in the page. */
@@ -332,7 +406,7 @@ function sentenceOf(el: Element, taken: WeakSet<Element>): string {
         text += words;
         if (!inControl && /[\p{L}\p{N}]/u.test(words)) own = true;
       } else if (child instanceof Element) {
-        if (NOT_WORDS.has(child.tagName) || holdsTyping(child) || child.getAttribute("aria-hidden") === "true" || getComputedStyle(child).display !== "inline") {
+        if (NOT_WORDS.has(child.tagName) || holdsTyping(child) || choiceBoxes.has(child) || child.getAttribute("aria-hidden") === "true" || getComputedStyle(child).display !== "inline") {
           text += " ";
           continue;
         }
@@ -341,7 +415,7 @@ function sentenceOf(el: Element, taken: WeakSet<Element>): string {
       }
     }
   };
-  walk(el, false);
+  if (!choiceBoxes.has(el)) walk(el, false);
   return own ? text.replace(/\s+/g, " ").trim() : "";
 }
 
@@ -461,6 +535,29 @@ function chooseHeadings(all: Heading[]): string[] {
 let own: ReadonlySet<string> = new Set();
 /** Whether the page being read has a <label> tied to no field, looked up once a reading. Without one, no caption is looked for in labels. */
 let untiedLabels = false;
+/** Boxes that show the choice made in a select built around a field, looked up once a reading. See `choiceBoxesOf`. */
+let choiceBoxes: WeakSet<Element> = new WeakSet();
+
+/** Fields that open a list and show what was picked from it beside themselves, not in themselves. */
+const CHOICE_FIELDS = 'input[role="combobox"], input[aria-haspopup="listbox"], input[aria-haspopup="tree"], input[aria-haspopup="grid"]';
+
+/**
+ * The boxes in which a select built around a field draws the visitor's
+ * choice: the box the field fills, where the choice is written beside it
+ * ("Lucy" beside the field of a select). Nothing in such a box is read, for a
+ * name, a caption, a row or page text, since what it says is the visitor's.
+ */
+function choiceBoxesOf(): WeakSet<Element> {
+  const boxes = new WeakSet<Element>();
+  for (const field of Array.from(document.querySelectorAll(CHOICE_FIELDS)).slice(0, 200)) {
+    const box = field.parentElement;
+    if (!box || box === document.body || box.tagName === "LABEL" || box.querySelectorAll("input, select, textarea, label").length > 1) continue;
+    const outer = box.getBoundingClientRect();
+    const inner = field.getBoundingClientRect();
+    if (outer.width * outer.height > 0 && inner.width * inner.height >= (outer.width * outer.height) / 2) boxes.add(box);
+  }
+  return boxes;
+}
 const cleanText = (text: string, max = 80): string => maskAndTrim(text, max, own);
 
 /**
@@ -476,6 +573,7 @@ const cleanText = (text: string, max = 80): string => maskAndTrim(text, max, own
 export function takeSnapshot(ignore: Element, question = "", near = (ignore as Element & { pointedAt?: Element }).pointedAt): PageSnapshot {
   own = namedIn(question);
   untiedLabels = Array.from(document.querySelectorAll("label")).some((label) => !label.hasAttribute("for") && !(label as HTMLLabelElement).control);
+  choiceBoxes = choiceBoxesOf();
   const candidates: Candidate[] = [];
   const headings: Heading[] = [];
   const texts: TextBlock[] = [];
@@ -555,10 +653,18 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
     }
 
     // cursor:pointer is inherited, so only the element where it starts counts.
-    const pointerHere = !INTERACTIVE_ROLES.has(explicitRole) && !svg && MAYBE_CLICKABLE.has(el.tagName) ? getComputedStyle(el).cursor === "pointer" : parentPointer;
+    // A component's own element, like a select drawn in a shadow root, passes its pointer on to what is drawn inside
+    // it, which does not start one. It is not taken for a control by its pointer alone.
+    const component = el.tagName.includes("-");
+    const pointerHere = !INTERACTIVE_ROLES.has(explicitRole) && !svg && (MAYBE_CLICKABLE.has(el.tagName) || component) ? getComputedStyle(el).cursor === "pointer" : parentPointer;
+    const pointerStarts = pointerHere && !parentPointer && !insideControl && !component && !pressedForAField(el);
     const role = pressableOnly ? "clickable"
       : svg && !INTERACTIVE_ROLES.has(explicitRole) && !(el.tagName.toLowerCase() === "a" && (el.hasAttribute("href") || el.hasAttribute("xlink:href"))) ? ""
-      : roleOf(el, explicitRole, pointerHere && !parentPointer && !insideControl);
+      : roleOf(el, explicitRole, pointerStarts);
+    // A box listed only because the keyboard can reach it, which shows no pointer and takes no click of its own, is
+    // often how a calendar's panel or a grid takes the arrow keys. A pointer that starts on something inside it marks
+    // a control of its own, like a day, so what is inside it is looked at as if it were not inside a control.
+    const keysOnly = role === "clickable" && !pressableOnly && !pointerHere && !el.hasAttribute("onclick");
 
     /** A table row is read as one line, so its cells are not read again on their own. */
     const isRow = !role && (el.tagName === "TR" || explicitRole === "row");
@@ -568,6 +674,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
       const rect = el.getBoundingClientRect();
       if (hasRealBox(el, rect) && (!hoverBox || liesInside(rect, hoverBox))) {
         added = { el, id: "", role, label: labelOf(el, role), nav: ["nav", "header", "aside", "menu", "tabs", "footer"].includes(scope.region), region: scope.region, heading: scope.heading, outside };
+        if (role === "clickable" && pointerStarts) added.pointer = true;
         const options = optionsOf(el);
         if (options.length) added.options = options;
         const icon = iconOf(el);
@@ -603,7 +710,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
     if (holdsTyping(el) || pressableOnly) return;
 
     const before = candidates.length;
-    const inside = insideControl || role !== "";
+    const inside = insideControl || (role !== "" && !keysOnly);
     // Only a box that is not a control in its own right can turn out to be a wrapper.
     const mayBeWrapper = !!added && (role === "clickable" || (!isNative(el) && !isFocusable(el)));
     // The words inside a row that was read as one line have been sent already, so what its cells give is set aside.
@@ -617,12 +724,36 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
     // a row that opens what it shows, with a button or two inside it.
     const within = added ? candidates.slice(before).filter((c) => c !== added) : [];
     let wrapper = false;
+    let inner: Candidate | undefined;
     if (added && !isNative(el) && !isFocusable(el) && within.some((c) => c.role !== "clickable" && isNative(c.el))) {
       wrapper = true;
+    } else if (added && !isNative(el) && (inner = onlyLinkSayingTheSame(added, within))) {
+      // An entry the keyboard moves to, around one link that says what the entry says, like a menu's item around its
+      // link, is that link. What the entry says of itself, that it is chosen or cannot be used, is said of the link.
+      wrapper = true;
+      const state = [...new Set([...(inner.state ?? []), ...(added.state ?? [])])];
+      if (state.length) inner.state = state;
     } else if (added?.role === "clickable" && within.some((c) => c.role === "clickable" && saysMostOf(c.boxNamed ? "" : c.label, added!.label))) {
       // A clickable box around a clickable box that says the same thing: the inner one is the control.
       // A panel named "Simple graph" around its legend, "A-series B-series", says something else and stays.
       wrapper = true;
+    } else if (added?.role === "clickable" && (inner = showingTheSame(added, within))) {
+      // The same, where the inner box is named by its caption and shows the same words as the box around it: a
+      // custom select, "-- Select --" around "-- Select --", whose inner box is called "Job Title". The picture on
+      // the box around it, an arrow that says it opens a list, goes with it.
+      wrapper = true;
+      if (!inner.icon && added.icon) inner.icon = added.icon;
+    } else if (added?.role === "clickable" && (inner = framed(added, within))) {
+      // A box that says nothing but what a control inside it says, around a control with a role of its own, is that
+      // control's frame: the track of a slider, or the box around a select that shows its choice. The picture on the
+      // frame, an arrow that says it opens a list, goes with the control.
+      wrapper = true;
+      if (!inner.icon && added.icon) inner.icon = added.icon;
+    } else if (keysOnly && added && keyedGrid(within)) {
+      // A box the keyboard moves through, holding rows of like things a pointer goes to, is not one control: a
+      // calendar's panel holds its days. Each of those is a control of its own, and its row is not one entry.
+      wrapper = true;
+      for (const c of within) if (c.pointer) c.single = true;
     }
     if (added && wrapper) {
       candidates.splice(candidates.indexOf(added), 1);
@@ -676,7 +807,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   usable = [];
 
   const elements = new Map<string, Element>();
-  const strip = ({ el: _el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, ...element }: Candidate): SnapElement => element;
+  const strip = ({ el: _el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, pointer: _pointer, single: _single, ...element }: Candidate): SnapElement => element;
   const listed = chosen.map((c, index) => {
     const element = strip(c);
     element.id = `e${index + 1}`;
@@ -870,8 +1001,9 @@ function roleOf(el: Element, explicitRole: string, pointerStartsHere: boolean): 
     if (field && isRendered(field)) return "";
   }
   if (el.hasAttribute("onclick") || pointerStartsHere) return "clickable";
-  // Something the keyboard can land on is there to be used, whatever it looks like: a row, a card, a tile.
-  if (isFocusable(el) && !FOCUSABLE_NOT_CLICKABLE.has(tag) && !scrolls(el)) return "clickable";
+  // Something the keyboard can land on is there to be used, whatever it looks like: a row, a card, a tile. A list,
+  // a menu or a grid that takes the keyboard does so to move it among its entries, which are what is used.
+  if (isFocusable(el) && !FOCUSABLE_NOT_CLICKABLE.has(tag) && !ROVING.has(explicitRole) && !scrolls(el)) return "clickable";
   return "";
 }
 
@@ -943,11 +1075,22 @@ function onTop(el: Element, ignore: Element): boolean {
  */
 function hasRealBox(el: Element, rect: DOMRect): boolean {
   if (rect.width >= 2 && rect.height >= 2) return true;
-  if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) return false;
+  // A switch drawn by its label, around a button the size of a pixel, is pressed through the label too.
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement || el instanceof HTMLButtonElement)) return false;
   return Array.from(el.labels ?? []).some((label) => {
     const box = label.getBoundingClientRect();
     return box.width >= 2 && box.height >= 2;
   });
+}
+
+/**
+ * Whether a box is part of a label tied to a field that can be seen, like the
+ * drawing of a switch inside its label. Pressing it presses the field, which
+ * is listed, so its pointer does not make it a control of its own.
+ */
+function pressedForAField(el: Element): boolean {
+  const field = (el.parentElement?.closest("label") as HTMLLabelElement | null)?.control;
+  return !!field && isRendered(field);
 }
 
 /**
@@ -993,10 +1136,14 @@ function optionsOf(el: Element): string[] {
 /**
  * A table whose rows open what they show often makes every cell clickable,
  * which lists one row ten times over, most of them with nothing to say. The
- * cells of one row become one entry, named by what the row says.
+ * cells of one row become one entry, named by what the row says. A cell the
+ * page treats as a control of its own stays one: a calendar's day, which says
+ * whether it is the one chosen, is named for itself, or is one of the like
+ * things a box the keyboard moves through holds.
  */
 function mergeCells(candidates: Candidate[]): Candidate[] {
-  const isCell = (c: Candidate) => c.role === "clickable" && !c.icon && c.el.matches('td, [role="cell"], [role="gridcell"]');
+  const ownCell = (c: Candidate) => c.single || c.el.hasAttribute("aria-selected") || c.el.hasAttribute("aria-label");
+  const isCell = (c: Candidate) => c.role === "clickable" && !c.icon && !ownCell(c) && c.el.matches('td, [role="cell"], [role="gridcell"]');
   const byRow = new Map<Element, Candidate[]>();
   for (const c of candidates) {
     if (!isCell(c)) continue;
@@ -1070,6 +1217,8 @@ function nameRows(candidates: Candidate[]) {
   for (const group of groups.values()) {
     if (group.length < 2) continue;
     for (const c of group) {
+      // A calendar's day is one of a row of days, and the other days do not say which one it is.
+      if (c.single) continue;
       const row = rowOf(c.el);
       if (!row || isHeaderRow(row)) continue;
       // A row that is itself listed, or holds a listed box around this control, has already said what it is.
@@ -1123,17 +1272,19 @@ const BESIDE_CHARS = 40;
  * The words beside a control in the nearest box around it that says anything:
  * the value next to its "Remove", the name next to its "Edit". A box that
  * holds another control listed the same cannot tell the two apart, so the
- * search stops there. `holds` says how many of them each box holds, and `not`
- * is a name already found to be shared, to look past.
+ * search stops there. `holds` says how many of them each box holds, `not`
+ * is a name already found to be shared, to look past, and `caption` is the
+ * control's own name, which tells nothing apart either.
  */
-function wordsBeside(control: Element, holds: Map<Element, number>, not = ""): string {
+function wordsBeside(control: Element, holds: Map<Element, number>, not = "", caption = ""): string {
   for (let box = control.parentElement, depth = 0; box && box !== document.body && depth < BESIDE_DEPTH; box = box.parentElement, depth++) {
     if ((holds.get(box) ?? 0) > 1) return "";
     // Marks left standing alone once the control is taken out, like the brackets around a link, are not words.
     const words = wordsIn(box, 60, CONTROLS, control).split(" ").filter((piece) => /[\p{L}\p{N}]/u.test(piece)).join(" ");
     // A box that says this much is a paragraph or a whole part of the page, not a name beside a control.
     if (words.length > BESIDE_CHARS) return "";
-    if (words && words !== not) return cleanText(words, BESIDE_CHARS);
+    // The control's own caption, like the label of a tick box, says nothing more about which one it is.
+    if (words && words !== not && !(caption && saysMostOf(words, caption) && saysMostOf(caption, words))) return cleanText(words, BESIDE_CHARS);
   }
   return "";
 }
@@ -1161,15 +1312,22 @@ function tellTwinsApart(candidates: Candidate[]) {
   for (const group of twins(candidates)) {
     // A row that names several of them has said all it can.
     if (group[0]?.row) continue;
+    // The page's own tooltip on each, when each has a different one, says best which is which: two days "8" are
+    // "2026-11-08" and "2026-12-08". A field that shows a choice can carry that choice as its tooltip, so it is not read.
+    const titles = group.map((c) => (showsAChoice(c.el, c.role) ? "" : cleanText(c.el.getAttribute("title") ?? "", BESIDE_CHARS)));
+    if (titles.every(Boolean) && new Set(titles).size === titles.length) {
+      group.forEach((c, index) => (c.row = titles[index]));
+      continue;
+    }
     const holds = new Map<Element, number>();
     for (const c of group) {
       for (let box = c.el.parentElement, depth = 0; box && depth < BESIDE_DEPTH; box = box.parentElement, depth++) holds.set(box, (holds.get(box) ?? 0) + 1);
     }
-    const names = group.map((c) => wordsBeside(c.el, holds));
+    const names = group.map((c) => wordsBeside(c.el, holds, "", c.label));
     group.forEach((c, index) => {
       let name = names[index] ?? "";
       // Two of them beside the same words, like "All": the next box out may say more.
-      if (name && names.indexOf(name) !== names.lastIndexOf(name)) name = wordsBeside(c.el, holds, name) || name;
+      if (name && names.indexOf(name) !== names.lastIndexOf(name)) name = wordsBeside(c.el, holds, name, c.label) || name;
       if (name) c.row = name;
     });
   }
@@ -1196,7 +1354,7 @@ function rowPieces(row: Element): Piece[] {
       return;
     }
     if (!(node instanceof Element) || node.getAttribute("aria-hidden") === "true") return;
-    if (["BUTTON", "SELECT", "SCRIPT", "STYLE", "svg"].includes(node.tagName) || holdsTyping(node) || unseen(node)) return;
+    if (["BUTTON", "SELECT", "SCRIPT", "STYLE", "svg"].includes(node.tagName) || holdsTyping(node) || choiceBoxes.has(node) || unseen(node)) return;
     for (const child of node.childNodes) walk(child);
   };
   walk(row);
@@ -1233,6 +1391,10 @@ function rowName(row: Element, control: Element, piecesOf: (row: Element) => Pie
  * says so. A tick box or a switch usually has its words after it.
  */
 const CONTROLS = "input, select, textarea, button, a[href], [role='button'], [role='combobox'], [role='textbox'], [role='searchbox'], [contenteditable]:not([contenteditable='false'])";
+
+/** Anything that takes a value or a tick, whatever it is built from. */
+const FIELDS =
+  "input, select, textarea, [role='switch'], [role='slider'], [role='checkbox'], [role='radio'], [role='spinbutton'], [role='combobox'], [role='textbox'], [role='searchbox']";
 
 /**
  * Whether a box holds something pressed on its own, shown by a pointer cursor
@@ -1286,6 +1448,11 @@ function captionNode(el: Element, after: boolean): { text: string; from?: Elemen
   for (let depth = 0; depth < 6 && node && node !== document.body; depth++) {
     // Inside an editor the words beside a control are the visitor's own.
     if ((node.parentElement as HTMLElement | null)?.isContentEditable) return { text: "" };
+    // Beside a select's field, in the box it fills, is the choice the visitor made: the caption is outside that box.
+    if (node.parentElement && choiceBoxes.has(node.parentElement)) {
+      node = node.parentElement;
+      continue;
+    }
     // A column heading names its column. The heading beside it names another.
     if (depth > 0 && node.matches("th, [role='columnheader']")) return { text: "" };
     // The nearest words beside it, whether bare words in the same box or a box of their own:
@@ -1303,8 +1470,9 @@ function captionNode(el: Element, after: boolean): { text: string; from?: Elemen
       if (beside.matches(HEADINGS)) return { text: "" };
       const text = wordsOf(beside);
       if (text) return { text, from: beside };
-      // Another field, or another field's box: the caption beyond it belongs to that field.
-      if (holdsTyping(beside) || beside.matches("select") || beside.querySelector("input, select, textarea")) return { text: "" };
+      // Another field, or another field's box: the caption beyond it belongs to that field. A switch or a slider
+      // is a field too: "Disabled:" before a switch is the switch's, not the slider's before it.
+      if (holdsTyping(beside) || beside.matches(FIELDS) || beside.querySelector(FIELDS)) return { text: "" };
     }
     node = node.parentElement;
     if (node && ["FORM", "TABLE", "TBODY", "FIELDSET", "UL", "OL"].includes(node.tagName)) break;
@@ -1372,6 +1540,32 @@ function opensAList(el: Element, role: string): boolean {
   return role === "combobox" || ["listbox", "tree", "grid"].includes((el.getAttribute("aria-haspopup") ?? "").toLowerCase());
 }
 
+/**
+ * Whether a control shows a choice the visitor made: a select, or a control
+ * that opens a list and shows what was picked from it. Its own words are that
+ * choice, which is never sent as its name.
+ */
+function showsAChoice(el: Element, role: string): boolean {
+  return role === "select" || opensAList(el, role);
+}
+
+/**
+ * What the page calls a field, for a control that says it is named by that
+ * field: what names the field in turn, its placeholder or its tooltip. Never
+ * what was written in it.
+ */
+function nameOfField(field: Element): string {
+  const root = field.getRootNode() as Document | ShadowRoot;
+  const byIds = (field.getAttribute("aria-labelledby") ?? "")
+    .split(/\s+/)
+    .map((id) => (id ? root.getElementById?.(id) : null))
+    .map((named) => (named && !holdsTyping(named) && !named.contains(field) ? wordsIn(named, 200, "", undefined, true) : ""))
+    .join(" ")
+    .trim();
+  const labels = field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement ? Array.from(field.labels ?? []).map(labelWords).join(" ").trim() : "";
+  return byIds || field.getAttribute("aria-label")?.trim() || labels || field.getAttribute("placeholder") || field.getAttribute("aria-placeholder") || field.getAttribute("title") || "";
+}
+
 /** The aria-label or aria-labelledby of the box just around a control, which some pages put there rather than on the control. */
 function nameAround(el: Element): string {
   for (let box = el.parentElement, depth = 0; box && box !== document.body && depth < 2; box = box.parentElement, depth++) {
@@ -1386,13 +1580,21 @@ function labelOf(el: Element, role: string): string {
   const root = el.getRootNode() as Document | ShadowRoot;
   /** Named by a part of itself, which is then a name the visitor can see. */
   let namedByOwnWords = false;
+  /** A field that shows the choice made in a list it opens. Its own words are that choice, which is the visitor's. */
+  const choice = showsAChoice(el, role);
   const byIds = (ids: string) =>
     ids
       .split(/\s+/)
       .map((id) => {
         const named = id ? root.getElementById?.(id) : null;
-        if (named && el.contains(named)) namedByOwnWords = true;
-        return named ? wordsIn(named, 200, "", undefined, true) : "";
+        if (!named) return "";
+        if (el.contains(named)) {
+          // A select that names itself by its own words as well as its caption ("Age Ten") is named by the caption.
+          if (choice) return "";
+          namedByOwnWords = true;
+        }
+        // A control named by a field is named by what the page calls that field, never by what is written in it.
+        return holdsTyping(named) ? nameOfField(named) : wordsIn(named, 200, "", undefined, true);
       })
       .join(" ")
       .trim();
@@ -1400,7 +1602,7 @@ function labelOf(el: Element, role: string): string {
   const typedIn = holdsTyping(el);
   /** The name the page gives for screen readers. */
   const given = byIds(el.getAttribute("aria-labelledby") ?? "") || el.getAttribute("aria-label")?.trim() || "";
-  let raw = el.getAttribute("data-haptic-label") || (given && !typedIn && !namedByOwnWords && !SHOWS_A_VALUE.has(role) ? withShownWords(given, el) : given);
+  let raw = el.getAttribute("data-haptic-label") || (given && !typedIn && !namedByOwnWords && !choice && !SHOWS_A_VALUE.has(role) ? withShownWords(given, el) : given);
   const ticks = role === "checkbox" || role === "radio" || role === "switch";
   if (!raw && (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
     // A label can carry its words as an aria-label of its own.
@@ -1429,12 +1631,13 @@ function labelOf(el: Element, role: string): string {
     const caption = captionNode(el, false);
     if (untiedLabel(caption.from)) raw = caption.text;
   }
-  // Never use a field's contents as its label.
-  if (!raw && role !== "textbox" && role !== "select" && !typedIn) raw = visibleText(el);
+  // Never use a field's contents as its label, nor the choice a select shows.
+  if (!raw && role !== "textbox" && !choice && !typedIn) raw = visibleText(el, NESTED_ENTRIES);
   // What the page shows in an empty field is the page's own words for it.
   if (!raw && typedIn) raw = el.getAttribute("placeholder") || el.getAttribute("aria-placeholder") || el.getAttribute("data-placeholder") || "";
   raw ||= el.getAttribute("title") || "";
-  if (!raw && !typedIn) raw = (el instanceof HTMLImageElement ? el.alt : el.querySelector("img[alt]")?.getAttribute("alt")) || el.querySelector("svg title")?.textContent || "";
+  // A select can show its choice as a picture, a flag for a country, whose words are that choice too.
+  if (!raw && !typedIn && !choice) raw = (el instanceof HTMLImageElement ? el.alt : el.querySelector("img[alt]")?.getAttribute("alt")) || el.querySelector("svg title")?.textContent || "";
   // A custom field or tick box, built from boxes with no words of its own.
   // A tick box is captioned by the words after it. A field that is typed in or chosen from is captioned by the words
   // before it only: the words after it belong to whatever comes next, a paragraph or the next part of the page.
@@ -1445,9 +1648,12 @@ function labelOf(el: Element, role: string): string {
 }
 
 /** The words a control shows, or failing those the words it has for screen readers only, like an icon button's name. */
-function visibleText(el: Element): string {
-  return wordsIn(el, 160) || wordsIn(el, 160, "", undefined, true);
+function visibleText(el: Element, skip = ""): string {
+  return wordsIn(el, 160, skip) || wordsIn(el, 160, skip, undefined, true);
 }
+
+/** The entries a tree's or a menu's entry holds under it, which are listed on their own and are not part of its name. */
+const NESTED_ENTRIES = '[role="group"], [role="tree"], [role="menu"], [role="listbox"]';
 
 /** Icon-only buttons are common in dashboards. The icon's class name is often the only clue. */
 function iconOf(el: Element): string | undefined {
@@ -1536,10 +1742,25 @@ function isRequired(el: Element, role: string): boolean {
   return names.some(markedRequired);
 }
 
+/**
+ * Whether a control cannot be used: it says so, a disabled group of fields
+ * holds it, or it is inside an entry that says so, like the link inside a
+ * menu's disabled item, or a tick box inside a list's disabled option.
+ */
+function isDisabled(el: Element): boolean {
+  if ((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true") return true;
+  try {
+    if (isNative(el) && el.matches(":disabled")) return true;
+  } catch {
+    // :disabled unsupported. What the control says of itself stands.
+  }
+  return !!el.parentElement?.closest('[aria-disabled="true"]');
+}
+
 /** A state is at most 16 characters: the server cuts anything longer. */
 function stateOf(el: Element, role: string): string[] {
   const state: string[] = [];
-  if ((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true") state.push("disabled");
+  if (isDisabled(el)) state.push("disabled");
   if (isRequired(el, role)) state.push("required");
   const popup = opens(el, role);
   if (popup) state.push(popup);
@@ -1598,9 +1819,22 @@ export function findOpenModal(ignore: Element): Element | undefined {
   document.querySelectorAll('[role="dialog"], [role="alertdialog"]').forEach((el) => {
     if (ignore.contains(el) || !isRendered(el)) return;
     // Many dialogs never say they are modal. One that sits over the middle of the page, with the page dimmed or blocked behind it, is.
-    if (el.getAttribute("aria-modal") === "true" || coversThePage(el, ignore)) modals.push(el);
+    // One that says it is not modal, like a notice about cookies in a corner, is not, whatever is drawn over the page.
+    const modal = el.getAttribute("aria-modal");
+    if (modal === "true" || (modal !== "false" && coversThePage(el, ignore))) modals.push(el);
   });
   return modals[modals.length - 1];
+}
+
+/** Whether what is drawn at the middle of the part of a box that is in the window is that box, or in it. */
+function seenAtItsMiddle(el: Element, rect: DOMRect, ignore: Element): boolean {
+  const left = Math.max(rect.left, 0);
+  const right = Math.min(rect.right, window.innerWidth);
+  const top = Math.max(rect.top, 0);
+  const bottom = Math.min(rect.bottom, window.innerHeight);
+  if (right <= left || bottom <= top) return false;
+  const hit = document.elementsFromPoint((left + right) / 2, (top + bottom) / 2).find((over) => over !== ignore && !ignore.contains(over));
+  return !!hit && (el.contains(hit) || hit.contains(el));
 }
 
 /** Whether a dialog has taken the page over: the middle of the window is the dialog, or a backdrop drawn with it. */
@@ -1615,6 +1849,8 @@ function coversThePage(dialog: Element, ignore: Element): boolean {
   const cover = top.getBoundingClientRect();
   const coversWindow = cover.width >= window.innerWidth * 0.95 && cover.height >= window.innerHeight * 0.95;
   if (!coversWindow || top === document.body || top === document.documentElement) return false;
+  // A dialog that is itself under the layer, like a notice under the layer a list puts behind itself, is not what took the page over.
+  if (!seenAtItsMiddle(dialog, rect, ignore)) return false;
   // Either it lies beside the dialog, or it wraps the dialog and is pinned to the window.
   return !top.contains(dialog) || getComputedStyle(top).position === "fixed";
 }

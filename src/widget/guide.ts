@@ -1,6 +1,6 @@
 import { cleanText, describeElement, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { hear, keyName, keysAsked, nothingHeard, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "./observe.ts";
-import { currentPath, describeChange, elementKey, findOpenModal, isField, NOTHING_CHANGED, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
+import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
 import type { Ui } from "./ui.ts";
 
 // Runs one guide: ask the model for a step, point at it, wait for the visitor
@@ -1120,7 +1120,8 @@ export function nameOfClicked(clicked: Element, listing: Map<Element, SnapElemen
   if (listed?.label) return cleanText(listed.label, 60);
   const given = clicked.getAttribute("aria-label");
   if (given) return cleanText(given, 60);
-  if (!clicked.matches(NAMED_BY_ITS_TEXT)) return "";
+  // A day in a calendar that opened after the page was read is named as a reading would name it.
+  if (!clicked.matches(NAMED_BY_ITS_TEXT)) return nameOfPicked(clicked);
   if ((clicked as HTMLElement).isContentEditable) return "";
   if (clicked.querySelector("input, textarea, select, [contenteditable]")) return "";
   return cleanText(clicked.textContent || "", 60);
