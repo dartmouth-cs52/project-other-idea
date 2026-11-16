@@ -12,6 +12,8 @@
 //   POST   /api/app/sites/:id/corrections       point a step of a guide at another control from now on
 //   DELETE /api/app/sites/:id/corrections/:id   take a correction back
 //   PUT    /api/app/sites/:id/blocked           the controls Haptic must never point at
+//   …      /api/app/sites/:id/teach[/:session]  Teach Haptic: start, follow, review and save (worker/teach.ts)
+//   DELETE /api/app/sites/:id/taught/:route     take a taught route back
 //   GET    /api/app/approve?key=…&sig=…         an access request, for the team's approve page
 //   POST   /api/app/approve                     approve it, and email the person a sign-in link
 //
@@ -26,6 +28,7 @@ import { database, joinOrganization, organizationOf, type Organization, type Sql
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
 import { groupGuides } from "./health";
 import { finishedCsv, finishedGuides, guideSteps, insights, monthOf } from "./insights";
+import { routeView, teachApi, TeachRefused } from "./teach";
 import { MAX_PAGES, readMore, startReading, type BrowserBinding, type Reading } from "./reader";
 
 export interface AppEnv extends AuthEnv {
@@ -90,7 +93,7 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
 
     if (path === "/sites" && request.method === "POST") return reply(await addSite(sql, org, await body(request)), 201);
 
-    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?)?$/.exec(path);
+    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?|\/teach(?:\/[^/]+)?|\/taught\/[^/]+)?$/.exec(path);
     if (match) {
       const id = match[1] ?? "";
       if (!SITE_ID.test(id)) throw new Refusal(404, "No such site.");
@@ -134,6 +137,18 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
           if (sub === "/blocked" && request.method === "PUT") return reply({ blocked: await setBlocked(sql, id, org.id, (await body(request)).controls) });
         } catch (error) {
           if (error instanceof Invalid) throw new Refusal(400, error.message);
+          throw error;
+        }
+      }
+      if (sub?.startsWith("/teach") || sub?.startsWith("/taught/")) {
+        const site = await ownedSite(sql, org, id);
+        const kind = sub.startsWith("/taught/") ? "taught" : "teach";
+        const rest = sub.slice(kind === "taught" ? "/taught/".length : "/teach".length).replace(/^\//, "");
+        try {
+          const result = await teachApi(sql, site, org.id, { id: user.id, name: user.name, email: user.email }, request.method, kind, rest, () => body(request));
+          return reply(result.body, result.status);
+        } catch (error) {
+          if (error instanceof TeachRefused) throw new Refusal(error.status, error.message);
           throw error;
         }
       }
@@ -294,6 +309,7 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string) 
     origins,
     corrections: site.context.corrections ?? [],
     blocked: site.context.blocked ?? [],
+    taught: (site.context.taught ?? []).map(routeView),
     reading: readingSummary(site.reading, site.context.pages ?? []),
     appearance: { ...DEFAULT_APPEARANCE, ...site.context.appearance },
     notes: site.context.notes ?? "",
