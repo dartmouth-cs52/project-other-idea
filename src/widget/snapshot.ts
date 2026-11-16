@@ -768,6 +768,8 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
       wrapper = true;
       const why = reasonOf(el) || wordsIn(el, 200, `${CONTROLS}, label`);
       for (const c of unusable) giveReason(c, why);
+    } else if (added && opensRecord(el, added)) {
+      // A table row that opens what it shows is a control of its own, whatever it holds, and is no frame of its tick box.
     } else if (added && !isNative(el) && !isFocusable(el) && within.some((c) => c.role !== "clickable" && isNative(c.el))) {
       wrapper = true;
     } else if (added?.role === "clickable" && within.some((c) => c.role === "clickable" && saysMostOf(c.boxNamed ? "" : c.label, added!.label))) {
@@ -1080,6 +1082,29 @@ function labelTarget(label: HTMLLabelElement): Element | null {
   return target && hasControlRole(target) ? target : null;
 }
 
+/**
+ * Whether a box that takes clicks is a table row that opens the record it
+ * shows: a row the pointer starts on, or that says it takes clicks, with
+ * words of its own besides those of its controls. It holds a tick box to
+ * select it and buttons for its actions, and is a control all the same.
+ */
+function opensRecord(el: Element, c: Candidate): boolean {
+  if (!isRowOfTable(el)) return false;
+  if (!c.pointer && !el.hasAttribute("onclick")) return false;
+  return /[\p{L}\p{N}]/u.test(wordsIn(el, 40, `${CONTROLS}, label`));
+}
+
+/** Boxes that are ticked, whatever they are drawn with. */
+const TICKS = "[role='checkbox'], [role='switch'], [role='radio']";
+
+/** What a table row holds for its actions. */
+const ROW_ACTIONS = "button, [role='button']";
+
+/** Whether an element is a row of a table, by its tag or its role. */
+function isRowOfTable(el: Element): boolean {
+  return el.tagName === "TR" || el.getAttribute("role") === "row";
+}
+
 /** A tag the browser itself treats as a control. */
 function isNative(el: Element): boolean {
   const tag = el.tagName;
@@ -1299,7 +1324,10 @@ function nameRows(candidates: Candidate[]) {
       // The outermost such box is the one that speaks for the row, in the words a person sees on it.
       let around: Candidate | undefined;
       for (let box: Element | null = c.el.parentElement; box; box = box === row ? null : box.parentElement) around = named.get(box) ?? around;
-      const name = around ? cleanText(wordsIn(around.el, 80) || around.label, 40) : rowName(row, c.el, piecesOf);
+      // A table row that is listed is told by the words it shows outside its controls, the same for each of them: an
+      // invoice's link is not told apart by its own number.
+      const words = around && isRowOfTable(around.el) ? wordsIn(around.el, 80, CONTROLS) : around ? wordsIn(around.el, 80) : "";
+      const name = around ? cleanText(words || around.label, 40) : rowName(row, c.el, piecesOf);
       if (name) c.row = entryNumber(row) + name;
     }
   }
@@ -1312,9 +1340,18 @@ function nameRows(candidates: Candidate[]) {
  */
 function rowOf(control: Element): Element | null {
   for (let row = control.parentElement?.closest(ROW) ?? null, tries = 0; row && tries < 4; row = row.parentElement?.closest(ROW) ?? null, tries++) {
-    if (sameKind(row, row.previousElementSibling) || sameKind(row, row.nextElementSibling)) return row;
+    if (sameKind(row, row.previousElementSibling) || sameKind(row, row.nextElementSibling) || isTableRow(row)) return row;
   }
   return null;
+}
+
+/**
+ * A row of a table, which is a row by what it is, whatever stands beside it.
+ * A table drawn with a box around each row, so that it can be measured or
+ * shown on hover, leaves each row with nothing of its kind beside it.
+ */
+function isTableRow(row: Element): boolean {
+  return isRowOfTable(row) && !!row.parentElement?.closest('table, [role="table"], [role="grid"], [role="treegrid"]');
 }
 
 function sameKind(row: Element, other: Element | null): other is Element {
@@ -1718,7 +1755,8 @@ function labelOf(el: Element, role: string): string {
     if (untiedLabel(caption.from)) raw = caption.text;
   }
   // Never use a field's contents as its label, nor the choice a select shows.
-  if (!raw && role !== "textbox" && !choice && !typedIn) raw = visibleText(el, NESTED_ENTRIES);
+  // A table row is named by what it shows, and not by the words of the buttons for its actions.
+  if (!raw && role !== "textbox" && !choice && !typedIn) raw = visibleText(el, isRowOfTable(el) ? `${NESTED_ENTRIES}, ${ROW_ACTIONS}` : NESTED_ENTRIES);
   // What the page shows in an empty field is the page's own words for it.
   if (!raw && typedIn) raw = el.getAttribute("placeholder") || el.getAttribute("aria-placeholder") || el.getAttribute("data-placeholder") || "";
   raw ||= el.getAttribute("title") || "";
@@ -1745,7 +1783,11 @@ const NESTED_ENTRIES = '[role="group"], [role="tree"], [role="menu"], [role="lis
 function iconOf(el: Element): string | undefined {
   // Nothing inside an editor is the page's own, its pictures included.
   if ((el as HTMLElement).isContentEditable) return undefined;
-  for (const candidate of [el, ...Array.from(el.querySelectorAll("svg, i, [class*='icon']")).slice(0, 4)]) {
+  // The pencil on a table row's edit button is that button's picture, and the tick in its tick box is the tick box's.
+  const pictures = Array.from(el.querySelectorAll("svg, i, [class*='icon']"));
+  const owner = (picture: Element) => picture.parentElement?.closest(`${CONTROLS}, label, ${TICKS}`);
+  const own = isRowOfTable(el) ? pictures.filter((picture) => !el.contains(owner(picture) ?? null)) : pictures;
+  for (const candidate of [el, ...own.slice(0, 4)]) {
     const dataIcon = candidate.getAttribute("data-icon");
     if (dataIcon) return dataIcon;
     const match = ICON_CLASS.exec(candidate.getAttribute("class") ?? "");

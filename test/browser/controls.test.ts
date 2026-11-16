@@ -104,3 +104,50 @@ test("a section of words with a title of its own still introduces what comes aft
   const snapshot = await read(`<section aria-label="Intro"><h2>Billing</h2><p>Pay your bills on time.</p></section><button>Pay a bill</button>`);
   assert.deepEqual(lines(snapshot), ['button "Pay a bill" [Billing]']);
 });
+
+// Rows that open a record ----------------------------------------------------------
+
+/** A row of a table drawn in boxes, each row alone in a box of its own, as Northpine's table draws them: a tick box, an invoice's link, words, and actions that show on hover. */
+const BILL_ROW = (n: number, invoice: string, vendor: string, amount: string) =>
+  `<div class="row-box"><div role="row" style="display:grid;grid-template-columns:36px 1fr 1fr 1fr 1fr;position:relative;cursor:pointer">
+    <div role="cell"><span><button type="button" role="checkbox" aria-checked="false" id="r${n}" style="width:16px;height:16px"></button><label for="r${n}"><span style="${SR_ONLY}">Select row</span></label></span></div>
+    <div role="cell"><a href="/bills/bill_000p${n}">${invoice}</a></div><div role="cell">${vendor}</div><div role="cell">${amount}</div><div role="cell">Due Nov 18</div>
+    <div role="cell" style="position:absolute;right:0;top:0;opacity:0;display:flex"><button type="button">Pay</button><button type="button" aria-label="More"><svg class="lucide lucide-ellipsis" width="16" height="16"></svg></button></div>
+  </div></div>`;
+
+test("a table row that opens its record is listed though it holds a tick box and buttons, and its actions and links carry its name", { skip }, async () => {
+  const snapshot = await read(`<main><h1>Bills</h1><div role="table" aria-label="Bills"><div role="rowgroup">
+    ${BILL_ROW(1, "INV-04257", "Brightdesk Coworking", "$1,200.00")}${BILL_ROW(2, "INV-04312", "Keystone Legal", "$880.00")}
+  </div></div></main>`);
+  assert.deepEqual(lines(snapshot), [
+    'clickable "INV-[number] Brightdesk Coworking $1,200.00 Due Nov 18" [main › Bills]',
+    'checkbox "Select row" [main › Bills › row: Brightdesk Coworking $1,200.00 Due Nov…]',
+    // Two links that read the same once their numbers are masked are told apart by their rows.
+    'link "INV-[number]" [main › Bills › row: Brightdesk Coworking $1,200.00 Due Nov…] → /bills/:id',
+    'button "Pay" [main › Bills › row: Brightdesk Coworking $1,200.00 Due Nov…]',
+    'button "More" icon:ellipsis [main › Bills › row: Brightdesk Coworking $1,200.00 Due Nov…]',
+    'clickable "INV-[number] Keystone Legal $880.00 Due Nov 18" [main › Bills]',
+    'checkbox "Select row" [main › Bills › row: Keystone Legal $880.00 Due Nov 18]',
+    'link "INV-[number]" [main › Bills › row: Keystone Legal $880.00 Due Nov 18] → /bills/:id',
+    'button "Pay" [main › Bills › row: Keystone Legal $880.00 Due Nov 18]',
+    'button "More" icon:ellipsis [main › Bills › row: Keystone Legal $880.00 Due Nov 18]',
+  ]);
+});
+
+test("an employee's row as OrangeHRM draws it is listed, without the pictures of its tick box and buttons, and its buttons carry its name", { skip }, async () => {
+  const row = (id: string, name: string) => `<div class="card"><div role="row" style="display:flex;cursor:pointer">
+    <div role="cell" style="width:40px"><label><input type="checkbox" style="opacity:0;position:absolute"><span style="display:inline-block;width:14px;height:14px"><i class="oxd-icon bi-check"></i></span></label></div>
+    <div role="cell" style="width:80px"><div>${id}</div></div><div role="cell" style="width:160px"><div>${name}</div></div>
+    <div role="cell" style="width:80px"><div style="display:flex"><button type="button" style="width:24px;height:24px"><i class="oxd-icon bi-pencil-fill"></i></button><button type="button" style="width:24px;height:24px"><i class="oxd-icon bi-trash"></i></button></div></div>
+  </div></div>`;
+  const snapshot = await read(`<main><h1>Employees</h1><div role="table"><div role="rowgroup">${row("0042", "Peter Mac Anderson")}${row("0043", "Linda Jane Anderson")}</div></div></main>`);
+  const listed = lines(snapshot);
+  assert.ok(listed.includes('clickable "0042 Peter Mac Anderson" [main › Employees]'), listed.join("\n"));
+  assert.ok(listed.includes('button icon:pencil-fill [main › Employees › row: 0042 Peter Mac Anderson]'), listed.join("\n"));
+  assert.ok(listed.includes('button icon:trash [main › Employees › row: 0043 Linda Jane Anderson]'), listed.join("\n"));
+});
+
+test("a table row whose only words are its link's is no control of its own", { skip }, async () => {
+  const snapshot = await read(`<main><h1>Orders</h1><table><tbody><tr style="cursor:pointer"><td><a href="/orders/1">Order 1</a></td></tr><tr style="cursor:pointer"><td><a href="/orders/2">Order 2</a></td></tr></tbody></table></main>`);
+  assert.deepEqual(lines(snapshot), ['link "Order 1" [main › Orders] → /orders/:id', 'link "Order 2" [main › Orders] → /orders/:id']);
+});
