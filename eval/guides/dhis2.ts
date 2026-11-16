@@ -87,7 +87,7 @@ const guides: Guide[] = [
     kind: "awkward",
     start: DASHBOARD,
     goal: "Comment est-ce que j'exporte des données en CSV ?",
-    steps: [APPS, app("Import/Export", "dhis-web-import-export"), { expect: [link("Data export")], act: { click: 'a[href="#/export/data"]' } }, DONE],
+    steps: [APPS, app("Import/Export", "dhis-web-import-export"), { expect: [any("Data export")], act: { click: 'a[href="#/export/data"]' } }, DONE],
     reached: { url: "dhis-web-import-export/.*#/export/data" },
   },
 
@@ -121,7 +121,8 @@ const guides: Guide[] = [
     ],
   },
 
-  // A menu behind the dashboard's "more" button, then a submenu. Either print layout will do.
+  // A menu behind the dashboard's "more" button, then a submenu. Either print layout will do, and so will the print
+  // preview that edit mode shows.
   // Still fails: the dashboard as it is, or Slideshow.
   {
     id: "print-dashboard",
@@ -133,7 +134,7 @@ const guides: Guide[] = [
       { expect: [any("Dashboard layout"), any("One item per page")], act: { click: 'li:has-text("Dashboard layout")' } },
       DONE,
     ],
-    reached: { url: "dhis-web-dashboard/#/[A-Za-z0-9]+/print(layout|oipp)" },
+    reached: [{ url: "dhis-web-dashboard/#/[A-Za-z0-9]+/print(layout|oipp)" }, { url: "dhis-web-dashboard/#/[A-Za-z0-9]+/edit$", text: "Exit print preview" }],
   },
 
   // The header's apps, an app's home, and one of its reports. The Reporting Rates dashboard answers it too.

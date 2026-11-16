@@ -28,6 +28,8 @@ A fixed set of questions with known right answers, on Haptic's own demo and on r
 | `gitlab` | A public project on GitLab.com (held out, recorded in part) | DevOps platforms | 8 | 23 |
 | `moodle` | Moodle's demo school (held out, recorded in part) | learning systems | 9 | 33 |
 
+Three more held-out guide sets, `horilla`, `dhis2` and `finefoods`, have no case file: they are only run whole. See [Three fresh held-out apps](#three-fresh-held-out-apps).
+
 The real apps are public demos and public sites, used the way a visitor would. On a site other people use, no guide saves, sends or deletes anything. The case files hold what those public pages showed.
 
 Several guide files carry workarounds for faults in the widget as it is today, most of them to do with when it asks for a step: `orangehrm`, `parabank`, `wikipedia`, `backstage`, `ui5` and `toolshop`. They are switched on only while recording. So the single-step cases for those apps show the widget at its best, and the whole-guide runs, which use none of them, show what a visitor gets. The workarounds come out when the widget is fixed.
@@ -250,6 +252,37 @@ These guide files no longer match what the widget sends, and are not recorded ag
 A prompt adjusted until its own test set passes proves little. So part of the benchmark is **held out**: whole apps (`heldOut: true` on the guide set) that the prompt and the widget are never adjusted against.
 
 The rule: look at failures, and change the prompt or the widget because of them, only on the tuned side. Run the held-out side to see whether a change carried over, and read its score, not its misses. Once a held-out miss has been used to make a change, that app is no longer held out, and a new one has to take its place.
+
+### Three fresh held-out apps
+
+Three held-out apps and about 28 guides were too few to trust, and they had been looked at several times. So on 16 November 2026 three more were added by someone working behind a firewall: they could run Haptic on them, and wrote down for the team only totals and how each guide was written. What Haptic does on these apps, run by run, is kept out of this repository and out of every report. Keep it that way: to see whether a change carried over, run them and read the score, and do not open their run files.
+
+| Guide set | App | Stands for | How it is built | Guides run whole |
+|---|---|---|---|---|
+| `horilla` | Horilla HR's public demo | HR systems | drawn on the server (Django, with HTMX swapping parts of a page) | 10 |
+| `dhis2` | DHIS2's public play instance, version 2.41 | the data systems ministries and large NGOs run | a React page for each app, on DHIS2's own component library | 10 |
+| `finefoods` | Refine's Finefoods example admin, Material UI build | internal admin dashboards | a single-page app on Material UI | 10 |
+
+Each set has eleven guides. Ten of two to five steps are run whole: five or six ordinary tasks, one or two questions that ask for a fact shown on another page (passed too by the true answer in words, which is read from the page wherever it can change), one wrong click, one asked in Spanish, French or with typos, and one that stops before a control that deletes. The eleventh asks for something the app cannot do; it has one step, which a whole-guide run skips. Every script was walked in a browser with no model before any run, and each guide's comment names a wrong ending that still fails.
+
+How they were chosen: public demos made for trying the product, whose robots rules and terms do not forbid automated visits, that show no bot check, and that sign in with an account the demo itself publishes (Horilla, DHIS2) or none (Finefoods). Left out for that reason: Odoo, Dolibarr, SuiteCRM, Tryton, Axelor, NocoBase, Leantime, FreeScout, Snipe-IT, Kimai, Invoice Ninja, Nautobot and Refine's other examples (robots forbid them), Ever Gauzy (its terms forbid automated use and benchmarks), MantisBT (its robots rules shut out AI agents), Twenty and UVdesk (a bot check), Krayin (phone verification), NetBox, OpenBoxes, Request Tracker, OpenProject, Plane and Taiga (no published account), Vikunja (strangers change its shared account's language and data), Apache OFBiz (its demos are marked disabled), Vendure (its full demo was down, and its read-only one publishes no account), and Redmine, ERPNext, GLPI, Saleor's dashboard, Bahmni and OpenMRS (did not load). DHIS2 2.42 and later show every app inside a frame, which no script in the page can read, so the 2.41 instance is used; its address names the patch release and moves when a new one replaces it.
+
+Each app's context was built the way a new customer's would be: `npm run tag` with the browser reader, signed in with the demo's account for Horilla and DHIS2, then published (Horilla 21 pages, DHIS2 28, Finefoods 11), so the live and the staging servers both have it. With no case file, a fresh checkout has no copy to run them with: copy each from the store first, as in `npx wrangler kv key get --binding SITES --remote site_bench_horilla > data/sites/site_bench_horilla.json` (and the same for `site_bench_dhis2` and `site_bench_finefoods`).
+
+Results on the staging server (set to Claude Sonnet 5.5), 16 November 2026, each guide run twice:
+
+| | Whole guides that got there | Plausible range |
+|---|---|---|
+| `horilla` | 14/20 | 48-85% |
+| `dhis2` | 17/20 | 64-95% |
+| `finefoods` | 19/20 | 76-99% |
+| **Three fresh apps** | **50/60 (83%)** | **72-91%** |
+
+The 60 runs ended: reached 50, stopped short 4, ran long 6, stalled 0, went in circles 0, cut short 0, error 0. They took 191 model calls.
+
+One test was wrong at first. DHIS2 `export-csv-fr` knew its own third control, Data export, only as a link, and it is an entry in a side menu, so a run that pointed at it would have been stopped there as a control that might write; it now accepts that control by its name, and the guide's two runs were run again. DHIS2 `print-dashboard` also accepts the print preview that edit mode shows, as another good ending.
+
+Read this with care: two runs a guide is few, the ranges are wide, and all three are live demos that other people use and that reset, so the same guide can meet different data another day.
 
 ## Adding a site
 
