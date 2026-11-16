@@ -75,7 +75,7 @@ A crawl turns the site into a **graph**. Each page's title, headings, buttons an
 
 ### Beyond pointing
 
-- **[Answers](docs/answers.md)** (opt-in): replies in words to questions like "what does this do?", drawn from the site's own help articles, with citations. The server, not the prompt, enforces the rules that matter. An answer must cite a real article. Prices, refunds, legal matters and account specifics are never stated. A button an article names is checked against the live page, so out-of-date docs get flagged instead of repeated.
+- **[Answers](docs/answers.md)** (on for a site with help docs): replies in words to questions like "what does this do?", drawn from the site's own help articles, with citations. The server, not the prompt, enforces the rules that matter. An answer must cite a real article. Prices, refunds, legal matters and account specifics are never stated. A button an article names is checked against the live page, so out-of-date docs get flagged instead of repeated.
 - **[What people can't find](docs/corrections.md#what-people-cant-find-and-guide-health)**: the dashboard leads with the questions people gave up on, counted by person, and flags a common question whose guides stopped finishing, which is what a change to the product looks like. The company's team gets an email about it.
 - **[Corrections](docs/corrections.md#point-here-instead)**: when Haptic points at the wrong thing, the company picks the right control on that step in the dashboard, and the fix applies to similar questions from then on. A company can also list controls Haptic must never point at, which the server and the widget both enforce.
 - **[Do it with me](docs/widget.md#do-it-with-me)** (opt-in, per site): on a site that turns it on, a **Do it** button sits beside Send. Haptic clicks, types and chooses on the page while the user watches, lists what it did, and points at the last control, the one that saves, sends or pays, for the user to click. It never presses anything that saves, sends, pays or deletes, never types passwords or payment details, and types only what the user wrote in their question. The user's own click or key pauses it, and Escape stops it. The server checks every action with the same rules as the widget, and a page can turn it off for itself with `data-acting="off"` on the script tag.
@@ -199,7 +199,7 @@ Haptic is in early access. Known limits:
 
 - The command-line crawler reads server-rendered HTML, so pages drawn by JavaScript or behind a login come back thin. The widget still reads every page live, so those sites lean more on notes and docs.
 - Nothing inside a rich-text editor can be pointed at. This is deliberate: the widget reads nothing inside an area the user writes in.
-- Answers is off by default and hasn't yet been benchmarked against a real model.
+- Answers is on for any site with help docs. It has been run against a real model on one app, Northpine: whole guides and a few questions of fact, not its own benchmark of answers (`npm run eval:answers`). A how-to question is guided to the end there as on a site without it ([how](docs/answers.md)).
 - Do it with me is off by default. It does not pick dates yet: a date field is handed to the user.
 - Real apps the prompt and widget were never tuned on score below the ones they were (86% of single steps against 97% on Haptic's own sites), and about half the whole guides on real apps get there.
 
