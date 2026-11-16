@@ -39,6 +39,15 @@ function sources(policy: string, names: string[]): string[] | undefined {
   return undefined;
 }
 
+/**
+ * Each policy the page set. Several headers arrive joined by a comma or a line
+ * break, and no source list holds either. A meta tag holds one policy, which
+ * may run over several lines.
+ */
+export function policiesOf(header: string | undefined, meta: string[]): string[] {
+  return [...(header ? header.split(/[,\n]/) : []), ...meta].map((policy) => policy.trim()).filter(Boolean);
+}
+
 /** Whether every policy allows an inline <style>: 'unsafe-inline' with no nonce or hash beside it, which would switch it off. */
 export function inlineStyleAllowed(policies: string[]): boolean {
   return policies.every((policy) => {
@@ -112,10 +121,10 @@ export async function cspSite(browser: Browser, bundles: Bundles, sweepJs: strin
     }
     const header = opened.headers["content-security-policy"];
     const reportOnly = opened.headers["content-security-policy-report-only"];
-    if (header) result.policy.header = header.slice(0, 1200);
+    if (header) result.policy.header = header.slice(0, 8000);
     if (reportOnly) result.policy.reportOnly = reportOnly.slice(0, 600);
     result.policy.meta = await page.evaluate(META_POLICIES).catch(() => []);
-    const policies = [header, ...result.policy.meta].filter((policy): policy is string => !!policy).flatMap((policy) => policy.split(/[,\n]/));
+    const policies = policiesOf(header, result.policy.meta);
     result.trustedTypes = /require-trusted-types-for/i.test(policies.join(" "));
     result.inlineStyleAllowed = inlineStyleAllowed(policies);
     result.connectAllowedByPolicy = connectAllowed(policies);
