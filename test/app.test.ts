@@ -125,6 +125,8 @@ test("a step carries its guide and whether the visitor strayed, and a bad guide 
   assert.equal(parseTurn({ ...body, guide: GUIDE, offTrack: true })?.guide, GUIDE);
   assert.equal(parseTurn({ ...body, guide: GUIDE, offTrack: true })?.offTrack, true);
   assert.equal(parseTurn({ ...body, guide: "not-a-uuid" })?.guide, undefined);
+  // The widget masks a question of up to 300 characters, which can make it longer. The server takes up to 450.
+  assert.equal(parseTurn({ ...body, goal: "x".repeat(500) })?.goal.length, 450);
   assert.equal(parseTurn({ ...body, offTrack: "yes" })?.offTrack, undefined);
 });
 

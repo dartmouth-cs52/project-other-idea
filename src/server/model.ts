@@ -5,6 +5,7 @@ import type { SiteContext, TurnReply, TurnRequest } from "../shared/types.ts";
 import type { Ceiling } from "./budget.ts";
 import { costOf } from "./prices.ts";
 import { buildSystemPrompt, buildUserMessage } from "./prompt.ts";
+import { checkSay, type Rule } from "./rules.ts";
 
 // One model call per step. HAPTIC_MODEL picks the model, or "mock" for a
 // keyword matcher that needs no API key. The reply is streamed, so the control
@@ -79,8 +80,10 @@ export interface TurnMeasure {
   ms: number;
   /** Until the control to point at was known, which is when the pointer can start moving. */
   msToTarget: number;
-  /** The sentence exactly as the model wrote it, before tidySay. The benchmark compares the two. */
+  /** The sentence exactly as the model wrote it, before it was tidied and checked. The benchmark compares the two. */
   wrote: string;
+  /** The rules in rules.ts that changed the sentence. Empty for nearly every step. */
+  broke: Rule[];
   tokens?: { input: number; cacheRead: number; cacheWrite: number; output: number };
   /** What the step cost, in US dollars, worked out from the tokens. */
   usd: number;
@@ -103,6 +106,12 @@ const TARGET_SO_FAR = /"target"\s*:\s*(?:"([^"]*)"|null)/;
 export function tidySay(say: string): string {
   return say.replace(/[\s}]+$/, "").trimStart();
 }
+
+/** What a visitor reads when every sentence the model wrote had to be dropped. */
+export const SAY_WITHOUT_WORDS = {
+  pointing: "This is the one to use.",
+  nothing: "I can't help with that one.",
+} as const;
 
 /** Thrown for failures the visitor's browser should hear about with a specific status. */
 export class TurnError extends Error {
@@ -165,7 +174,7 @@ export async function measureTurn(
     if (onPage(id)) onTarget?.(id);
   };
 
-  let answer: Omit<TurnMeasure, "ms" | "msToTarget" | "wrote">;
+  let answer: Omit<TurnMeasure, "ms" | "msToTarget" | "wrote" | "broke">;
   if (settings.model === "mock") {
     const reply = mockTurn(request);
     if (mockPauseMs > 0) {
@@ -178,8 +187,11 @@ export async function measureTurn(
   if (!onPage(answer.reply.target)) answer.reply.target = null;
   targetKnown(answer.reply.target);
   const wrote = answer.reply.say;
-  answer.reply.say = tidySay(wrote);
-  return { ...answer, ms: Date.now() - started, msToTarget: msToTarget ?? Date.now() - started, wrote };
+  const { say, broke } = checkSay(tidySay(wrote));
+  // Nothing fit to show was left. The pointer, if there is one, still says where to go.
+  answer.reply.say = say || (answer.reply.target ? SAY_WITHOUT_WORDS.pointing : SAY_WITHOUT_WORDS.nothing);
+  if (broke.length) console.warn(`turn ${site.id} step ${request.step}: the sentence broke the rules for ${broke.join(", ")}.`);
+  return { ...answer, ms: Date.now() - started, msToTarget: msToTarget ?? Date.now() - started, wrote, broke };
 }
 
 /**
@@ -197,7 +209,7 @@ async function claudeTurn(
   request: TurnRequest,
   settings: TurnSettings,
   targetKnown: (id: string | null) => void,
-): Promise<Omit<TurnMeasure, "ms" | "msToTarget" | "wrote">> {
+): Promise<Omit<TurnMeasure, "ms" | "msToTarget" | "wrote" | "broke">> {
   client ??= new Anthropic(apiKey ? { apiKey } : {});
   const messages: Anthropic.Beta.BetaMessageParam[] = request.history.map((turn) => ({ role: turn.role, content: turn.text }));
   // The conversation has to start with a user message.
@@ -267,7 +279,7 @@ async function claudeTurn(
     cacheWrite: usage.cache_creation_input_tokens ?? 0,
     output: usage.output_tokens,
   };
-  if (response.stop_reason === "refusal") return { reply: { target: null, status: "stuck", say: "I can't help with that one." }, model: response.model, tokens, usd };
+  if (response.stop_reason === "refusal") return { reply: { target: null, status: "stuck", say: SAY_WITHOUT_WORDS.nothing }, model: response.model, tokens, usd };
   if (!response.parsed_output) throw new TurnError(502, `The model's reply couldn't be read (stop reason: ${response.stop_reason}).`, usd);
   return { reply: response.parsed_output, model: response.model, tokens, usd };
 }

@@ -163,6 +163,13 @@ export interface GuideReport {
   helped?: boolean;
 }
 
+/**
+ * The longest question the server takes. The ask box holds 300 characters, and
+ * the widget masks what it sends, which can make it longer: "12345" becomes
+ * "[number]". This leaves room for that.
+ */
+export const MAX_ASKED = 450;
+
 /** A question as typed, made comparable: masked, lower case, no punctuation, single spaces. */
 export function questionKey(question: string): string {
   return cleanText(question, 300)
@@ -209,8 +216,12 @@ export function normalizePath(input: string): string {
   return "/" + segments.join("/");
 }
 
+/** A phone number or a long number anywhere in a segment: "415-555-0132", "+14155550132", "2024-001234". Masked like the page's text is. */
+const NUMBER_IN_SEGMENT = /\d{5,}|\+?\d[\d\s().-]{7,}\d/;
+
 function isIdSegment(segment: string): boolean {
   if (/^\d+$/.test(segment)) return true;
+  if (NUMBER_IN_SEGMENT.test(segment)) return true;
   if (UUID.test(segment)) return true;
   if (segment.includes("@")) return true;
   if (/^[0-9a-f]{8,}$/i.test(segment) && /\d/.test(segment)) return true;

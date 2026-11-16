@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { DEFAULT_CACHE, measureTurn, TurnError, type TurnSettings } from "../src/server/model.ts";
+import { DEFAULT_CACHE, measureTurn, tidySay, TurnError, type TurnSettings } from "../src/server/model.ts";
 import { loadCaseFiles, plausibleRange, score, type Case } from "./cases.ts";
 
 // Runs every benchmark case against one or more models and prints how often
@@ -35,8 +35,10 @@ interface Run {
   why: string;
   ms: number;
   msToTarget: number;
-  /** False when the model's sentence had to be tidied before a visitor could be shown it. */
+  /** False when the model's sentence had to be tidied before a visitor could be shown it: stray space or a closing brace at its ends. */
   clean: boolean;
+  /** The rules for a sentence that the model's own sentence broke, like "link" or "length". Part of it was not shown. */
+  broke: string[];
   said: string;
   servedBy: string;
   tokens?: { input: number; cacheRead: number; cacheWrite: number; output: number };
@@ -114,6 +116,7 @@ async function main() {
       "plausible range": `${Math.round(range.low * 100)}-${Math.round(range.high * 100)}%`,
       "status agrees": percent(answered.filter((run) => run.statusAgrees).length, answered.length),
       "clean sentence": percent(answered.filter((run) => run.clean).length, answered.length),
+      "within the rules": percent(answered.filter((run) => run.broke.length === 0).length, answered.length),
       "ms to pointer": middle(answered.map((run) => run.msToTarget).sort((a, b) => a - b), 0.5),
       "typical ms": middle(times, 0.5),
       "slow ms (9 in 10 are faster)": middle(times, 0.9),
@@ -141,12 +144,12 @@ async function runOne(name: string, settings: TurnSettings, item: Case, site: Pa
   try {
     const measure = await measureTurn(site, { ...item.request, site: site.id }, settings);
     const result = score(item, measure.reply);
-    return { ...base, ...result, ms: measure.ms, msToTarget: measure.msToTarget, clean: measure.wrote === measure.reply.say, said: measure.reply.say, servedBy: measure.model, ...(measure.tokens ? { tokens: measure.tokens } : {}) };
+    return { ...base, ...result, ms: measure.ms, msToTarget: measure.msToTarget, clean: tidySay(measure.wrote) === measure.wrote, broke: measure.broke, said: measure.reply.say, servedBy: measure.model, ...(measure.tokens ? { tokens: measure.tokens } : {}) };
   } catch (error) {
     // Bad credentials fail every call the same way, so there's no point going on.
     if (error instanceof TurnError && error.status === 500) throw error;
     const message = error instanceof Error ? error.message : String(error);
-    return { ...base, pass: false, statusAgrees: false, why: "", ms: 0, msToTarget: 0, clean: false, said: "", servedBy: "", error: message };
+    return { ...base, pass: false, statusAgrees: false, why: "", ms: 0, msToTarget: 0, clean: false, broke: [], said: "", servedBy: "", error: message };
   }
 }
 

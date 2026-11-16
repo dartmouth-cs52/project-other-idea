@@ -45,8 +45,9 @@ export class Store {
   /** Each guide's step write still under way in this process, so a report about it can wait for it. */
   private readonly writing = new Map<string, Promise<void>>();
 
-  constructor(url: string) {
-    this.sql = neon(url);
+  /** `connection` is Neon's connection string. A test hands in a stand-in for the query function instead. */
+  constructor(connection: string | NeonQueryFunction<false, false>) {
+    this.sql = typeof connection === "string" ? neon(connection) : connection;
   }
 
   async loadSite(id: string): Promise<SiteContext | undefined> {
@@ -136,7 +137,25 @@ export class Store {
       ]);
     });
     this.track(guide, write);
-    return write;
+    return write.then(() => this.recordCost(guide, request.step, measure));
+  }
+
+  /**
+   * Adds what the step cost to its row. It is a statement of its own, sent
+   * after the step is safely written, because these columns came later
+   * (db/migrations/0004): on a database that does not have them yet this
+   * fails, says so, and the step itself is still there.
+   */
+  private recordCost(guide: string, step: number, measure: TurnMeasure): Promise<void> {
+    const { tokens } = measure;
+    if (!tokens && !measure.broke.length) return Promise.resolve();
+    return this.quietly("record what a step cost (has db/migrations/0004 been applied?)", async () => {
+      await this.sql`
+        update steps set input_tokens = ${tokens?.input ?? null}, cache_read_tokens = ${tokens?.cacheRead ?? null},
+          cache_write_tokens = ${tokens?.cacheWrite ?? null}, output_tokens = ${tokens?.output ?? null},
+          usd = ${tokens ? measure.usd : null}, broke = ${measure.broke}
+        where guide_id = ${guide} and n = ${step}`;
+    });
   }
 
   /** Notes a write under way for a guide, after any already under way, so a report can wait for all of them. */
