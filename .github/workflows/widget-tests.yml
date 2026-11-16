@@ -41,9 +41,13 @@ jobs:
 
       - run: npm ci
 
-      - name: Install a browser for this run
+      # The acting engine's tests also run on pages built from the real React,
+      # Radix and cmdk (test/widget/act/fixtures). They are not dependencies of
+      # the project, so they come in with the browser, in the same install:
+      # a second install with --no-save would take the first one's away.
+      - name: Install a browser, and the libraries some test pages are built from
         run: |
-          npm install --no-save playwright
+          npm install --no-save playwright react@19 react-dom@19 radix-ui@1 cmdk@1
           npx playwright install --with-deps chromium
 
       - run: npm run test:widget

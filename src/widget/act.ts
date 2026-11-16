@@ -847,7 +847,7 @@ function highlighted(option: Element, active: Element | undefined): boolean {
   if (active && (active === option || option.contains(active))) return true;
   const pointedAt = active?.getAttribute("aria-activedescendant");
   if (pointedAt && option.id && pointedAt === option.id) return true;
-  if (option.hasAttribute("data-highlighted") || option.getAttribute("data-selected") === "true" || option.hasAttribute("data-focus")) return true;
+  if (flagged(option, "data-highlighted") || option.getAttribute("data-selected") === "true" || flagged(option, "data-focus")) return true;
   return Array.from(option.classList).some((token) => /(?:^|[-_])(?:focused|active|highlighted)$/i.test(token));
 }
 
@@ -964,9 +964,15 @@ function hasBox(el: Element): boolean {
 /** A class word that marks something as disabled, in the way most toolkits write it: "is-disabled", "Mui-disabled", "option-disabled". */
 const DISABLED_TOKEN = /(?:^|[-_]|is)disabled$/i;
 
+/** Whether a data- attribute says yes: present and empty, as Radix writes it, or "true", as cmdk writes it. cmdk writes "false" on every item that is not. */
+function flagged(el: Element, name: string): boolean {
+  const value = el.getAttribute(name);
+  return value !== null && value !== "false";
+}
+
 function disabled(el: Element): boolean {
   for (let at: Element | null = el, depth = 0; at && depth < 3; at = at.parentElement, depth++) {
-    if (at.getAttribute("aria-disabled") === "true" || at.hasAttribute("data-disabled") || (at as HTMLButtonElement).disabled === true) return true;
+    if (at.getAttribute("aria-disabled") === "true" || flagged(at, "data-disabled") || (at as HTMLButtonElement).disabled === true) return true;
     if (Array.from(at.classList).some((token) => DISABLED_TOKEN.test(token))) return true;
   }
   return false;
