@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { chips, HAS_WEB, labels, openSetup, siteState, startFlow, toggle, type Flow, type State } from "./setup-harness.ts";
+import { chips, HAS_WEB, labels, openSetup, ORIGIN, SITE, siteState, startFlow, toggle, type Flow, type State } from "./setup-harness.ts";
 
 // The setup screens, end to end in a browser against a stand-in Worker that
 // keeps what is saved: what "Never touch" saves, changing the address, a save
@@ -95,6 +95,47 @@ describe("the setup screens in chromium", { skip: HAS_WEB ? false : "web/node_mo
       assert.equal(await page.getByLabel("Your app's address").inputValue(), "www.example.com", "still on the address, with what they typed");
       assert.deepEqual(deletes(), []);
       assert.equal(state.site.origin, "https://app.example.com");
+      await page.close();
+    });
+
+    test("pages still being read from the old address are stopped, never shown, and the new address is read", async () => {
+      const reading = (read: number, done: boolean, titles: string[]) => ({
+        read, max: 30, done, failed: 0, thin: 0, via: "browser", controls: 0, signIn: 0, risky: [],
+        pages: titles.map((title, index) => ({ path: index ? `/${title.split(" ").pop()}` : "/", title, controls: 9 })),
+      });
+      state = siteState({ setup: { step: "reading" }, reading: reading(1, false, ["Old site home"]) });
+      // The old address's next batch: finished, with the old site's pages, and slow, so it is still on its way when the address changes.
+      let release = () => {};
+      const slow = new Promise<void>((resolve) => (release = resolve));
+      state.reply = (method, path) => {
+        if (path !== `/sites/${SITE}/read`) return undefined;
+        if (state.site.origin === ORIGIN) return slow.then(() => [200, reading(3, true, ["Old site home", "Old site pricing", "Old site docs"])]);
+        return Promise.resolve([200, reading(2, true, ["New site home", "New site start"])]);
+      };
+      const reads = () => state.calls.filter((call) => call.path === `/sites/${SITE}/read`);
+      const page = await openSetup(flow);
+      await page.waitForFunction(() => document.body.textContent?.includes("Old site home"));
+      assert.equal(reads().length, 1, "the old address's batch is on its way");
+
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await page.getByLabel("Your app's address").fill("www.other-product.example");
+      await page.keyboard.press("Enter");
+      await page.getByText("public pages of www.other-product.example").waitFor();
+      // From here on, anything from the old site on the screen is noted.
+      // A string, as tsx would otherwise name the function with a helper the page doesn't have.
+      await page.evaluate(`{
+        const seen = (window.__old = []);
+        const look = () => document.body.textContent.includes("Old site") && seen.push(document.body.textContent);
+        look();
+        new MutationObserver(look).observe(document.body, { subtree: true, childList: true, characterData: true });
+      }`);
+      release();
+      await page.waitForTimeout(1500);
+      assert.deepEqual(await page.evaluate(() => (window as unknown as { __old: string[] }).__old), [], "nothing from the old site shows");
+      await page.getByText("New site start").waitFor({ timeout: 5000 });
+      assert.equal(reads()[0]?.aborted, true, "the old address's read was stopped");
+      const changed = state.calls.findIndex((call) => call.method === "PUT" && call.path.endsWith("/address"));
+      assert.ok(reads().some((call) => state.calls.indexOf(call) > changed), "the new address was read");
       await page.close();
     });
   });

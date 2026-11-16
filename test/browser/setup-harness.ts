@@ -81,10 +81,12 @@ export interface Control {
 /** What the stand-in Worker holds and answers with. Tests change it, and read what was sent. */
 export interface State {
   site: Record<string, unknown> & { blocked: Control[]; setup: Record<string, unknown> | null; origin: string; allowedOrigins: string[]; origins: unknown[] };
-  /** Every request to /api/app, in order. */
-  calls: { method: string; path: string; body: unknown }[];
+  /** Every request to /api/app, in order, and whether the page gave up on it before it was answered. */
+  calls: { method: string; path: string; body: unknown; aborted?: boolean }[];
   /** Answers to force, by "METHOD /path": a status, with the body's error. */
   fail: Record<string, number>;
+  /** A test's own answer, which may take as long as the test likes. Undefined leaves it to the stand-in. */
+  reply?: (method: string, path: string, body: Record<string, unknown>) => Promise<[number, unknown]> | undefined;
 }
 
 const risky = [
@@ -174,10 +176,17 @@ export async function startFlow(state: () => State): Promise<Flow> {
       request.on("end", () => {
         const body = text ? (JSON.parse(text) as Record<string, unknown>) : {};
         const path = url.pathname.slice("/api/app".length).replace(/\/$/, "");
-        state().calls.push({ method: request.method ?? "GET", path, body });
-        const [status, out] = answer(state(), request.method ?? "GET", path, body);
-        response.writeHead(status, { "content-type": "application/json" });
-        response.end(JSON.stringify(out));
+        const method = request.method ?? "GET";
+        const call: State["calls"][number] = { method, path, body };
+        state().calls.push(call);
+        response.on("close", () => {
+          if (!response.writableFinished) call.aborted = true;
+        });
+        void Promise.resolve(state().reply?.(method, path, body) ?? answer(state(), method, path, body)).then(([status, out]) => {
+          if (response.destroyed) return;
+          response.writeHead(status, { "content-type": "application/json" });
+          response.end(JSON.stringify(out));
+        });
       });
       return;
     }

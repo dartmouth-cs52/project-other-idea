@@ -147,6 +147,8 @@ export function SetupFlow() {
       }
       if (current) {
         await api(`/sites/${current.id}/address`, { method: "PUT", body: { url } });
+        // What is still being read is the old address's. Stop it, and read the new one.
+        pages.addressChanged();
         await load();
         go("reading");
         return;
