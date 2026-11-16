@@ -240,17 +240,33 @@ const COUNTS = `
   from developer_emails e
   where e.sent_at > now() - interval '1 day' and (e.recipient = $1 or e.company_id = $3 or e.sender = $4)`;
 
+/** How long a press left pending waits before it may be tried again, once. Longer than any request to Resend takes. */
+const PENDING_RETRY_AFTER = "1 minute";
+
+/** A press already counted: sent, or pending and maybe being sent right now. */
+interface Press {
+  state: "pending" | "sent";
+}
+
+async function pressOf(sql: Sql, key: string): Promise<Press | undefined> {
+  return ((await sql.query(`select state from developer_emails where key = $1`, [key])) as Press[])[0];
+}
+
 /**
  * Emails the install steps to a developer. Only someone signed in to the
  * company that owns the site gets here. In any 24 hours one mailbox gets at
  * most 3, a site sends 10, a company 20 and one person 10, counted in their
  * own table so deleting a site doesn't reset them.
  *
- * The browser makes a key for each press of Send. It is hashed with the site
- * and the mailbox, so a key sent again with another address is a new email,
- * held to every limit, and only a true retry, the same press to the same
- * address, is let past them. Resend holds the key for a day, so a retry is
- * answered as the first try was, without a second email.
+ * The browser makes a key for each press of Send, hashed here with the site
+ * and the mailbox, so the same key with another address is another email, held
+ * to every limit. A press is counted as pending before it goes to Resend, and
+ * marked sent once Resend has it. A retry of a press already sent is answered
+ * from that record and never goes to Resend. Only the request that counted an
+ * email may take it off the count, and only when its own send failed. A press
+ * left pending, by a request cut off between counting and sending, may be
+ * tried once more after a minute, with the same key, so Resend sends it only
+ * if the first never reached it. Whatever happens then, it stays counted.
  */
 async function emailDeveloper(call: SetupRequest, id: string, input: Record<string, unknown>): Promise<Answer> {
   const { sql, org, user, env } = call;
@@ -275,9 +291,12 @@ async function emailDeveloper(call: SetupRequest, id: string, input: Record<stri
   const mailbox = mailboxOf(checked.email);
   const recipient = await hashOf(`mailbox ${mailbox}`);
   const key = await hashOf(`press ${input.key} ${site.id} ${mailbox}`);
+  const sentAnswer: Answer = { status: 200, body: { sent: true, to: checked.email } };
+  /** True when this request counted the email, and so may take it off if its own send fails. */
+  let counted = false;
   try {
-    const seen = await sql.query(`select 1 from developer_emails where key = $1`, [key]);
-    if (!seen.length) {
+    let press = await pressOf(sql, key);
+    if (!press) {
       // Said plainly first. Then checked again as the row is written, after taking the locks for this
       // company and this mailbox, so presses at the same moment, here or at another company, take turns.
       const counts = ((await sql.query(`select ${COUNTS}`, [recipient, site.id, org.id, user.id]))[0] ?? {}) as Counts;
@@ -295,7 +314,21 @@ async function emailDeveloper(call: SetupRequest, id: string, input: Record<stri
           [recipient, site.id, org.id, user.id, key, EMAILS_PER_ADDRESS, EMAILS_PER_SITE, EMAILS_PER_COMPANY, EMAILS_PER_PERSON],
         ),
       ]);
-      if (!(kept as unknown[]).length) return refuse(429, "Too many emails at once. Wait a moment and try again.");
+      counted = (kept as unknown[]).length > 0;
+      // Not written: a limit was reached meanwhile, or the same press got there first.
+      if (!counted) press = await pressOf(sql, key);
+      if (!counted && !press) return refuse(429, "Too many emails at once. Wait a moment and try again.");
+    }
+    if (!counted) {
+      if (press!.state === "sent") return sentAnswer;
+      // Pending: being sent by another request right now, or left by one cut off before it heard back.
+      const claimed = await sql.query(
+        `update developer_emails set retried = true
+        where key = $1 and state = 'pending' and not retried and sent_at < now() - interval '${PENDING_RETRY_AFTER}'
+        returning key`,
+        [key],
+      );
+      if (!claimed.length) return refuse(409, `This email is on its way, or may have gone already. If it doesn't arrive, ${COPY_INSTEAD.charAt(0).toLowerCase()}${COPY_INSTEAD.slice(1)}`);
     }
   } catch (error) {
     if (!notMigrated(error)) throw error;
@@ -305,15 +338,21 @@ async function emailDeveloper(call: SetupRequest, id: string, input: Record<stri
 
   const sent = await sendEmail(env, email, `developer-email/${site.id}/${key}`, call.fetcher ?? ((input, init) => fetch(input, init)));
   // 409: Resend has a request with this key already, which only an email already handed over can have made.
-  // Bound to the address as the key is, that was this email, so it went: it stays counted and is said to have gone.
-  if (!sent.ok && sent.status === 409) console.log("Resend already has this install email.", sent.detail);
-  else if (!sent.ok) {
-    console.error("The install email was not sent:", sent.status, sent.detail);
-    // Nothing went out, so it doesn't count against the day's emails.
-    await sql.query(`delete from developer_emails where key = $1`, [key]).catch((error: Error) => console.error("Could not take back the unsent email:", error.message));
-    const why = sent.status === 0 ? "The email service could not be reached." : `The email service turned it down, with status ${sent.status}.`;
-    return refuse(502, `${why} ${COPY_INSTEAD}`);
+  // Bound to the address as the key is, that was this email, so it went.
+  if (sent.ok || sent.status === 409) {
+    if (sent.ok) console.log("Sent an install email.", sent.id);
+    else console.log("Resend already has this install email.", sent.detail);
+    await sql.query(`update developer_emails set state = 'sent' where key = $1`, [key]).catch((error: Error) => console.error("Could not mark the install email sent:", error.message));
+    return sentAnswer;
   }
-  if (sent.ok) console.log("Sent an install email.", sent.id);
-  return { status: 200, body: { sent: true, to: checked.email } };
+  console.error("The install email was not sent:", sent.status, sent.detail);
+  // This request counted it and its own send failed, so nothing went out: it comes off the count. A retry of a
+  // press another request counted never takes it off, whatever Resend says, because that one may have gone.
+  if (counted) {
+    await sql
+      .query(`delete from developer_emails where key = $1 and state = 'pending' and not retried`, [key])
+      .catch((error: Error) => console.error("Could not take back the unsent email:", error.message));
+  }
+  const why = sent.status === 0 ? "The email service could not be reached." : `The email service turned it down, with status ${sent.status}.`;
+  return refuse(502, `${why} ${COPY_INSTEAD}`);
 }

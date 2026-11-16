@@ -212,7 +212,8 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     assert.match(idempotency ?? "", new RegExp(`^developer-email/${SITE}/[0-9a-f]{32}$`), "the press's key, bound to the site and the address");
     assert.ok(!idempotency?.includes("press-0001"));
     const [row] = await rows();
-    assert.deepEqual(Object.keys(row!).sort(), ["company_id", "key", "recipient", "sender", "sent_at", "site_id"]);
+    assert.deepEqual(Object.keys(row!).sort(), ["company_id", "key", "recipient", "retried", "sender", "sent_at", "site_id", "state"]);
+    assert.equal((row as unknown as { state: string }).state, "sent");
     assert.equal(row!.site_id, SITE);
     assert.equal(row!.company_id, ORG.id);
     assert.equal(row!.sender, USER.id);
@@ -266,13 +267,12 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     assert.ok(text.includes(`<script src="https://widget.joinhaptic.com/widget.js" data-site="${SITE}" async></script>`));
   });
 
-  test("a retry of the same press sends the same request to Resend, which sends once, and counts once", async () => {
+  test("a retry of the same press is told it was sent, from the record, and counts once", async () => {
     reset();
     const { sent, fetcher } = resend();
     await call(sql(), { to: "dev@example.com", key: "press-0002" }, { fetcher });
-    assert.equal((await call(sql(), { to: "dev@example.com", key: "press-0002" }, { fetcher }))?.status, 200);
-    assert.equal(sent.length, 2);
-    assert.equal(sent[1]!.idempotency, sent[0]!.idempotency);
+    assert.deepEqual(await call(sql(), { to: "dev@example.com", key: "press-0002" }, { fetcher }), { status: 200, body: { sent: true, to: "dev@example.com" } });
+    assert.equal(sent.length, 1, "Resend is asked once");
     assert.equal((await rows()).length, 1);
   });
 
@@ -286,6 +286,100 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     }
     assert.equal(resend.delivered.filter((to) => to === "victim@example.org").length, EMAILS_PER_ADDRESS);
     assert.ok(resend.delivered.length <= EMAILS_PER_SITE, `${resend.delivered.length} delivered from one site`);
+  });
+
+  /** Resend, counting requests, that refuses any key it has had before, as it may when the team is over its rate. */
+  function refusesRepeats() {
+    const delivered: string[] = [];
+    const keys = new Set<string>();
+    let requests = 0;
+    const fetcher = async (_url: string, init?: RequestInit) => {
+      requests++;
+      const key = new Headers(init?.headers).get("idempotency-key") ?? "";
+      if (keys.has(key)) return Response.json({ statusCode: 429, name: "rate_limit_exceeded", message: "Too many requests." }, { status: 429 });
+      keys.add(key);
+      delivered.push((JSON.parse(String(init?.body)) as { to: string[] }).to[0]!);
+      return Response.json({ id: `email_${delivered.length}` });
+    };
+    return { delivered, fetcher, requests: () => requests };
+  }
+  const counted = async () => Number((await sql().query(`select count(*)::int as n from developer_emails`))[0]!.n);
+  /** Resend that never answers: the request that counted the email stops there, as a Worker cut off mid-request would. */
+  const hangs = () => new Promise<Response>(() => {});
+  const until = async (done: () => Promise<boolean>) => {
+    for (let i = 0; i < 100 && !(await done()); i++) await new Promise((resolve) => setTimeout(resolve, 50));
+  };
+
+  test("a retry of a delivered press is answered from the record, so a refused retry can't take the email off the count", async () => {
+    reset();
+    const resend = refusesRepeats();
+    for (let round = 0; round < 25; round++) {
+      const key = `retry-press-${String(round).padStart(4, "0")}`;
+      await call(sql(), { to: "victim@example.org", key }, { fetcher: resend.fetcher });
+      const again = await call(sql(), { to: "victim@example.org", key }, { fetcher: resend.fetcher });
+      if (round < EMAILS_PER_ADDRESS) assert.deepEqual(again, { status: 200, body: { sent: true, to: "victim@example.org" } }, "a retry of a press that went is told it went");
+    }
+    assert.equal(resend.delivered.length, EMAILS_PER_ADDRESS);
+    assert.equal(await counted(), EMAILS_PER_ADDRESS, "every email that went is still counted");
+    assert.equal(resend.requests(), EMAILS_PER_ADDRESS, "no retry reached Resend");
+  });
+
+  test("forty retries at once after each email change nothing", async () => {
+    reset();
+    const resend = refusesRepeats();
+    for (let round = 0; round < 6; round++) {
+      const key = `burst-press-${String(round).padStart(4, "0")}`;
+      await call(sql(), { to: "victim@example.org", key }, { fetcher: resend.fetcher });
+      await Promise.all(Array.from({ length: 40 }, () => call(sql(), { to: "victim@example.org", key }, { fetcher: resend.fetcher })));
+    }
+    assert.equal(resend.delivered.length, EMAILS_PER_ADDRESS);
+    assert.equal(await counted(), EMAILS_PER_ADDRESS);
+    assert.equal(resend.requests(), EMAILS_PER_ADDRESS);
+  });
+
+  test("one press sent sixty times makes one request to Resend", async () => {
+    reset();
+    const resend = refusesRepeats();
+    const answers = [];
+    for (let i = 0; i < 60; i++) answers.push((await call(sql(), { to: "dev@example.com", key: "one-press-0001" }, { fetcher: resend.fetcher }))?.status);
+    assert.ok(answers.every((status) => status === 200));
+    assert.equal(resend.requests(), 1);
+    assert.equal(await counted(), 1);
+  });
+
+  test("a press left half done, as by a crash between counting and sending, is retried once and only after a wait, and counts either way", async () => {
+    reset();
+    const { sent, fetcher } = resend();
+    const press = { to: "dev@example.com", key: "crashed-press-01" };
+    // The first request counted the email and stopped before it heard from Resend.
+    void call(sql(), press, { fetcher: hangs });
+    await until(async () => (await counted()) === 1);
+    const [row] = (await sql().query(`select state from developer_emails`)) as { state: string }[];
+    assert.equal(row?.state, "pending");
+    // Straight away: it may still be going, so nothing is sent again.
+    const soon = await call(sql(), press, { fetcher });
+    assert.equal(soon?.status, 409);
+    assert.equal(sent.length, 0);
+    // After the wait, once: the same request to Resend, which sends it if the first never got there.
+    exec(DB, `update developer_emails set sent_at = now() - interval '2 minutes'`);
+    assert.deepEqual(await call(sql(), press, { fetcher }), { status: 200, body: { sent: true, to: "dev@example.com" } });
+    assert.equal(sent.length, 1);
+    assert.equal(((await sql().query(`select state from developer_emails`))[0] as { state: string }).state, "sent");
+    assert.equal((await call(sql(), press, { fetcher }))?.status, 200);
+    assert.equal(sent.length, 1, "and from then on it is answered from the record");
+  });
+
+  test("a retry of a half-done press that Resend refuses leaves it counted, and it isn't tried again", async () => {
+    reset();
+    const press = { to: "dev@example.com", key: "crashed-press-02" };
+    void call(sql(), press, { fetcher: hangs });
+    await until(async () => (await counted()) === 1);
+    exec(DB, `update developer_emails set sent_at = now() - interval '2 minutes'`);
+    const refused = resend(500);
+    assert.equal((await call(sql(), press, { fetcher: refused.fetcher }))?.status, 502);
+    assert.equal(await counted(), 1, "only the request that counted an email may take it off");
+    assert.equal((await call(sql(), press, { fetcher: refused.fetcher }))?.status, 409);
+    assert.equal(refused.sent.length, 1, "retried once, never again");
   });
 
   test("Resend answering 409 for a key it has seen means the email went, so it stays counted and the person is told it was sent", async () => {

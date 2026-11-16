@@ -18,7 +18,12 @@ create table developer_emails (
   -- The Neon Auth user id of the person who pressed Send.
   sender text not null,
   recipient text not null,
-  sent_at timestamptz not null default now()
+  -- When Send was pressed.
+  sent_at timestamptz not null default now(),
+  -- Pending from the moment it is counted until Resend takes it, then sent. A row left pending, by a
+  -- request cut off between the two, may be tried again once, after a minute. Either way it counts.
+  state text not null default 'pending' check (state in ('pending', 'sent')),
+  retried boolean not null default false
 );
 create index developer_emails_company on developer_emails (company_id, sent_at);
 create index developer_emails_recipient on developer_emails (recipient, sent_at);
