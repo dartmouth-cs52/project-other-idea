@@ -69,34 +69,36 @@ export function DeveloperEmail({ siteId, installLink }: { siteId: string; instal
 
   return (
     <div className="flex flex-col gap-3" data-developer-email={state.kind}>
-      <form onSubmit={send} noValidate className="flex flex-col gap-2 sm:flex-row sm:items-start">
-        <div className="flex flex-1 flex-col gap-2">
-          <Label htmlFor={`developer-${siteId}`}>Email it to my developer</Label>
-          <Input
-            id={`developer-${siteId}`}
-            type="email"
-            inputMode="email"
-            autoComplete="off"
-            placeholder="developer@company.com"
-            value={to}
-            onChange={(event) => {
-              setTo(event.target.value);
-              setFieldError(null);
-            }}
-            aria-invalid={fieldError ? true : undefined}
-            aria-describedby={fieldError ? `developer-${siteId}-error` : undefined}
-            className="h-11 bg-card px-3.5 md:text-base"
-          />
-          {fieldError && (
-            <p id={`developer-${siteId}-error`} className="text-[13px] leading-5 text-destructive">
-              {fieldError}
-            </p>
-          )}
+      <form onSubmit={send} noValidate className="flex flex-col gap-2">
+        <Label htmlFor={`developer-${siteId}`}>Email it to my developer</Label>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+          <div className="flex flex-1 flex-col gap-2">
+            <Input
+              id={`developer-${siteId}`}
+              type="email"
+              inputMode="email"
+              autoComplete="off"
+              placeholder="developer@company.com"
+              value={to}
+              onChange={(event) => {
+                setTo(event.target.value);
+                setFieldError(null);
+              }}
+              aria-invalid={fieldError ? true : undefined}
+              aria-describedby={fieldError ? `developer-${siteId}-error` : undefined}
+              className="h-11 bg-card px-3.5 md:text-base"
+            />
+            {fieldError && (
+              <p id={`developer-${siteId}-error`} className="text-[13px] leading-5 text-destructive">
+                {fieldError}
+              </p>
+            )}
+          </div>
+          <Button type="submit" size="xl" variant="secondary" disabled={state.kind === "sending"}>
+            <Send />
+            {state.kind === "sending" ? "Sending" : "Send"}
+          </Button>
         </div>
-        <Button type="submit" size="xl" variant="secondary" disabled={state.kind === "sending"} className="sm:mt-6">
-          <Send />
-          {state.kind === "sending" ? "Sending" : "Send"}
-        </Button>
       </form>
       {state.kind === "failed" && (
         <div className="flex flex-col gap-3">

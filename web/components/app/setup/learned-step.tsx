@@ -67,7 +67,7 @@ export function LearnedStep({ site, pages, onChange, onBack, onNext }: { site: S
     read === 0
       ? `Haptic couldn't read the public pages of ${host}. It learns each page from the live page once the script is on, so guides still work.`
       : `It read ${read} ${read === 1 ? "page" : "pages"} on ${host} and found ${(reading?.controls ?? 0).toLocaleString()} buttons, links and fields.${
-          reading?.signIn ? ` ${reading.signIn} ${reading.signIn === 1 ? "page looks" : "pages look"} like ${reading.signIn === 1 ? "it needs" : "they need"} sign-in. Haptic learns those from the live page once the script is on, with no password.` : ""
+          reading?.signIn ? ` Haptic learns the ${reading.signIn === 1 ? "page that needs" : `${reading.signIn} pages that need`} sign-in from the live page once the script is on, with no password.` : ""
         }`;
 
   return (
@@ -131,12 +131,12 @@ export function LearnedStep({ site, pages, onChange, onBack, onNext }: { site: S
                   onClick={() => toggle(item)}
                   className={cn(
                     "inline-flex h-9 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                    on ? "border-primary bg-primary text-primary-foreground" : "bg-card text-foreground hover:bg-muted",
+                    on ? "border-foreground/40 bg-card text-foreground" : "border-dashed bg-transparent text-muted-foreground hover:bg-muted",
                   )}
                 >
-                  {on ? <Check className="size-4" /> : <Plus className="size-4 text-muted-foreground" />}
+                  {on ? <Check className="size-4" /> : <Plus className="size-4" />}
                   {item.label}
-                  {item.path && <span className={cn("font-normal", on ? "text-primary-foreground/70" : "text-muted-foreground")}>{item.path}</span>}
+                  {item.path && <span className="font-normal text-muted-foreground">{item.path}</span>}
                 </button>
               </li>
             );

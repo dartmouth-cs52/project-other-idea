@@ -20,6 +20,7 @@ export function InstallOptions({ scriptUrl, siteId, live }: { scriptUrl: string;
   return (
     <div className="flex flex-col gap-4">
       <AgentPill siteId={siteId} live={live} />
+      <h3 className="pt-2 text-base font-medium">Or add it yourself</h3>
       <div role="tablist" aria-label="Where your site is built" className="flex flex-wrap gap-2">
         {options.map((item) => (
           <button

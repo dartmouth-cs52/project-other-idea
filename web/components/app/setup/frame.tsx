@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { CornerDownLeft } from "lucide-react";
-import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { stepLabel, type SetupStepId } from "@/lib/setup";
 
@@ -39,8 +38,8 @@ export function StepFrame({
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-3">
         <p className="text-sm font-medium text-muted-foreground">{stepLabel(step)}</p>
-        <h1 ref={heading} tabIndex={-1} className="flex items-center gap-3 text-4xl font-medium tracking-[-0.03em] text-balance outline-none">
-          {mark}
+        <h1 ref={heading} tabIndex={-1} className="flex items-start gap-3 text-4xl font-medium tracking-[-0.03em] text-balance outline-none">
+          {mark && <span className="flex h-10 shrink-0 items-center">{mark}</span>}
           <span>{title}</span>
         </h1>
         {lead && <div className="max-w-[60ch] text-lg leading-7 text-pretty text-muted-foreground">{lead}</div>}
@@ -58,9 +57,11 @@ export function Primary({ children, onClick, disabled, type = "button", classNam
       <Button type={type} size="xl" onClick={onClick} disabled={disabled} data-setup-primary className={className}>
         {children}
       </Button>
-      <span className={cn("hidden items-center gap-1.5 text-sm text-muted-foreground sm:inline-flex", disabled && "invisible")} aria-hidden>
-        press Enter <CornerDownLeft className="size-3.5" />
-      </span>
+      {!disabled && (
+        <span className="hidden items-center gap-1.5 text-sm text-muted-foreground sm:inline-flex" aria-hidden>
+          press Enter <CornerDownLeft className="size-3.5" />
+        </span>
+      )}
     </>
   );
 }

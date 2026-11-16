@@ -22,11 +22,14 @@ export function useSetupReading(site: SetupSite | null) {
       busy.current = true;
       setStalled(false);
       try {
-        for (let round = 0; round < 25; round++) {
+        let done = false;
+        for (let round = 0; round < 25 && !done; round++) {
           const next = await api<SetupReading | null>(`/sites/${siteId}/read`, { method: "POST", body: restart && round === 0 ? { restart: true } : {} });
           setReading(next);
-          if (!next || next.done) break;
+          done = !next || next.done;
         }
+        // Out of rounds with pages still to read: say so, rather than seem to read for ever.
+        if (!done) setStalled(true);
       } catch {
         setStalled(true);
       } finally {

@@ -102,9 +102,9 @@ export function ReadingStep({ origin, pages, onBack, onNext }: { origin: string;
         </>
       }
     >
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 divide-x rounded-xl border bg-muted">
         <Count label={list.shown === 1 ? "page read" : "pages read"} value={list.shown} />
-        <Count label="buttons, links and fields" value={controlsShown} />
+        <Count label="controls found" value={controlsShown} />
         <Count label="need sign-in" value={reading?.signIn ?? 0} />
       </div>
 
@@ -137,7 +137,7 @@ export function ReadingStep({ origin, pages, onBack, onNext }: { origin: string;
 
 function Count({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-xl border bg-muted p-4">
+    <div className="flex min-w-0 flex-col gap-1 px-3 py-3 sm:px-5 sm:py-4">
       <span className="text-2xl font-medium tracking-[-0.02em] tabular-nums">{value.toLocaleString()}</span>
       <span className="text-sm leading-5 text-muted-foreground">{label}</span>
     </div>
@@ -182,7 +182,8 @@ function PageList({ paths, reading, waiting }: { paths: string[]; reading: Setup
   }, [paths.length]);
 
   return (
-    <div ref={box} className="relative max-h-[264px] min-h-[176px] overflow-y-auto rounded-xl border bg-card" data-reading-list>
+    // Six rows and the room under the last one for the pointer, so the list always scrolls by whole rows.
+    <div ref={box} className="relative max-h-[276px] min-h-[188px] overflow-y-auto rounded-xl border bg-card" data-reading-list>
       <ul className="relative pb-3">
         {paths.map((path, index) => {
           const page = byPath.get(path);

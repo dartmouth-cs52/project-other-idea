@@ -148,7 +148,7 @@ export function SetupFlow() {
           <Pointer className="size-[22px]" />
           {brand.name}
         </a>
-        {siteId && step && step !== "address" ? (
+        {current?.connected && step === "connect" ? null : siteId && step && step !== "address" ? (
           <Button variant="ghost" size="lg" onClick={later}>
             Finish later
           </Button>

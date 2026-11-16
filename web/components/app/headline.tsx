@@ -117,11 +117,12 @@ function Tile({ label, value, empty = "None yet", note, change }: { label: strin
   const Icon = change?.direction === "up" ? ArrowUpRight : change?.direction === "down" ? ArrowDownRight : Minus;
   return (
     <div className="flex min-w-0 flex-col gap-2 rounded-xl border bg-muted p-6" data-metric={label}>
-      <span className="text-sm font-medium text-muted-foreground">{label}</span>
+      {/* Two lines kept for the label, so the numbers line up across the row when one label wraps. */}
+      <span className="text-sm font-medium text-muted-foreground sm:min-h-10">{label}</span>
       {value === null ? <span className="text-2xl font-medium tracking-[-0.02em] text-muted-foreground">{empty}</span> : <span className="text-4xl font-medium tracking-[-0.03em]">{value}</span>}
       {change && (
-        <span className="flex items-center gap-1 text-sm text-foreground">
-          <Icon className="size-4 shrink-0" aria-hidden />
+        <span className="flex items-start gap-1 text-sm text-foreground">
+          <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
           {change.text}
         </span>
       )}
