@@ -177,8 +177,12 @@ const DOC_BODY: BodyLimit = {
 const SITE_BODY: BodyLimit = { max: MAX_NOTES * 2 + 4_000, message: `Notes can be up to ${MAX_NOTES.toLocaleString()} characters.`, field: "notes" };
 
 async function body(request: Request, limit: BodyLimit = ANY_BODY): Promise<Record<string, unknown>> {
-  const text = await request.text();
-  if (text.length > limit.max) throw new Refusal(413, limit.message, limit.field);
+  // The limit is in characters, which are only known once decoded. A character is at most three bytes of UTF-8
+  // (one outside the BMP is four bytes but two characters), so a body over three bytes a character is too long
+  // whatever it holds, and is refused before it is read in full. A byte order mark adds three bytes that decode
+  // to nothing, but a JSON object's braces take one byte each, so a body that could be accepted still fits.
+  const text = await textUpTo(request, limit.max * 3);
+  if (text === undefined || text.length > limit.max) throw new Refusal(413, limit.message, limit.field);
   try {
     const value = JSON.parse(text || "{}");
     if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
@@ -186,6 +190,32 @@ async function body(request: Request, limit: BodyLimit = ANY_BODY): Promise<Reco
     // Falls through to the refusal.
   }
   throw new Refusal(400, "That was not valid JSON.");
+}
+
+/**
+ * The body as text, or undefined once it is longer than `maxBytes`. `request.text()` would read the whole
+ * body into memory first, and a client can send up to Cloudflare's request limit, far more than a Worker has.
+ * So a declared length that is too long is refused before reading, and the rest are counted as they arrive,
+ * which also covers chunked bodies with no length given.
+ */
+async function textUpTo(request: Request, maxBytes: number): Promise<string | undefined> {
+  if (Number(request.headers.get("content-length")) > maxBytes) return undefined;
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return text + decoder.decode();
+    bytes += value.byteLength;
+    if (bytes > maxBytes) {
+      // Not awaited: the refusal doesn't depend on it, and the rest of the body is never read.
+      reader.cancel().catch(() => {});
+      return undefined;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
 }
 
 // Who is signed in -----------------------------------------------------------
