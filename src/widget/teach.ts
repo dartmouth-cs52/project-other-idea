@@ -120,8 +120,11 @@ export async function startTeaching(api: string, site: string, fresh: string | u
       const claim = newTeachToken();
       const answer = TEACH_TOKEN.test(fresh) ? await call(api, "/v1/teach/claim", { site, token: fresh, claim }) : undefined;
       if (answer?.ok && typeof answer.data.question === "string") {
-        held = { token: fresh, claim, question: answer.data.question, expiresAt: String(answer.data.expiresAt ?? ""), steps: [] };
-        keep(held);
+        const claimed: Teaching = { token: fresh, claim, question: answer.data.question, expiresAt: String(answer.data.expiresAt ?? ""), steps: [] };
+        keep(claimed);
+        // Just claimed, so there is nothing to check.
+        new Teacher(api, site, claimed, accent).start();
+        return true;
       } else {
         const message = refusal(answer);
         console.warn(`[Haptic] ${message}`);
