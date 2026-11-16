@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { loadCaseFiles } from "../eval/cases.ts";
 import { cannotHelpSay, finishAnswer, MAX_ANSWER_SAY, missingControls, neverDecided, type ModelReply } from "../src/server/answers.ts";
 import { ANSWERS_DOCS_BUDGET, articlesOf, buildSystemPrompt } from "../src/server/prompt.ts";
-import { DEFAULT_APPEARANCE, STREAM_TYPE, type Mode, type SiteContext, type TurnRequest } from "../src/shared/types.ts";
+import { answersOn, DEFAULT_APPEARANCE, STREAM_TYPE, type Mode, type SiteContext, type TurnRequest } from "../src/shared/types.ts";
 
 // The stand-in model, so these run with no API key. See turn.test.ts.
 process.env.HAPTIC_MODEL = "mock";
@@ -27,6 +27,8 @@ const base: SiteContext = {
   source: { url: "https://app.test", maxPages: 1, docs: [] },
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
+  // It has help docs, so Answers would be on by default. The tests of a site without it switch it off.
+  answers: { enabled: false },
 };
 const site: SiteContext = { ...base, answers: { enabled: true } };
 
@@ -61,10 +63,22 @@ test("a site without Answers gets the prompt the benchmark measured, to the lett
     joinhaptic: "2fe1bd84f9742698b37df4bc02ee9923ecbd3d9c8640e148b7f86aa0b76666af",
   };
   for (const { name, file } of await loadCaseFiles(Object.keys(measured))) {
-    assert.equal(createHash("sha256").update(buildSystemPrompt(file.site)).digest("hex"), measured[name], name);
+    const off = { ...file.site, answers: { enabled: false } };
+    assert.equal(createHash("sha256").update(buildSystemPrompt(off)).digest("hex"), measured[name], name);
     // Switched on and off again, it is the same prompt.
-    assert.equal(buildSystemPrompt({ ...file.site, answers: { enabled: false } }), buildSystemPrompt(file.site));
+    assert.equal(buildSystemPrompt({ ...off, answers: { enabled: false, staleAfterDays: 30 } }), buildSystemPrompt(off));
   }
+});
+
+test("Answers is on for a site with help docs unless it is switched off, and off for a site without any", () => {
+  const { answers: _, ...unset } = base;
+  assert.equal(answersOn(unset), true);
+  assert.equal(answersOn({ ...unset, docs: [] }), false);
+  assert.equal(answersOn({ ...unset, answers: { enabled: false } }), false);
+  assert.equal(answersOn({ ...unset, docs: [], answers: { enabled: true } }), true);
+  // A setting that only says how old an article may get leaves on or off to the docs.
+  assert.equal(answersOn({ ...unset, answers: { staleAfterDays: 90 } }), true);
+  assert.equal(buildSystemPrompt(unset), buildSystemPrompt({ ...unset, answers: { enabled: true } }));
 });
 
 test("a site without Answers gets a reply with the three fields it always had", async () => {

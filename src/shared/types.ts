@@ -37,7 +37,7 @@ export interface SiteContext {
     /** Steps one visitor may take in a day. Meant for a public demo: in an office, everyone can share one address. */
     perCaller?: number;
   };
-  /** Answers: replies in words from the help docs, beside the pointer. Off unless `enabled` is true. */
+  /** Answers: replies in words from the help docs, beside the pointer. On for a site with help docs unless `enabled` is false (see answersOn). */
   answers?: AnswersConfig;
   /** Where a visitor is sent when Haptic can't help. Without it the widget offers nothing. */
   handoff?: Handoff;
@@ -94,8 +94,18 @@ export interface Doc {
  * or say it can't help. A site without it gets exactly the guide it had
  * before: the same prompt and the same three fields in each reply.
  */
+/**
+ * Whether a site answers in words. A site that says so either way is taken at its word. Otherwise it is on
+ * when the site has help docs, since those are what answers come from, and off without any, where it could
+ * only ever say the docs don't cover it.
+ */
+export function answersOn(site: { answers?: AnswersConfig; docs?: readonly unknown[] }): boolean {
+  return site.answers?.enabled ?? (site.docs?.length ?? 0) > 0;
+}
+
 export interface AnswersConfig {
-  enabled: boolean;
+  /** Left out, Answers is on when the site has help docs. */
+  enabled?: boolean;
   /** An answer resting on an article last changed more than this many days ago is marked as possibly out of date. */
   staleAfterDays?: number;
 }
@@ -407,6 +417,8 @@ export interface PageOutline {
   links: { label: string; to: string }[];
   /** Buttons, tabs and menu items. An icon-only one is named by its icon, like "icon:share-2". */
   buttons: string[];
+  /** What a menu, tab or accordion showed when a visitor opened it, in the same shape the crawl uses. */
+  opens?: PageOpening[];
 }
 
 /** What the widget posts to /v1/outline. */

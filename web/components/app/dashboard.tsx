@@ -3,15 +3,13 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertCircleIcon } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Field, FormAlert, failureFrom, useFieldErrors, type Failure } from "@/components/form";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ApiError, api, type Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
 import { accessHref } from "@/lib/site";
-import { AppNav, Card, leaveFor } from "./parts";
+import { AppNav, Card, FailedCard, leaveFor } from "./parts";
 import { SiteView } from "./site-view";
 
 /** The first word of the person's name, from Google. Someone who signed in by an emailed link has none. */
@@ -56,7 +54,9 @@ export function Dashboard() {
       <AppNav who={me ? (firstName(me.user.name) ?? me.user.email) : undefined} email={me?.user.email} />
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-12">
         {state.kind === "loading" && <p className="text-base text-muted-foreground">Signing you in</p>}
-        {state.kind === "failed" && <FailedCard message={state.message} />}
+        {state.kind === "failed" && (
+          <FailedCard className="max-w-2xl" title="Something went wrong" message={state.message} retry={() => window.location.reload()} />
+        )}
         {me && !me.approved && <NotApproved me={me} />}
         {me?.approved && !me.sites?.length && (
           <AddSite
@@ -121,16 +121,18 @@ function NotApproved({ me }: { me: Me }) {
 function AddSite({ name, onAdded }: { name?: string; onAdded: (id: string) => void }) {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const fields = useFieldErrors({ url: "site-url" });
   async function submit(event: FormEvent) {
     event.preventDefault();
+    setFailure(null);
+    if (fields.show({ url: url.trim() ? undefined : "Paste your site's address." })) return;
     setBusy(true);
-    setError(null);
     try {
       const site = await api<{ id: string }>("/sites", { method: "POST", body: { url } });
       onAdded(site.id);
     } catch (failure) {
-      setError((failure as Error).message);
+      if (!fields.showRefusal(failure)) setFailure(failureFrom("Couldn't add your site", failure));
       setBusy(false);
     }
   }
@@ -143,41 +145,31 @@ function AddSite({ name, onAdded }: { name?: string; onAdded: (id: string) => vo
         </p>
       </div>
       <form onSubmit={submit} className="flex flex-col gap-4 rounded-xl border bg-muted p-6" noValidate>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="site-url">Your site&apos;s address</Label>
+        <Field
+          id="site-url"
+          label="Your site's address"
+          required
+          error={fields.errors.url}
+          hint="The address people use your product at. You can add staging and others later."
+        >
           <Input
-            id="site-url"
+            {...fields.control("url", { hint: true })}
+            required
             value={url}
-            onChange={(event) => setUrl(event.target.value)}
+            onChange={(event) => {
+              setUrl(event.target.value);
+              fields.clear("url");
+            }}
             placeholder="https://app.example.com"
             autoComplete="url"
             className="h-11 bg-card px-3.5 md:text-base"
-            aria-invalid={error ? true : undefined}
           />
-          <p className="text-sm text-muted-foreground">The address people use your product at. You can add staging and others later.</p>
-        </div>
-        <Button type="submit" size="xl" disabled={busy || !url.trim()}>
+        </Field>
+        <Button type="submit" size="xl" disabled={busy}>
           {busy ? "Adding" : "Add site"}
         </Button>
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircleIcon />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+        <FormAlert failure={failure} />
       </form>
     </div>
-  );
-}
-
-function FailedCard({ message }: { message: string }) {
-  return (
-    <Card className="max-w-2xl">
-      <h1 className="text-2xl font-medium tracking-[-0.02em]">Something went wrong</h1>
-      <p className="text-base text-muted-foreground">{message}</p>
-      <Button variant="secondary" className="self-start" onClick={() => window.location.reload()}>
-        Try again
-      </Button>
-    </Card>
   );
 }

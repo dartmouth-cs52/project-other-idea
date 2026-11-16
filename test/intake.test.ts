@@ -197,6 +197,8 @@ test("the system prompt is the same for every turn, and a doc over budget is lef
     notes: "Billing is under the A menu.", pages: [page("/")],
     docs: [{ title: "Small", source: "s.md", text: "short doc" }, { title: "Huge", source: "h.md", text: "x".repeat(70_000) }],
     source: { url: "https://a.com", maxPages: 5, docs: [] }, createdAt: "", updatedAt: "",
+    // With Answers on, docs get far more room. This is the room a site without it has.
+    answers: { enabled: false },
   };
   const system = buildSystemPrompt(site);
   assert.equal(system, buildSystemPrompt(site));

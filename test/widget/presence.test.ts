@@ -141,11 +141,14 @@ async function quietCounts(session: Session, during?: () => Promise<void>): Prom
  * or popover opening on the top layer, heard on the document in the capture
  * phase, and the window changing size, which can bring a control of the
  * page's under the launcher. And, while the site learns from visits
- * (learn.ts), a passive click listener and the address watcher's popstate and
- * hashchange (navigation.ts, which in Chromium watches through the Navigation
- * API, with no timer). No timer, frame or observer of Haptic's runs.
+ * (learn.ts), a passive click listener, the passive press and key listeners
+ * that hear a menu, tab or accordion being opened (main's #51: only such a
+ * press starts anything, a few looks over a second and a half), and the
+ * address watcher's popstate and hashchange (navigation.ts, which in Chromium
+ * watches through the Navigation API, with no timer). No timer, frame or
+ * observer of Haptic's runs.
  */
-const IDLE = { calls: 0, observers: 0, listeners: ["d:click:true", "d:toggle:true", "w:hashchange:false", "w:popstate:false", "w:resize:false"] };
+const IDLE = { calls: 0, observers: 0, listeners: ["d:click:true", "d:keydown:true", "d:pointerdown:true", "d:toggle:true", "w:hashchange:false", "w:popstate:false", "w:resize:false"] };
 
 test("nothing of Haptic's runs on a page where no guide is running: no timer, no frame, no observer, and no listener but those for the top layer, the window's size and learning the site", async () => {
   const session = await start(COUNTED, () => words("Saving is done with the Save button at the top."));

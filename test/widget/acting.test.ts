@@ -456,7 +456,7 @@ test("once acting is over, by the visitor's click on the commit or by Stop, noth
     { acting: { ...ACTING_ON, confirmFirst: false } },
   );
   // What may listen while nothing is in use: the top layer and the window's size, and learning the site (presence.test.ts).
-  const idle = { calls: 0, observers: 0, listeners: ["d:click:true", "d:toggle:true", "w:hashchange:false", "w:popstate:false", "w:resize:false"] };
+  const idle = { calls: 0, observers: 0, listeners: ["d:click:true", "d:keydown:true", "d:pointerdown:true", "d:toggle:true", "w:hashchange:false", "w:popstate:false", "w:resize:false"] };
   // The ask box is put away, as a visitor done with it does. While it is open the widget is in use.
   const putAway = async () => {
     if (await session.page.locator("haptic-root .panel").isVisible()) await session.page.locator("haptic-root .launcher").click();

@@ -5,7 +5,7 @@ import { cn } from "cn";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { api, OUTCOME_LABEL, type Correction, type FinishedList, type GroupGuide, type GuideDetail, type HealthGroup, type Insights } from "@/lib/app-api";
 import { PointHereInstead } from "./guiding-rules";
-import { Card, CardTitle, DoneMark, seconds, when } from "./parts";
+import { Card, CardTitle, DoneMark, FailedCard, seconds, when } from "./parts";
 
 const RANGES = [7, 30, 90];
 
@@ -20,6 +20,8 @@ export function InsightsView({ siteId, refreshKey, onCorrected }: { siteId: stri
   const [data, setData] = useState<Insights | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  // Bumped by Try again, to ask once more without waiting for the next refresh.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -29,9 +31,21 @@ export function InsightsView({ siteId, refreshKey, onCorrected }: { siteId: stri
     return () => {
       live = false;
     };
-  }, [siteId, days, refreshKey]);
+  }, [siteId, days, refreshKey, attempt]);
 
-  if (error) return <Card><p className="text-base text-muted-foreground">{error}</p></Card>;
+  if (error) {
+    return (
+      <FailedCard
+        level={2}
+        title="Couldn't load the questions"
+        message={error}
+        retry={() => {
+          setError(null);
+          setAttempt((count) => count + 1);
+        }}
+      />
+    );
+  }
   if (!data) return <Card><p className="text-base text-muted-foreground">Loading questions</p></Card>;
 
   const { summary } = data;
@@ -303,12 +317,14 @@ function CantFind({ siteId, days, rows, ranges, onOpen }: { siteId: string; days
 
 function GroupGuides({ siteId, days, groupKey, onOpen }: { siteId: string; days: number; groupKey: string; onOpen: (guide: string) => void }) {
   const [guides, setGuides] = useState<GroupGuide[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api<{ guides: GroupGuide[] }>(`/sites/${siteId}/groups?key=${encodeURIComponent(groupKey)}&days=${days}`).then(
-      (result) => setGuides(result.guides),
-      () => setGuides([]),
+      (result) => (setGuides(result.guides), setError(null)),
+      (failure: Error) => setError(failure.message),
     );
   }, [siteId, days, groupKey]);
+  if (error) return <p className="text-sm text-muted-foreground">The guides didn&apos;t load. {error}</p>;
   if (!guides) return <p className="text-sm text-muted-foreground">Loading the guides</p>;
   return (
     <ul className="flex flex-col rounded-lg border">

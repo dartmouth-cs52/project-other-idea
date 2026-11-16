@@ -5,7 +5,7 @@ import { actingProblems } from "../server/acting.ts";
 import { webhookAllowed } from "../server/handoff.ts";
 import { buildSystemPrompt, docsThatFit, renderSiteMap } from "../server/prompt.ts";
 import { listSiteIds, loadSite, saveSite } from "../server/sites.ts";
-import { DEFAULT_APPEARANCE, type SiteContext, type SiteSource } from "../shared/types.ts";
+import { answersOn, DEFAULT_APPEARANCE, type SiteContext, type SiteSource } from "../shared/types.ts";
 import { browseSite, canBrowse, MAP_BUDGET } from "./browse.ts";
 import { crawlSite, type CrawlResult } from "./crawl.ts";
 import { loadDocs } from "./docs.ts";
@@ -47,7 +47,7 @@ Options:
   --accent <hex>       Color of the pointer and its highlight. Default ${DEFAULT_APPEARANCE.accent}.
   --position <side>    bottom-right or bottom-left. Default bottom-right.
   --label <text>       Text on the launcher button. Default "${DEFAULT_APPEARANCE.launcherLabel}".
-  --answers <on|off>   Answers: reply in words from the help docs as well as pointing. Off by default.
+  --answers <on|off>   Answers: reply in words from the help docs as well as pointing. On by default for a site with help docs.
   --stale-days <n>     With Answers on, mark an answer from an article older than this as possibly out of date.
   --handoff-webhook <url>    When Haptic can't help, the widget offers a short form (an email address and a note).
                              It is posted here as JSON, with the conversation and the page. An https address of yours.
@@ -205,7 +205,7 @@ async function build(base: SiteContext): Promise<SiteContext> {
   if (left.length) {
     console.warn(`  ${left.length} help docs don't fit in the prompt and won't be used: ${left.map((doc) => doc.source).join(", ")}.\n  Trim them or pass fewer. Looking docs up by question is the fix for this and isn't built yet.`);
   }
-  if (site.answers?.enabled) {
+  if (answersOn(site)) {
     const linked = docs.filter((doc) => doc.url).length;
     const dated = docs.filter((doc) => doc.updated).length;
     console.log(`  Answers is on. ${linked} of ${docs.length} help docs have an address to link to, and ${dated} have a date.`);
@@ -281,8 +281,12 @@ async function main() {
   if (values.answers && values.answers !== "on" && values.answers !== "off") fail("--answers is on or off.");
   const staleDays = values["stale-days"] === undefined ? existing?.answers?.staleAfterDays : Number(values["stale-days"]);
   if (staleDays !== undefined && !(Number.isInteger(staleDays) && staleDays > 0)) fail(`--stale-days has to be a whole number above 0, not "${values["stale-days"]}".`);
-  const answersOn = values.answers ? values.answers === "on" : existing?.answers?.enabled === true;
-  const answers = answersOn || staleDays !== undefined ? { enabled: answersOn, ...(staleDays !== undefined ? { staleAfterDays: staleDays } : {}) } : undefined;
+  // Left unset, Answers follows the docs: on with some, off without (answersOn). A choice made before is kept.
+  const chosen = values.answers ? values.answers === "on" : existing?.answers?.enabled;
+  const answers =
+    chosen !== undefined || staleDays !== undefined
+      ? { ...(chosen !== undefined ? { enabled: chosen } : {}), ...(staleDays !== undefined ? { staleAfterDays: staleDays } : {}) }
+      : undefined;
 
   const handoff = { ...existing?.handoff };
   for (const [flag, field] of [["handoff-webhook", "webhook"], ["handoff-secret", "secret"], ["handoff-url", "url"], ["handoff-email", "email"], ["handoff-label", "label"]] as const) {

@@ -1,6 +1,6 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { cleanText, normalizePath, questionKey, type GuideReport, type PageOutline, type SiteContext, type TurnRequest } from "../shared/types.ts";
-import { MAX_VISITORS, outlineRows, visitorHash, withLearned, type LearnedLabel } from "./learned.ts";
+import { MAX_VISITORS, openingRows, outlineRows, visitorHash, withLearned, type LearnedLabel, type LearnedOpening } from "./learned.ts";
 import type { TurnMeasure } from "./model.ts";
 
 // What the widget server keeps in Neon: each site, which origins the script has
@@ -69,11 +69,26 @@ export class Store {
    * step never waits on this.
    */
   async loadSite(id: string): Promise<SiteContext | undefined> {
-    const [rows, labels] = await Promise.all([
+    const [rows, labels, openings] = await Promise.all([
       this.sql`select id, name, origin, allowed_origins, context from sites where id = ${id}` as unknown as Promise<SiteRow[]>,
       this.learnedLabels(id),
+      this.learnedOpenings(id),
     ]);
-    return rows[0] ? withLearned(siteFromRow(rows[0]), labels, this.labelThreshold) : undefined;
+    return rows[0] ? withLearned(siteFromRow(rows[0]), labels, this.labelThreshold, openings) : undefined;
+  }
+
+  /** What enough visitors saw behind a control. None when the table is missing (db/migrations/0012). */
+  private async learnedOpenings(id: string): Promise<LearnedOpening[]> {
+    try {
+      const rows = await this.sql`
+        select route, control, label, href, visitor_count as visitors, seen_count::int as seen from outline_openings
+        where site_id = ${id} and visitor_count >= ${this.labelThreshold}
+        order by visitor_count desc, seen_count desc limit ${LABELS_READ}`;
+      return rows as LearnedOpening[];
+    } catch (error) {
+      console.error("Couldn't read what menus show (has db/migrations/0012 been applied?):", error instanceof Error ? error.message : error);
+      return [];
+    }
   }
 
   /** The labels enough visitors have seen on this site. None, rather than a failed site, when the table is missing (db/migrations/0009). */
@@ -97,7 +112,9 @@ export class Store {
    */
   recordOutline(site: SiteContext, visitor: string, outline: PageOutline): Promise<void> {
     const rows = outlineRows(outline);
-    if (!rows.length) return Promise.resolve();
+    // In a statement of their own, so a database without 0012 still learns the page's labels.
+    const opened = this.recordOpenings(site, visitor, openingRows(outline));
+    if (!rows.length) return opened;
     return this.quietly("learn from a page (has db/migrations/0009 been applied?)", async () => {
       const [counted] = (await this.sql`select count(*)::int as count from outline_labels where site_id = ${site.id}`) as { count: number }[];
       const count = counted?.count ?? 0;
@@ -118,6 +135,26 @@ export class Store {
           seen_count = outline_labels.seen_count + 1, last_seen_at = now(),
           visitors = case when ${visitor} = any(outline_labels.visitors) or cardinality(outline_labels.visitors) >= ${MAX_VISITORS}
             then outline_labels.visitors else outline_labels.visitors || ${visitor}::text end`;
+    });
+  }
+
+  /** Counts what a visitor saw behind each control, the same way as a page's labels. */
+  private recordOpenings(site: SiteContext, visitor: string, rows: ReturnType<typeof openingRows>): Promise<void> {
+    if (!rows.length) return Promise.resolve();
+    return this.quietly("learn what a menu shows (has db/migrations/0012 been applied?)", async () => {
+      const json = JSON.stringify(rows);
+      const [counted] = (await this.sql`select count(*)::int as count from outline_openings where site_id = ${site.id}`) as { count: number }[];
+      const full = (counted?.count ?? 0) >= MAX_LABELS;
+      await this.sql`
+        insert into outline_openings (site_id, route, control, label, href, visitors)
+        select ${site.id}, r.route, r.control, r.label, r.href, array[${visitor}::text]
+        from jsonb_to_recordset(${json}::jsonb) as r(route text, control text, label text, href text)
+        where not ${full} or exists (select 1 from outline_openings o where o.site_id = ${site.id} and o.route = r.route
+          and o.control = r.control and o.label = r.label and o.href = r.href)
+        on conflict (site_id, route, control, label, href) do update set
+          seen_count = outline_openings.seen_count + 1, last_seen_at = now(),
+          visitors = case when ${visitor} = any(outline_openings.visitors) or cardinality(outline_openings.visitors) >= ${MAX_VISITORS}
+            then outline_openings.visitors else outline_openings.visitors || ${visitor}::text end`;
     });
   }
 
