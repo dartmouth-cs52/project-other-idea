@@ -161,10 +161,10 @@ export async function startTeaching(sql: Sql, site: TeachSite, teacher: Teacher,
   if (question.replace(/[^\p{L}\p{N}]/gu, "").length < 3) throw new TeachRefused(400, "Write the question Haptic should learn to answer, like “how do I add a budget”.");
   // Sessions nobody saved go after a week, so no recorded steps are kept for long without a reason.
   await sql`delete from teach_sessions where site_id = ${site.id} and saved_at is null and created_at < now() - ${`${KEEP_UNSAVED_DAYS} days`}::interval`;
-  const [{ waiting }] = (await sql`
+  const [counted] = (await sql`
     select count(*)::int as waiting from teach_sessions
     where site_id = ${site.id} and claimed_at is null and cancelled_at is null and expires_at > now()`) as { waiting: number }[];
-  if (waiting >= MAX_WAITING) throw new TeachRefused(400, `This site has ${MAX_WAITING} teaching links waiting to be opened. Use one of them, or wait half an hour.`);
+  if ((counted?.waiting ?? 0) >= MAX_WAITING) throw new TeachRefused(400, `This site has ${MAX_WAITING} teaching links waiting to be opened. Use one of them, or wait half an hour.`);
   const token = newTeachToken();
   const rows = (await sql`
     insert into teach_sessions (site_id, token_hash, question, guide_id, created_by, created_by_name, expires_at)
