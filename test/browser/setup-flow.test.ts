@@ -33,6 +33,36 @@ describe("the setup screens in chromium", { skip: HAS_WEB ? false : "web/node_mo
     });
   });
 
+  describe("when saving where the setup is fails", () => {
+    test("every screen says so, with Retry, and Retry saves it", async () => {
+      state = siteState();
+      state.fail["PUT /sites/site_a1b2c3d4e5f6/setup"] = 500;
+      const page = await openSetup(flow);
+      await page.getByRole("button", { name: "Skip" }).click();
+      await page.getByRole("heading", { name: "Add the script" }).waitFor();
+      const alert = page.getByRole("alert").filter({ hasText: "Couldn't save where you are" });
+      await alert.waitFor();
+      await page.getByRole("button", { name: "Continue" }).click();
+      await page.getByRole("heading", { name: "See it connect" }).waitFor();
+      await alert.waitFor();
+      delete state.fail["PUT /sites/site_a1b2c3d4e5f6/setup"];
+      await alert.getByRole("button", { name: "Retry" }).click();
+      await alert.waitFor({ state: "detached" });
+      assert.equal(state.site.setup?.step, "connect");
+      await page.close();
+    });
+
+    test("Finish later still leaves for the dashboard, which is told not to send them back", async () => {
+      state = siteState({ setup: { step: "install" } });
+      state.fail["PUT /sites/site_a1b2c3d4e5f6/setup"] = 500;
+      const page = await openSetup(flow);
+      await page.getByRole("button", { name: "Finish later" }).first().click();
+      await page.waitForFunction(() => (window as unknown as { __navigations: string[] }).__navigations.length > 0);
+      assert.deepEqual(await page.evaluate(() => (window as unknown as { __navigations: string[] }).__navigations), ["push /dashboard/?site=site_a1b2c3d4e5f6&later=1"]);
+      await page.close();
+    });
+  });
+
   describe("changing the address", () => {
     const deletes = () => state.calls.filter((call) => call.method === "DELETE");
 

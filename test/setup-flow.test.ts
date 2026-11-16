@@ -65,6 +65,7 @@ test("the dashboard sends a site part way through setup back to it, but not one 
   assert.equal(belongsInSetup({ connected: false, reading: null, setup: { step: "connect", finishedAt: "2026-11-16T00:00:00Z" } }), false);
   assert.equal(belongsInSetup({ connected: false, reading: null, setup: null }), false, "a site from before the setup screens keeps the dashboard");
   assert.equal(belongsInSetup({ connected: true, reading: null, setup: { step: "install" } }), false, "a connected site shows its dashboard");
+  assert.equal(belongsInSetup({ connected: false, reading: null, setup: { step: "install" } }, { later: true }), false, "Finish later whose save failed still stays on the dashboard");
 });
 
 test("an address is checked the way the Worker checks it", () => {

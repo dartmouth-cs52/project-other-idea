@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import type { Site } from "@/lib/app-api";
 import { belongsInSetup, hostOf, installStatus, SETUP_STEPS, stepFor, stepIndex } from "@/lib/setup";
@@ -18,7 +18,7 @@ import type { SetupSite } from "./types";
 export function SetupGate({ site }: { site: Site }) {
   const setupSite = site as unknown as SetupSite;
   const router = useRouter();
-  const send = belongsInSetup(setupSite);
+  const send = belongsInSetup(setupSite, { later: useSearchParams().get("later") === "1" });
   const href = `/dashboard/setup/?site=${site.id}`;
 
   useEffect(() => {

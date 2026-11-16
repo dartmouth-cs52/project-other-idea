@@ -67,9 +67,13 @@ export function stepFor(site: SetupSiteState | null): SetupStepId {
   return site.reading && site.reading.done ? "learned" : "reading";
 }
 
-/** Whether the dashboard should send someone to the setup screens instead of showing the site. */
-export function belongsInSetup(site: SetupSiteState): boolean {
-  return !site.connected && Boolean(site.setup && !site.setup.finishedAt && !site.setup.later);
+/**
+ * Whether the dashboard should send someone to the setup screens instead of
+ * showing the site. Not when they chose Finish later, even if that couldn't be
+ * saved: the setup then says so in the dashboard's address (`later`).
+ */
+export function belongsInSetup(site: SetupSiteState, asked: { later?: boolean } = {}): boolean {
+  return !asked.later && !site.connected && Boolean(site.setup && !site.setup.finishedAt && !site.setup.later);
 }
 
 // The address ------------------------------------------------------------------

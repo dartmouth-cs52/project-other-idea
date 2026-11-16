@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { AlertCircleIcon } from "lucide-react";
 import { cn } from "cn";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Pointer } from "@/components/pointer";
 import { Button } from "@/components/ui/button";
 import { ApiError, api, type Me } from "@/lib/app-api";
@@ -43,6 +45,8 @@ export function SetupFlow() {
   // Null until someone moves, so the first screen comes from the site as it loads.
   const [chosen, setChosen] = useState<{ step: SetupStepId; for: string | null } | null>(null);
   const [direction, setDirection] = useState<1 | -1>(1);
+  // Where the setup is, when saving it failed: shown on every screen with Retry, until a save goes through.
+  const [unsaved, setUnsaved] = useState<{ id: string; body: Record<string, unknown> } | null>(null);
   const pages = useSetupReading(site);
   useEnterToContinue();
 
@@ -95,24 +99,38 @@ export function SetupFlow() {
   const current = site && site.id === siteId ? site : null;
   const step: SetupStepId | null = chosen && chosen.for === siteId ? chosen.step : !siteId ? "address" : current ? stepFor(current) : null;
 
+  /** Saves where the setup is on the site. True when it went. When it didn't, every screen says so, with Retry. */
+  async function save(body: Record<string, unknown>, id = siteId): Promise<boolean> {
+    if (!id) return true;
+    try {
+      await api(`/sites/${id}/setup`, { method: "PUT", body });
+      setUnsaved(null);
+      return true;
+    } catch {
+      setUnsaved({ id, body });
+      return false;
+    }
+  }
+
   /** Moves to a screen and keeps it on the site, so a reload comes back to it. */
   function go(next: SetupStepId, way: 1 | -1 = 1) {
     setDirection(way);
     setChosen({ step: next, for: siteId });
     window.scrollTo({ top: 0 });
-    if (siteId && next !== "address") void api(`/sites/${siteId}/setup`, { method: "PUT", body: { step: next, later: false } }).catch(() => {});
+    if (next !== "address") void save({ step: next, later: false });
   }
   const forward = () => step && nextStep(step) && go(nextStep(step)!, 1);
   const back = () => step && previousStep(step) && go(previousStep(step)!, -1);
 
+  /** Leaves for the dashboard whatever happens. If Finish later couldn't be saved, the address says so, so it doesn't send them back. */
   async function later() {
-    if (siteId) await api(`/sites/${siteId}/setup`, { method: "PUT", body: { later: true } }).catch(() => {});
-    router.push(siteId ? `/dashboard/?site=${siteId}` : "/dashboard/");
+    const saved = await save({ later: true });
+    router.push(siteId ? `/dashboard/?site=${siteId}${saved ? "" : "&later=1"}` : "/dashboard/");
   }
 
   async function finish() {
-    if (siteId) await api(`/sites/${siteId}/setup`, { method: "PUT", body: { finished: true, step: "connect" } }).catch(() => {});
-    router.push(`/dashboard/?site=${siteId}`);
+    const saved = await save({ finished: true, step: "connect" });
+    router.push(`/dashboard/?site=${siteId}${saved ? "" : "&later=1"}`);
   }
 
   /**
@@ -134,7 +152,7 @@ export function SetupFlow() {
         return;
       }
       const added = await api<{ id: string }>("/sites", { method: "POST", body: { url } });
-      await api(`/sites/${added.id}/setup`, { method: "PUT", body: { step: "reading" } }).catch(() => {});
+      await save({ step: "reading" }, added.id);
       setSite(null);
       setDirection(1);
       setChosen({ step: "reading", for: added.id });
@@ -180,6 +198,20 @@ export function SetupFlow() {
       <div className="h-0.5 w-full bg-border" role="progressbar" aria-label="Setup" aria-valuemin={1} aria-valuemax={SETUP_STEPS.length} aria-valuenow={index + 1}>
         <div className="h-full bg-primary transition-[width] duration-250 ease-out motion-reduce:transition-none" style={{ width: `${((index + 1) / SETUP_STEPS.length) * 100}%` }} />
       </div>
+      {unsaved && (
+        <div className="mx-auto w-full max-w-2xl px-6 pt-6">
+          <Alert variant="destructive" className="px-3.5 py-3">
+            <AlertCircleIcon />
+            <AlertTitle>Couldn&apos;t save where you are</AlertTitle>
+            <AlertDescription>
+              <span>If you leave now, the setup may open on an earlier screen next time.</span>
+              <Button variant="secondary" size="sm" className="mt-2 w-fit" onClick={() => void save(unsaved.body, unsaved.id)}>
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
       <main className="flex flex-1 flex-col px-6 py-10 sm:py-16">
         <div className={cn("mx-auto my-auto w-full", step === "install" ? "max-w-3xl" : "max-w-2xl")}>
           {failure && !current && siteId ? (
