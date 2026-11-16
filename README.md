@@ -148,7 +148,7 @@ npm run build                     # bundle the widget to dist/widget.js
 npm run eval -- --models mock     # the guide benchmark, no API key needed
 ```
 
-`web/` and `testbed/` are separate packages with their own `npm run dev` and `npm run build`. CI typechecks, tests and builds the server, and lints and builds the website, on every push and pull request. Pushes to `main` deploy the website and the widget server.
+`web/` and `testbed/` are separate packages with their own `npm run dev` and `npm run build`. CI typechecks, tests and builds the server, lints and builds the website, and typechecks and builds Northpine, on every push and pull request. Pushes to `main` deploy the website and the widget server.
 
 ## Documentation
 

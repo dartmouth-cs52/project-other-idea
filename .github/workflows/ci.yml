@@ -35,3 +35,19 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+
+  testbed:
+    name: Northpine
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: testbed
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: testbed/package-lock.json
+      - run: npm ci
+      - run: npm run build
