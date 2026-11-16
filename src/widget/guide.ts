@@ -66,6 +66,15 @@ const DATA_FLOOR_MS = 700;
  * "again"). A page that keeps changing under it has to stop somewhere.
  */
 const MAX_AGAIN = 2;
+/**
+ * How many times a guide asks again because the address changed while the
+ * model was answering, within `MOVES_MS`. A page that keeps changing its own
+ * address would otherwise be asked about without end, and could spend its
+ * site's budget for everyone. Past it, the guide stops with `MOVES_SAY`.
+ */
+const MAX_MOVES = 3;
+const MOVES_MS = 30_000;
+const MOVES_SAY = "This page keeps changing its address, so I've stopped for now. Ask again once it settles.";
 /** How long after the visitor's click on a list's control the list is looked for, when it is their turn to pick from it. */
 const LIST_OPENS_MS = 200;
 /** How the visitor is named to the model while Haptic acts: Haptic's own steps are "You". */
@@ -318,6 +327,8 @@ export class Guide {
   private expectLoadUntil = 0;
   /** The act session whose "What I did" is on show, so a line that comes in late is added to it. */
   private didOnShow?: { session: ActSession; closing: string; commit: string };
+  /** When this guide asked again because the address changed under a question, and in which run: see `MAX_MOVES`. */
+  private moves: { run: number; at: number }[] = [];
 
   constructor(
     private readonly ui: Ui,
@@ -801,6 +812,9 @@ export class Guide {
     const startOver = async () => {
       dropEarly();
       if (this.acting) return this.stopActing(SAYS.moved, undefined, "stopped");
+      const now = Date.now();
+      this.moves = [...this.moves.filter((move) => move.run === run && now - move.at < MOVES_MS), { run, at: now }];
+      if (this.moves.length > MAX_MOVES) return this.finish(MOVES_SAY, "loop");
       const here = currentPath();
       ui.setBusy(this.step === 0 ? "Finding it…" : "Next step…");
       await settle(ui.host);
