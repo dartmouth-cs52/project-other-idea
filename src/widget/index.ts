@@ -33,6 +33,11 @@ async function boot() {
   // as soon as the model has decided. The last is the whole reply. `request`
   // carries `mode: "act"` when the visitor pressed Do it; the version says
   // this widget understands an act reply. Stop aborts the request in flight.
+  //
+  // `fetch` is the page's, and a page's monitoring script may have wrapped it
+  // and hand back an object of its own: one that can be read as text, with no
+  // stream to read as it arrives, and sometimes no headers. Then the reply is
+  // read whole and taken line by line all the same.
   const sendTurn = async (request: Omit<TurnRequest, "site">, onTarget?: (id: string) => void, signal?: AbortSignal): Promise<TurnReply> => {
     const response = await fetch(`${api}/v1/turn`, {
       method: "POST",
@@ -40,26 +45,44 @@ async function boot() {
       body: JSON.stringify({ ...request, site, version: TURN_VERSION, today: localDate() }),
       ...(signal ? { signal } : {}),
     });
-    if (!response.ok) throw new Error(`Turn failed with ${response.status}: ${await response.text()}`);
-    if (!response.body || !(response.headers.get("Content-Type") ?? "").includes(STREAM_TYPE)) return response.json();
+    const status = typeof response.status === "number" ? response.status : 0;
+    const ok = typeof response.ok === "boolean" ? response.ok : status >= 200 && status < 300;
+    if (!ok) throw new Error(`Turn failed with ${status}: ${await wholeText(response).catch(() => "")}`);
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffered = "";
     let reply: TurnReply | undefined;
-    for (;;) {
-      const { done, value } = await reader.read();
-      buffered += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-      const lines = buffered.split("\n");
-      buffered = done ? "" : (lines.pop() ?? "");
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        const message = JSON.parse(line) as Partial<TurnReply> & { error?: string; code?: number };
-        if (message.error) throw new Error(`Turn failed with ${message.code}: ${message.error}`);
-        if (typeof message.say === "string") reply = message as TurnReply;
-        else if (typeof message.target === "string") onTarget?.(message.target);
+    const takeMessage = (message: Partial<TurnReply> & { error?: string; code?: number }) => {
+      if (message.error) throw new Error(`Turn failed with ${message.code}: ${message.error}`);
+      if (typeof message.say === "string") reply = message as TurnReply;
+      else if (typeof message.target === "string") onTarget?.(message.target);
+    };
+    const take = (line: string) => {
+      if (line.trim()) takeMessage(JSON.parse(line));
+    };
+    const type = typeof response.headers?.get === "function" ? (response.headers.get("Content-Type") ?? "") : "";
+    const body = response.body;
+    if (body && typeof body.getReader === "function" && type.includes(STREAM_TYPE)) {
+      const reader = body.getReader();
+      const decoder = new TextDecoder();
+      let buffered = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        buffered += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+        const lines = buffered.split("\n");
+        buffered = done ? "" : (lines.pop() ?? "");
+        for (const line of lines) take(line);
+        if (done) break;
       }
-      if (done) break;
+    } else {
+      // Read whole: one JSON, as a server that does not stream sends it, or the same lines as the stream.
+      const text = await wholeText(response);
+      let whole: unknown;
+      try {
+        whole = JSON.parse(text);
+      } catch {
+        whole = undefined;
+      }
+      if (whole && typeof whole === "object") takeMessage(whole);
+      else for (const line of text.split("\n")) take(line);
     }
     if (!reply) throw new Error("The reply ended before it was complete.");
     return reply;
@@ -79,6 +102,13 @@ async function boot() {
   );
   const guide = new Guide(ui, sendTurn, { ...(acting ? { acting } : {}), ...(pageOff ? { pageOff } : {}) });
   guide.resume();
+}
+
+/** A response read whole as text: by `text()`, or by `json()` when that is all a wrapped `fetch` gives back. */
+async function wholeText(response: Response): Promise<string> {
+  if (typeof response.text === "function") return response.text();
+  if (typeof response.json === "function") return JSON.stringify(await response.json());
+  return "";
 }
 
 const start = () => boot().catch((error) => console.warn("[Haptic]", error));
