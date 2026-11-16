@@ -69,3 +69,41 @@ test("on a page with more elements than a reading visits, what is on screen is r
     'link "Two" [nav › Contents] → /two',
   ]);
 });
+
+// Frames of the page's own origin -------------------------------------------------------
+
+/** A frame whose page is given inline, which is of the page's own origin. */
+const frame = (html: string, attributes: string) => `<iframe ${attributes} srcdoc="${html.replace(/&/g, "&amp;").replace(/"/g, "&quot;")}"></iframe>`;
+
+test("controls in a frame of the page's own origin are listed where they are drawn, and a frame from another origin is not read", { skip }, async () => {
+  const snapshot = await read(`<main><h1>Demo</h1>
+    ${frame(`<ul role="tablist" style="margin:0"><li role="tab" aria-selected="true">Nunc tincidunt</li><li role="tab">Proin dolor</li></ul><div style="height:400px"></div><a href="#more">More</a>`, 'title="Tabs demo" style="position:absolute;left:20px;top:100px;width:400px;height:200px;border:0"')}
+    ${frame(`<body contenteditable="true"><p>Hello</p></body>`, 'title="Rich Text Area" style="position:absolute;left:20px;top:320px;width:400px;height:100px;border:0"')}
+    <iframe src="https://elsewhere.test/widget" title="Their widget" style="position:absolute;left:500px;top:100px;width:200px;height:100px"></iframe></main>`);
+  assert.deepEqual(lines(snapshot), [
+    'tab "Nunc tincidunt" (selected) [tabs]',
+    'tab "Proin dolor" [tabs]',
+    'link "More" [main › Demo] below the visible area',
+    'textbox "Rich Text Area" [main › Demo]',
+  ]);
+});
+
+test("a frame of the page's own origin over the whole window, holding a dialog of cookie choices, is all of the page that can be used", { skip }, async () => {
+  const snapshot = await read(`<header><a href="/">Home</a><button>Run</button></header>
+    ${frame(`<div role="dialog" aria-label="Cookie consent" style="margin:100px auto;width:400px"><p>We use cookies.</p><button>Decline</button><button>Accept</button></div>`, 'title="Consent" style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:10"')}`);
+  assert.equal(snapshot.dialog, "Cookie consent");
+  assert.deepEqual(lines(snapshot), ['button "Decline"', 'button "Accept"']);
+});
+
+test("what a visitor typed in a frame's field is not sent, nor the frame's words that repeat it", { skip }, async () => {
+  const snapshot = await read(
+    frame(
+      `<label>Card holder <input id="holder"></label><p id="preview">Name on card</p>
+      <script>document.getElementById('holder').addEventListener('input', (event) => (document.getElementById('preview').textContent = event.target.value));</script>`,
+      'title="Payment" style="width:500px;height:200px;border:0"',
+    ),
+    { before: (page) => page.frameLocator("iframe").locator("#holder").fill("Wilhelmina Quartermaine") },
+  );
+  assert.deepEqual(lines(snapshot), ['textbox "Card holder"']);
+  assert.ok(!JSON.stringify(snapshot).includes("Wilhelmina"), JSON.stringify(snapshot));
+});
