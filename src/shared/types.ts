@@ -20,6 +20,19 @@ export interface SiteContext {
   pages: PageNode[];
   /** The inputs this was built from, so `refresh` can rebuild it unattended. */
   source: SiteSource;
+  /** True switches Haptic off on this site: no launcher is drawn and the model is never called. */
+  off?: boolean;
+  /**
+   * The most this site may spend on the model, in US dollars. Past it visitors
+   * get a fixed sentence until the hour or the day turns. The server's own
+   * limits apply to whatever is left out (see src/server/budget.ts).
+   */
+  budget?: {
+    hour?: number;
+    day?: number;
+    /** Steps one visitor may take in a day. Meant for a public demo: in an office, everyone can share one address. */
+    perCaller?: number;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -65,6 +78,8 @@ export interface PageNode {
 export interface PublicSiteConfig {
   name: string;
   appearance: Appearance;
+  /** Set when Haptic is switched off here. The widget then draws nothing. */
+  off?: true;
 }
 
 export interface SnapElement {
@@ -171,6 +186,12 @@ export interface TurnReply {
   status: "continue" | "done" | "stuck";
   /** One or two sentences shown next to the pointer. */
   say: string;
+  /**
+   * True when the server answered without asking the model, because the site
+   * is switched off or has spent its budget. The guide stopped there: it did
+   * not finish, and there is nothing to ask the visitor about.
+   */
+  paused?: true;
 }
 
 // Paths ---------------------------------------------------------------------

@@ -224,6 +224,12 @@ export class Guide {
     }
     if (run !== this.run) return;
 
+    // The site is switched off or has spent its budget, and the model was not asked.
+    if (reply.paused) {
+      dropEarly();
+      return this.pause(reply.say);
+    }
+
     // The answer is about a page the visitor has already left. Start over from where they are now.
     const here = normalizePath(location.pathname);
     if (here !== page.snapshot.path) {
@@ -345,6 +351,22 @@ export class Guide {
     this.ui.closePanel();
     this.ui.say(text);
     this.end(outcome);
+  }
+
+  /**
+   * Ends a guide the server would not go on with. It did not finish, so it is
+   * reported as a step that failed, and "Did this help?" is not asked. The
+   * server has the guide on record from its first question, so there is one
+   * to report on even when this is the first reply.
+   */
+  private pause(text: string) {
+    this.stopWaiting?.();
+    this.stopWaiting = undefined;
+    forget();
+    this.ui.setBusy("");
+    this.ui.closePanel();
+    this.ui.say(text);
+    this.end("error");
   }
 
   /**

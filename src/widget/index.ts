@@ -23,6 +23,8 @@ async function boot() {
   } catch (error) {
     console.warn("[Haptic] Couldn't load the site's settings.", error);
   }
+  // Switched off for this site. Nothing is drawn, and nothing is said about it on the customer's page.
+  if (config.off) return;
 
   // The reply comes as lines of JSON. The first names the control to point at,
   // as soon as the model has decided. The last is the whole reply.

@@ -4,7 +4,8 @@ import { DEFAULT_APPEARANCE, STREAM_TYPE, type SiteContext } from "../src/shared
 
 // The stand-in model, so these run with no API key. See turn.test.ts.
 process.env.HAPTIC_MODEL = "mock";
-const { createApp, parseTurn } = await import("../src/server/app.ts");
+const { createApp, parseTurn, FIXED_SAY } = await import("../src/server/app.ts");
+type AppParts = import("../src/server/app.ts").AppParts;
 
 const site: SiteContext = {
   version: 1,
@@ -21,14 +22,15 @@ const site: SiteContext = {
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
 
-function makeApp(limit = false) {
+function makeApp(limit = false, extra: Partial<AppParts> = {}, served: SiteContext = site) {
   const turns: string[] = [];
   const app = createApp({
-    loadSite: async (id) => (id === site.id ? site : undefined),
+    loadSite: async (id) => (id === served.id ? served : undefined),
     widget: async () => "/* widget */",
     widgetMaxAge: 300,
     overLimit: () => limit,
     onTurn: (request) => void turns.push(request.goal),
+    ...extra,
   });
   return { app, turns };
 }
@@ -172,4 +174,17 @@ test("a guide's first question is passed on before the model answers, and later 
   // A step is answered from the copy of the site already held. The widget loading on a page waits for a fresh one.
   await app(new Request(`https://widget.test/v1/sites/${site.id}`, { headers: { Origin: "https://app.test" } }), "1.1.1.1");
   assert.deepEqual(hurried, [true, true, true, undefined]);
+});
+
+test("a site that is switched off gets no launcher, and a step that still arrives never reaches the model", async () => {
+  const off = { target: null, status: "stuck", say: FIXED_SAY.off, paused: true };
+  // Once by the host's switch and once by the site's own setting.
+  for (const { app, turns } of [makeApp(false, { isOff: () => true }), makeApp(false, {}, { ...site, off: true })]) {
+    const config = await app(new Request(`https://widget.test/v1/sites/${site.id}`, { headers: { Origin: "https://app.test" } }), "1.1.1.1");
+    assert.equal((await config?.json()).off, true);
+    assert.deepEqual(await (await app(turn(), "1.1.1.1"))?.json(), off);
+    const streamed = await app(turn({ Accept: STREAM_TYPE }), "1.1.1.1");
+    assert.deepEqual(JSON.parse(((await streamed?.text()) ?? "").trim()), off);
+    assert.deepEqual(turns, []);
+  }
 });

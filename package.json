@@ -12,6 +12,8 @@
     "build": "tsx src/widget/build.ts",
     "deploy": "wrangler deploy",
     "site:publish": "tsx --env-file-if-exists=.env src/intake/publish.ts",
+    "site:off": "tsx src/intake/switch.ts off",
+    "site:on": "tsx src/intake/switch.ts on",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "eval": "tsx --env-file-if-exists=.env eval/run.ts",

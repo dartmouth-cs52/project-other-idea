@@ -8,9 +8,12 @@ import {
   type SiteContext,
   type SnapElement,
   type Snapshot,
+  type TurnReply,
   type TurnRequest,
 } from "../shared/types.ts";
-import { measureTurn, TurnError, type TurnMeasure } from "./model.ts";
+import type { Alert, Budget, Gate } from "./budget.ts";
+import { ceilingFor, measureTurn, TurnError } from "./model.ts";
+import type { TurnMeasure } from "./model.ts";
 
 // What the Haptic server answers: the widget file, each site's public
 // settings, and the one endpoint the widget calls for every step of a guide.
@@ -38,6 +41,14 @@ export interface AppParts {
    * leaves before the answer, is still on record. Must not throw.
    */
   onAsk?(request: TurnRequest, site: SiteContext, origin: string | undefined): void;
+  /** The off switch, as this host keeps it: true stops every model call for the site. A site's own `off` is checked as well. */
+  isOff?(site: SiteContext): boolean | Promise<boolean>;
+  /** Keeps what each site has spent on the model, so a site can be stopped at its limit. Without one, nothing is capped. */
+  budget?: Budget;
+  /** Told when a site passes half, four fifths or all of a limit. Must not throw. */
+  onAlert?(site: SiteContext, alert: Alert): void;
+  /** Work to finish after the reply has gone, like adding a step's cost to the budget. A Worker has to be told about it, or it is cut short. */
+  background?(work: Promise<unknown>): void;
   /** Told about each finished step, for logging. Must not throw. */
   onTurn?(request: TurnRequest, measure: TurnMeasure, site: SiteContext, origin: string | undefined): void;
   /**
@@ -51,6 +62,26 @@ export interface AppParts {
 }
 
 const MAX_BODY_BYTES = 512 * 1024;
+
+/**
+ * What a visitor reads when the server answers without asking the model. The
+ * words are fixed, so nothing typed into the ask box or planted on a page can
+ * change them. They go out as an ordinary reply, which every copy of the
+ * widget already knows how to show, marked `paused` so the widget does not
+ * take it for a guide that finished. Its status is "stuck", so a widget from
+ * before the mark existed, still cached in a visitor's browser, ends the
+ * guide as one that found no way forward, which is not billed, and not as one
+ * that arrived.
+ */
+export const FIXED_SAY = {
+  off: "The guide is switched off for now.",
+  /** The site has spent its budget for the hour or the day. */
+  resting: "The guide is resting for now. Try again in a little while.",
+  /** One visitor has used their steps for the day. */
+  visitorLimit: "That's as much as the guide can do for you today. Try again tomorrow.",
+} as const;
+
+const fixedReply = (say: string): TurnReply => ({ target: null, status: "stuck", say, paused: true });
 
 /** Returns the handler. It answers `undefined` for addresses that are not its own, so a host can serve other things. */
 export function createApp(parts: AppParts) {
@@ -81,6 +112,7 @@ export function createApp(parts: AppParts) {
       if (origin) parts.onSeen?.(site, origin, allowed);
       if (!allowed) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
       const config: PublicSiteConfig = { name: site.name, appearance: site.appearance };
+      if (await switchedOff(parts, site)) config.off = true;
       return json(200, config);
     }
 
@@ -93,14 +125,29 @@ export function createApp(parts: AppParts) {
       if (await parts.overLimit(`${site.id} ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
       if (turn.step === 0 && turn.guide) parts.onAsk?.(turn, site, origin);
 
+      const streamed = (request.headers.get("Accept") ?? "").includes(STREAM_TYPE);
+      // A page that was open before the switch was thrown still has its launcher, so a step can arrive.
+      if (await switchedOff(parts, site)) {
+        const reply = fixedReply(FIXED_SAY.off);
+        return streamed ? lines(cors, async (line) => line(reply)) : json(200, reply);
+      }
+
+      const admitted = await askBudget(parts, site, caller, turn);
+      if (!admitted.gate.open) {
+        const reply = fixedReply(admitted.gate.why === "caller" ? FIXED_SAY.visitorLimit : FIXED_SAY.resting);
+        return streamed ? lines(cors, async (line) => line(reply)) : json(200, reply);
+      }
+
       // A widget that asks for it gets the step as it forms: the control to point at first, then the whole reply.
-      if ((request.headers.get("Accept") ?? "").includes(STREAM_TYPE)) return streamTurn(parts, site, turn, cors, origin);
+      if (streamed) return streamTurn(parts, site, turn, caller, admitted, cors, origin);
 
       try {
         const measure = await measureTurn(site, turn);
+        charge(parts, site, caller, admitted, measure.usd, 1);
         parts.onTurn?.(turn, measure, site, origin);
         return json(200, measure.reply);
       } catch (error) {
+        charge(parts, site, caller, admitted, paidFor(error), 0);
         if (!(error instanceof TurnError)) throw error;
         console.error(`turn ${site.id}: ${error.message}`);
         return json(error.status, { error: error.message });
@@ -142,24 +189,101 @@ function parseReport(body: unknown): GuideReport | undefined {
  * named the control, and the full reply follows as the last line. The status
  * line is already sent by then, so a failure arrives as `{"error":…,"code":…}`.
  */
-function streamTurn(parts: AppParts, site: SiteContext, turn: TurnRequest, cors: Record<string, string>, origin: string | undefined): Response {
+function streamTurn(
+  parts: AppParts,
+  site: SiteContext,
+  turn: TurnRequest,
+  caller: string,
+  admitted: Admitted,
+  cors: Record<string, string>,
+  origin: string | undefined,
+): Response {
+  return lines(cors, async (line) => {
+    try {
+      const measure = await measureTurn(site, turn, undefined, (id) => line({ target: id }));
+      charge(parts, site, caller, admitted, measure.usd, 1);
+      parts.onTurn?.(turn, measure, site, origin);
+      line(measure.reply);
+    } catch (error) {
+      charge(parts, site, caller, admitted, paidFor(error), 0);
+      const known = error instanceof TurnError;
+      console.error(`turn ${site.id}:`, known ? error.message : error);
+      line({ error: known ? error.message : "Something went wrong.", code: known ? error.status : 500 });
+    }
+  });
+}
+
+/** A response in the streamed format. `write` is handed the function that sends one line. */
+function lines(cors: Record<string, string>, write: (line: (value: unknown) => void) => Promise<void>): Response {
   const encoder = new TextEncoder();
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const line = (value: unknown) => controller.enqueue(encoder.encode(JSON.stringify(value) + "\n"));
-      try {
-        const measure = await measureTurn(site, turn, undefined, (id) => line({ target: id }));
-        parts.onTurn?.(turn, measure, site, origin);
-        line(measure.reply);
-      } catch (error) {
-        const known = error instanceof TurnError;
-        console.error(`turn ${site.id}:`, known ? error.message : error);
-        line({ error: known ? error.message : "Something went wrong.", code: known ? error.status : 500 });
-      }
+      await write((value) => controller.enqueue(encoder.encode(JSON.stringify(value) + "\n")));
       controller.close();
     },
   });
   return new Response(body, { headers: { ...cors, "Content-Type": STREAM_TYPE, "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
+}
+
+/** How long a step waits to hear whether it may go ahead. A budget that is slow is treated like one that cannot be reached. */
+const BUDGET_WAIT_MS = 400;
+
+/** What the budget said about a step, and what it set aside for it. */
+interface Admitted {
+  gate: Gate;
+  /** Names what was set aside. It can come after the step has gone ahead, when the budget was slow to answer. */
+  hold: Promise<number | undefined>;
+}
+
+/**
+ * Whether the site may make another model call. When it may, the most the
+ * step could cost is set aside until `charge` settles it. If the budget cannot
+ * be reached, or takes too long, the step goes ahead: the spend limit at the
+ * model provider is what holds when this fails, and a visitor should not lose
+ * their guide to it.
+ */
+async function askBudget(parts: AppParts, site: SiteContext, caller: string, turn: TurnRequest): Promise<Admitted> {
+  const budget = parts.budget;
+  if (!budget) return { gate: { open: true }, hold: Promise.resolve(undefined) };
+  const asked = Promise.resolve()
+    .then(() => budget.admit(site, caller, ceilingFor(site, turn)))
+    .catch((error) => {
+      console.error(`budget ${site.id}: couldn't be reached, so the step went ahead.`, error);
+      return undefined;
+    });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<"late">((resolve) => {
+    timer = setTimeout(() => resolve("late"), BUDGET_WAIT_MS);
+  });
+  const first = await Promise.race([asked, late]);
+  clearTimeout(timer);
+  if (first === "late") console.error(`budget ${site.id}: no answer in ${BUDGET_WAIT_MS} ms, so the step went ahead.`);
+  return { gate: first === "late" || !first ? { open: true } : first.gate, hold: asked.then((admission) => admission?.hold) };
+}
+
+/**
+ * Settles a step with the site's budget, after the reply has gone: adds what
+ * it cost, gives back what was set aside for it, and passes on any alert that
+ * sets off. A step that failed is settled as well, with `steps` 0.
+ */
+function charge(parts: AppParts, site: SiteContext, caller: string, admitted: Admitted, usd: number, steps: number) {
+  const budget = parts.budget;
+  if (!budget) return;
+  const work = admitted.hold
+    .then((hold) => budget.settle(site, caller, hold, usd, steps))
+    .then((report) => {
+      for (const alert of report.alerts) parts.onAlert?.(site, alert);
+    })
+    .catch((error) => console.error(`budget ${site.id}: a step's cost couldn't be added.`, error));
+  parts.background?.(work);
+}
+
+/** What a model call that failed still cost. The provider counts a reply that was cut short or could not be read. */
+const paidFor = (error: unknown): number => (error instanceof TurnError ? error.usd : 0);
+
+/** Off for this site, by the site's own setting or by the host's switch. */
+async function switchedOff(parts: AppParts, site: SiteContext): Promise<boolean> {
+  return site.off === true || (await parts.isOff?.(site)) === true;
 }
 
 /** The widget only works on origins the site lists. Requests with no Origin header (same-origin GETs, curl) pass. */
