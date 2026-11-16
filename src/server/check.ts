@@ -64,6 +64,164 @@ export function namedButNotPointedNote(element: SnapElement): string {
   );
 }
 
+// The same contradiction after the first step. On Northpine the owner asked
+// to add a budget, was led to Budgets, and the guide ended there: "You're on
+// the Budgets page now, where every team's budget is listed. To add one, use
+// New budget at the top.", "done" and no pointer. Only the first question was
+// ever asked again, because once the goal is reached a control named in
+// passing is usually an extra, and right as it is: "The left menu is now
+// hidden. To bring it back, click Main menu" (grafana), "Click Close when
+// you're finished" (jira). In the replies recorded on the 12 tuned apps
+// (2,433 single steps and 232 whole-guide steps with their pages, 3,455
+// whole-guide steps without), 74 after the first step named a listed control
+// with nothing pointed at. Pointing at it would have been right 7 times and
+// wrong 67: most came once the goal was reached, or while ParaBank was down.
+// Judged as below, none is pointed at, 61 are left as they were (59 of them
+// rightly) and 13 are asked about again. So such a reply is judged first:
+// - "point": the control is plainly the goal's next step. It is pointed at,
+//   with the same sentence and "continue", and no model call is made.
+// - "aside": it is named as something optional or for later, or the goal was
+//   a question about what the site has and is answered. The reply stands.
+// - "ask": anything else. The model is asked once more (namedButNotPointedNote).
+
+/** What is done with a guide's reply whose sentence tells the visitor to use a listed control while nothing is pointed at. */
+export type NamedVerdict = "point" | "aside" | "ask";
+
+/**
+ * Words that make using the control optional, conditional, for later, or a
+ * way back: "if you want", "when you're finished", "to bring it back", "for
+ * more". Matched anywhere in the sentence.
+ */
+const ASIDE = new RegExp(
+  [
+    String.raw`\b(?:if|unless|whenever|in case|otherwise|optionally|anytime|any time|later|also|meanwhile|in the meantime|for example|for instance)\b`,
+    String.raw`\b(?:when|once|after|until|as soon as)\s+(?:you|it)\b`,
+    String.raw`\b(?:try again|see more|see the rest|bring it back|get it back|go back|come back)\b`,
+    String.raw`(?:^|[.!?;:]\s+)to\s+(?:check|confirm|double-check|verify|review|undo|leave|exit|return)\b`,
+    String.raw`\bfor\s+(?:more|the rest|later|other|newer|older)\b`,
+  ].join("|"),
+  "i",
+);
+/** Words that say the goal, or something, is already done: "is now hidden", "has been added", "Done.". */
+const REACHED = new RegExp(
+  [
+    String.raw`^\s*(?:done|all set|you're all set|you're set|that's it)\b`,
+    String.raw`\b(?:is|are|was|were)\s+now\b`,
+    String.raw`\bnow\s+(?:shows?|lists?|has|have|holds?|contains?|open|closed|hidden|showing|listed|selected|filtered|grouped|sorted|applied|in|on|off|set|enabled|disabled|saved|added|created)\b`,
+    String.raw`\b(?:has|have)\s+(?:now\s+)?been\b`,
+    String.raw`\bshould\s+now\b`,
+    String.raw`\b(?:this is it|you're on it|you're already (?:on|there|in))\b`,
+    String.raw`\byou(?:'ve| have)?\s+(?:just\s+)?(?:clicked|pressed|selected|added|saved|created|submitted|sent)\b`,
+    String.raw`\b(?:confirms|confirmed|successfully)\b`,
+  ].join("|"),
+  "i",
+);
+/** Words that say something is missing or failing, so a control named after them may be a way around it rather than the step. */
+const UNABLE = /\b(?:can't|cannot|can not|couldn't|could not|unable|isn't|aren't|doesn't|don't see|didn't|won't|hasn't|haven't|no longer|not (?:showing|shown|listed|there|here|available|loaded)|error|failed|still loading)\b/i;
+/** Controls that close or leave what is open. Named after the goal is reached, they are how to get out of it. */
+const DISMISS = /^(?:close|cancel|back|dismiss|ok|okay|done|no thanks|not now|skip|x|×|back to\b.*)$/i;
+/** A goal that asks for a way, though it may start like a question: "How do I…", "where can I…", "I want to…". */
+const ASKS_FOR_A_WAY = /\b(?:how (?:do|can|could|would|should|to)|i(?:'d| would)?\s+(?:really\s+|only\s+|just\s+)?(?:want|need|like) to|help me|let me|walk me|take me|show me how|where(?:'s|\s+(?:do|can|could|should|would|is|are)))\b/i;
+/** A goal that asks what the site has or shows: "which budgets are over", "is there a cheat sheet of hotkeys?". */
+const ASKS_A_FACT = /^\s*(?:what|what's|which|who|who's|whose|when|why|how (?:many|much|long|often|far)|is|are|does|do|did|has|have|can|could|will|would|was|were)\b/i;
+/** Words too common to tie a control to a goal: "New budget" and "add a budget" share "budget", not "new" or "add". */
+const COMMON = new Set(
+  (
+    "the and for with from into onto this that these those there here then than what which who how where when why can could would should will does did " +
+    "have has had are was were been you your our ours their them they she her him his its mine want need like please just get got make set add new create edit " +
+    "change update open close view show see use find take let help put give all any every each more other some one page menu button link tab list item items " +
+    "top bottom left right side next back way thing now again also only own not out off about over under after before yes done save"
+  ).split(" "),
+);
+
+/** A text's words that say what it is about, lower case and without a plural "s". */
+function keyWords(text: string): Set<string> {
+  const words = text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  const stem = (word: string) => (word.endsWith("ies") && word.length > 4 ? `${word.slice(0, -3)}y` : word.endsWith("s") && !word.endsWith("ss") && word.length > 3 ? word.slice(0, -1) : word);
+  return new Set(words.filter((word) => word.length >= 3 && !/^\d+$/.test(word) && !COMMON.has(word)).map(stem));
+}
+
+/** Whether a control's name shares a word with the goal: "New budget" with "how do I add a budget". */
+function namesTheGoal(label: string, goal: string): boolean {
+  const wanted = keyWords(goal);
+  return [...keyWords(label)].some((word) => wanted.has(word));
+}
+
+/** Whether the goal only asks what the site has or shows, which the owner decided an answer in words can finish. */
+export function asksForAFact(goal: string): boolean {
+  return ASKS_A_FACT.test(goal) && !ASKS_FOR_A_WAY.test(goal);
+}
+
+/** Every listed control the sentence tells the visitor to use, in the order the sentence names them. */
+function toldToUse(snapshot: Snapshot, say: string): { element: SnapElement; at: number }[] {
+  const found: { element: SnapElement; at: number; end: number }[] = [];
+  const named = snapshot.elements.filter((element) => element.label.trim().length >= SHORTEST).sort((a, b) => b.label.length - a.label.length);
+  for (const element of named) {
+    const name = escape(element.label.trim()).replace(/\s+/g, "\\s+");
+    const told = new RegExp(String.raw`\b${USE}\s+(?:on\s+)?(?:the\s+)?["“'‘]?${name}["”'’]?(?=$|[\s.,;:!?)])`, "gi");
+    const through = new RegExp(String.raw`\b${THROUGH}\s+["“'‘]?${name}["”'’]?\s+${KIND}\b`, "gi");
+    for (const match of [...say.matchAll(told), ...say.matchAll(through)]) {
+      const end = match.index + match[0].length;
+      if (NOT_AN_INSTRUCTION.test(say.slice(0, match.index))) continue;
+      if (found.some((other) => match.index < other.end && end > other.at)) continue;
+      found.push({ element, at: match.index, end });
+    }
+  }
+  return found.sort((a, b) => a.at - b.at);
+}
+
+/**
+ * What to do with a guide's reply, after its first question, whose sentence
+ * tells the visitor to use `element` and points at nothing (namedButNotPointed).
+ *
+ * "point" only when nothing in the reply makes the control anything but the
+ * next step: the goal asks for a way, not a fact; the control shares a word
+ * with the goal; it is the only control the sentence sends the visitor to,
+ * and the first thing that sentence asks of them; nothing says it is
+ * optional, for later, already done or failing; the reply is not "stuck";
+ * and the control does not close or leave something.
+ *
+ * "aside" when the sentence makes it optional or for later ("if", "when
+ * you're finished", "to bring it back", "for more"), when the goal only asks
+ * what the site has and the reply is "done", or when the sentence says
+ * something is already done and the control has nothing to do with the goal.
+ *
+ * "ask" otherwise. On the first question nothing can be done yet, so there a
+ * reply is never an aside: it is pointed or asked about, as before. An act
+ * reply is also an aside when it leaves a field or a value to the visitor, as
+ * namedButNotDone has it.
+ */
+export function judgeNamed(request: Pick<TurnRequest, "goal" | "step" | "event" | "snapshot" | "mode">, reply: TurnReply, element: SnapElement): NamedVerdict {
+  const first = request.step === 0 && !request.event;
+  const say = reply.say.replace(/[’‘]/g, "'");
+  // An act reply that leaves a field or a value to the visitor is their turn, whatever else it names ("and I'll click Next after").
+  if (request.mode === "act" && !first && leavesItToTheVisitor(say, request.snapshot)) return "aside";
+  const aside = ASIDE.test(say);
+  const fact = asksForAFact(request.goal);
+  if (!first && (aside || (fact && reply.status === "done"))) return "aside";
+  const reached = REACHED.test(say);
+  const ofTheGoal = namesTheGoal(element.label, request.goal);
+  const told = toldToUse(request.snapshot, say);
+  const at = told.find((one) => one.element === element)?.at ?? -1;
+  // The sentence the instruction is in, up to it: something else asked of the visitor there comes first.
+  const before = say.slice(0, Math.max(at, 0)).split(/[.!?]\s+/).at(-1) ?? "";
+  const asksFirst = new RegExp(String.raw`\bthen\b|(?<!\bto\s)\b(?:${USE}|${ASK_FOR})\b`, "i").test(before);
+  const sure =
+    reply.status !== "stuck" &&
+    !aside &&
+    !reached &&
+    !fact &&
+    ofTheGoal &&
+    at >= 0 &&
+    !asksFirst &&
+    new Set(told.map((one) => one.element.id)).size === 1 &&
+    !UNABLE.test(say) &&
+    !DISMISS.test(element.label.trim());
+  if (sure) return "point";
+  if (!first && reached && !ofTheGoal) return "aside";
+  return "ask";
+}
+
 // In act mode the same contradiction stops the run, at any step. A reply of
 // "continue" with nothing pointed at is the visitor's turn on nothing: Haptic
 // does nothing, and the visitor is left with nothing to use. Seen on
