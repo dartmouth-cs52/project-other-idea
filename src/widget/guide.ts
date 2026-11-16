@@ -1888,6 +1888,8 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
         return `${who} went to ${currentPath()} without using ${name}.`;
       case "unknown":
         return `The page changed after something ${whom} did that could not be identified.`;
+      case "covered":
+        return `A dialog opened over ${name}, so it cannot be used until the dialog is closed.`;
       case "redrawn":
         return "";
     }

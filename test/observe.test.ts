@@ -158,6 +158,30 @@ test("a control the page drew again, with nothing done, is found again and not a
   assert.equal(run(BUTTON, [press(0, OTHER), release(30), tick(60), tick(300, { gone: true })]).verdict?.how, "unknown");
 });
 
+test("Escape that takes the control away dismissed it, even with the keyboard on the control, unless the sentence asked for Escape", () => {
+  const escape: Seen = { type: "key", at: 0, key: "Escape", inTarget: true, inTyped: false };
+  // The dialog Continue was in closed: not the step, and not a wrong click either.
+  assert.deepEqual(run(BUTTON, [escape, tick(150, { gone: true, dialog: true })]).verdict, { how: "unknown", onTarget: false, strayed: false });
+  // A sentence that said "Press Escape" heard it at once.
+  assert.deepEqual(run({ ...BUTTON, keys: ["escape"] }, [escape]).verdict, { how: "key", key: "escape", onTarget: true, strayed: false });
+  // Escape in a field that closes only its own list leaves the field where it was: that is not a step at all.
+  assert.equal(run(FIELD, [escape, tick(150, { changed: true })]).verdict, undefined);
+  // Another key on the control that takes it away is still the control's own doing.
+  assert.equal(run(BUTTON, [{ ...escape, key: "ArrowRight" } as Seen, tick(150, { gone: true })]).verdict?.how, "key");
+});
+
+test("a dialog the page opens over the control, with nothing done, ends the step once it has stayed a moment", () => {
+  // A dialog that flickers up and away has not covered it.
+  assert.equal(run(BUTTON, [tick(500, { covered: true, dialog: true }), tick(600, { dialog: false })]).verdict, undefined);
+  const covered = run(BUTTON, [tick(500, { covered: true, dialog: true }), tick(600, { covered: true, dialog: true }), tick(750, { covered: true, dialog: true })]);
+  assert.deepEqual(covered.verdict, { how: "covered", onTarget: false, strayed: false });
+  assert.equal(covered.at, 750);
+  // While it is over the control, the control is looked at often, so the verdict comes soon.
+  assert.equal(waiting(run(BUTTON, [tick(500, { covered: true, dialog: true })]).heard, 1500), true);
+  // One the visitor's own press opened is the press's doing, heard as before.
+  assert.equal(run(BUTTON, [press(0, BLANK), release(40), click(41, BLANK), tick(300, { covered: true, dialog: true })]).verdict?.how, "unknown");
+});
+
 test("a real dropdown is heard by its change, by its second click, or by leaving it once opened", () => {
   assert.equal(run(SELECT, [{ type: "input", at: 10, inTarget: true }]).verdict?.how, "filled");
   assert.equal(run(SELECT, [click(0, TARGET), click(900, TARGET)]).verdict?.how, "filled");
