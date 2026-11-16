@@ -86,7 +86,7 @@ Haptic runs on joinhaptic.com, so people can try it before they ask for access. 
 
 To try it against a widget server on your machine, build with `NEXT_PUBLIC_WIDGET_URL=http://localhost:4000` and `NEXT_PUBLIC_HAPTIC_SITE` set to a site of yours that allows the address you open. Set `NEXT_PUBLIC_HAPTIC_SITE` to nothing to build without it.
 
-What the guide knows about the site beyond the page in front of it is in `haptic-notes.md`, with what it read from the public pages. After changing the notes or the pages, rebuild that and publish it, from the top of the repository:
+What the guide knows about the site beyond the page in front of it is in `haptic-notes.md`, with what it read from the live public pages. Build that and publish it before the tag first goes live, and again after changing the notes or once a change to the pages is live, from the top of the repository:
 
 ```bash
 HAPTIC_PUBLIC_URL=https://widget.joinhaptic.com npm run tag -- --url https://joinhaptic.com --id site_joinhaptic --name Haptic --notes web/haptic-notes.md --visitor-steps 60
@@ -96,7 +96,7 @@ HAPTIC_PUBLIC_URL=https://widget.joinhaptic.com npm run tag -- --url https://joi
 npm run site:publish -- site_joinhaptic
 ```
 
-The second needs `DATABASE_URL` for Neon's main branch in `.env`. Anyone can use the guide here, so it is held to the server's budget for a site, $2 an hour and $10 a day, and one visitor gets 60 steps a day. A visitor is told apart by network address, so people sharing one, as on an office or campus network, share the 60. Past any of these, visitors read a fixed sentence instead of a step. For a busy day, such as a demo to a room, rebuild with a higher `--visitor-steps`, and `--budget-hour` and `--budget-day` if needed, and publish again. `npm run site:off -- site_joinhaptic` takes the launcher off the site without a deploy.
+The second needs `DATABASE_URL` for Neon's main branch in `.env`. Until it has run, the widget server answers from the copy of `site_joinhaptic` it held before, which has no notes and no limit for each visitor. Anyone can use the guide here, so it is held to the server's budget for a site, $2 an hour and $10 a day, and one visitor gets 60 steps a day. A visitor is told apart by network address, so people sharing one, as on an office or campus network, share the 60. Past any of these, visitors read a fixed sentence instead of a step. For a busy day, such as a demo to a room, rebuild with a higher `--visitor-steps`, and `--budget-hour` and `--budget-day` if needed, and publish again. `npm run site:off -- site_joinhaptic` takes the launcher off the site without a deploy.
 
 ## Deploying
 
