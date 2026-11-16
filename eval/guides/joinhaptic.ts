@@ -52,4 +52,7 @@ const guides: Guide[] = [
   { id: "no-such-feature", start: "/", goal: "How do I log in to my account?", steps: [DONE] },
 ];
 
-export default { siteId: "site_joinhaptic", origin: "https://joinhaptic.com", hasTag: false, guides } satisfies GuideSet;
+// The site has its own tag now (web/components/haptic-tag.tsx), so recording uses
+// the live widget script instead of adding a second. The recorder still answers
+// every step itself, so the model is never called.
+export default { siteId: "site_joinhaptic", origin: "https://joinhaptic.com", hasTag: true, guides } satisfies GuideSet;
