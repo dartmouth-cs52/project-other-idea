@@ -520,11 +520,15 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
   The launcher carries no tag. A customer can change the launcher's word, and
   cannot remove the line.
 - **Put the launcher away.** With the mouse over the launcher or focus on it,
-  a 20px white circle with a minus fades in on its inner top corner, the left
+  a 20px white circle with an × fades in on its outer bottom corner, the right
   one for a launcher on the right. It takes the launcher down to a 14px dot in
-  the same place: the word fades first, then the pill draws in. Under the
-  mouse or focus the dot opens to 32px and shows the pointer mark, and a click
-  brings the launcher back without opening the panel. Each change is 300ms or
+  the same place: the word fades first, then the pill draws in. The dot stays
+  that small while the mouse that pressed the × is still over it. Once the
+  mouse comes back, or with focus, it opens to 32px and shows the pointer
+  mark, growing in place without moving, and a click brings the launcher back
+  without opening the panel. Minimized, the area that answers the mouse is a
+  still 32px square, so the dot can't flicker between sizes under a pointer
+  resting on its edge. Each change is 300ms or
   less and eases out with the glide's curve, with no bounce. With reduced
   motion on, each one happens at once. The visitor's choice holds on the
   site's other pages.

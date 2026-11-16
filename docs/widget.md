@@ -26,7 +26,7 @@ Each label is counted by distinct visitor (`src/server/learned.ts`). The widget 
 
 ## Putting the launcher away
 
-A visitor who doesn't want the launcher in the corner can minimize it. A small button with a minus shows on the launcher's corner while the mouse is over it or it has focus, and turns it into a dot. The dot opens up a little to show the pointer when the mouse is over it, and a click brings the launcher back. The choice is kept in the site's `localStorage` as `haptic.minimized`, so it holds on the next page. Where storage is blocked, the launcher is minimized on that page only. `test/browser/minimize.test.ts` covers it in all three browsers.
+A visitor who doesn't want the launcher in the corner can minimize it. A small button with an × shows on the launcher's outer bottom corner while the mouse is over it or it has focus, and turns it into a dot. The dot opens up a little to show the pointer when the mouse is over it, and a click brings the launcher back. The choice is kept in the site's `localStorage` as `haptic.minimized`, so it holds on the next page. Where storage is blocked, the launcher is minimized on that page only. `test/browser/minimize.test.ts` covers it in all three browsers.
 
 ## Testing in browsers
 
