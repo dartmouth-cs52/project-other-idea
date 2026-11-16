@@ -240,7 +240,13 @@ const guides: Guide[] = [
       },
       DONE,
     ],
-    reached: { url: "/admin/saveSubscriber/5$", text: "Subscribers: Leave Rejections" },
+    // The Email Subscriptions page answers the question too: its Leave Rejections row has a Subscribers column, the
+    // same people the row's own page lists (both empty on 16 November 2026). There it counts once the sentence says
+    // which row, since the page has five.
+    reached: [
+      { url: "/admin/saveSubscriber/5$", text: "Subscribers: Leave Rejections" },
+      { url: "/admin/viewEmailNotification$", selector: '.oxd-table-card:has-text("Leave Rejections")', said: "\\bleave rejections\\b" },
+    ],
   },
   // Asked in French. Five dropdowns that all read "-- Select --"; Status is the fourth.
   {
