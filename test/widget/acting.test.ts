@@ -555,3 +555,77 @@ test("a tab that is a link to its own route, drawn again when the route changes,
     await session.close();
   }
 });
+
+test("after three steps in a row Haptic could not do, acting ends and the guide goes on as a guide", async () => {
+  // Fields that refuse a script's keys and throw away what a script sets, so Haptic's typing never takes.
+  const field = (n: number) => `<label>Code ${n} <input id="code${n}" data-watch></label>`;
+  const session = await start(
+    `${WATCH}<h1>Verify</h1><form>${field(1)}${field(2)}${field(3)}<button type="button">Next</button></form>
+    <script>
+      for (const input of document.querySelectorAll('input')) {
+        input.addEventListener('keydown', (event) => { if (!event.isTrusted) event.preventDefault(); });
+        input.addEventListener('input', (event) => { if (!event.isTrusted) input.value = ''; });
+      }
+    </script>`,
+    (request) => (request.mode === "act" ? doing(request, `Code ${request.step + 1}`, "type", "Typing the code.", ["alpha", "bravo", "charlie"][request.step] ?? "delta") : words("Now click Next.")),
+    "/",
+    { acting: { ...ACTING_ON, confirmFirst: false } },
+  );
+  try {
+    await session.ask("can you put alpha, bravo and charlie in the codes", { act: true });
+    for (const n of [1, 2, 3]) {
+      await session.untilState("pointing", 20_000);
+      assert.equal(await session.pointed(), `code${n}`);
+      assert.match(await session.caption(), /^I couldn't do this one\./);
+      await session.page.locator(`#code${n}`).click();
+      await session.page.keyboard.type(["alpha", "bravo", "charlie"][n - 1]!, { delay: 20 });
+      await session.untilAsked(n + 1, 15_000);
+    }
+    const fourth = session.requests[3]!;
+    assert.equal(fourth.mode, undefined, "acting went on after three failures in a row");
+    assert.match(fourth.event ?? "", /You stopped doing it yourself, since several steps could not be done\./);
+    await session.untilState("finished");
+  } finally {
+    await session.close();
+  }
+});
+
+test("each press is shown: the pointer glides to it and a ripple marks it, and with reduced motion there is no ripple", async () => {
+  for (const reduce of [false, true]) {
+    const session = await start(
+      `${WATCH}<h1>Wizard</h1><div><button id="next" type="button" data-watch style="margin:200px 0 0 400px">Next</button></div><p id="step"></p>
+      <script>document.getElementById('next').addEventListener('click', () => (document.getElementById('step').textContent = 'Step two'));</script>`,
+      (request, index) => (index === 0 ? doing(request, "Next", "click", "Going on.") : words("Done.")),
+      "/",
+      { acting: { ...ACTING_ON, confirmFirst: false } },
+    );
+    try {
+      await session.page.emulateMedia({ reducedMotion: reduce ? "reduce" : "no-preference" });
+      // Ripples are counted as they are added to Haptic's own element.
+      await session.page.evaluate(() => {
+        const shadow = document.querySelector("haptic-root")!.shadowRoot!;
+        (window as unknown as { ripples: number }).ripples = 0;
+        new MutationObserver((records) => {
+          for (const record of records) for (const node of record.addedNodes) if (node instanceof Element && node.classList.contains("ripple")) (window as unknown as { ripples: number }).ripples++;
+        }).observe(shadow, { childList: true });
+      });
+      await session.ask("can you go to the next step", { act: true });
+      await session.untilAsked(2, 15_000);
+      assert.equal(await session.page.textContent("#step"), "Step two");
+      const ripples = await session.page.evaluate(() => (window as unknown as { ripples: number }).ripples);
+      if (reduce) assert.equal(ripples, 0, "a ripple was drawn with reduced motion");
+      else assert.ok(ripples >= 1, "no ripple marked the press");
+      // The pointer went to the button it pressed.
+      const near = await session.page.evaluate(() => {
+        const cursor = document.querySelector("haptic-root")!.shadowRoot!.querySelector(".cursor") as HTMLElement;
+        const button = document.getElementById("next")!.getBoundingClientRect();
+        // Where the pointer was last sent, as its own style says: it is put away once the guide is over.
+        const [x, y] = (/translate\(([-\d.]+)px, ([-\d.]+)px\)/.exec(cursor.style.transform) ?? []).slice(1).map(Number);
+        return { ok: Math.abs(x! - (button.left + button.width / 2)) < 30 && Math.abs(y! - (button.top + button.height / 2)) < 30, transform: cursor.style.transform };
+      });
+      assert.ok(near.ok, `the pointer is not at the button it pressed: ${JSON.stringify(near)}`);
+    } finally {
+      await session.close();
+    }
+  }
+});
