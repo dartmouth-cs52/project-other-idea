@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { emailText, INSTALL_FROM, UnsafeText } from "../web/worker/developer-email.ts";
+import { developerEmail, emailText, INSTALL_FROM, UnsafeText } from "../web/worker/developer-email.ts";
 import {
   EMAILS_PER_ADDRESS,
   EMAILS_PER_MAILBOX,
@@ -175,6 +175,18 @@ test("a new address is checked like any other, and only for the company's own si
   assert.equal((await call(sql, { url: "www.example.com" }, { method: "PUT", what: "address", org: OTHER_ORG }))?.status, 404);
 });
 
+test("a long host is cut to 80 characters in the subject, and given in full in the body", () => {
+  const host = `${"a".repeat(60)}.${"b".repeat(60)}.${"c".repeat(60)}.example.com:8443`;
+  const email = developerEmail({ to: "dev@example.com", sender: { email: "dana@example.com" }, siteOrigin: `https://${host}`, siteId: SITE, installOrigin: "https://joinhaptic.com", scriptUrl: "https://widget.joinhaptic.com/widget.js" });
+  const shown = email.subject.slice("dana@example.com asked you to add Haptic to ".length);
+  assert.equal(shown.length, 80);
+  assert.ok(shown.endsWith("…"));
+  assert.ok(host.startsWith(shown.slice(0, -1)));
+  assert.ok(email.text.includes(host), "the body has it all");
+  const short = developerEmail({ to: "dev@example.com", sender: { email: "dana@example.com" }, siteOrigin: "https://app.example.com", siteId: SITE, installOrigin: "https://joinhaptic.com", scriptUrl: "https://widget.joinhaptic.com/widget.js" });
+  assert.equal(short.subject, "dana@example.com asked you to add Haptic to app.example.com");
+});
+
 test("where the setup is: one step at a time, Finish later, done, and only for the company's own site", async () => {
   const rows = [site()];
   const sql = fakeSql(rows);
@@ -245,7 +257,7 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
       assert.equal((await call(sql(), { to: "dev@example.com", key: press() }, { fetcher, user: sender }))?.status, 200);
       const { body } = sent[0]!;
       const host = new URL(origin).host;
-      assert.equal(body.subject, `${sender.email} asked you to add Haptic to ${host}`);
+      assert.equal(body.subject, `${sender.email} asked you to add Haptic to ${host.length > 80 ? `${host.slice(0, 79)}…` : host}`);
       assert.equal(body.reply_to, sender.email);
       for (const part of [body.subject, body.html, body.text]) {
         if (input.name.trim().length > 1) assert.ok(!part.includes(input.name.trim()), "the name never appears");

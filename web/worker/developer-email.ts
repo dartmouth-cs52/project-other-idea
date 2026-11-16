@@ -14,6 +14,9 @@ import { emailButton, emailPage, escape, type Email, type } from "./sign-in-emai
 
 export const INSTALL_FROM = "Haptic <install@joinhaptic.com>";
 
+/** The most of a site's host the subject shows, ellipsis included. */
+const SUBJECT_HOST = 80;
+
 export interface DeveloperEmailInput {
   /** The developer. */
   to: string;
@@ -52,7 +55,8 @@ export function developerEmail(input: DeveloperEmailInput): Email {
   const link = `${input.installOrigin}/install/?site=${input.siteId}`;
   const prompt = agentPrompt(input.installOrigin, input.siteId);
   const tag = scriptTag(input.scriptUrl, input.siteId);
-  const subject = `${who} asked you to add Haptic to ${host}`;
+  // A host can be 253 characters. The subject shows at most 80 of it, and the body all of it.
+  const subject = `${who} asked you to add Haptic to ${host.length > SUBJECT_HOST ? `${host.slice(0, SUBJECT_HOST - 1)}…` : host}`;
   const lead = `${who} asked you to add Haptic to ${host}. It is one script tag on every page, including the pages behind the login. Reply to this email to reach them.`;
   const stranger = `If you don't know ${who}, ignore this email.`;
 
