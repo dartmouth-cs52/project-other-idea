@@ -179,6 +179,12 @@ export interface HistoryTurn {
 
 export interface TurnRequest {
   site: string;
+  /**
+   * The random id the widget keeps in the browser (src/widget/learn.ts). The
+   * server keeps only a hash of it made with the site's id, so the dashboard
+   * can count people rather than questions. Never part of the prompt.
+   */
+  visitor?: string;
   /** Made by the widget when the question is asked, and kept across page loads, so a guide's steps can be tied together. */
   guide?: string;
   goal: string;

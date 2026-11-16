@@ -4,6 +4,8 @@
 import { checkRequest, cleanRequest, emailDomain, isPersonalEmail, type AccessField, type AccessRequest } from "../lib/access-request";
 import { appApi, approveLink, type AppEnv } from "./app-api";
 import { proxyAuth } from "./auth";
+import { database } from "./db";
+import { sendHealthAlerts } from "./health";
 import { HOOK_PATH, neonHook, type HookEnv } from "./neon-hook";
 
 export interface Assets {
@@ -25,6 +27,17 @@ export interface Env extends AppEnv, HookEnv {
 }
 
 const SITE = "joinhaptic.com";
+
+/** The Worker's daily schedule, in wrangler.jsonc. Runs apart from any request. */
+export async function daily(env: Env): Promise<void> {
+  if (!env.DATABASE_URL) return;
+  try {
+    const sent = await sendHealthAlerts(database(env.DATABASE_URL), env);
+    console.log(`Guide health: ${sent} emails sent.`);
+  } catch (error) {
+    console.error("Guide health check failed:", error);
+  }
+}
 
 export async function handle(request: Request, env: Env, assets: Assets): Promise<Response> {
   const url = new URL(request.url);

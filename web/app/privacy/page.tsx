@@ -70,6 +70,12 @@ export default function Privacy() {
         run for us by Neon.
       </p>
       <p>
+        With each question we also keep a scrambled form of the random id described below, so the company can see how
+        many different people asked something, and one person asking ten times counts once. It is made differently for
+        each product, cannot be turned back into the id, and says nothing about who the person is. It does let the
+        company see that two questions came from the same browser.
+      </p>
+      <p>
         Haptic does not ask who a visitor is. But a name that shows on the page, in its address or on a control can
         be in what we keep, along with the time of each step, so the company may be able to tell who asked.
       </p>
@@ -83,8 +89,8 @@ export default function Privacy() {
         out whole.
       </p>
       <p>
-        To count how many different people have seen a name, the browser keeps a random id for that product, made by
-        Haptic and tied to nothing else. Our server keeps only a scrambled form of it, made differently for each
+        To count how many different people have seen a name, or asked a question, the browser keeps a random id for
+        that product, made by Haptic and tied to nothing else. Our server keeps only a scrambled form of it, made differently for each
         product, and at most ten of those for each name. A name is used to guide anyone only once several different
         people have seen it, so a name that only one person sees, like the title of their own document, is never
         used. The names, with when each was first and last seen and how often, are kept until the company asks us to

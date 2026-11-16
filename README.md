@@ -63,7 +63,7 @@ sequenceDiagram
     end
 ```
 
-1. **Snapshot.** The widget (about 38 KB, no dependencies, isolated in a shadow root) lists every interactive control on the page with a short id, its role, label, state and position (`nav`, `main › Billing`). When a dialog is open, only the dialog is listed.
+1. **Snapshot.** The widget (about 45 KB, 16 KB gzipped, no dependencies, isolated in a shadow root) lists every interactive control on the page with a short id, its role, label, state and position (`nav`, `main › Billing`). When a dialog is open, only the dialog is listed.
 2. **Decide.** The server sends the snapshot, the goal and the progress so far to Claude. The site's knowledge is a cached prompt, so each step pays full price only for what changed. The reply has a strict schema, and a target that isn't on the page is dropped, so Haptic can only point at what the user can actually see.
 3. **Point.** The pointer moves the moment the target id arrives, before the caption has finished streaming.
 4. **Observe.** Once the user acts, the widget waits for the page to settle and reports what changed. If they click something else, Haptic notices and gives them the step that gets them back.
@@ -76,7 +76,8 @@ A crawl turns the site into a **graph**. Each page's title, headings, buttons an
 ### Beyond pointing
 
 - **[Answers](docs/answers.md)** (opt-in): replies in words to questions like "what does this do?", drawn from the site's own help articles, with citations. The server, not the prompt, enforces the rules that matter. An answer must cite a real article. Prices, refunds, legal matters and account specifics are never stated. A button an article names is checked against the live page, so out-of-date docs get flagged instead of repeated.
-- **[Corrections](docs/corrections.md)**: when Haptic points at the wrong thing, the company picks the right control on that step in the dashboard, and the fix applies to similar questions from then on. A company can also list controls Haptic must never point at, which the server and the widget both enforce.
+- **[What people can't find](docs/corrections.md#what-people-cant-find-and-guide-health)**: the dashboard leads with the questions people gave up on, counted by person, and flags a common question whose guides stopped finishing, which is what a change to the product looks like. The company's team gets an email about it.
+- **[Corrections](docs/corrections.md#point-here-instead)**: when Haptic points at the wrong thing, the company picks the right control on that step in the dashboard, and the fix applies to similar questions from then on. A company can also list controls Haptic must never point at, which the server and the widget both enforce.
 - **[Hand-off to a person](docs/answers.md#the-way-to-a-person)**: when Haptic can't help, it passes the conversation to the company's existing support, through a webhook (optionally HMAC-signed), a contact page, email, or the site's own chat widget.
 
 ## Engineering
@@ -158,7 +159,7 @@ npm run test:browser              # the widget in Chromium, Firefox and WebKit
 |---|---|
 | [Operations](docs/operations.md) | Deploying, the database, what is recorded about visitors, billing outcomes, the kill switch, spend limits and step costs |
 | [The widget on a live page](docs/widget.md) | Modal dialogs, covered controls, route changes, learning the site from visits, and the browser tests |
-| [Correcting Haptic](docs/corrections.md) | "Point here instead", and controls Haptic must never point at |
+| [Correcting Haptic](docs/corrections.md) | What people can't find, guide health and its emails, "Point here instead", and controls Haptic must never point at |
 | [Answers and hand-off](docs/answers.md) | Answering from help docs, the server-side rules, and hand-off to a person |
 | [Benchmark](eval/README.md) | How cases work, how to run them, and results |
 | [Website and dashboard](web/README.md) | Sign-in, approvals, the dashboard, and deploying the site |

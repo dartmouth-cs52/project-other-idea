@@ -108,7 +108,6 @@ export interface Insights {
   days: number;
   summary: { guides: number; unanswered: number; helped_yes: number; helped_no: number; median_ms_to_pointer: number | null; median_steps_finished: number | null };
   outcomes: { outcome: Outcome; count: number }[];
-  unanswered: { key: string; question: string; asked: number; unanswered: number; last_asked: string; example: string | null }[];
   recent: {
     id: string;
     question: string;
@@ -123,6 +122,34 @@ export interface Insights {
   }[];
   abandonedAt: { path: string; step: number; target_label: string | null; count: number }[];
   wrongClicks: { path: string; target_label: string; shown: number; wrong: number }[];
+  /** The lead: questions grouped by meaning, counted by person, that some people asked and didn't get to the end of. */
+  cantFind: { key: string; question: string; visitors: number; found: number; asked: number; stoppedAt: { path: string; step: number; label: string | null; count: number } | null }[];
+  /** The most asked groups of the last eight weeks, with each week's finish rate. A flagged one finishes far less often than before. */
+  health: HealthGroup[];
+  /** Groups the company was told about in the last month. */
+  alerts: { key: string; sent_at: string; emailed: boolean }[];
+}
+
+export interface HealthGroup {
+  key: string;
+  question: string;
+  weeks: { ago: number; guides: number; finished: number; visitors: number }[];
+  flag?: {
+    before: number;
+    now: number;
+    visitorsBefore: number;
+    stop: { path: string; step: number; label: string | null } | null;
+    missing?: { path: string; role: string | null; label: string };
+  };
+}
+
+export interface GroupGuide {
+  id: string;
+  question: string;
+  started_at: string;
+  helped: boolean | null;
+  outcome: Outcome;
+  step_count: number;
 }
 
 export interface FinishedList {

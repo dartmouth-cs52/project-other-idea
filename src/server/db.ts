@@ -1,6 +1,6 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { cleanText, normalizePath, questionKey, type GuideReport, type PageOutline, type SiteContext, type TurnRequest } from "../shared/types.ts";
-import { MAX_VISITORS, outlineRows, withLearned, type LearnedLabel } from "./learned.ts";
+import { MAX_VISITORS, outlineRows, visitorHash, withLearned, type LearnedLabel } from "./learned.ts";
 import type { TurnMeasure } from "./model.ts";
 
 // What the widget server keeps in Neon: each site, which origins the script has
@@ -178,7 +178,21 @@ export class Store {
         on conflict (id) do nothing`;
     });
     this.track(guide, write);
-    return write;
+    return write.then(() => this.recordVisitor(request));
+  }
+
+  /**
+   * Adds who asked, as a hash of the widget's random id made with the site's
+   * id, so the dashboard counts people and not questions. A statement of its
+   * own, because the column came later (db/migrations/0011).
+   */
+  private recordVisitor(request: TurnRequest): Promise<void> {
+    const { guide, visitor } = request;
+    if (!guide || !visitor) return Promise.resolve();
+    return this.quietly("note who asked (has db/migrations/0011 been applied?)", async () => {
+      const hash = await visitorHash(request.site, visitor);
+      await this.sql`update guides set visitor = ${hash} where id = ${guide} and site_id = ${request.site} and visitor is null`;
+    });
   }
 
   /** Records one step, and the guide it belongs to if this is its first. A step asked again (after a loop or a page change) replaces the earlier try. */
@@ -208,6 +222,7 @@ export class Store {
     });
     this.track(guide, write);
     return write
+      .then(() => (request.step === 0 ? undefined : this.recordVisitor(request)))
       .then(() => this.recordCost(guide, request.step, measure))
       .then(() => this.recordKind(guide, request.step, measure))
       .then(() => this.recordUnseen(guide, request.step, measure));

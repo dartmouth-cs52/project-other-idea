@@ -1,5 +1,8 @@
 // No extension on this import: the website imports this file too, and its settings refuse one.
+import { FILLER } from "./questions";
 import { describeElement, questionKey, type SnapElement } from "./types";
+
+const FILLER_SET = new Set(FILLER);
 
 // Corrections from the customer, and the controls Haptic must never point at.
 // Shared by the server, which puts them in the prompt and enforces the list,
@@ -46,13 +49,8 @@ export function isBlocked(element: Pick<SnapElement, "role" | "label" | "icon"> 
   return Boolean(element && blocked?.some((control) => matchesControl(element, control)));
 }
 
-// Words that say nothing about what someone wants, left out when two questions are compared.
-const FILLER = new Set(
-  "a an and are can could do does for from get go have how i in is it me my of on or please the there this to want we what where which who why will with would you your".split(" "),
-);
-
 function meaning(question: string): Set<string> {
-  return new Set(questionKey(question).split(" ").filter((word) => word.length > 1 && !FILLER.has(word)));
+  return new Set(questionKey(question).split(" ").filter((word) => word.length > 1 && !FILLER_SET.has(word)));
 }
 
 /** True when two questions share most of what they are about, like "how do I add more seats" and "add seats to my plan". */
