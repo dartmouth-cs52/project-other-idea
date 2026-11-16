@@ -188,10 +188,10 @@ test("the words of separate boxes are kept apart, as the accessibility tree keep
 
 // Words the page repeats from a field ---------------------------------------------------
 
-test("the page's words that repeat what a field holds are not sent, as text or as a heading", { skip }, async () => {
+test("the page's words that repeat what a field holds are not sent as page text", { skip }, async () => {
   const snapshot = await read(
     `<main><h1>New card</h1><label for="nick">Card name</label><input id="nick"><label for="amount">Amount</label><input id="amount">
-      <aside><p>Preview</p><div><span>northpine</span> <span id="name">New card</span></div><p id="total">Total $0.00</p><h3 id="for">Card for nobody yet</h3></aside>
+      <aside><p>Preview</p><div><span>northpine</span> <span id="name">New card</span></div><p id="total">Total $0.00</p></aside>
       <p>Cards are issued at once.</p></main>`,
     {
       before: async (page) => {
@@ -199,8 +199,7 @@ test("the page's words that repeat what a field holds are not sent, as text or a
         await page.locator("#nick").fill("Mergers offsite Zurich");
         await page.locator("#amount").fill("7315");
         await page.evaluate(`document.getElementById("name").textContent = "Mergers offsite Zurich";
-          document.getElementById("total").textContent = "Total $7315.00";
-          document.getElementById("for").textContent = "Card for Mergers offsite Zurich";`);
+          document.getElementById("total").textContent = "Total $7315.00";`);
       },
     },
   );
@@ -208,7 +207,16 @@ test("the page's words that repeat what a field holds are not sent, as text or a
   for (const typed of ["Mergers offsite", "Zurich", "7315"]) assert.ok(!sent.includes(typed), `"${typed}" was sent: ${sent}`);
   // The page's own words around them still are.
   assert.deepEqual(snapshot.text, ["Card name", "Amount", "Preview", "Cards are issued at once."]);
-  assert.deepEqual(snapshot.headings, ["New card"]);
+});
+
+test("a heading and a dialog's title that say what a field holds are still sent: a form that edits a record holds its name", { skip }, async () => {
+  const snapshot = await read(`<main><h1>Team offsite</h1><label for="nick">Nickname</label><input id="nick" value="Team offsite"><p>Team offsite</p></main>
+    <div role="dialog" aria-modal="true" aria-labelledby="t" style="position:fixed;inset:0;background:white"><h2 id="t">Cancel Team offsite?</h2><button>Cancel card</button></div>`);
+  assert.equal(snapshot.dialog, "Cancel Team offsite?");
+  assert.deepEqual(lines(snapshot), ['button "Cancel card" [dialog › Cancel Team offsite?]']);
+  assert.deepEqual(snapshot.headings, ["Team offsite", "Cancel Team offsite?"]);
+  // A piece of page text that says it is left out, as the visitor may have typed it.
+  assert.ok(!snapshot.text.includes("Team offsite"), JSON.stringify(snapshot.text));
 });
 
 test("a value of fewer than three characters is too common to leave out the words that hold it", { skip }, async () => {

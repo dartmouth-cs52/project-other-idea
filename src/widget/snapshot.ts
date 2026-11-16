@@ -478,10 +478,9 @@ interface Scope {
 /** Controls inside a heading, like a search box and its button in a dialog's title bar. Their words are theirs, not the heading's. */
 const NOT_HEADING_WORDS = "button, [role='button'], select, [role='combobox'], [role='checkbox'], [role='switch'], [role='slider']";
 
-/** A heading's own words, leaving out the words of controls set inside it. A heading that repeats what a field holds says nothing. */
+/** A heading's own words, leaving out the words of controls set inside it. */
 function headingWords(heading: Element): string {
-  const words = wordsIn(heading, 160, NOT_HEADING_WORDS);
-  return echoesTyping(words) ? "" : cleanText(words, 80);
+  return cleanText(wordsIn(heading, 160, NOT_HEADING_WORDS), 80);
 }
 
 /** A heading on the page, with what decides whether it is among the few that are sent. */
@@ -500,17 +499,16 @@ const SECTION_TAGS = new Set(["SECTION", "ARTICLE", "FIELDSET"]);
 const SECTION_ROLES = new Set(["region", "group", "radiogroup", "article", "tabpanel"]);
 const HEADINGS = "h1, h2, h3, h4, h5, h6, [role='heading']";
 
-/** The name a box is given by its page: the element it says names it, or its aria-label. A name that repeats what a field holds is none. */
+/** The name a box is given by its page: the element it says names it, or its aria-label. */
 function nameOfBox(el: Element): string {
   const ids = el.getAttribute("aria-labelledby");
   if (ids) {
     const root = el.getRootNode() as Document | ShadowRoot;
     const named = ids.split(/\s+/).map((id) => (id ? root.getElementById?.(id) : null)).find(Boolean);
-    const words = named ? wordsIn(named, 160, "", undefined, true) : "";
-    if (words) return echoesTyping(words) ? "" : cleanText(words, 80);
+    const words = named ? cleanText(wordsIn(named, 160, "", undefined, true), 80) : "";
+    if (words) return words;
   }
-  const label = el.getAttribute("aria-label") ?? "";
-  return echoesTyping(label) ? "" : cleanText(label, 80);
+  return cleanText(el.getAttribute("aria-label") ?? "", 80);
 }
 
 /** Whether a box is named only for screen readers: by its aria-label, with no element named as what names it. */
@@ -596,7 +594,9 @@ function typedValues(): string[] {
 /**
  * Whether words of the page repeat what a field holds: a card's preview that
  * shows the name being typed for it, or a total that shows the amount. They
- * are what the visitor typed, so they are not sent. The value has to stand
+ * are what the visitor typed, so they are not sent as page text. Headings and
+ * titles are not held to this: a form that edits a record holds its name, and
+ * the page's heading and its dialogs' titles say it too. The value has to stand
  * whole, with no letter or digit run on to it: "Settings" does not repeat a
  * search for "set".
  */
@@ -925,7 +925,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
 
   const snapshot: Snapshot = {
     path: currentPath(),
-    title: echoesTyping(document.title) ? "" : cleanText(document.title, 80),
+    title: cleanText(document.title, 80),
     headings: chooseHeadings(headings),
     text: chooseText(texts, nearAt),
     elements: listed,
@@ -2131,5 +2131,5 @@ function dialogLabel(el: Element): string {
   // A dialog with no name and no heading is named by its first words, which are its title drawn as text,
   // unless those are a field's caption or a link's.
   words ||= rowPieces(el).find((piece) => /\p{L}{3}/u.test(piece.text) && !piece.node.parentElement?.closest(`label, ${CONTROLS}`))?.text ?? "";
-  return echoesTyping(words) ? "" : cleanText(words, 60);
+  return cleanText(words, 60);
 }
