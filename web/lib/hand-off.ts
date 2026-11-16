@@ -41,8 +41,8 @@ export async function copyText(text: string, doc: Document = document): Promise<
 
 /** How long to wait for the agent's app to take focus before saying it didn't open. */
 export const OPEN_WAIT_MS = 1500;
-/** An app that asks first ("Open Cursor?") can take longer. A later switch still counts, and the note changes then. */
-export const LATE_OPEN_MS = 15_000;
+/** How long the hidden frame that hands a link to an app stays, for Firefox and Safari. */
+const FRAME_MS = 15_000;
 
 export type OpenResult = "opened" | "nothing" | "blocked";
 
@@ -50,36 +50,29 @@ export type OpenResult = "opened" | "nothing" | "blocked";
  * Opens a link to an app, such as claude-cli://open?q=…, and watches whether
  * the page lost focus, which is what happens when the computer hands the link
  * to an app. A link no app takes does nothing, with no error, so "nothing" is
- * the answer when focus stays. `onLate` hears of a switch that comes after the
- * answer, once someone has said yes to the browser's "Open this app?" question.
+ * the answer when focus stays. The watching stops with the answer: once the
+ * page has said the app didn't open, the person switching to their editor to
+ * paste must not turn that into "opened".
  */
-export function openAppLink(link: string, options: { win?: Window; waitMs?: number; lateMs?: number; onLate?: () => void } = {}): Promise<OpenResult> {
+export function openAppLink(link: string, options: { win?: Window; waitMs?: number } = {}): Promise<OpenResult> {
   const win = options.win ?? window;
   const doc = win.document;
   const waitMs = options.waitMs ?? OPEN_WAIT_MS;
   return new Promise((resolve) => {
     let answered = false;
-    let left = false;
-    let frame: HTMLIFrameElement | undefined;
-    const leave = () => {
-      if (left) return;
-      left = true;
-      if (!answered) {
-        answered = true;
-        resolve("opened");
-      } else options.onLate?.();
-      stop();
-    };
-    const onVisibility = () => doc.visibilityState === "hidden" && leave();
-    win.addEventListener("blur", leave);
-    doc.addEventListener("visibilitychange", onVisibility);
-    const late = win.setTimeout(() => stop(), options.lateMs ?? LATE_OPEN_MS);
-    function stop() {
+    const answer = (result: OpenResult) => {
+      if (answered) return;
+      answered = true;
       win.removeEventListener("blur", leave);
       doc.removeEventListener("visibilitychange", onVisibility);
-      win.clearTimeout(late);
-      frame?.remove();
-    }
+      win.clearTimeout(wait);
+      resolve(result);
+    };
+    const leave = () => answer("opened");
+    const onVisibility = () => doc.visibilityState === "hidden" && answer("opened");
+    win.addEventListener("blur", leave);
+    doc.addEventListener("visibilitychange", onVisibility);
+    const wait = win.setTimeout(() => answer("nothing"), waitMs);
 
     try {
       if (isChromium(win)) {
@@ -87,22 +80,15 @@ export function openAppLink(link: string, options: { win?: Window; waitMs?: numb
         win.location.assign(link);
       } else {
         // Firefox and Safari would show an error page for a link no app takes, so it goes in a hidden frame.
-        frame = doc.createElement("iframe");
+        const frame = doc.createElement("iframe");
         frame.style.display = "none";
         frame.src = link;
         doc.body.appendChild(frame);
+        win.setTimeout(() => frame.remove(), FRAME_MS);
       }
     } catch {
-      answered = true;
-      stop();
-      resolve("blocked");
-      return;
+      answer("blocked");
     }
-    win.setTimeout(() => {
-      if (answered) return;
-      answered = true;
-      resolve(left ? "opened" : "nothing");
-    }, waitMs);
   });
 }
 

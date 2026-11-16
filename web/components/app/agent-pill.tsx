@@ -17,6 +17,8 @@ type Note =
   | { kind: "copied" }
   | { kind: "copy-failed" }
   | { kind: "opening"; agent: Agent; copied: boolean }
+  /** Pressed while another was still being tried. It goes next. */
+  | { kind: "queued"; agent: Agent; after: Agent }
   | { kind: "opened"; agent: Agent; copied: boolean }
   | { kind: "not-opened"; agent: Agent; copied: boolean }
   | { kind: "blocked"; agent: Agent; copied: boolean };
@@ -37,7 +39,9 @@ export function AgentPill({ siteId, live, className }: { siteId: string; live?: 
   const [note, setNote] = useState<Note | null>(null);
   const [copiedAt, setCopiedAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const busy = useRef(false);
+  // The agent being tried, and one pressed meanwhile, which goes next.
+  const busy = useRef<Agent | null>(null);
+  const queued = useRef<Agent | null>(null);
 
   // "Paste to your agent" turns into "Waiting for your agent" a minute after the copy, as Vercel's does.
   useEffect(() => {
@@ -58,9 +62,13 @@ export function AgentPill({ siteId, live, className }: { siteId: string; live?: 
     }
   }
 
-  async function open(agent: Agent) {
-    if (busy.current) return;
-    busy.current = true;
+  async function open(agent: Agent): Promise<void> {
+    if (busy.current) {
+      queued.current = agent;
+      setNote({ kind: "queued", agent, after: busy.current });
+      return;
+    }
+    busy.current = agent;
     try {
       // Copied first, while the press still counts as the person's own, so the prompt is there whatever the link does.
       const copied = (await copyText(prompt)).ok;
@@ -69,17 +77,18 @@ export function AgentPill({ siteId, live, className }: { siteId: string; live?: 
         setNow(Date.now());
       }
       setNote({ kind: "opening", agent, copied });
-      const result = await openAppLink(agent.link(prompt), {
-        // Someone who says yes to the browser's "Open this app?" question after the wait still gets the right note.
-        onLate: () => setNote({ kind: "opened", agent, copied }),
-      });
+      const result = await openAppLink(agent.link(prompt));
       setNote({ kind: result === "opened" ? "opened" : result === "blocked" ? "blocked" : "not-opened", agent, copied });
     } finally {
-      busy.current = false;
+      busy.current = null;
     }
+    const next = queued.current;
+    queued.current = null;
+    if (next) await open(next);
   }
 
-  const showBox = note && (note.kind === "copy-failed" || (note.kind !== "copied" && note.kind !== "opening" && note.kind !== "opened" && !note.copied));
+  // The prompt to copy by hand, whenever the browser wouldn't copy it and no app took it.
+  const showBox = note && (note.kind === "copy-failed" || ((note.kind === "not-opened" || note.kind === "blocked") && !note.copied));
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-2", className)} data-agent-pill>
@@ -162,6 +171,8 @@ function noteText(note: Note | null, status: string): string {
       return "Your browser didn't let the page copy. Select the prompt below and copy it.";
     case "opening":
       return `Opening ${note.agent.name}.${note.copied ? " The prompt is copied too." : ""}`;
+    case "queued":
+      return `${note.agent.name} is next, once ${note.after.name} has been tried.`;
     case "opened":
       return `Opened in ${note.agent.name}${note.agent.id === "claude" ? ", in your home folder, so change to your app's folder before you press Enter" : ""}.${note.copied ? " The prompt is also copied." : ""}`;
     case "not-opened":
