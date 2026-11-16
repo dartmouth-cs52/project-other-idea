@@ -319,3 +319,23 @@ test("an address is matched as it is, or as a visitor would write it", () => {
   // A pattern written for the address as it is still works.
   assert.equal(addressFits("created%20%3E%3D%20-7d")("https://x/?jql=created%20%3E%3D%20-7d"), true);
 });
+
+test("the guides' answers in words pass the sentences seen on staging, and not wrong ones", async () => {
+  const joinhaptic = (await import("../eval/guides/joinhaptic.ts")).default as GuideSet;
+  const says = (id: string) => joinhaptic.guides.find((guide) => guide.id === id)!.says!;
+  // As the home page showed them on 16 November 2026.
+  const prices = { shown: ["Early access", "Free", "$149 a month"] };
+  for (const right of [
+    "The Pricing section is on this page: Free during early access, Team at $149 a month, Scale at $499 a month, and Enterprise is custom.",
+    "Haptic is free during early access. After that, plans start at $149 per month.",
+  ]) assert.equal(saidOrWhy(says("pricing"), right, prices), "", right);
+  assert.match(saidOrWhy(says("pricing"), "Haptic is free during early access, then from $99 a month.", prices), /does not say "\$149 a month"/);
+  assert.match(saidOrWhy(says("pricing"), "It costs $149 a year after early access, which is free.", prices), /does not say "\$149 a month"/);
+  assert.match(saidOrWhy(says("pricing"), "Early access is not free: $149 a month.", prices), /wrong answer/);
+
+  const reads = { shown: ["Haptic reads the names of buttons and fields. What people type stays in the browser, and emails and long numbers are masked before anything is sent."] };
+  assert.equal(saidOrWhy(says("what-it-reads"), "It reads button labels and form field names, and never what you type.", reads), "");
+  // What failed three times in three on staging: where the answer is, and not the answer.
+  assert.notEqual(saidOrWhy(says("what-it-reads"), 'The FAQ on the home page has an answer titled "What does Haptic see on the page?". Click FAQ in the top bar to read it.', reads), "");
+  assert.notEqual(saidOrWhy(says("what-it-reads"), "It reads the buttons and fields on your page and what people type.", reads), "");
+});

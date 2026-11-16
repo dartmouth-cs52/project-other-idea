@@ -20,13 +20,25 @@ const guides: Guide[] = [
       { expect: [button("Request access"), any("Additional details")] },
     ],
   },
+  // The FAQ's own answer, and an answer in words that says what it says: free in early access, then from the price of
+  // the first paid plan. Both are read from the pricing section's first two plans when the guide starts ("Early
+  // access", "Free", "$149 a month"), so a change of price changes the test with it. Naming the other plans as well is
+  // right too, and is not needed. "Not free" is the right words the wrong way round.
   {
     id: "pricing",
     start: "/",
     goal: "How much does it cost?",
     steps: [{ expect: [any("How much does it cost?")], act: { click: 'button:has-text("How much does it cost?")' } }, DONE],
     reached: { selector: 'button[aria-expanded="true"]:has-text("How much does it cost?")' },
+    says: {
+      shown: { selector: "#pricing li:nth-child(1) > h3, #pricing li:nth-child(-n+2) > h3 + p", when: "start" },
+      not: ["\\b(isn't|is not|not|never)\\s+free\\b"],
+    },
   },
+  // The answer is in the FAQ on the home page, and in words on the home page itself: "Haptic reads the names of
+  // buttons and fields. What people type stays in the browser". An answer in words names what the home page says it
+  // reads, read from there when the guide starts, and says that it never reads what people type. Pointing to where
+  // the answer is, without saying it, is neither.
   {
     id: "what-it-reads",
     start: "/request-access/",
@@ -37,6 +49,11 @@ const guides: Guide[] = [
       DONE,
     ],
     reached: { selector: 'button[aria-expanded="true"]:has-text("What does Haptic see on the page?")' },
+    says: {
+      shown: { selector: 'article h3:has-text("Never reads what people type") + p', part: "(?<=\\bnames of )[^.]+", anyOrder: true, when: "start", from: "/" },
+      all: ["\\b(never|not|doesn't|does not|won't|nothing)\\b[^.]*\\btyp(e|es|ed|ing)\\b"],
+      not: ["(?<!\\b(never|not|n't)\\s+)\\b(reads|sees|records|captures|stores|sends)\\s+(everything|whatever|what)\\s+(you|people|users|visitors)\\s+(type|enter)"],
+    },
   },
   {
     id: "privacy",
