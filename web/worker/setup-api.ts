@@ -123,6 +123,7 @@ async function saveSetup(call: SetupRequest, id: string, input: Record<string, u
     patch.step = input.step;
   }
   if (typeof input.later === "boolean") patch.later = input.later;
+  if (input.neverTouchSaved === true) patch.neverTouchSaved = true;
   if (input.finished === true) patch.finishedAt = new Date().toISOString();
   if (!Object.keys(patch).length) return refuse(400, "Say which step, or Finish later.");
   // Only the setup changes, so a page read finishing meanwhile keeps its pages.

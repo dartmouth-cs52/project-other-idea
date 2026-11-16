@@ -21,6 +21,8 @@ export interface SetupState {
   later?: boolean;
   /** Left the last screen for the dashboard. */
   finishedAt?: string;
+  /** "Never touch" was saved from the setup once, so its ticks show what is saved from then on. */
+  neverTouchSaved?: boolean;
 }
 
 export function isSetupStep(value: unknown): value is SetupStepId {
@@ -179,6 +181,28 @@ export function riskyControls(pages: ReadPage[], max = 8): SuggestedControl[] {
     .sort((a, b) => b.seen - a.seen || a.label.localeCompare(b.label))
     .slice(0, max)
     .map(({ role, label, path }) => ({ role, label, path }));
+}
+
+const sameName = (a: { label: string }, b: { label: string }) => a.label.trim().toLowerCase() === b.label.trim().toLowerCase();
+
+/**
+ * Whether a suggestion shows ticked. Until "Never touch" has been saved, and
+ * while nothing is ruled out, every suggestion starts ticked. After that, the
+ * ticks are what is saved, so coming back shows exactly what Haptic will do.
+ */
+export function neverTouchTicked(item: { label: string }, blocked: { label: string }[], saved: boolean): boolean {
+  return saved || blocked.length ? blocked.some((other) => sameName(other, item)) : true;
+}
+
+/**
+ * The "Never point at" list to save: what the owner ruled out that these
+ * suggestions don't name, left as it was, then each ticked suggestion. An
+ * unticked suggestion is taken off. A ticked one already saved keeps its kind.
+ */
+export function neverTouchList(suggestions: SuggestedControl[], ticked: SuggestedControl[], blocked: { role?: string; label: string }[]): { role?: string; label: string }[] {
+  const kept = blocked.filter((control) => !suggestions.some((item) => sameName(item, control)));
+  const chosen = ticked.map((item) => blocked.find((control) => sameName(control, item)) ?? (item.role ? { role: item.role, label: item.label } : { label: item.label }));
+  return [...kept, ...chosen];
 }
 
 /** The suggestions for "Never touch": what the reader found, then the usual ones, without repeating a name. */

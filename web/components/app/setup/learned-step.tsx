@@ -7,7 +7,7 @@ import { FormAlert, failureFrom, type Failure } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, type ControlName } from "@/lib/app-api";
-import { hostOf, neverTouchSuggestions, type SuggestedControl } from "@/lib/setup";
+import { hostOf, neverTouchList, neverTouchSuggestions, neverTouchTicked, type SuggestedControl } from "@/lib/setup";
 import { Back, Primary, StepFrame } from "./frame";
 import type { SetupSite } from "./types";
 import type { SetupPages } from "./use-reading";
@@ -15,47 +15,54 @@ import type { SetupPages } from "./use-reading";
 /** Pages listed before "Show all". */
 const PAGES_SHOWN = 8;
 
-const sameControl = (a: { label: string; role?: string }, b: { label: string; role?: string }) => a.label.toLowerCase() === b.label.toLowerCase() && (a.role ?? "") === (b.role ?? "");
+const key = (item: { label: string }) => item.label.trim().toLowerCase();
 
 /**
  * Step 3. What the reading found, and the controls Haptic should never point
- * at, filled in from what it found plus the usual ones. Continue saves them to
- * the site's "Never point at" list. Skip saves nothing.
+ * at: what it found plus the usual ones. Until the list has been saved they all
+ * start ticked. After that the ticks show what is saved. Continue saves exactly
+ * the ticked ones among these, taking off any unticked, and leaves alone what
+ * the owner ruled out elsewhere. Skip saves nothing.
  */
 export function LearnedStep({ site, pages, onChange, onBack, onNext }: { site: SetupSite; pages: SetupPages; onChange: (site: SetupSite) => void; onBack: () => void; onNext: () => void }) {
   const reading = pages.reading;
   const host = hostOf(site.origin);
   const [all, setAll] = useState(false);
-  const [suggested, setSuggested] = useState<SuggestedControl[]>(() => neverTouchSuggestions(reading?.risky ?? []));
-  const [chosen, setChosen] = useState<SuggestedControl[]>(() => neverTouchSuggestions(reading?.risky ?? []));
+  // Added on this screen. The rest comes from the reading on every render, so controls it finds later still show.
+  const [added, setAdded] = useState<SuggestedControl[]>([]);
+  // What the person changed here, by name. Anything not changed shows what is saved.
+  const [changed, setChanged] = useState<Record<string, boolean>>({});
   const [adding, setAdding] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
 
   const read = reading?.read ?? 0;
   const list = reading?.pages ?? [];
-  const toggle = (item: SuggestedControl) => setChosen((now) => (now.some((other) => sameControl(other, item)) ? now.filter((other) => !sameControl(other, item)) : [...now, item]));
+  const saved = Boolean(site.setup?.neverTouchSaved);
+  const suggested = neverTouchSuggestions([...(reading?.risky ?? []), ...added]);
+  const ticked = (item: SuggestedControl) => changed[key(item)] ?? neverTouchTicked(item, site.blocked, saved);
+  const toggle = (item: SuggestedControl) => setChanged((now) => ({ ...now, [key(item)]: !ticked(item) }));
 
   function add(event: FormEvent) {
     event.preventDefault();
     const label = adding.replace(/\s+/g, " ").trim().slice(0, 60);
     if (!label) return;
-    const item = { label };
-    if (!suggested.some((other) => sameControl(other, item))) setSuggested((now) => [...now, item]);
-    if (!chosen.some((other) => sameControl(other, item))) setChosen((now) => [...now, item]);
+    if (!suggested.some((other) => key(other) === key({ label }))) setAdded((now) => [...now, { label }]);
+    setChanged((now) => ({ ...now, [key({ label })]: true }));
     setAdding("");
   }
 
   async function save() {
     setBusy(true);
     setError(null);
-    const merged: ControlName[] = [...site.blocked];
-    for (const item of chosen) if (!merged.some((other) => sameControl(other, item))) merged.push(item.role ? { role: item.role, label: item.label } : { label: item.label });
+    const next = neverTouchList(suggested, suggested.filter(ticked), site.blocked) as ControlName[];
+    const same = next.length === site.blocked.length && next.every((control, i) => key(control) === key(site.blocked[i]!) && (control.role ?? "") === (site.blocked[i]!.role ?? ""));
     try {
-      if (merged.length !== site.blocked.length) {
-        const result = await api<{ blocked: ControlName[] }>(`/sites/${site.id}/blocked`, { method: "PUT", body: { controls: merged } });
-        onChange({ ...site, blocked: result.blocked });
-      }
+      let blocked = site.blocked;
+      if (!same) blocked = (await api<{ blocked: ControlName[] }>(`/sites/${site.id}/blocked`, { method: "PUT", body: { controls: next } })).blocked;
+      // From now on the ticks show what is saved, even if nothing is.
+      const { setup } = await api<{ setup: SetupSite["setup"] }>(`/sites/${site.id}/setup`, { method: "PUT", body: { neverTouchSaved: true } });
+      onChange({ ...site, blocked, setup });
       onNext();
     } catch (failure) {
       setError(failureFrom("Couldn't save the list", failure));
@@ -129,7 +136,7 @@ export function LearnedStep({ site, pages, onChange, onBack, onNext }: { site: S
         </div>
         <ul className="flex flex-wrap gap-2" aria-label="Controls to never point at">
           {suggested.map((item) => {
-            const on = chosen.some((other) => sameControl(other, item));
+            const on = ticked(item);
             return (
               <li key={`${item.role ?? ""} ${item.label}`}>
                 <button

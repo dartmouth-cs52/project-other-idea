@@ -11,7 +11,9 @@ import {
   durationChange,
   installStatus,
   mailboxOf,
+  neverTouchList,
   neverTouchSuggestions,
+  neverTouchTicked,
   nextStep,
   pageControls,
   pillLabel,
@@ -198,6 +200,17 @@ test("what the reading found: controls counted as the reader counts them, and th
     ["Delete workspace", "Billing", "Pay invoice", "Remove member", "Transfer ownership", "pay", "Delete", "Change billing"],
     "what was found first, then the usual ones, with no name twice",
   );
+});
+
+test("Never touch starts all ticked, then shows what is saved, and saves exactly the ticked suggestions", () => {
+  const suggestions = [{ role: "button", label: "Delete project" }, { label: "Pay" }, { label: "Delete" }];
+  assert.equal(neverTouchTicked({ label: "Pay" }, [], false), true, "nothing saved yet: ticked");
+  assert.equal(neverTouchTicked({ label: "Pay" }, [], true), false, "saved as nothing: unticked");
+  assert.equal(neverTouchTicked({ label: "Pay" }, [{ label: "Delete" }], false), false, "something is ruled out: the ticks are what is");
+  assert.equal(neverTouchTicked({ label: "delete" }, [{ label: "Delete" }], false), true);
+  const blocked = [{ label: "Archive workspace" }, { label: "Pay" }, { role: "link", label: "Delete" }];
+  assert.deepEqual(neverTouchList(suggestions, [suggestions[0]!, suggestions[2]!], blocked), [{ label: "Archive workspace" }, { role: "button", label: "Delete project" }, { role: "link", label: "Delete" }], "Pay unticked comes off, Archive workspace stays, Delete keeps its kind");
+  assert.deepEqual(neverTouchList(suggestions, [], blocked), [{ label: "Archive workspace" }]);
 });
 
 test("pages that need sign-in: almost nothing to click, or sent to another site, or refused", () => {
