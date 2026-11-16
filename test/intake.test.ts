@@ -63,12 +63,44 @@ test("eight digits in groups are a phone number, unless they start on a word; a 
   assert.equal(cleanText("1 000 000 users"), "1 000 000 users");
   // Digits that start right after a letter belong to the word. What follows them is looked at on its own.
   assert.equal(cleanText("Galaxy S II I9100 1.249,00 EUR"), "Galaxy S II I9100 1.249,00 EUR");
-  assert.equal(cleanText("Room A1 912 34 567"), "Room A1 [number]");
-  assert.equal(cleanText("IBAN DE89 3704 0044 0532 0130 00"), "IBAN DE89 [number]");
+  assert.equal(cleanText("Model I9100 1.249"), "Model I9100 1.249");
+  assert.equal(cleanText("XPS13 9310"), "XPS13 9310");
+  assert.equal(cleanText("Order #A12-3456"), "Order #A12-3456");
   assert.equal(cleanText("ID12345678"), "ID[number]");
   // Dates stay, as "my latest invoice" needs them, birth dates among them.
   assert.equal(cleanText("Born 1984-03-07"), "Born 1984-03-07");
   assert.equal(cleanText("Born 07.03.1984, call 912 34 567"), "Born 07.03.1984, call [number]");
+});
+
+test("only a real date is left readable: anything else written like one is masked as any number is", () => {
+  // Found in review: main masked each of these, and the date rule left them readable.
+  assert.equal(cleanText("Phone 12-34-5678"), "Phone [number]");
+  assert.equal(cleanText("Acct 12.34.5678"), "Acct [number]");
+  for (const notADate of ["13.13.2026", "00.12.2026", "12.00.2026", "32-01-2026", "2026-13-01", "2026-12-32", "1234-56-78", "04.07.1776", "01.02.5678"]) {
+    assert.equal(cleanText(notADate), "[number]", notADate);
+  }
+  // A month from 1 to 12, a day from 1 to 31, either way round, and a year of two figures or from 1800 to 2199.
+  for (const date of ["31.12.2026", "12-31-2026", "1.2.2026", "2026-1-31", "1900-01-01", "04-12-80", "DOB 12.04.1980", "Due 2026-11-15", "From 2026-11-01 to 2026-11-15"]) {
+    assert.equal(cleanText(date), date);
+  }
+  // In a row of numbers, the date stays and the rest is masked.
+  assert.equal(cleanText("2026-11-15 603 646 1110 12.34.5678"), "2026-11-15 [number]");
+});
+
+test("digits right after a letter belong to the word, unless more of a number follows them: then the number is masked whole", () => {
+  // Found in review: these left an SSN, a card's first group and a licence's first part readable.
+  assert.equal(cleanText("SSN123-45-6789"), "SSN[number]");
+  assert.equal(cleanText("Card4111 1111 1111 1111"), "Card[number]");
+  assert.equal(cleanText("License D1234-56789-01234"), "License D[number]");
+  // Eight digits with the ones after the word, in groups of plain digits, as a phone in Denmark is written.
+  assert.equal(cleanText("Tel91 23 45 67"), "Tel[number]");
+  assert.equal(cleanText("IBAN DE89 3704 0044 0532 0130 00"), "IBAN DE[number]");
+  assert.equal(cleanText("Room A1 912 34 567"), "Room A[number]");
+  assert.equal(cleanText("SSN123 45 6789, born 07.03.1984"), "SSN[number], born 07.03.1984");
+  // A short model code, with a price or a size after it, stays.
+  assert.equal(cleanText("Galaxy S II I9100 1.249,00 EUR"), "Galaxy S II I9100 1.249,00 EUR");
+  assert.equal(cleanText("RTX4090 24 GB"), "RTX4090 24 GB");
+  assert.equal(cleanText("DOB12.04.1980"), "DOB12.04.1980");
 });
 
 test("what the visitor named counts as on the page only where it stands on its own there", () => {

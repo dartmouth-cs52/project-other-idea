@@ -55,11 +55,14 @@ export default function Privacy() {
         Haptic masks anything that looks like an email address, any run of five or more digits, such as an account or
         order number, and any eight or more digits written in groups with spaces, dashes, dots or brackets between
         them, such as a phone or card number. Digits that follow straight after a letter, like the model number I9100,
-        count as part of that word. Our server masks the same again before it stores anything.
+        count as part of that word, unless more of a number follows them, as in SSN123-45-6789: then the whole
+        number is masked. Our server masks the same again before it stores anything.
       </p>
       <p>
-        Haptic does not mask dates written in figures, such as 07.03.1984 or 2026-11-16. Questions like &ldquo;my
-        latest invoice&rdquo; need them, and a date says no more about a person than the names a page already shows.
+        Haptic does not mask real dates written in figures, such as 07.03.1984 or 2026-11-16, with a month from 1 to
+        12 and a day from 1 to 31. Digits written like a date that is not one, such as 12.34.5678, are masked.
+        Questions like &ldquo;my latest invoice&rdquo; need dates, and a date says no more about a person than the
+        names a page already shows.
         But a date on the page can be a date of birth, and it is read and sent like any other text. Nor does Haptic
         mask shorter numbers, such as prices and quantities, or names and other words, so text that shows on the page
         can still hold personal details.

@@ -131,6 +131,18 @@ test("phone numbers of eight digits are masked wherever the page shows them, and
   assert.ok(snapshot.text.includes("Born 1984-03-07"), JSON.stringify(snapshot.text));
 });
 
+test("numbers written like a date that is not one, and digits glued to a word that run into a number, are masked wherever the page shows them", { skip }, async () => {
+  // From the second review: each of these reached the model in /v1/turn.
+  const snapshot = await read(`<h1>Account</h1><p>Your account 12.34.5678 and phone 12-34-5678 and ssn SSN123-45-6789</p>
+    <p>Card4111 1111 1111 1111, licence D1234-56789-01234</p><button>Galaxy S II I9100 1.249,00 EUR</button><p>Born 07.03.1984</p>`);
+  const sent = JSON.stringify(snapshot);
+  for (const secret of ["12.34.5678", "12-34-5678", "123-45-6789", "4111", "1234-56789"]) assert.ok(!sent.includes(secret), `${secret} was sent: ${sent}`);
+  assert.ok(snapshot.text.includes("Your account [number] and phone [number] and ssn SSN[number]"), JSON.stringify(snapshot.text));
+  assert.ok(snapshot.text.includes("Card[number], licence D[number]"), JSON.stringify(snapshot.text));
+  assert.ok(snapshot.elements.some((element) => element.label === "Galaxy S II I9100 1.249,00 EUR"), sent);
+  assert.ok(snapshot.text.includes("Born 07.03.1984"), JSON.stringify(snapshot.text));
+});
+
 test("a date is not masked, and a row is named by it", { skip }, async () => {
   const snapshot = await read(`<table>
     <tr><th>Date</th><th>Transaction</th></tr>

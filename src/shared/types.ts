@@ -630,8 +630,24 @@ const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 /** Digits written with the spaces and marks a phone number has. Whether it is one is decided in `maskNumbers`. */
 const PHONE = /\+?\d[\d\s().-]{7,}\d/g;
 const LONG_DIGITS = /\d{5,}/g;
-/** A date in figures, standing on its own among such digits: 2026-11-15, 15.11.2026, 11-15-26. */
+/** A date in figures, standing on its own among such digits: 2026-11-15, 15.11.2026, 11-15-26. Only a real one is left readable (`isRealDate`). */
 const DATE = /(^|[\s(])(\d{4}[-.]\d{1,2}[-.]\d{1,2}|\d{1,2}[-.]\d{1,2}[-.](?:\d{4}|\d{2}))(?=$|[\s)])/g;
+
+/**
+ * Whether digits written as a date are one: a month from 1 to 12, a day from
+ * 1 to 31, and a year of two figures or from 1800 to 2199. Year first is year,
+ * month, day; otherwise day and month may come in either order. "12.34.5678"
+ * and "12-34-5678" are not dates, and are masked as any other number is.
+ */
+function isRealDate(written: string): boolean {
+  const parts = written.split(/[-.]/);
+  const [first, second, third] = parts.map(Number) as [number, number, number];
+  const month = (n: number) => n >= 1 && n <= 12;
+  const day = (n: number) => n >= 1 && n <= 31;
+  const year = (part: string) => part.length === 2 || (Number(part) >= 1800 && Number(part) <= 2199);
+  if (parts[0]!.length === 4) return year(parts[0]!) && month(second) && day(third);
+  return year(parts[2]!) && ((day(first) && month(second)) || (month(first) && day(second)));
+}
 /**
  * Digits written in groups, as a phone or card number is, are masked from this
  * many on. Eight, because a phone number in Norway, Denmark and Singapore has
@@ -656,12 +672,16 @@ export function namedIn(question: string): Set<string> {
 }
 
 /**
- * Masks phone numbers and long runs of digits. A date is left alone, and so
- * is a run of digits that is one of `own`, the things the visitor named.
+ * Masks phone numbers and long runs of digits. A real date is left alone, and
+ * so is a run of digits that is one of `own`, the things the visitor named.
  * Digits that start right after a letter belong to a word, like the model
- * number in "Galaxy S II I9100 1.249,00 EUR": they are no phone number, and
- * what follows them is looked at on its own. A run of five or more digits in
- * a row is masked all the same.
+ * number in "Galaxy S II I9100 1.249,00 EUR", and what follows them is looked
+ * at on its own; unless more of a number follows them: joined to it by a
+ * dash, a dot or a bracket ("SSN123-45-6789", "D1234-56789-01234"), or
+ * followed through single spaces by groups of plain digits that make eight or
+ * more with them ("Card4111 1111 1111 1111", "Tel91 23 45 67"). Then they are
+ * that number's first part, and it is masked whole. A run of five or more
+ * digits in a row is masked all the same.
  */
 function maskNumbers(text: string, own?: ReadonlySet<string>): string {
   const whole = (piece: string): string => piece.replace(/\+?\d(?:[\d\s().-]*\d)?/, "[number]");
@@ -678,6 +698,7 @@ function maskNumbers(text: string, own?: ReadonlySet<string>): string {
     let out = "";
     let from = 0;
     for (const date of candidate.matchAll(DATE)) {
+      if (!isRealDate(date[2] ?? "")) continue;
       const start = date.index + (date[1] ?? "").length;
       out += maskRun(candidate.slice(from, start)) + (date[2] ?? "");
       from = start + (date[2] ?? "").length;
@@ -688,7 +709,13 @@ function maskNumbers(text: string, own?: ReadonlySet<string>): string {
     .replace(PHONE, (candidate: string, at: number, whole: string) => {
       if (at === 0 || !/\p{L}/u.test(whole[at - 1] ?? "")) return maskCandidate(candidate);
       const glued = /^\+?\d+/.exec(candidate)?.[0] ?? "";
-      return glued + maskCandidate(candidate.slice(glued.length));
+      const rest = candidate.slice(glued.length);
+      // Joined to more digits by a mark: one number glued to the word, masked whole.
+      if (/^[().-]+\d/.test(rest)) return maskCandidate(candidate);
+      // Followed by groups of plain digits that make a phone or card number with them: its first group.
+      const groups = /^(?: \d+(?= |$))*/.exec(rest)?.[0] ?? "";
+      if (groups && (glued + groups).replace(/\D/g, "").length >= MIN_PHONE_DIGITS) return maskRun(glued + groups) + maskCandidate(rest.slice(groups.length));
+      return glued + maskCandidate(rest);
     })
     .replace(LONG_DIGITS, (digits) => (own?.has(digits) ? digits : "[number]"));
 }
