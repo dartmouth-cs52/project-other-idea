@@ -193,7 +193,7 @@ Each run ends one of these ways:
 | went in circles | It was still giving steps four past the length of the script, and on the way pointed again at a control already used on a page that looked the same. |
 | ran long | It was still giving steps four past the length of the script, each on something new. |
 | stalled | The widget stopped asking for steps: it gave up, what the visitor did never registered, or the control could not be reached at all. |
-| cut short | On a site other people use, it pointed at a control that could send, buy, save or delete, and the run stopped before pressing it, or a step set off a request that would have written to the site, which was stopped. |
+| cut short | On a site other people use, it pointed at a control that could send, buy, save or delete, and the run stopped before pressing it, or a step set off a request that would have written to the site, which was stopped. A control that is the script's own last one, or the last one of another good way the script lists (`otherEnds`), ends the run as reached instead, without being pressed. |
 | error | The benchmark could not tell: the site was down, sign-in was refused, the model or the server failed. |
 
 An "error" says nothing about Haptic (the site was down or refused the run), so it is left out of the rate and counted beside it. A run "cut short" counts as not reached: Haptic led the visitor somewhere the script never goes on that site, which is sometimes another good way but more often a wrong one, and the benchmark cannot tell which. Each is listed so it can be read by hand. However a run ends short of the goal, the line says what the widget was showing.
@@ -243,6 +243,7 @@ These guide files no longer match what the widget sends, and are not recorded ag
 - `parabank`: its matchers describe the widget before it was reworked.
 - `ui5`, `wikipedia`, `toolshop` (five marks) and `orangehrm` (the chip's cross, the sort arrows): `unlisted` marks on controls the widget now lists. Toolshop's `{ label: "Excavator" }` no longer fits, and orangehrm's unnamed fields are now named.
 - The guides whose scripts changed on 15 November 2026: antdpro `rule-template` and `basic-form`, grafana `find-panel-data`, jira `export-spreadsheet` (new start), orangehrm `new-department` and `rejected-leave`, toolshop `buy-circular-saw` (new question) and `pay-in-instalments`, and the toolshop guides that name the signed-in customer.
+- The guides whose ends changed on 16 November 2026, whose last cases may differ: parabank `update-phone` (now ends on Update Profile, unpressed), grafana `delete-panel` (Delete counts only with The Basics selected). The ends of jira `opened-this-week`, orangehrm `shortlisted-candidates` and `rejection-emails`, and the answers of joinhaptic `pricing` and `what-it-reads`, changed too, which whole-guide runs alone use.
 
 ## The held-out split
 
