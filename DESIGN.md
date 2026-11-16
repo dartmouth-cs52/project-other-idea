@@ -519,6 +519,15 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
   and keeps, and the underline shows only under the mouse or keyboard focus.
   The launcher carries no tag. A customer can change the launcher's word, and
   cannot remove the line.
+- **Put the launcher away.** With the mouse over the launcher or focus on it,
+  a 20px white circle with a minus fades in on its inner top corner, the left
+  one for a launcher on the right. It takes the launcher down to a 14px dot in
+  the same place: the word fades first, then the pill draws in. Under the
+  mouse or focus the dot opens to 32px and shows the pointer mark, and a click
+  brings the launcher back without opening the panel. Each change is 300ms or
+  less and eases out with the glide's curve, with no bounce. With reduced
+  motion on, each one happens at once. The visitor's choice holds on the
+  site's other pages.
 
 ## Do's and Don'ts
 

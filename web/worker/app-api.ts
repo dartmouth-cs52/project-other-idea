@@ -18,8 +18,8 @@
 // Every site is looked up together with the caller's organization, so a site
 // id, which is public, is never enough to read or change someone's data.
 
-import { cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
-import { DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
+import { answersOn, cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
+import { ANSWERS_DOCS_BUDGET, DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
@@ -299,16 +299,19 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string) 
     reading: readingSummary(site.reading, site.context.pages ?? []),
     appearance: { ...DEFAULT_APPEARANCE, ...site.context.appearance },
     notes: site.context.notes ?? "",
-    docs: docsSummary(site.context.docs ?? []),
+    docs: docsSummary(site.context.docs ?? [], answersOn(site.context)),
+    // On means answering in words from the docs. Chosen is null when the site follows the default: on once it has docs.
+    answers: { on: answersOn(site.context), chosen: site.context.answers?.enabled ?? null },
   };
 }
 
 /** The docs as the settings page lists them: no text, and whether each one is in the prompt. */
-function docsSummary(docs: Doc[]) {
-  const fit = docsThatFit(docs);
+function docsSummary(docs: Doc[], answers: boolean) {
+  const budget = answers ? ANSWERS_DOCS_BUDGET : DOCS_BUDGET;
+  const fit = docsThatFit(docs, budget);
   const used = docs.filter((doc) => fit.has(doc.source)).reduce((sum, doc) => sum + doc.text.length, 0);
   return {
-    budget: DOCS_BUDGET,
+    budget,
     used,
     list: docs.map((doc) => ({
       title: doc.title,
@@ -414,11 +417,15 @@ async function changeSite(sql: Sql, env: AppEnv, org: Organization, id: string, 
   if (input.notes !== undefined && typeof input.notes !== "string") throw new Refusal(400, "notes must be text.");
   const notes = typeof input.notes === "string" ? input.notes.trim() : null;
   if (notes !== null && notes.length > MAX_NOTES) throw new Refusal(400, `Notes can be up to ${MAX_NOTES.toLocaleString()} characters.`, "notes");
+  if (input.answers !== undefined && typeof input.answers !== "boolean") throw new Refusal(400, "answers must be true or false.");
+  // Switching Answers keeps how long an answer's article may go before it is marked as possibly out of date.
+  const answers = typeof input.answers === "boolean" ? { ...site.context.answers, enabled: input.answers } : null;
   // Only the fields given change, inside the context too, so a page read finishing meanwhile keeps its pages.
   await sql`
     update sites set name = ${name}, allowed_origins = ${origins},
       context = jsonb_set(jsonb_set(context, '{appearance}', coalesce(${appearance === null ? null : JSON.stringify(appearance)}::jsonb, context->'appearance', '{}'::jsonb)),
-        '{notes}', coalesce(to_jsonb(${notes}::text), context->'notes', '""'::jsonb)),
+        '{notes}', coalesce(to_jsonb(${notes}::text), context->'notes', '""'::jsonb))
+        || jsonb_strip_nulls(jsonb_build_object('answers', ${answers === null ? null : JSON.stringify(answers)}::jsonb)),
       updated_at = now()
     where id = ${id} and company_id = ${org.id}`;
   // The widget server keeps its copy of a site for up to a minute, so a newly allowed address starts working within that.

@@ -118,7 +118,8 @@ export default function Privacy() {
       </p>
       <p>
         Progress through a guide, and which pages have been outlined, is kept in the browser for that tab, and is
-        cleared when the tab closes. The random id stays in the browser until its storage for that product is cleared.
+        cleared when the tab closes. The random id stays in the browser until its storage for that product is cleared, and so
+        does a note that you put the launcher away, if you did. That note is never sent to us.
       </p>
 
       <h2>Contact</h2>

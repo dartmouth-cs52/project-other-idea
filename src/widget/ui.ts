@@ -14,16 +14,40 @@ const POINTER_TIP = { x: 3.81, y: 3.14 };
 
 const CSS = `
 :host { all: initial; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
-  font: 14px/20px system-ui, -apple-system, "Segoe UI", sans-serif; color: #1c1917; }
+  font: 14px/20px system-ui, -apple-system, "Segoe UI", sans-serif; color: #1c1917; --glide: cubic-bezier(.2,.8,.2,1); }
 * { box-sizing: border-box; }
 button { font: inherit; cursor: pointer; }
 .dock { position: fixed; bottom: 20px; display: flex; flex-direction: column; gap: 10px; pointer-events: auto; }
 .dock.right { right: 20px; align-items: flex-end; }
 .dock.left { left: 20px; align-items: flex-start; }
-.launcher { display: inline-flex; align-items: center; gap: 8px; height: 40px; border: 0; border-radius: 999px; padding: 0 16px 0 14px;
-  background: #1c1917; color: #fafaf9; font-weight: 500; box-shadow: 0 4px 14px rgba(0,0,0,.22); }
-.launcher svg { width: 16px; height: 16px; flex: none; }
+.launch { position: relative; display: inline-flex; }
+.launcher { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; min-width: 40px; border: 0; border-radius: 999px;
+  padding: 0 16px 0 14px; background: #1c1917; color: #fafaf9; font-weight: 500;
+  /* The faint light edge is lost on a light page and keeps it in sight on a dark one. */
+  box-shadow: 0 0 0 1px rgba(250,250,249,.16), 0 4px 14px rgba(0,0,0,.22);
+  transition: height .3s var(--glide), min-width .3s var(--glide), padding .3s var(--glide), gap .3s var(--glide),
+    box-shadow .3s var(--glide), transform .2s var(--glide); }
+.launcher svg { width: 16px; height: 16px; flex: none; transition: width .3s var(--glide), height .3s var(--glide), opacity .2s ease-out; }
 .launcher path { fill: currentColor; }
+.launcher span { display: inline-block; max-width: 180px; overflow: hidden; white-space: nowrap;
+  transition: max-width .3s var(--glide), opacity .2s ease-out .1s; }
+/* Minimized: a small dot in the same corner. Hovered or focused, it opens up a little to show the pointer. */
+.launcher.mini { height: 14px; min-width: 14px; padding: 0; gap: 0; box-shadow: 0 0 0 1px rgba(250,250,249,.28), 0 2px 8px rgba(0,0,0,.2); }
+.launcher.mini span { max-width: 0; opacity: 0; transition: max-width .3s var(--glide), opacity .12s ease-out; }
+.launcher.mini svg { width: 0; height: 0; opacity: 0; }
+.launcher.mini:hover, .launcher.mini:focus-visible { height: 32px; min-width: 32px; box-shadow: 0 0 0 1px rgba(250,250,249,.2), 0 6px 16px rgba(0,0,0,.24); transform: translateY(-1px); }
+.launcher.mini:hover svg, .launcher.mini:focus-visible svg { width: 14px; height: 14px; opacity: 1; }
+.launcher:active { transform: scale(.97); }
+/* The way to minimize, on the launcher's inner top corner while the pointer is over it or it has focus. */
+.hide { position: absolute; top: -6px; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0;
+  border: 1px solid #e7e5e4; border-radius: 999px; background: #fff; color: #57534e; box-shadow: 0 2px 6px rgba(0,0,0,.16);
+  opacity: 0; transform: scale(.92) translateY(2px); pointer-events: none; transition: opacity .18s ease-out, transform .18s var(--glide); }
+.dock.right .hide { left: -6px; }
+.dock.left .hide { right: -6px; }
+.hide svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.hide:hover { color: #1c1917; background: #fafaf9; }
+.launch:hover .hide, .launch:focus-within .hide { opacity: 1; transform: none; pointer-events: auto; }
+.launch.mini .hide { display: none; }
 .panel { width: min(320px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 14px;
   padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.16); }
 [hidden] { display: none !important; }
@@ -78,7 +102,7 @@ button { font: inherit; cursor: pointer; }
 .note { margin: 0; padding: 8px 12px 4px; font-size: 12px; line-height: 16px; color: #78716c; }
 .note a { color: inherit; text-decoration: none; }
 .note a:hover, .note a:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .cursor { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .cursor, .launcher, .launcher svg, .launcher span, .hide { transition: none; } .launcher.mini:hover { transform: none; } }
 `;
 
 // A visitor is told they are dealing with an AI before they ask it anything,
@@ -87,6 +111,28 @@ button { font: inherit; cursor: pointer; }
 // can change the launcher's word, and cannot take this away. The link goes to
 // the page that says what Haptic reads and keeps.
 const ABOUT_URL = "https://joinhaptic.com/privacy/";
+
+// A visitor who minimizes the launcher keeps it minimized on the next page of
+// the site. It is only a convenience, so storage that is blocked or full just
+// means it starts as the full launcher again.
+const MINIMIZED_KEY = "haptic.minimized";
+
+function minimizedBefore(): boolean {
+  try {
+    return localStorage.getItem(MINIMIZED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function remember(mini: boolean) {
+  try {
+    if (mini) localStorage.setItem(MINIMIZED_KEY, "1");
+    else localStorage.removeItem(MINIMIZED_KEY);
+  } catch {
+    // Not kept. It is minimized on this page only.
+  }
+}
 
 export interface UiHandlers {
   onAsk: (question: string) => void;
@@ -138,7 +184,10 @@ export class Ui {
           <div class="status" hidden><span></span><button class="stop" type="button">Stop</button></div>
           <p class="note">Haptic <a href="${ABOUT_URL}" target="_blank" rel="noopener noreferrer">is an AI guide and can be wrong.</a></p>
         </div>
-        <button class="launcher" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${POINTER_PATH}"/></svg><span></span></button>
+        <div class="launch">
+          <button class="launcher" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${POINTER_PATH}"/></svg><span></span></button>
+          <button class="hide" type="button" aria-label="Minimize Haptic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg></button>
+        </div>
       </div>`;
     const pick = <T extends Element>(selector: string) => root.querySelector(selector) as T;
     this.panel = pick(".panel");
@@ -167,9 +216,25 @@ export class Ui {
     pick(".launcher span").textContent = appearance.launcherLabel;
     this.at = { x: side === "left" ? 60 : window.innerWidth - 60, y: window.innerHeight - 40 };
 
+    const launch = pick<HTMLElement>(".launch");
+    const minimize = (mini: boolean) => {
+      launch.classList.toggle("mini", mini);
+      launcher.classList.toggle("mini", mini);
+      // Its word is hidden while it is a dot, so the dot needs a name of its own.
+      if (mini) launcher.setAttribute("aria-label", `Show ${appearance.launcherLabel}`);
+      else launcher.removeAttribute("aria-label");
+      remember(mini);
+    };
+    if (minimizedBefore()) minimize(true);
     launcher.addEventListener("click", () => {
+      if (launcher.classList.contains("mini")) return minimize(false);
       this.panel.hidden = !this.panel.hidden;
       if (!this.panel.hidden) this.input.focus();
+    });
+    pick(".hide").addEventListener("click", () => {
+      this.panel.hidden = true;
+      minimize(true);
+      launcher.focus({ preventScroll: true });
     });
     this.form.addEventListener("submit", (event) => {
       event.preventDefault();
