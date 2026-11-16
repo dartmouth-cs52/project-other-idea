@@ -382,6 +382,19 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     assert.equal(refused.sent.length, 1, "retried once, never again");
   });
 
+  test("one key sent with two addresses is two emails, each with its own key, each sent and counted", async () => {
+    reset();
+    const { sent, fetcher } = resend();
+    assert.equal((await call(sql(), { to: "first@example.org", key: "shared-press-01" }, { fetcher }))?.status, 200);
+    assert.equal((await call(sql(), { to: "second@example.net", key: "shared-press-01" }, { fetcher }))?.status, 200);
+    assert.deepEqual(sent.map((item) => item.body.to[0]), ["first@example.org", "second@example.net"], "the second address gets its own email, not the first one's answer");
+    assert.notEqual(sent[0]!.idempotency, sent[1]!.idempotency);
+    assert.equal((await rows()).length, 2);
+    // The same mailbox written another way is the same email, though: a retry.
+    assert.equal((await call(sql(), { to: "First@Example.org", key: "shared-press-01" }, { fetcher }))?.status, 200);
+    assert.equal(sent.length, 2);
+  });
+
   test("Resend answering 409 for a key it has seen means the email went, so it stays counted and the person is told it was sent", async () => {
     reset();
     const conflict = async () => Response.json({ statusCode: 409, name: "invalid_idempotent_request", message: "Same idempotency key used with a different request payload." }, { status: 409 });
@@ -449,25 +462,43 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     assert.equal(sent.length, EMAILS_PER_COMPANY);
   });
 
-  test("the database holds the limits itself, when presses race", async () => {
+  /**
+   * The real queries, with the insert held for 0.3 s after it has taken its view of the table, so presses at
+   * the same moment always overlap and none sees another's row: only the locks, taken in the statement
+   * before it, make them wait their turn. Take either lock out of setup-api.ts and these tests fail.
+   */
+  const slowWrites = () => {
+    const real = psqlSql(DB);
+    const slow = ((strings: TemplateStringsArray, ...values: unknown[]) => real(strings, ...values)) as typeof real;
+    slow.query = real.query;
+    slow.transaction = (queries) => {
+      const last = queries[queries.length - 1] as unknown as { text: string; params: unknown[] };
+      assert.match(last.text, /on conflict \(key\) do nothing/);
+      const held = real.query(last.text.replace("on conflict (key) do nothing", "and pg_sleep(0.3)::text = '' on conflict (key) do nothing"), last.params);
+      return real.transaction([...queries.slice(0, -1), held]);
+    };
+    return slow;
+  };
+  const THIRD_ORG = { id: "00000000-0000-4000-8000-000000000003", name: "Third Co", role: "owner" };
+  const THIRD = { id: "00000000-0000-4000-8000-0000000000cc", email: "kai@third.example", name: "Kai", emailVerified: true };
+
+  test("the company's lock holds the site's limit when presses overlap", async () => {
     reset();
     const { sent, fetcher } = resend();
-    // Thirty presses at the same moment on one site: ten go.
-    const site = await Promise.all(Array.from({ length: 30 }, (_, i) => call(sql(), { to: `race${i}@example.org`, key: press() }, { fetcher })));
-    assert.equal(site.filter((answer) => answer?.status === 200).length, EMAILS_PER_SITE);
+    const answers = await Promise.all(Array.from({ length: 16 }, (_, i) => call(slowWrites(), { to: `race${i}@example.org`, key: press() }, { fetcher })));
+    assert.equal(answers.filter((answer) => answer?.status === 200).length, EMAILS_PER_SITE);
     assert.equal(sent.length, EMAILS_PER_SITE);
+  });
 
-    // Two companies at the same moment, to one mailbox: three go between them.
+  test("the mailbox's lock holds its limit when three companies' presses overlap", async () => {
     reset();
     addSite("site_other0001", OTHER_ORG.id);
-    const mailbox = resend();
-    const answers = await Promise.all(
-      Array.from({ length: 8 }, (_, i) =>
-        call(sql(), { to: "shared@example.net", key: press() }, { fetcher: mailbox.fetcher, ...(i % 2 ? { org: OTHER_ORG, site: "site_other0001", user: COLLEAGUE } : {}) }),
-      ),
-    );
+    addSite("site_third0001", THIRD_ORG.id);
+    const { sent, fetcher } = resend();
+    const who = [{}, { org: OTHER_ORG, site: "site_other0001", user: COLLEAGUE }, { org: THIRD_ORG, site: "site_third0001", user: THIRD }];
+    const answers = await Promise.all(Array.from({ length: 9 }, (_, i) => call(slowWrites(), { to: "shared@example.net", key: press() }, { fetcher, ...who[i % 3] })));
     assert.equal(answers.filter((answer) => answer?.status === 200).length, EMAILS_PER_ADDRESS);
-    assert.equal(mailbox.sent.length, EMAILS_PER_ADDRESS);
+    assert.equal(sent.length, EMAILS_PER_ADDRESS);
   });
 
   test("records older than a day are deleted with the next email, and by the daily run", async () => {
