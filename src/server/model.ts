@@ -7,7 +7,7 @@ import { ACTING_LIMITS, ACTS, actionsAllowed, MODES, REASONS, type Act, type Mod
 import { actingFor, type NotActing } from "./acting.ts";
 import { declinedReply, finishAnswer, neverDecided, type Finished, type ModelReply, type Overruled } from "./answers.ts";
 import type { Ceiling } from "./budget.ts";
-import { namedButNotDone, namedButNotDoneNote, namedButNotPointed, namedButNotPointedNote, pressLeftToVisitor } from "./check.ts";
+import { judgeNamed, namedButNotDone, namedButNotDoneNote, namedButNotPointed, namedButNotPointedNote, pressLeftToVisitor, type NamedVerdict } from "./check.ts";
 import { costOf } from "./prices.ts";
 import { answersOn, articlesOf, buildSystemPrompt, buildUserMessage } from "./prompt.ts";
 import { checkSay, SAY_MAX_CHARS, SAY_MAX_SENTENCES, SAY_WITHOUT_WORDS, tidySay, type Rule } from "./rules.ts";
@@ -34,9 +34,13 @@ type CacheLife = "5m" | "1h";
 
 /**
  * What is done with a reply whose sentence tells the visitor to use a listed
- * control while it points at nothing (check.ts). "ask" asks the model once
- * more when it is the guide's first question, and only says so in the
- * server's log after that. "log" only logs, "off" does neither.
+ * control while it points at nothing (check.ts). "log" only logs, "off" does
+ * neither. "ask", the default, acts on it. A guide's reply is judged first
+ * (check.ts, judgeNamed): when the control is plainly the goal's next step it
+ * is pointed at, with the same sentence and "continue", and no model call is
+ * made; when the control is named as an aside, something optional or for
+ * later, the reply stands; otherwise the model is asked once more. On the
+ * first question nothing is an aside, so there it is pointed at or asked about.
  *
  * Measured on 16 November 2026 over four runs of the 469 tuned single steps
  * (1,870 replies): on every step it caught 34 replies (1.8%), of which 14 were
@@ -46,6 +50,9 @@ type CacheLife = "5m" | "1h";
  * questions it caught 9 replies (0.5%), all 9 wrong, such as "Click FAQ in the
  * top bar to read it" with nothing pointed at. Nothing can have been reached
  * before the first step, so there a control the sentence names is the step.
+ * After the first step only the log was written, until Northpine's owner asked
+ * to add a budget and the guide ended on Budgets with "To add one, use New
+ * budget at the top.": what judgeNamed adds is measured in check.ts.
  *
  * In act mode "ask" also asks once more at any step when a reply of
  * "continue" points at nothing and its sentence names a control Haptic could
@@ -151,8 +158,9 @@ export interface TurnMeasure {
   /**
    * The listed control the first reply's sentence told the visitor to use while it pointed at nothing, and whether the model was asked again.
    * `act` is set when it was an act reply of "continue" naming a control Haptic could press (namedButNotDone).
+   * `verdict` is how a guide's reply was judged (judgeNamed), and `pointed` is set when the server pointed at the control itself.
    */
-  recheck?: { named: string; asked: boolean; act?: true };
+  recheck?: { named: string; asked: boolean; act?: true; verdict?: NamedVerdict; pointed?: true };
   /**
    * Set when the widget asked to act. `refused`: why the step was answered as
    * a guide. `capped`: the step was past the site's cap, so the model was not
@@ -290,8 +298,8 @@ export function ceilingFor(site: SiteContext, request: TurnRequest, settings: Tu
   const prompt = (known[mode] ??= size(buildSystemPrompt(site, act ? "act" : undefined)));
   const input = size(buildUserMessage(request, site)) + request.history.reduce((sum, turn) => sum + size(turn.text), 0);
   const cost = (cacheWrite: number, cacheRead: number) => costOf(settings.model, { input, cacheRead, cacheWrite, output: MAX_TOKENS }, settings.cache);
-  // A guide's step on a site with Answers on is never asked twice (see measureTurn).
-  const twice = settings.recheck === "ask" && (act || (!answersOn(site) && request.step === 0 && !request.event));
+  // A guide's step on a site with Answers on is never asked twice (see measureTurn). Any other step may be.
+  const twice = settings.recheck === "ask" && (act || !answersOn(site));
   const again = twice ? cost(0, prompt) : 0;
   return { cold: cost(prompt, 0) + again, warm: cost(0, prompt) + again };
 }
@@ -388,17 +396,28 @@ export async function measureTurn(
   const named = checking && !stalled ? namedButNotPointed(request.snapshot, asStep(answer.reply)) : undefined;
   const found = stalled ?? named;
   if (found) {
-    const ask = settings.recheck === "ask" && (stalled !== undefined || (request.step === 0 && !request.event));
+    // A reply that names a control is judged (check.ts), an act reply's too unless it stalls, which is always asked about.
+    const verdict = stalled ? undefined : judgeNamed(request, asStep(answer.reply), found);
+    const acts = settings.recheck === "ask";
+    // Only a guide's step is made in code. In act mode the step may be Haptic's own press, so the model is asked to make it.
+    const point = acts && verdict === "point" && !acting.act;
+    const ask = acts && (stalled !== undefined || verdict === "ask" || (verdict === "point" && acting.act));
+    const then = point ? ", so it is pointed at" : ask ? ", asking again" : verdict === "aside" ? ", named as an aside" : "";
     // Ids only: the server's log holds nothing from the visitor's page.
     console.log(
       stalled
-        ? `recheck ${site.id} step ${request.step}: an act reply of "continue" names ${found.id}, which Haptic could press, and nothing is pointed at${ask ? ", asking again" : ""}`
-        : `recheck ${site.id} step ${request.step}: the sentence tells the visitor to use ${found.id} and nothing is pointed at${ask ? ", asking again" : ""}`,
+        ? `recheck ${site.id} step ${request.step}: an act reply of "continue" names ${found.id}, which Haptic could press, and nothing is pointed at${then}`
+        : `recheck ${site.id} step ${request.step}: the sentence tells the visitor to use ${found.id} and nothing is pointed at${then}`,
     );
-    answer.recheck = { named: found.id, asked: ask, ...(stalled ? { act: true as const } : {}) };
+    answer.recheck = { named: found.id, asked: ask, ...(stalled ? { act: true as const } : {}), ...(verdict ? { verdict } : {}), ...(point ? { pointed: true as const } : {}) };
+    if (point) {
+      // The same sentence, now with the pointer it describes, and the guide goes on.
+      answer.reply = { ...answer.reply, target: found.id, status: "continue" };
+      targetKnown(found.id);
+    }
     if (ask) {
       try {
-        const note = stalled ? namedButNotDoneNote(stalled) : namedButNotPointedNote(found);
+        const note = stalled ? namedButNotDoneNote(stalled) : namedButNotPointedNote(found, answer.reply.status);
         const again = await claudeTurn(site, request, settings, answers, modeKnown, targetKnown, signal, { reply: asStep(answer.reply), note });
         if (!onPage(again.reply.target)) again.reply.target = null;
         answer = { ...again, tokens: added(answer.tokens, again.tokens), usd: answer.usd + again.usd, recheck: answer.recheck };

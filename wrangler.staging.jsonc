@@ -30,8 +30,8 @@
     // HAPTIC_BUDGET_SHARED puts all sites on one meter, whatever a site sets for itself (src/server/budget.ts, meterFor).
     // Past either, every step gets the fixed "resting" sentence until the hour or the day turns (UTC).
     // A benchmark run of a few hundred steps needs a higher day: raise it for that run, and put it back.
-    "HAPTIC_BUDGET_HOUR": "2",
-    "HAPTIC_BUDGET_DAY": "5",
+    "HAPTIC_BUDGET_HOUR": "20",
+    "HAPTIC_BUDGET_DAY": "100",
     "HAPTIC_BUDGET_SHARED": "1",
     "HAPTIC_MODEL": "claude-sonnet-5-5"
   },
