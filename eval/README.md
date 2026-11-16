@@ -9,7 +9,7 @@ A fixed set of questions with known right answers, and a command that runs any m
 
 A case is one step of one guide, frozen: the page as the widget saw it, the question, what had happened so far, and which controls are a right answer. A guide of five steps is five cases. Cases live in `eval/cases/`, one JSON file per site, and each file carries the site's context, because that is part of what the model reads.
 
-`eval/cases/demo.json` holds 57 cases from 14 guides on the demo app, including a wrong click, a question with no answer in the app, and forms inside dialogs. `eval/cases/joinhaptic.json` holds 17 cases from 6 guides on the live joinhaptic.com: a real public site with an accordion, a footer and a two-step form.
+`eval/cases/demo.json` holds 57 cases from 14 guides on the demo app, including a wrong click, a question with no answer in the app, and forms inside dialogs. `eval/cases/joinhaptic.json` holds 19 cases from 7 guides on the live joinhaptic.com: a real public site with an accordion, a footer, a sign-in page, a two-step form, and a question about something the site does not have.
 
 ## Running it
 
@@ -58,7 +58,7 @@ npm run eval:record -- demo         # needs the local server: HAPTIC_MODEL=mock 
 HAPTIC_PUBLIC_URL=https://widget.joinhaptic.com npm run eval:record -- joinhaptic
 ```
 
-A guide can stop before a button that must not be pressed. The joinhaptic.com form guide ends at the button that sends the request, so recording never submits it. This works for any public site: add a file to `eval/guides/`, build the site with `npm run tag`, and record. Pages behind a login need the recording method above.
+A guide can stop before a button that must not be pressed. The joinhaptic.com form guide ends at the button that sends the request, and its sign-in guide at the sign-in form, so recording never submits a request, sends a sign-in link or opens Google. This works for any public site: add a file to `eval/guides/`, build the site with `npm run tag`, and record. Pages behind a login need the recording method above.
 
 It drives a browser with Playwright, which this project does not install. The steps are at the top of `eval/record.ts`.
 

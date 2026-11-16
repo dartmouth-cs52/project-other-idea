@@ -1,8 +1,9 @@
 import { any, button, DONE, type Guide, type GuideSet } from "../guide.ts";
 
 // Haptic's own site, joinhaptic.com: a real public site with a navigation bar,
-// an accordion, a footer and a two-step form. The form guide stops at the
-// button that sends the request, so recording never submits it.
+// an accordion, a footer, a sign-in page and a two-step form. The form and
+// sign-in guides stop before the button that would send anything, so recording
+// never submits the request, sends a sign-in link or opens Google.
 
 const guides: Guide[] = [
   {
@@ -24,7 +25,10 @@ const guides: Guide[] = [
     id: "pricing",
     start: "/",
     goal: "How much does it cost?",
-    steps: [{ expect: [any("How much does it cost?")], act: { click: 'button:has-text("How much does it cost?")' } }, DONE],
+    // The Pricing link in the top bar and the FAQ question both answer it, so either is right.
+    // The recorder points at the first of them on the page, the Pricing link, so that is what it clicks:
+    // clicking the FAQ question instead would record the next step as a wrong click.
+    steps: [{ expect: [any("Pricing"), any("How much does it cost?")], act: { click: 'header a[href="/#pricing"]' } }, DONE],
   },
   {
     id: "what-it-reads",
@@ -48,8 +52,25 @@ const guides: Guide[] = [
     goal: "terms of service",
     steps: [{ expect: [any("Terms")], act: { click: 'footer a[href="/terms/"]' } }, DONE],
   },
-  // The site has no sign-in, so the right answer points at nothing.
-  { id: "no-such-feature", start: "/", goal: "How do I log in to my account?", steps: [DONE] },
+  {
+    id: "sign-in",
+    start: "/",
+    goal: "How do I log in to my account?",
+    steps: [
+      { expect: [any("Sign in")], act: { click: 'header a[href="/sign-in/"]' } },
+      // Reaching the sign-in page is not logging in, so the guide goes on to either way in.
+      // Recording stops here. No sign-in link is sent and Google is never opened.
+      { expect: [button("Continue with Google"), any("Work email")] },
+    ],
+  },
+  // The site has no blog, and nothing on it stands in for one, so the right answer points at nothing.
+  // Paying and live chat are missing too, but are poor tests: Pricing says Haptic is free during early
+  // access, and the email link in the footer is how to reach the team, so pointing at either is fair.
+  { id: "no-such-feature", start: "/", goal: "Where is your blog?", steps: [DONE] },
 ];
 
+// joinhaptic.com does not carry Haptic's tag yet, so the recorder adds the live
+// widget script, as the tag would. Set this to true once the site's own tag is
+// live, so that a page never has two. The recorder answers every step itself,
+// so the model is never called.
 export default { siteId: "site_joinhaptic", origin: "https://joinhaptic.com", hasTag: false, guides } satisfies GuideSet;
