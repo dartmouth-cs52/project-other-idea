@@ -235,7 +235,12 @@ export class Guide {
           waiting.acted = what;
           // If this click loads a new page before the reply is in, the next page still needs to know about it.
           this.strayed = !what.onTarget;
-          this.save(what.event);
+          // The step was shown and acted on, though its sentence is not in yet. Saved as done, so a page this
+          // click loads asks the next step and does not ask this one again over the top of it.
+          this.save(what.event, {
+            user: this.step === 0 ? this.goal : (event ?? "The page changed."),
+            assistant: listed ? `Pointed at ${describeElement(listed)}.` : "Pointed at a control.",
+          });
           whenActed?.(what);
         }),
       };
@@ -515,13 +520,17 @@ export class Guide {
     this.ui.offerHandoff(config.label, open, send);
   }
 
-  private save(event?: string) {
+  /** Saves the guide for the next page. `shown` is a step pointed at whose reply is still coming, counted as done. */
+  private save(event?: string, shown?: { user: string; assistant: string }) {
+    const history: HistoryTurn[] = shown
+      ? [...this.history, { role: "user", text: shown.user }, { role: "assistant", text: shown.assistant }]
+      : this.history;
     const saved: SavedGuide = {
       ...(this.id ? { id: this.id } : {}),
       goal: this.goal,
-      history: this.history.slice(-MAX_HISTORY),
+      history: history.slice(-MAX_HISTORY),
       ...(this.thread.length ? { thread: this.thread } : {}),
-      step: this.step,
+      step: shown ? this.step + 1 : this.step,
       path: normalizePath(location.pathname),
       savedAt: Date.now(),
       ...(event ? { event } : {}),
