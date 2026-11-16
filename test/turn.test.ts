@@ -293,6 +293,17 @@ const SEEN: [what: string, wrote: string, shown: string][] = [
     "Choose 12456 in the From account # dropdown. Then pick 13344 in the To account dropdown next to it.",
   ],
   [
+    // From the first live check of acting, 16 November 2026: the end of the reply's own field, a curly quote mark and a comma, after the last full stop.
+    "a curly quote mark and a comma after the last full stop",
+    'The Status filter has no "on hold" choice (All statuses, Draft, Submitted, Approved, Rejected, Paid). Open Status and pick the closest match, such as Submitted, and I\'ll help from there.”,',
+    'The Status filter has no "on hold" choice (All statuses, Draft, Submitted, Approved, Rejected, Paid). Open Status and pick the closest match, such as Submitted, and I\'ll help from there.',
+  ],
+  [
+    "the same with a straight quote mark, a comma and a brace",
+    "Click Next to go on to Card type.\",}",
+    "Click Next to go on to Card type.",
+  ],
+  [
     "a sentence that ran away, with check marks",
     "Open the From account # dropdown and choose 12456.  Then pick 13344 in the To account dropdown.  ✓ Amount is done.  ✓ Next up is the account choice.  ✓ Last is the Transfer button.  ✓ Go on.  ✓ Choose the account.  ✓ Thanks.  ✓ Great.  ✓ Fine.  ✓ Continue.  ✓ Okay.  ✓ Done.  ✓ Yes.  ✓ Right.  ✓ Sure.  ✓ Good.  ✓ Alright.  ✓ Ready.",
     "Open the From account # dropdown and choose 12456. Then pick 13344 in the To account dropdown. Amount is done. Next up is the account choice.",

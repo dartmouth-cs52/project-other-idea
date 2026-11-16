@@ -219,6 +219,8 @@ function withoutLeftovers(text: string): string {
     else if ("«»".includes(last) && count(text, "«»") % 2) text = rest;
     // A single one counts only after a stop, and only when no word in the sentence opens with one: "we'll" does not.
     else if ("'’".includes(last) && STOP.includes(rest.at(-1) ?? " ") && !/(?:^|[\s(])['‘’]\S/.test(rest)) text = rest;
+    // A comma, colon or semicolon after the last stop and any marks that close with it ends nothing: it is the reply's own JSON, written as text.
+    else if (",;:".includes(last) && PROPER_END.test(rest)) text = rest;
     else if (!PROPER_END.test(text)) {
       // The last run of characters holds a full stop with more stuck to it.
       const word = /\S+$/.exec(text)?.[0] ?? "";
