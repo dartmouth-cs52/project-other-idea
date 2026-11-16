@@ -190,6 +190,8 @@ interface Reveal {
   shown: string;
   /** The part of the selector that picks the box the mouse has to be over. */
   box: string;
+  /** The mouse has to be over the hidden thing itself, as `.actions:hover { opacity: 1 }` says. Only something see-through takes the mouse. */
+  self?: boolean;
   visibility: boolean;
   opacity: boolean;
 }
@@ -223,11 +225,29 @@ function selectorParts(list: string): string[] {
 }
 
 /**
- * Reads one selector such as ".panel:hover .menu" as "the mouse over .panel
- * shows .menu". Nothing is returned when the mouse would have to be over the
- * hidden thing itself, or over something beside it and not around it.
+ * A selector that is wholly one `:is(…)` or `:where(…)`, as Tailwind 4 writes
+ * `group-hover:` (`:is(:where(.group):hover .x)`), read as what it wraps.
  */
-function readReveal(part: string): Pick<Reveal, "shown" | "box"> | undefined {
+function unwrapped(part: string): string[] {
+  const trimmed = part.trim();
+  const opening = /^:(?:is|where|matches|-webkit-any)\(/.exec(trimmed);
+  if (!opening || !trimmed.endsWith(")")) return [trimmed];
+  let depth = 0;
+  for (let i = opening[0].length - 1; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (ch === "(" || ch === "[") depth++;
+    else if ((ch === ")" || ch === "]") && --depth === 0 && i !== trimmed.length - 1) return [trimmed];
+  }
+  return selectorParts(trimmed.slice(opening[0].length, -1)).flatMap(unwrapped);
+}
+
+/**
+ * Reads one selector such as ".panel:hover .menu" as "the mouse over .panel
+ * shows .menu". Nothing is returned when the mouse would have to be over
+ * something beside it and not around it. One that asks for the mouse over the
+ * hidden thing itself, ".actions:hover", is returned as `self`.
+ */
+function readReveal(part: string): Pick<Reveal, "shown" | "box" | "self"> | undefined {
   let end = -1;
   for (const match of part.matchAll(OVER)) {
     let depth = 0;
@@ -246,7 +266,11 @@ function readReveal(part: string): Pick<Reveal, "shown" | "box"> | undefined {
     else if (depth === 0 && /[\s>+~]/.test(ch)) break;
   }
   const rest = part.slice(cut);
-  if (!rest.trim()) return undefined;
+  if (!rest.trim()) {
+    // The mouse over the thing itself: only the mouse, since the keyboard inside a see-through box is not the visitor seeing it.
+    const self = part.replace(OVER, "").trim();
+    return self && /:hover(?![\w-])/.test(part) && !/:focus-within(?![\w-])/.test(part) ? { shown: self, box: self, self: true } : undefined;
+  }
   depth = 0;
   for (const ch of rest) {
     if (ch === "(" || ch === "[") depth++;
@@ -286,7 +310,7 @@ function revealsIn(root: Document | ShadowRoot): Reveal[] {
         const visibility = rule.style.visibility === "visible";
         const opacity = rule.style.opacity !== "" && Number(rule.style.opacity) > 0;
         if (!visibility && !opacity) continue;
-        for (const part of selectorParts(selector)) {
+        for (const part of selectorParts(selector).flatMap(unwrapped)) {
           const reveal = readReveal(part);
           if (reveal) found.push({ ...reveal, visibility, opacity });
         }
@@ -320,8 +344,10 @@ function shownWhenOver(el: Element, hiddenByVisibility: boolean, seeThrough: boo
   let opacity = false;
   for (const rule of revealsIn(root)) {
     try {
+      // Something hidden takes no mouse, so only a see-through box can be shown by the mouse over it.
+      if (rule.self && (hiddenByVisibility || !seeThrough)) continue;
       if (!el.matches(rule.shown)) continue;
-      const over = el.parentElement?.closest(rule.box);
+      const over = rule.self ? el : el.parentElement?.closest(rule.box);
       if (!over) continue;
       box ??= over;
       visibility ||= rule.visibility;
@@ -894,8 +920,10 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
         if (unnamedMenu && !added.label) added.spot = spotOf(inPageWindow(rect, frame), viewportHeight);
         const state = stateOf(el, role);
         if (state.includes("disabled")) giveReason(added, reasonOf(el));
-        // Fully transparent controls have always been listed: row actions that fade in. One that a stylesheet shows on hover says so.
-        const fades = !hoverBox && hiddenChecked < MAX_HIDDEN_CHECKED && getComputedStyle(el).opacity === "0" && ++hiddenChecked > 0 && shownWhenOver(el, false, true);
+        // Fully transparent controls have always been listed: row actions that fade in. One that a stylesheet shows on hover says so,
+        // whether the control is see-through itself or a box around it is, as a row's cell of actions often is.
+        const clear = !hoverBox && hiddenChecked < MAX_HIDDEN_CHECKED && seeThroughNow(el) ? seeThroughBox(el) : undefined;
+        const fades = clear && ++hiddenChecked > 0 && shownWhenOver(clear, false, true);
         if (hoverBox || (fades && liesInside(rect, fades))) state.push(SHOWS_ON_HOVER);
         if (state.length) added.state = state;
         const href = hrefOf(el);
@@ -1798,6 +1826,12 @@ function scrollBoxOf(el: Element, facts: Map<Element, BoxFacts>): Element | unde
     if (scrollsBy(factsOf(node, facts).overflowY) && node.scrollHeight > node.clientHeight + 1) return node;
   }
   return undefined;
+}
+
+/** Whether an element is drawn fully see-through, by itself or by a box around it, though it is in the page and laid out. */
+function seeThroughNow(el: Element): boolean {
+  if (typeof el.checkVisibility === "function") return el.checkVisibility({ visibilityProperty: true }) && !el.checkVisibility({ opacityProperty: true });
+  return getComputedStyle(el).opacity === "0";
 }
 
 /** The box in an element's ancestry, itself included, that draws it fully see-through, if one does. */
