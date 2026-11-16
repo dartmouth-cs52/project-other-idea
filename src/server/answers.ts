@@ -157,7 +157,7 @@ export function declinedReply(site: SiteContext, answers: boolean): Finished {
 
 /** The most controls checked for one answer. */
 const MAX_CONTROLS = 6;
-/** A site map with fewer controls than this, over all its pages, says nothing about what the product has. */
+/** A site map with fewer different controls than this, over all its pages, says nothing about what the product has. */
 const MIN_KNOWN_CONTROLS = 5;
 
 /** A label made comparable: lower case, single spaces, and none of the quotes, dots or arrows a sentence wraps a label in. */
@@ -192,7 +192,8 @@ function sameControl(named: string, label: string): boolean {
  */
 export function missingControls(site: SiteContext, snapshot: Snapshot, controls: string[]): string[] {
   if (snapshot.dialog !== undefined || snapshot.truncated) return [];
-  const known = site.pages.flatMap((page) => [...page.buttons, ...page.fields, ...page.links.map((link) => link.label)]).map(plainLabel);
+  // Each label once: a menu the crawl found on every page is still only the few controls in it.
+  const known = [...new Set(site.pages.flatMap((page) => [...page.buttons, ...page.fields, ...page.links.map((link) => link.label)]).map(plainLabel))].filter(Boolean);
   if (known.length < MIN_KNOWN_CONTROLS) return [];
   const seen = [...snapshot.elements.map((element) => plainLabel(element.label)), ...known];
 

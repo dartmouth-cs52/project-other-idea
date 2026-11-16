@@ -271,6 +271,12 @@ test("nothing is called missing when Haptic cannot know", () => {
   assert.deepEqual(missingControls(mapped, { ...page, truncated: true }, ["Archive project"]), []);
   // A product whose pages the crawl could not read: a control that isn't here is most likely on another page.
   assert.deepEqual(missingControls(site, page, ["Archive project"]), []);
+  // Nor one whose crawl found only the same menu on every page: six labels, but two controls.
+  const menuOnly: SiteContext = {
+    ...site,
+    pages: ["/", "/team", "/projects"].map((path) => ({ path, title: "", headings: [], links: [{ label: "Projects", to: "/projects" }, { label: "Team", to: "/team" }], buttons: [], fields: [] })),
+  };
+  assert.deepEqual(missingControls(menuOnly, page, ["Archive project"]), []);
 });
 
 test("an answer built on an article that names a control the product no longer has says so", async () => {
