@@ -54,7 +54,8 @@ export default function Privacy() {
       <p>
         One exception: when someone writes an email address, or a number of five or more digits, in their question,
         that exact value is left readable wherever it stands on its own on the page, so Haptic can find the order or
-        account they asked about. It is still masked in the question itself.
+        account they asked about. In the question itself it is left readable only when the page shows it too, and
+        masked otherwise.
       </p>
       <p>
         With each question the widget also sends the person&apos;s date, as their device shows it, so the AI knows what

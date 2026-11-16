@@ -3,6 +3,7 @@ import {
   cleanText,
   describeElement,
   MAX_ASKED,
+  namedIn,
   type GuideOutcome,
   type GuideReport,
   type HistoryTurn,
@@ -281,7 +282,25 @@ export class Guide {
    */
   private get asked(): string {
     // Cut to the ask box's 300 characters first: a mask can be longer than what it hides, and the end of a question is usually what it asks.
-    return cleanText(this.goal.slice(0, 300), MAX_ASKED);
+    return cleanText(this.goal.slice(0, 300), MAX_ASKED, this.shownOwn);
+  }
+
+  /**
+   * The emails and long numbers the visitor named that the page being sent
+   * also shows. The page reading leaves those readable (`namedIn`), so the
+   * question leaves them readable too, or the model could not tell that the
+   * account on the page is the one asked about. Anything the visitor named
+   * that the page does not show stays masked in the question.
+   */
+  private shownOwn: ReadonlySet<string> = new Set();
+  private noteShownOwn(snapshot: Snapshot) {
+    const own = namedIn(this.goal);
+    if (!own.size) {
+      this.shownOwn = own;
+      return;
+    }
+    const sent = JSON.stringify(snapshot).toLowerCase();
+    this.shownOwn = new Set([...own].filter((value) => sent.includes(value.toLowerCase())));
   }
 
   /** A question. `act` is set when the visitor pressed Do it, and Haptic then acts if the site and the page allow it. */
@@ -673,6 +692,7 @@ export class Guide {
       acting.turns++;
     }
     let reply: TurnReply;
+    this.noteShownOwn(page.snapshot);
     try {
       reply = await this.sendTurn(
         {

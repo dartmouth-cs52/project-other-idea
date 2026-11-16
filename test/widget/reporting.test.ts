@@ -7,8 +7,9 @@ after(closeBrowser);
 
 // What the widget tells the server about a guide besides its questions: one id
 // for all its steps, how it ended, and whether the visitor said it helped. The
-// question leaves the browser masked, while the page is read with it as it was
-// typed. Reports go to the harness's own stand-in for the server.
+// question leaves the browser masked, except for what the visitor named that the
+// page also shows, and the page is read with it as it was typed. Reports go to
+// the harness's own stand-in for the server.
 
 const ORDERS = `<h1>Orders</h1>
   <p>Order 88123 for sam@example.com</p><p>Order 99876 for kim@example.com</p>
@@ -26,15 +27,17 @@ function reports(session: Session): Record<string, unknown>[] {
   return sent;
 }
 
-test("a guide's steps carry one id, its question leaves masked, and how it ended is reported once, then whether it helped", async () => {
+test("a guide's steps carry one id, its question leaves masked but for what the page also shows, and how it ended is reported once, then whether it helped", async () => {
   const session = await start(ORDERS, (request, index) => (index === 0 ? point(request, "Export", "Click Export.") : words("Your orders are exported.")));
   const sent = reports(session);
   try {
-    await session.ask("export order 88123 for sam@example.com");
+    await session.ask("export order 88123 for sam@example.com, not 55555 or lee@example.com");
     await session.untilState("pointing");
     const [first] = session.requests;
     assert.match(first?.guide ?? "", GUIDE_ID);
-    assert.equal(first?.goal, "export order [number] for [email]");
+    // The order and the address the page shows stay readable in the question, so the model can tell
+    // that they are the ones asked about. What the visitor named that the page does not show stays masked.
+    assert.equal(first?.goal, "export order 88123 for sam@example.com, not [number] or [email]");
     // The visitor named this order and this address, so where exactly they stand on the page they are left readable. The others are masked.
     const text = first?.snapshot.text.join(" ") ?? "";
     assert.match(text, /Order 88123 for sam@example\.com/);
