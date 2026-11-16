@@ -921,11 +921,12 @@ export class Guide {
    * their turn. For a choice (`picks`), the click that opens the list is not
    * the step: the pick is.
    */
-  private visitorTurn(run: number, el: Element, listing: Map<Element, SnapElement>, say: string, event: string, picks = false) {
+  private visitorTurn(run: number, given: Element, listing: Map<Element, SnapElement>, say: string, event: string, picks = false) {
     const { ui } = this;
     const session = this.acting;
-    const listed = listing.get(el);
-    const name = listed ? nameOf(listed) : "the control";
+    const listed = listing.get(given);
+    // A control the page drew again while Haptic tried it, as a tab does on the route it leads to, is pointed at on its new node.
+    const el = !given.isConnected && listed && this.previous ? (sameControl(this.previous, listed, takeSnapshot(ui.host, this.goal)) ?? given) : given;
     ui.setState("pointing");
     ui.setBusy(ACTING_WORDS.yourTurn);
     ui.pointAt(el, say);
@@ -973,8 +974,8 @@ export class Guide {
       ui.rest();
       ui.setState("asking");
       ui.setBusy(ACTING_WORDS.doing);
+      // A field they typed in is not watched until it is left, as in a guide: Haptic's next step moves on from it.
       const since = performance.now();
-      if (what.how === "filled" && isTyped(on) && holdsFocus(on)) this.watchField(run, on, name);
       void settle(ui.host, { since, used: on }).then(() =>
         onceStaying(() => {
           if (run === this.run && this.acting === session) void this.turn(run, { event: told });

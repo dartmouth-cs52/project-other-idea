@@ -459,8 +459,10 @@ async function pressTab(run: Run): Promise<Outcome> {
   const panel = panelOf(el);
   const panelBefore = panel ? panelLook(panel) : "";
   const wasExpanded = expanded(el);
+  const address = location.href;
   // A tab is open when it says it is selected, when its panel changed, or, for the headers of an accordion that some toolkits make tabs, when it says it is expanded.
-  const selected = () => el.getAttribute("aria-selected") === "true" || (!!panel && panelLook(panel) !== panelBefore) || (!wasExpanded && expanded(el));
+  // A tab that is a link to its own address took when the address changed: the page draws it again there, so the old node says nothing.
+  const selected = () => el.getAttribute("aria-selected") === "true" || (!!panel && panelLook(panel) !== panelBefore) || (!wasExpanded && expanded(el)) || location.href !== address;
   run.listen(el);
   await press(run, el, run.plan);
   if (await waitFor(run, selected, CHECK_MS)) return run.done(`You clicked ${run.name}.`);

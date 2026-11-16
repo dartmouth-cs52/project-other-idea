@@ -527,3 +527,31 @@ test("a person the visitor named is picked from a list that shows each name with
     await theirs.close();
   }
 });
+
+test("a tab that is a link to its own route, drawn again when the route changes, is done by Haptic, not given to the visitor", async () => {
+  const session = await start(
+    `${WATCH}<h1>People</h1><div id="tabs"></div><main id="panel"></main>
+    <script>
+      // A router that draws the tabs again for each route, as a page built on its routes does.
+      const draw = () => {
+        const here = location.pathname;
+        document.getElementById('tabs').innerHTML = '<div role="tablist">' + [['/', 'Directory'], ['/roles', 'Roles and permissions']]
+          .map(([to, name]) => '<a role="tab" href="' + to + '" aria-selected="' + (here === to) + '">' + name + '</a>').join('') + '</div>';
+        document.getElementById('panel').textContent = here === '/roles' ? 'Finance can approve spend.' : 'Everyone';
+        for (const tab of document.querySelectorAll('[role=tab]')) tab.addEventListener('click', (event) => { event.preventDefault(); history.pushState({}, '', tab.getAttribute('href')); draw(); });
+      };
+      draw();
+    </script>`,
+    (request, index) => (index === 0 ? doing(request, "Roles and permissions", "click", "Opening the roles.", undefined, "tab") : words("Finance can approve spend.")),
+    "/",
+    { acting: { ...ACTING_ON, confirmFirst: false } },
+  );
+  try {
+    await session.ask("can you show me what the Finance role can do", { act: true });
+    const next = await session.untilAsked(2, 15_000);
+    assert.match(next.event ?? "", /^You clicked tab "Roles and permissions"\./);
+    assert.equal(await session.page.evaluate(() => location.pathname), "/roles");
+  } finally {
+    await session.close();
+  }
+});
