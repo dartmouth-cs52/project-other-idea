@@ -26,8 +26,12 @@ const OUTCOME = `case
  * The visitor got what they came for: they said so, or the guide finished, was answered in words, or showed them
  * where it is, and they didn't say it didn't help. A first answer they read without clicking ("shown") counts:
  * Haptic knew where it was, which is what "can't find" is about.
+ *
+ * A guide with no ending has a null outcome, and "null in (...)" is null in SQL, not false. The check
+ * for null keeps this false for such a guide, so "not SUCCEEDED" holds for it. Without it an abandoned
+ * guide was left out of where people stopped, and the dashboard said they got no first step.
  */
-export const SUCCEEDED = `(g.helped is true or (g.helped is distinct from false and g.outcome in ('finished', 'answered', 'shown')))`;
+export const SUCCEEDED = `(g.helped is true or (g.helped is distinct from false and g.outcome is not null and g.outcome in ('finished', 'answered', 'shown')))`;
 /**
  * Guides that count toward finding and finishing. Not one still under way,
  * and not one no change to the product could finish: a question left for a
