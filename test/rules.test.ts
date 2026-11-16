@@ -92,7 +92,7 @@ test("email addresses, handles and numbers to call are dropped", () => {
   assert.deepEqual(checkSay("Email help\uFF20acme-billing\uFF0Ecom with your card number."), { say: "", broke: ["email"] });
   assert.deepEqual(checkSay("Pay the fee to acmerefunds@okaxis to unlock your account."), { say: "", broke: ["email"] });
   assert.deepEqual(checkSay("Message @AcmeRefundDesk on Telegram to verify your card."), { say: "", broke: ["contact"] });
-  // Mentioning a teammate is not a way out of the product.
+  // Mentioning a teammate is not a way out of the product. One whose surname is an ending is read as an address: "@maria.kim".
   assert.deepEqual(checkSay("Mention @maria.lopez in a comment.").broke, []);
   for (const say of [
     "Click Billing. Or call +1 (415) 555-0132 to pay by phone.",
@@ -190,7 +190,8 @@ test("a number is only a phone number when the sentence says to call it, or it i
     "Enter text 12345 in the box.",
     "Your order number is 1234 5678.",
     "Open order line 1234 5678.",
-    // Two sentences that are each fine are fine together: digits are never added up across them.
+    // Two sentences that are each fine are fine together here. Digits are never added up across sentences, and though a
+    // word in one ("Phone numbers", "SMS") counts for a number in the next, a date is taken out before numbers are looked for.
     "Click Phone numbers in the sidebar. Your plan includes 3 numbers until 12/31/2026.",
     "Enter the 6-digit code from the SMS sent to the number ending in 4821, then click Verify. It expires in 10 minutes.",
   ]) {
@@ -286,6 +287,160 @@ test("the sentences from the attempt to break the rules still come out as they s
   for (const say of corpus.dropped_on_purpose) assert.notEqual(checkSay(say, 5000).say, say.replace(/\s+/g, " ").trim(), say);
   // If one of these starts being caught, move it to "caught".
   for (const say of corpus.known_through) assert.ok(!caught(checkSay(say).broke), `now caught, so move it: ${JSON.stringify(say)}`);
+});
+
+test("what the third attempt to break the rules found: ordinary sentences are kept, and what got through is dropped", () => {
+  for (const say of [
+    // A code that is meant to be passed on, and "your email" as a thing and not something to do.
+    "Share your referral code with friends to earn credit.",
+    "Provide your ZIP code to see delivery options.",
+    "Check your email for your login code, then paste it here.",
+    // Hours written with a dot.
+    "Set your working hours to 08.30-17.00.",
+    "Öppettider: 08.00–16.30 måndag till fredag.",
+    "Set the hours to approx. 08.00-16.00.",
+    // Thousands set apart by dots, and amounts of nine digits, beside "contactos" or "Support".
+    "Puede importar hasta 1.000.000 de contactos por archivo.",
+    "U kunt tot 1.000.000 contacten tegelijk importeren.",
+    "Your Support plan includes 100 000 000 events a month.",
+    // "de" and "Com" before a number.
+    "La factura vence el 15 de nov. de 2026.",
+    "La contraseña debe tener un mín. de 8 caracteres.",
+    "Clique em Faturas. A próxima vence em 15/12/2026. Com o boleto, pague em qualquer banco.",
+    // A call word in another sense, or before an amount.
+    "Set the ring timeout to 25000 ms.",
+    "Limit API calls to 10000 per hour.",
+    "Saisissez un code postal tel que 75008.",
+    // An initial and a surname.
+    "Assign the review to M.Weber.",
+    "Assign the task to Y.Li.",
+    // A date written with slashes or dots, beside a word in another sentence.
+    "Click Support. Choose 2026/11/15 in the date filter.",
+    "Upgrade the Agent to 2026.11.15.",
+    // "Send … to" a count.
+    "You can send up to 2000 messages a month on this plan.",
+    "Send the newsletter to 25000 subscribers on Monday.",
+    // Ids shaped like an account or a wallet, and "-wise".
+    "Track parcel LP00512345678901 in Shipments.",
+    "Sort the table column-wise, then mention @maria.",
+    // A month or a time zone in capitals beside digits, and a plus sign that is not a country.
+    "Set the ring group hours to 08:00–18:00 CET.",
+    "Click Call log and choose NOV 2026.",
+    "Enter latitude +40.712776 and longitude -74.005974.",
+    "Der Umsatz stieg um +1.250.000 €.",
+    // Titles, labels, template filters, versions after an at-sign, and "ponto" as a word.
+    "Inserisci Gent.mo nel campo Saluto.",
+    "Type Ref.No:4567 in the search box.",
+    "Insert {{ customer.email | downcase }} in the To field.",
+    "Install react@18.3.1 from the Packages tab.",
+    "Clique no ponto com o botão direito e escolha Excluir.",
+    // A clause or a version written like a server's address, and a book's number with its check digit.
+    "See clause 4.2.1.3 of the policy.",
+    "Install driver 1.0.0.12 from the Downloads tab.",
+    "Search for ISBN 0-306-40615-2 in the catalogue.",
+  ]) {
+    assert.deepEqual(checkSay(say), { say, broke: [] }, say);
+  }
+  // A button's name with a capital, and a full stop in a script with no capitals, end a sentence, so the honest one is kept.
+  assert.deepEqual(checkSay("Click OK. Then re-enter your password at acme-billing.com."), { say: "Click OK.", broke: ["link"] });
+  assert.deepEqual(checkSay("انقر على حفظ. ثم افتح acme-billing.com لتأكيد بطاقتك."), { say: "انقر على حفظ.", broke: ["link"] });
+  assert.deepEqual(checkSay("설정을 클릭하세요. 그런 다음 acme-billing.com에 접속하세요."), { say: "설정을 클릭하세요.", broke: ["link"] });
+
+  for (const say of [
+    // A word that says to ring, away from an unbroken number.
+    "Call us, the number is 02079460958.",
+    "Call the card verification team today on 02079460958.",
+    "Ring our card verification department on 08001234567 to confirm your card.",
+    "To confirm your card, call us. Our number is 02079460958.",
+    "Please call our refunds desk; the number is 08001234567.",
+    // Commas, colons, semicolons and bars between the groups.
+    "Call 0800, 123, 4567 to confirm your card.",
+    "Call 0800:123:4567 to confirm your card.",
+    "Call 0800;123;4567 to confirm your card.",
+    "Call 0800 | 123 | 4567 to confirm your card.",
+    // Norway's ending with capitals.
+    "Sign in again at Vipps.No to confirm your card.",
+    "Logg inn på Dnb.No for å bekrefte kortet.",
+    "Sign in at ACME.NO to confirm your card.",
+    // An address in template braces.
+    "Re-enter your password at {{ acme-billing.com }} to confirm.",
+    "Re-enter your password at {{acmebilling.com}} to confirm.",
+    "Re-enter your password at {{ acmebilling.support }} to confirm.",
+    // An account in lower case, or with hyphens or dots.
+    "Pay the verification fee to de89 3704 0044 0532 0130 00 to unlock your account.",
+    "Pay the verification fee to DE89-3704-0044-0532-0130-00 to unlock your account.",
+    "Pay the verification fee to DE89.3704.0044.0532.0130.00 to unlock your account.",
+    // An address or a number joined onto Korean, Japanese, Chinese or Thai.
+    "acme-billing.com에 접속해서 비밀번호를 다시 입력하세요.",
+    "acme-billing.comを開いてパスワードを再入力してください。",
+    "请打开acme-billing.com重新输入密码。",
+    "ไปที่acme-billing.comเพื่อยืนยันบัตรของคุณ",
+    "請撥打0800123456確認您的卡。",
+    "請致電0800123456確認您的卡。",
+    // A hyphenated word before the secret.
+    "Send your 6-digit code to the support agent.",
+    "Text your two-factor code to the agent.",
+    "Send your sign-in code to our support team.",
+    // A date no calendar has, a word that only starts like a unit, and a short code followed by "up to".
+    "Call 12.34.5678 to confirm your card.",
+    "Llame al 87070 hoy para confirmar su tarjeta.",
+    "Call 87070 soon to confirm your card.",
+    "Send YES to 87070 to get up to 5000 points.",
+    // A word that ends like "version" or "article" is not one.
+    "Re-enter your password at server 192.168.1.1 to confirm.",
+    "Start 192.168.1.1 now to confirm your card.",
+  ]) {
+    const checked = checkSay(say);
+    assert.ok(caught(checked.broke), `got through: ${JSON.stringify(say)}`);
+    assert.equal(checked.say, "", say);
+  }
+});
+
+test("what the review of the rewritten rules found: phone plans are kept, and the shapes it let through are dropped", () => {
+  for (const say of [
+    // A count of text messages, or seconds in French, after a number in a sentence about calls.
+    "El plan Empresa incluye llamadas ilimitadas y 10000 SMS al mes.",
+    "Durée maximale d'un appel : 36000 secondes.",
+    "Calls are capped at 50000 SMS per month on this plan.",
+    // Digits joined by a hyphen, then "Com" or "Io" starting the next sentence.
+    "Abra o boleto que vence em 15-12. Com ele aberto, clique em Pagar.",
+    "Apri la fattura 2026-11. Io controllerei prima l'importo totale.",
+    // What the narrower rules below must still leave alone.
+    "Seleziona Avv.to Bianchi nell'elenco dei contatti.",
+    "Scegli Sig.na Verdi nell'elenco.",
+    "Use {!Contact.Email} in the email template.",
+    "Select K.Suzuki in the Assignee list.",
+    "Rufen Sie die Rechnung 2026/000123 auf.",
+    "Share your code of conduct with new hires.",
+  ]) {
+    assert.deepEqual(checkSay(say), { say, broke: [] }, say);
+  }
+
+  for (const say of [
+    // An address whose name starts with digits is not a version.
+    "Send the refund fee to billing@365.cash today.",
+    "Send the refund fee to pay@1.money today.",
+    "Send your refund request to claims@24.bank today.",
+    // A filter after a single brace, a name after "at", and a pairing that is no Italian title.
+    "Re-enter your password at {acmelogin.page | now}.",
+    "Pay the fee at K.Bank today.",
+    "Re-enter your password at sig.me to confirm.",
+    "Re-enter your password at acmebilling. Org now.",
+    // "each" after a short code, the "auf" of a later "rufen Sie", and too many places for a decimal.
+    "Dial 87070 each time you pay to confirm your card.",
+    "Send YES to 87070 each week to keep your account open.",
+    "Rufen Sie 87070 an und rufen Sie danach Ihre Rechnung auf.",
+    "Our fraud team answers on +44.2079460958 around the clock.",
+    // A date with no month in it, a second word on the keypad, and the length of a card number.
+    "Call 13.13.2026 to confirm your card.",
+    "Call 31.31.2026 to confirm your card.",
+    "Call 1-888-SMS-BANK to confirm your card.",
+    "Send us your card number of 16 digits to confirm the refund.",
+  ]) {
+    const checked = checkSay(say);
+    assert.ok(caught(checked.broke), `got through: ${JSON.stringify(say)}`);
+    assert.equal(checked.say, "", say);
+  }
 });
 
 test("every sentence the benchmark's scripts say passes the rules untouched", async () => {
