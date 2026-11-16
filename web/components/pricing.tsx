@@ -42,7 +42,7 @@ export function Pricing() {
           </li>
         ))}
       </ul>
-      <p className="mt-6 max-w-[65ch] text-sm text-pretty text-muted-foreground">{pricing.lead}</p>
+      <p className="mt-6 text-sm text-pretty text-muted-foreground">{pricing.lead}</p>
     </section>
   );
 }

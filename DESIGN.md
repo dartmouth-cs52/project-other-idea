@@ -330,7 +330,7 @@ a single word (`text-pretty`, where the browser supports it). The price is the
 largest thing in the card and no larger than a feature card's title. No plan
 is marked as the popular one, and a card has no button, because the site has
 one call to action. Two short sentences of 14px Muted text under the cards say
-what is charged for. The plans and those sentences live in `web/lib/site.ts`.
+what is charged for, on one line from 820px up. The plans and those sentences live in `web/lib/site.ts`.
 
 The request access page is two columns. The pitch sits on the left, as a
 headline over a card. The form sits on the right in a second card, with its
