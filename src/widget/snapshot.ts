@@ -23,6 +23,12 @@ const LANDMARKS: Record<string, string> = {
 };
 const TEXT_TAGS = new Set(["P", "LI", "DD", "DT", "SPAN", "DIV", "SMALL", "STRONG", "LABEL", "TD", "FIGCAPTION"]);
 const MAYBE_CLICKABLE = new Set(["DIV", "SPAN", "LI", "IMG", "TD", "TR", "P"]);
+/**
+ * Roles that say what an element is, a row or an item, and not whether it can
+ * be clicked. Table and list libraries often make a whole row clickable with
+ * nothing in it that is a control, so a row like this is looked at on its own.
+ */
+const ROW_ROLES = new Set(["row", "gridcell", "cell", "listitem", "article"]);
 const ICON_CLASS = /(?:^|\s)(?:lucide|tabler-icon|bi|ri|fa|icon)-(?!solid|regular|brands|fw|lg|sm|xs|spin|btn|button)([a-z][a-z0-9-]+)/;
 
 export interface PageSnapshot {
@@ -34,6 +40,8 @@ export interface PageSnapshot {
 interface Candidate extends SnapElement {
   el: Element;
   nav: boolean;
+  /** A whole row added because nothing inside it is listed. It comes after everything else when the list is cut. */
+  row?: true;
 }
 
 interface Scope {
@@ -111,6 +119,18 @@ export function takeSnapshot(ignore: Element): PageSnapshot {
     if (added?.role === "clickable" && candidates.slice(before).some((c) => c.role !== "clickable")) {
       candidates.splice(candidates.indexOf(added), 1);
     }
+
+    // A row the visitor clicks as a whole, where nothing inside it was listed: a table row
+    // with only text in its cells, the way SAP and other grid libraries draw them. The
+    // pointer cursor says it can be clicked. Only rows that would otherwise be missing
+    // are added, so nothing listed above changes.
+    if (!role && !insideControl && candidates.length === before && (ROW_ROLES.has(explicitRole) || (!explicitRole && el.tagName.includes("-")))) {
+      const row = clickableRow(el, viewportHeight);
+      if (row) {
+        const context = [scope.region === "page" ? "" : scope.region, scope.heading].filter(Boolean).join(" › ");
+        candidates.push({ el, id: "", role: "clickable", label: row.label, nav: false, row: true, ...(context ? { context } : {}), ...(row.offscreen ? { offscreen: row.offscreen } : {}) });
+      }
+    }
   };
 
   if (root) visit(root, { region: modal ? "dialog" : "page", heading: "" }, false, false);
@@ -118,13 +138,14 @@ export function takeSnapshot(ignore: Element): PageSnapshot {
   // Over the cap, keep what's on screen first, then navigation, then the rest, in page order.
   let chosen = candidates;
   if (candidates.length > MAX_ELEMENTS) {
-    const rank = (c: Candidate) => (!c.offscreen ? 0 : c.nav ? 1 : 2);
+    // A row added above comes after everything else, so it can never push out a control.
+    const rank = (c: Candidate) => (c.row ? 3 : !c.offscreen ? 0 : c.nav ? 1 : 2);
     const keep = new Set([...candidates].sort((a, b) => rank(a) - rank(b)).slice(0, MAX_ELEMENTS));
     chosen = candidates.filter((c) => keep.has(c));
   }
 
   const elements = new Map<string, Element>();
-  const listed = chosen.map(({ el, nav: _nav, ...element }, index) => {
+  const listed = chosen.map(({ el, nav: _nav, row: _row, ...element }, index) => {
     element.id = `e${index + 1}`;
     elements.set(element.id, el);
     return element;
@@ -237,6 +258,23 @@ function ownText(el: Element): string {
   let text = "";
   for (const node of el.childNodes) if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
   return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * A row as one clickable thing, when the pointer cursor starts on it (and not on
+ * what holds it), it has words of its own, and it is not a header row or something
+ * the size of half the screen. Its label is those words.
+ */
+function clickableRow(el: Element, viewportHeight: number): { label: string; offscreen?: "above" | "below" } | undefined {
+  if (getComputedStyle(el).cursor !== "pointer") return undefined;
+  const holder = el.parentElement ?? (el.getRootNode() as ShadowRoot).host;
+  if (holder && getComputedStyle(holder).cursor === "pointer") return undefined;
+  if (el.querySelector('th, [role="columnheader"], [role="rowheader"]')) return undefined;
+  const rect = el.getBoundingClientRect();
+  if ((rect.width === 0 && rect.height === 0) || rect.height > viewportHeight / 2) return undefined;
+  const label = cleanText(visibleText(el), 80);
+  if (!label) return undefined;
+  return { label, ...(rect.bottom <= 0 ? { offscreen: "above" as const } : rect.top >= viewportHeight ? { offscreen: "below" as const } : {}) };
 }
 
 function isRendered(el: Element): boolean {
