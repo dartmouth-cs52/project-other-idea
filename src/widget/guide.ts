@@ -745,6 +745,25 @@ function isWithin(el: Element, node: Node | null): boolean {
   return false;
 }
 
+/**
+ * The box drawn over the page that `el` is in, looking out through shadow
+ * roots: a popover or a dialog shown on the top layer, or a list, a menu or a
+ * calendar. Nothing that is only part of the page's flow counts.
+ */
+function overlayOf(el: Element): Element | undefined {
+  for (let at: Node | null = el, depth = 0; at && depth < 40; at = at.parentNode ?? (at as ShadowRoot).host ?? null, depth++) {
+    if (!(at instanceof Element)) continue;
+    let top = false;
+    try {
+      top = at.matches(":popover-open, dialog[open]");
+    } catch {
+      // No popovers here.
+    }
+    if (top || at.matches('[role="listbox"], [role="menu"], [role="dialog"], [role="tree"]')) return at;
+  }
+  return undefined;
+}
+
 /** What a click at this point would land on, looking inside shadow roots. */
 function hitAt(x: number, y: number): Element | null {
   let hit = document.elementFromPoint(x, y);
@@ -851,6 +870,8 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   let popup: Element | undefined;
   /** When the mouse last came over the pointed control. A menu can open on that alone. */
   let hovered: number | undefined;
+  /** When a key that opens things (F4, the down arrow) was last pressed in the pointed control. */
+  let keyed: number | undefined;
   let idle = 0;
 
   /** The snapshot's own test for something a visitor can click: a tag or role that says so, a place in the list, or a pointer cursor that starts here. */
@@ -883,7 +904,14 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   const insidePopup = (path: EventTarget[], first: Element): boolean => {
     const root = popupOf();
     if (root && path.includes(root)) return true;
-    if (!isExpanded() && heard.opened === undefined && hovered === undefined) return false;
+    if (!isExpanded() && heard.opened === undefined && hovered === undefined && keyed === undefined) return false;
+    // Inside a shadow root nothing tells what came on show, as the page's changes are watched only outside them. A choice there, not
+    // read with the page, inside a box drawn over it that does not hold the control, is in what the control opened.
+    const over = !listing.has(first) && first.getRootNode() instanceof ShadowRoot ? overlayOf(first) : undefined;
+    if (over && !isWithin(over, target)) {
+      popup ??= over;
+      return true;
+    }
     // New since the pointer went up, and clicked after the visitor went into the control: it is what the control opened.
     if (isNew(first) && !listing.has(first)) {
       popup ??= layerOf(first);
@@ -1018,6 +1046,9 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     const path = outside(event);
     if (!path) return;
     const on = path[0];
+    const key = (event as KeyboardEvent).key ?? "";
+    // The keys that open a field's list or calendar, or a menu, from the keyboard.
+    if (path.includes(target) && (["F4", "ArrowDown", "ArrowUp", "Enter"].includes(key) || (event as KeyboardEvent).altKey)) keyed = performance.now();
     feed({ type: "key", at: performance.now(), key: (event as KeyboardEvent).key ?? "", inTarget: path.includes(target), inTyped: on instanceof Element && isTyped(on) });
   };
   const onInput = (event: Event) => {

@@ -249,3 +249,45 @@ test("a slider dragged with the mouse, which sends no input event, is heard", as
     await session.close();
   }
 });
+
+// UI5's date picker: a custom element whose input and calendar both live in
+// its shadow root. F4 in the input shows the calendar as a popover, and each
+// day is a cell in the shadow root of the calendar's own element.
+const SHADOW_DATE = `<h1>Delivery</h1><x-date-picker id="dp"></x-date-picker><button type="button">Order</button>
+  <script>
+    customElements.define('x-calendar', class extends HTMLElement {
+      connectedCallback() {
+        const root = this.attachShadow({ mode: 'open' });
+        root.innerHTML = '<div role="grid" aria-label="November 2026">' + Array.from({ length: 30 }, (_, n) => '<div role="gridcell" tabindex="-1" aria-label="November ' + (n + 1) + ', 2026" style="display:inline-block;width:28px;padding:4px;cursor:pointer">' + (n + 1) + '</div>').join('') + '</div>';
+        root.addEventListener('click', (event) => {
+          const cell = event.composedPath().find((node) => node.getAttribute && node.getAttribute('role') === 'gridcell');
+          if (cell) this.dispatchEvent(new CustomEvent('pick', { detail: cell.textContent, bubbles: true, composed: true }));
+        });
+      }
+    });
+    customElements.define('x-date-picker', class extends HTMLElement {
+      connectedCallback() {
+        const root = this.attachShadow({ mode: 'open' });
+        root.innerHTML = '<label for="value">Delivery Date</label> <input id="value" type="text"><div id="pop" popover="manual" style="margin:0;position:fixed;left:40px;top:120px;width:300px;border:1px solid #999;background:#fff"><x-calendar></x-calendar></div>';
+        const input = root.getElementById('value'), pop = root.getElementById('pop');
+        input.addEventListener('keydown', (event) => { if (event.key === 'F4') pop.showPopover(); });
+        pop.addEventListener('pick', (event) => { input.value = 'Nov ' + event.detail + ', 2026'; pop.hidePopover(); });
+      }
+    });
+  </script>`;
+
+test("a day picked in a calendar that the pointed field opened in its shadow root, with a key, is a pick", async () => {
+  const session = await start(SHADOW_DATE, (request, index) => (index === 0 ? point(request, "Delivery Date", "Press F4 in Delivery Date and pick the 15th.") : words("Done.")));
+  try {
+    await session.ask("deliver on the 15th");
+    await session.untilState("pointing");
+    await session.page.locator("x-date-picker input").focus();
+    await session.page.keyboard.press("F4");
+    await session.page.waitForTimeout(400);
+    await session.page.locator('x-calendar [aria-label="November 15, 2026"]').click();
+    const second = await session.untilAsked(2, 6000);
+    assert.match(second.event ?? "", /^The user chose "November 15, 2026" from the list that textbox "Delivery Date" opened\./);
+  } finally {
+    await session.close();
+  }
+});
