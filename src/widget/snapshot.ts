@@ -333,6 +333,8 @@ interface Candidate extends SnapElement {
   single?: boolean;
   /** Found by its pointer inside a box the keyboard moves through, and kept only if that box is a grid of such things. */
   loose?: boolean;
+  /** Why it cannot be used, when it cannot and the page says why: "Only Admin can do this." */
+  why?: string;
 }
 
 /** Controls with a role of their own, whose words are theirs and not the words of a box around them. */
@@ -434,13 +436,16 @@ function rowTextOf(row: Element): string {
 const MAX_CONTEXT = 120;
 
 /**
- * A control's surroundings in one line: the region, the heading, the row and
- * its place among its like. When that is too long the heading gives way,
- * because the row and the place are what tell two controls apart.
+ * A control's surroundings in one line: the region, the heading, why it cannot
+ * be used, the row and its place among its like. When that is too long the
+ * heading gives way, because the rest is what tells two controls apart and
+ * what a visitor asks about one that is grey. Why it cannot be used goes here
+ * and not in its state: the server on main keeps 16 characters of a state,
+ * and 120 of the surroundings.
  */
 function contextOf(c: Candidate): string {
   const region = c.region === "page" ? "" : c.region;
-  const rest = [c.row ? `row: ${c.row}` : "", c.place ?? ""].filter(Boolean);
+  const rest = [c.why ? `disabled: ${c.why}` : "", c.row ? `row: ${c.row}` : "", c.place ?? ""].filter(Boolean);
   const room = MAX_CONTEXT - [region, ...rest].filter(Boolean).join(" › ").length - 3;
   const heading = c.heading.length > room ? (room > 12 ? `${c.heading.slice(0, room - 1).trimEnd()}…` : "") : c.heading;
   return [region, heading, ...rest].filter(Boolean).join(" › ");
@@ -692,6 +697,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
           added.boxNamed = true;
         }
         const state = stateOf(el, role);
+        if (state.includes("disabled")) giveReason(added, reasonOf(el));
         // Fully transparent controls have always been listed: row actions that fade in. One that a stylesheet shows on hover says so.
         const fades = !hoverBox && hiddenChecked < MAX_HIDDEN_CHECKED && getComputedStyle(el).opacity === "0" && ++hiddenChecked > 0 && shownWhenOver(el, false, true);
         if (hoverBox || (fades && liesInside(rect, fades))) state.push(SHOWS_ON_HOVER);
@@ -747,8 +753,16 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
         within = within.filter((c) => !loose.has(c));
       }
     }
+    // A box the keyboard can reach, with no pointer or click of its own, around controls that cannot be used: the box a
+    // page puts around a disabled button so that a tooltip can say why, since the button itself takes no mouse or
+    // keyboard. It is those controls, not one more. What the page says about it, or prints in it beside them, is why.
+    const unusable = keysOnly && added && isFocusable(el) ? disabledWithin(within) : [];
     if (grid) {
       wrapper = true;
+    } else if (unusable.length) {
+      wrapper = true;
+      const why = reasonOf(el) || wordsIn(el, 200, `${CONTROLS}, label`);
+      for (const c of unusable) giveReason(c, why);
     } else if (added && !isNative(el) && !isFocusable(el) && within.some((c) => c.role !== "clickable" && isNative(c.el))) {
       wrapper = true;
     } else if (added?.role === "clickable" && within.some((c) => c.role === "clickable" && saysMostOf(c.boxNamed ? "" : c.label, added!.label))) {
@@ -820,7 +834,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   usable = [];
 
   const elements = new Map<string, Element>();
-  const strip = ({ el: _el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, pointer: _pointer, single: _single, loose: _loose, ...element }: Candidate): SnapElement => element;
+  const strip = ({ el: _el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, pointer: _pointer, single: _single, loose: _loose, why: _why, ...element }: Candidate): SnapElement => element;
   const listed = chosen.map((c, index) => {
     const element = strip(c);
     element.id = `e${index + 1}`;
@@ -1818,6 +1832,38 @@ function isDisabled(el: Element): boolean {
     // :disabled unsupported. What the control says of itself stands.
   }
   return !!el.parentElement?.closest('[aria-disabled="true"]');
+}
+
+/** The controls with a role of their own among these, when there are some and none of them can be used. */
+function disabledWithin(within: Candidate[]): Candidate[] {
+  const controls = within.filter((c) => c.role !== "clickable");
+  return controls.length && controls.every((c) => c.state?.includes("disabled")) ? controls : [];
+}
+
+/** The longest reason given for a control that cannot be used. A longer text is a paragraph, not a reason. */
+const MAX_REASON = 72;
+
+/**
+ * What the page says about a control, read as why it cannot be used when it
+ * cannot: what aria-describedby points to, such as a tooltip that is open,
+ * its aria-description, or its tooltip. Nothing inside a field is read.
+ */
+function reasonOf(el: Element): string {
+  const root = el.getRootNode() as Document | ShadowRoot;
+  const described = (el.getAttribute("aria-describedby") ?? "")
+    .split(/\s+/)
+    .map((id) => (id ? root.getElementById?.(id) : null))
+    .map((node) => (node && !holdsTyping(node) && !insideEditor(node) ? wordsIn(node, 200, "", undefined, true) : ""))
+    .join(" ")
+    .trim();
+  return described || el.getAttribute("aria-description")?.trim() || el.getAttribute("title")?.trim() || "";
+}
+
+/** Gives a control that cannot be used the reason the page gives, unless it has one, or the reason only says its name again. */
+function giveReason(c: Candidate, reason: string) {
+  const why = cleanText(reason, MAX_REASON);
+  if (c.why || !why || (saysMostOf(why, c.label) && saysMostOf(c.label, why))) return;
+  c.why = why;
 }
 
 /** A state is at most 16 characters: the server cuts anything longer. */

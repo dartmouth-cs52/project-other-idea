@@ -43,3 +43,43 @@ test("a control that is one by its role alone is named by a <label for>, and the
     <div role="switch" tabindex="0" aria-checked="false" id="s2" style="width:36px;height:20px"></div></main>`);
   assert.deepEqual(lines(snapshot), ['switch "Split across categories" [main › Trip]']);
 });
+
+// Controls the visitor's role disables -------------------------------------------
+
+test("a box the keyboard reaches around a disabled switch is folded into it, and the reason printed in it goes with the switch", { skip }, async () => {
+  const snapshot = await read(`<main><h1>Security</h1><section><h2>Two-factor authentication</h2>
+    <span tabindex="0" style="display:inline-flex"><div style="width:600px"><div style="display:flex;justify-content:space-between">
+      <div><label for="sw" style="cursor:pointer">Require two-factor for everyone</label><p>Only Admin can do this. You're signed in as Employee.</p></div>
+      <button type="button" role="switch" aria-checked="false" id="sw" disabled style="width:36px;height:20px"></button>
+    </div></div></span></section></main>`);
+  assert.deepEqual(lines(snapshot), [
+    `switch "Require two-factor for everyone" (disabled) [main › Two-factor authentication › disabled: Only Admin can do this. You're signed in as Employee.]`,
+  ]);
+});
+
+test("a disabled control carries the reason its tooltip, aria-describedby or aria-description gives, on itself or on the box around it", { skip }, async () => {
+  const snapshot = await read(`<main><h1>Bill</h1>
+    <span tabindex="0" aria-describedby="tip" style="display:inline-flex"><button disabled>Pay now</button></span>
+    <div role="tooltip" id="tip" style="position:absolute;top:0;left:400px">Only Admin or Finance can do this.</div>
+    <button disabled title="Only Admin can do this.">Delete</button>
+    <button disabled aria-describedby="why">Export</button><p id="why">Only Finance can export.</p>
+    <button disabled aria-description="Locked while the bill is paid.">Edit</button>
+    <span tabindex="0" style="display:inline-flex"><button disabled>Reject</button><button disabled>Approve</button></span>
+    <button disabled title="Archive">Archive</button></main>`);
+  assert.deepEqual(lines(snapshot), [
+    'button "Pay now" (disabled) [main › Bill › disabled: Only Admin or Finance can do this.]',
+    'button "Delete" (disabled) [main › Bill › disabled: Only Admin can do this.]',
+    'button "Export" (disabled) [main › Bill › disabled: Only Finance can export.]',
+    'button "Edit" (disabled) [main › Bill › disabled: Locked while the bill is paid.]',
+    // Listed once each, with no reason the page did not give, and no box of their own around them.
+    'button "Reject" (disabled) [main › Bill]',
+    'button "Approve" (disabled) [main › Bill]',
+    // A tooltip that only says the name again is no reason.
+    'button "Archive" (disabled) [main › Bill]',
+  ]);
+});
+
+test("a box the keyboard reaches around a control that can be used is not folded for this, and gives it no reason", { skip }, async () => {
+  const snapshot = await read(`<main><h1>Reports</h1><span tabindex="0" title="Exports everything" style="display:inline-flex"><button>Export</button><button disabled>Print</button></span></main>`);
+  assert.deepEqual(lines(snapshot), ['clickable "Export Print" [main › Reports]', 'button "Export" [main › Reports]', 'button "Print" (disabled) [main › Reports]']);
+});
