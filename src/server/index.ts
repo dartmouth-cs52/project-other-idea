@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, normalize } from "node:path";
 import { Readable } from "node:stream";
@@ -39,13 +39,32 @@ function overLimit(key: string): boolean {
 const threshold = labelThreshold(process.env);
 const store = process.env.DATABASE_URL ? new Store(process.env.DATABASE_URL, threshold) : undefined;
 const learned = new MemoryLearned();
+// Without a database, what was learned is kept in data/learned.json, so a restart doesn't forget the site.
+const LEARNED_FILE = fileURLToPath(new URL("../../data/learned.json", import.meta.url));
+let saving: ReturnType<typeof setTimeout> | undefined;
+if (!store) {
+  try {
+    learned.restore(JSON.parse(await readFile(LEARNED_FILE, "utf8")));
+  } catch {
+    // Nothing learned yet, or a file from an older version. Learning starts again.
+  }
+}
+function learn(siteId: string, visitor: string, outline: Parameters<MemoryLearned["record"]>[2]) {
+  learned.record(siteId, visitor, outline);
+  clearTimeout(saving);
+  saving = setTimeout(() => {
+    mkdir(fileURLToPath(new URL("../../data/", import.meta.url)), { recursive: true })
+      .then(() => writeFile(LEARNED_FILE, JSON.stringify(learned.save())))
+      .catch((error) => console.warn("Couldn't keep what was learned:", error instanceof Error ? error.message : error));
+  }, 1000);
+}
 
 const app = createApp({
   loadSite: async (id) => {
     const fromStore = await store?.loadSite(id);
     if (fromStore) return fromStore;
     const site = await loadSite(id);
-    return site && withLearned(site, learned.labels(id), threshold);
+    return site && withLearned(site, learned.labels(id), threshold, learned.openings(id));
   },
   widget: () => readFile(WIDGET_FILE, "utf8"),
   widgetMaxAge: process.env.NODE_ENV === "production" ? 300 : 0,
@@ -59,7 +78,7 @@ const app = createApp({
     void store?.recordStep(request, measure, origin);
   },
   onCancel: (request) => void store?.cancelStep(request),
-  onOutline: (site, visitor, outline) => (store ? void store.recordOutline(site, visitor, outline) : learned.record(site.id, visitor, outline)),
+  onOutline: (site, visitor, outline) => (store ? void store.recordOutline(site, visitor, outline) : learn(site.id, visitor, outline)),
   onSeen: (site, origin, allowed) => void store?.seenAt(site, origin, allowed),
   onAsk: (request, _site, origin) => void store?.startGuide(request, origin),
   onReport: (site, guide, report) => void store?.report(site, guide, report),

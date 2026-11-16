@@ -1,20 +1,19 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { AlertCircleIcon } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Field, FormAlert, useFieldErrors, type Failure } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { emailProblem } from "@/lib/access-request";
 import { auth, dashboardUrl } from "@/lib/auth-client";
-
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { site } from "@/lib/site";
 
 /** What Neon Auth's errors mean to the person who sees them. */
-const LINK_ERRORS: Record<string, string> = {
-  INVALID_TOKEN: "That sign-in link has already been used or has expired. Ask for a new one below.",
-  EXPIRED_TOKEN: "That sign-in link has expired. Ask for a new one below.",
+const LINK_ERRORS: Record<string, Failure> = {
+  INVALID_TOKEN: { title: "That sign-in link no longer works", detail: "It has been used already, or it has expired. Ask for a new one below." },
+  EXPIRED_TOKEN: { title: "That sign-in link has expired", detail: "Ask for a new one below." },
 };
+const LINK_FAILED: Failure = { title: "That sign-in didn't work", detail: "Try again below." };
 
 /**
  * Sign-in with an emailed link or Google. Anyone can get this far: whether
@@ -23,13 +22,14 @@ const LINK_ERRORS: Record<string, string> = {
 export function SignInForm({ linkError }: { linkError?: string | null }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "google">("idle");
-  const [error, setError] = useState<string | null>(linkError ? (LINK_ERRORS[linkError] ?? "That sign-in didn't work. Try again below.") : null);
+  const [failure, setFailure] = useState<Failure | null>(linkError ? (LINK_ERRORS[linkError] ?? LINK_FAILED) : null);
+  const fields = useFieldErrors({ email: "sign-in-email" });
 
   async function sendLink(event: FormEvent) {
     event.preventDefault();
     const address = email.trim().toLowerCase();
-    if (!EMAIL.test(address)) return setError("Enter your work email, like name@company.com.");
-    setError(null);
+    setFailure(null);
+    if (fields.show({ email: emailProblem(address) ?? undefined })) return;
     setStatus("sending");
     // Better Auth's magic link endpoint, through our proxy. The SDK has it at runtime but not in its types.
     const response = await fetch("/api/auth/sign-in/magic-link", {
@@ -39,19 +39,24 @@ export function SignInForm({ linkError }: { linkError?: string | null }) {
     }).catch(() => null);
     if (!response?.ok) {
       setStatus("idle");
-      setError(response?.status === 429 ? "Too many tries. Wait a minute and try again." : "We couldn't send the link. Try again in a moment.");
+      setFailure(
+        response?.status === 429
+          ? { title: "Too many tries", detail: "Wait a minute, then ask for the link again." }
+          : { title: "Couldn't send the link", detail: `Try again in a moment. If it keeps happening, email ${site.email}.` },
+      );
       return;
     }
     setStatus("sent");
   }
 
   async function google() {
-    setError(null);
+    setFailure(null);
+    fields.show({});
     setStatus("google");
     const { error: failed } = await auth().signIn.social({ provider: "google", callbackURL: dashboardUrl() });
     if (failed) {
       setStatus("idle");
-      setError("Google sign-in didn't start. Try again, or use an emailed link.");
+      setFailure({ title: "Couldn't open Google", detail: "Try again, or use an emailed link." });
     }
   }
 
@@ -76,37 +81,34 @@ export function SignInForm({ linkError }: { linkError?: string | null }) {
     <div className="flex flex-col gap-6 rounded-xl border bg-muted p-6">
       <Button variant="secondary" size="xl" onClick={google} disabled={status !== "idle"}>
         <GoogleMark />
-        {status === "google" ? "Opening Google…" : "Continue with Google"}
+        {status === "google" ? "Opening Google" : "Continue with Google"}
       </Button>
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
         <span className="h-px flex-1 bg-border" />
         or
         <span className="h-px flex-1 bg-border" />
       </div>
-      <form onSubmit={sendLink} className="flex flex-col gap-4" noValidate>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="sign-in-email">Work email</Label>
-        <Input
-          id="sign-in-email"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="name@company.com"
-          className="h-11 bg-card px-3.5 md:text-base"
-          aria-invalid={error ? true : undefined}
-        />
-        </div>
+      <form onSubmit={sendLink} className="flex flex-col gap-5" noValidate>
+        <Field id="sign-in-email" label="Work email" required error={fields.errors.email}>
+          <Input
+            {...fields.control("email")}
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              fields.clear("email");
+            }}
+            placeholder="name@company.com"
+            className="h-11 bg-card px-3.5 md:text-base"
+          />
+        </Field>
         <Button type="submit" size="xl" disabled={status !== "idle"}>
-          {status === "sending" ? "Sending…" : "Email me a sign-in link"}
+          {status === "sending" ? "Sending" : "Email me a sign-in link"}
         </Button>
+        <FormAlert failure={failure} />
       </form>
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircleIcon />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
     </div>
   );
 }

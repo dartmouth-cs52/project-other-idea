@@ -5,8 +5,10 @@
 
 import type { Doc } from "../../src/shared/types";
 
-/** The prompt's room for help docs, in characters. The same figure as src/server/prompt.ts. */
+/** The prompt's room for help docs, in characters. The same figures as src/server/prompt.ts. */
 export const DOCS_BUDGET = 60_000;
+/** With Answers on, the docs are what answers come from, so they get more room. */
+export const ANSWERS_DOCS_BUDGET = 250_000;
 /** One doc may fill the whole room, and no more. */
 export const MAX_DOC_CHARS = DOCS_BUDGET;
 export const MAX_DOCS = 30;
@@ -15,11 +17,11 @@ const TIMEOUT_MS = 15_000;
 const USER_AGENT = "HapticReader/1.0 (+https://joinhaptic.com)";
 
 /** Which docs the prompt holds: whole docs, in order, until the room is used up. */
-export function docsThatFit(docs: Doc[]): Set<string> {
+export function docsThatFit(docs: Doc[], budget = DOCS_BUDGET): Set<string> {
   let used = 0;
   const fit = new Set<string>();
   for (const doc of docs) {
-    if (used + doc.text.length > DOCS_BUDGET) continue;
+    if (used + doc.text.length > budget) continue;
     used += doc.text.length;
     fit.add(doc.source);
   }

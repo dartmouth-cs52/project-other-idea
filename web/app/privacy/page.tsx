@@ -90,7 +90,8 @@ export default function Privacy() {
         page of the product it loads on, once per page in each browser tab, whether or not anyone asks it anything.
         The outline is the page&apos;s title and headings, the names of its links and buttons, and where each link
         leads. When a click leads straight to another page, it also sends the name of what was clicked and where it
-        led. It never includes what people type, what is inside a table&apos;s cells, or the rest of the text on the
+        led. When someone opens a menu, a tab or a section that unfolds, it sends the names of what appeared, with the
+        name of what opened it. Nothing a text box suggests is sent. It never includes what people type, what is inside a table&apos;s cells, or the rest of the text on the
         page. A name that holds anything that looks like an email address, a phone number or a long number is left
         out whole.
       </p>
@@ -124,7 +125,8 @@ export default function Privacy() {
       </p>
       <p>
         Progress through a guide, and which pages have been outlined, is kept in the browser for that tab, and is
-        cleared when the tab closes. The random id stays in the browser until its storage for that product is cleared.
+        cleared when the tab closes. The random id stays in the browser until its storage for that product is cleared, and so
+        does a note that you put the launcher away, if you did. That note is never sent to us.
       </p>
 
       <h2>Contact</h2>

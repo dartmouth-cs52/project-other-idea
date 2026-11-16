@@ -440,8 +440,13 @@ Components are shadcn/ui, restyled only through tokens and variants.
   that fails gets an Error red outline and one 13px line under it saying what
   to type, the first such field takes the focus, and the line goes as soon as
   the person starts typing. A failure that is not one field's fault uses
-  shadcn's alert, with an icon, a short title and one line of detail. Success
-  replaces the form with a thank you.
+  shadcn's alert, with an icon, a short title and one line of detail, under the
+  form's buttons. Success replaces the form with a thank you. Every form on the
+  site and in the dashboard works this way, sign-in included, and so do the
+  server's refusals: one that names a field shows under that field. The parts
+  are in `web/components/form.tsx`. A page, or part of one, that could not load
+  is a card with a title, the reason in Muted text and, where it could help, Try
+  again. It has no Error red, because it is not a form.
 - **Accordion:** FAQ rows with a plus that turns to a cross. One row open at a
   time.
 
@@ -514,6 +519,19 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
   and keeps, and the underline shows only under the mouse or keyboard focus.
   The launcher carries no tag. A customer can change the launcher's word, and
   cannot remove the line.
+- **Put the launcher away.** With the mouse over the launcher or focus on it,
+  a 20px white circle with an × fades in on its outer bottom corner, the right
+  one for a launcher on the right. It takes the launcher down to a 14px dot in
+  the same place: the word fades first, then the pill draws in. The dot stays
+  that small while the mouse that pressed the × is still over it. Once the
+  mouse comes back, or with focus, it opens to 32px and shows the pointer
+  mark, growing in place without moving, and a click brings the launcher back
+  without opening the panel. Minimized, the area that answers the mouse is a
+  still 32px square, so the dot can't flicker between sizes under a pointer
+  resting on its edge. Each change is 300ms or
+  less and eases out with the glide's curve, with no bounce. With reduced
+  motion on, each one happens at once. The visitor's choice holds on the
+  site's other pages.
 
 ## Do's and Don'ts
 
