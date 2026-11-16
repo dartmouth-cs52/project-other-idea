@@ -103,6 +103,14 @@ test("with Answers on, the prompt gives each help article an id, and an article 
   assert.match(buildSystemPrompt({ ...site, docs: [] }), /This site has no help articles/);
 });
 
+test("with Answers on, a list that would hold the answer once it is searched or unfolded is something to guide to, not a dead end", () => {
+  // Northpine's chart of accounts, 16 November: "what's the GL code for lodging" got "I couldn't find that" or "this page has no
+  // account named Lodging" in 10 replies of 12, with Lodging folded under Travel and a search box on the page.
+  assert.match(buildSystemPrompt(site), /So does a list on this page that would hold the answer once it is searched, filtered or unfolded: point at what does that\./);
+  // The guide's own prompt is not changed by it.
+  assert.doesNotMatch(buildSystemPrompt(base), /would hold the answer/);
+});
+
 test("with Answers on there is room for a whole help centre, and a doc past it is still left out whole", () => {
   const big = { title: "Big", source: "big.md", text: "x".repeat(100_000) };
   const docs = [big, { ...big, title: "Bigger" }, { ...big, title: "Too much" }, { title: "Small", source: "s.md", text: "short" }];
