@@ -115,6 +115,12 @@ test("a control under a header pinned to the window is above the visible area, a
   ]);
 });
 
+test("a control under a small box pinned over the page, like a menu that is open, is not said to be out of view", { skip }, async () => {
+  const snapshot = await read(`<main style="height:2000px"><a href="/report" style="position:absolute;left:100px;top:200px">Report</a></main>
+    <div role="menu" style="position:fixed;left:80px;top:180px;width:200px;background:#fff;z-index:5"><div role="menuitem" tabindex="-1" style="height:30px">Rename</div><div role="menuitem" tabindex="-1" style="height:30px">Archive</div></div>`);
+  assert.deepEqual(lines(snapshot), ['link "Report" [main] → /report', 'menuitem "Rename" [menu]', 'menuitem "Archive" [menu]']);
+});
+
 test("a wall of cookie choices over the whole window is all of the page that can be used, and is named like a dialog", { skip }, async () => {
   const snapshot = await read(`<header><a href="/">Home</a><a href="/news">News</a></header><main><h1>Today</h1><a href="/story">Read the story</a></main>
     <div style="height:3000px"><a href="/far" style="margin-top:2500px;display:block">Far down</a></div>

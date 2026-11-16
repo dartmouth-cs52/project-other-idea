@@ -1942,6 +1942,10 @@ function keepReachable(candidates: Candidate[], ignore: Element, findLayer: bool
     const bar = pinnedBoxOf(blocker, facts);
     if (bar && !drawnWithin(bar, c.el)) {
       const box = inPageWindow(bar.getBoundingClientRect(), bar.ownerDocument === document ? undefined : c.frame);
+      // A bar sticks in the box it scrolls with, or spans the window. A small box pinned over the page, like a menu that
+      // is open, is no bar: what is under it is only under it while it is there.
+      const spans = factsOf(bar, facts).position === "sticky" || box.width >= window.innerWidth / 2 || box.height >= window.innerHeight / 2;
+      if (!spans) continue;
       if (box.top <= 0 && box.bottom >= window.innerHeight) buried.add(c);
       else c.offscreen = box.top + box.height / 2 < window.innerHeight / 2 ? "above" : "below";
       continue;
