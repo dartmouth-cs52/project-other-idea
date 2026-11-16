@@ -53,7 +53,12 @@ const PREVIEW_PADDING = "&#8199;&#847;&#65279;&#8203;".repeat(90);
 const FONT = "Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
 const type = (size: number, line: number, weight: 400 | 500) => `font-family:${FONT};font-size:${size}px;line-height:${line}px;font-weight:${weight};`;
 
-export function signInEmail({ to, link, type: linkType }: { to: string; link: string; type: LinkType }): Email {
+/**
+ * `id` is Neon's event id. Gmail threads emails that share a subject, and folds an ending it has
+ * already shown behind "...", which could hide a returning person's newest button. A hidden id
+ * at the end keeps each email's ending its own, and is the same on every retry of one event.
+ */
+export function signInEmail({ to, link, type: linkType, id }: { to: string; link: string; type: LinkType; id?: string }): Email {
   const copy = COPY[linkType] ?? COPY["sign-in"];
   const href = escape(link);
   const html = `<!doctype html>
@@ -92,7 +97,7 @@ a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !im
 </td>
 </tr></table>
 </td></tr>
-<tr><td style="padding:24px 0 0;${type(14, 20, 400)}"><a class="muted" href="https://joinhaptic.com" style="color:#78716C;text-decoration:none;">joinhaptic.com</a></td></tr>
+<tr><td style="padding:24px 0 0;${type(14, 20, 400)}"><a class="muted" href="https://joinhaptic.com" style="color:#78716C;text-decoration:none;">joinhaptic.com</a>${id ? `<span style="display:none;font-size:0;line-height:0;max-height:0;overflow:hidden;opacity:0;">${escape(id)}</span>` : ""}</td></tr>
 </table>
 </td></tr>
 </table>

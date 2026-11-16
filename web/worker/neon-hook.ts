@@ -72,7 +72,7 @@ export async function neonHook(request: Request, env: HookEnv, deps: HookDeps = 
   const link = event.event_data?.link_url;
   if (!to || !link || !isHttps(link) || typeof event.event_id !== "string") return reply(400, "The event is missing its address or link.");
 
-  const email = signInEmail({ to, link, type: (event.event_data?.link_type ?? "sign-in") as LinkType });
+  const email = signInEmail({ to, link, type: (event.event_data?.link_type ?? "sign-in") as LinkType, id: event.event_id });
   // Neon resends the same event id when a try fails or times out. Resend keeps the key for 24 hours and sends once.
   const sent = await sendEmail(env, email, `neon-auth/${event.event_id}`, deps.fetch);
   if (!sent.ok) {

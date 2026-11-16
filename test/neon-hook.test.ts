@@ -122,6 +122,8 @@ test("a signed sign-in link is emailed through Resend once, with the event id as
   assert.equal(payload.html.split("magic-link/verify").length, 2);
   assert.match(payload.html, /href="https:\/\/auth\.example\/magic-link\/verify\?token=abc&#38;callbackURL=/);
   assert.match(payload.text, /token=abc&callbackURL=/);
+  // A hidden event id ends each email, so Gmail never folds a newer one's ending into "...".
+  assert.match(payload.html, /display:none[^>]*>550e8400-e29b-41d4-a716-446655440000<\/span>/);
   for (const gone of [/1440/, /minute/i, /expire/i, /didn.t request/i, /ignore this/i, /neon/i]) {
     assert.doesNotMatch(payload.html, gone);
     assert.doesNotMatch(payload.text, gone);
