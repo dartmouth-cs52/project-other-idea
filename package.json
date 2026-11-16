@@ -11,14 +11,16 @@
     "tag": "tsx --env-file-if-exists=.env src/intake/cli.ts",
     "build": "tsx src/widget/build.ts",
     "deploy": "wrangler deploy",
-    "site:publish": "tsx src/intake/publish.ts",
+    "site:publish": "tsx --env-file-if-exists=.env src/intake/publish.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "eval": "tsx --env-file-if-exists=.env eval/run.ts",
-    "eval:record": "tsx eval/record.ts"
+    "eval:record": "tsx eval/record.ts",
+    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
+    "@neondatabase/serverless": "^1.2.1",
     "cheerio": "^1.2.0",
     "zod": "^4.6.7"
   },

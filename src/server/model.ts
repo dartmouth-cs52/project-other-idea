@@ -68,7 +68,7 @@ export interface TurnMeasure {
 
 const Reply = z.object({
   target: z.string().nullable().describe('Id of the element to point at, like "e12", or null'),
-  status: z.enum(["continue", "done"]),
+  status: z.enum(["continue", "done", "stuck"]),
   say: z.string().describe("One or two short sentences for the visitor"),
 });
 
@@ -199,7 +199,7 @@ async function claudeTurn(
     cacheWrite: usage.cache_creation_input_tokens ?? 0,
     output: usage.output_tokens,
   };
-  if (response.stop_reason === "refusal") return { reply: { target: null, status: "done", say: "I can't help with that one." }, model: response.model, tokens };
+  if (response.stop_reason === "refusal") return { reply: { target: null, status: "stuck", say: "I can't help with that one." }, model: response.model, tokens };
   if (!response.parsed_output) throw new TurnError(502, `The model's reply couldn't be read (stop reason: ${response.stop_reason}).`);
   return { reply: response.parsed_output, model: response.model, tokens };
 }
@@ -226,6 +226,6 @@ function mockTurn(request: TurnRequest): TurnReply {
     const score = words(element.label).filter((word) => goal.has(word)).length;
     if (score > (best?.score ?? 0)) best = { id: element.id, label: element.label, score };
   }
-  if (!best) return { target: null, status: "done", say: request.step ? "That should be it." : "I don't see that on this page." };
+  if (!best) return request.step ? { target: null, status: "done", say: "That should be it." } : { target: null, status: "stuck", say: "I don't see that on this page." };
   return { target: best.id, status: "continue", say: `${strayed ? "Not that one. " : ""}Click ${best.label}.` };
 }

@@ -104,6 +104,8 @@ export interface HistoryTurn {
 
 export interface TurnRequest {
   site: string;
+  /** Made by the widget when the question is asked, and kept across page loads, so a guide's steps can be tied together. */
+  guide?: string;
   goal: string;
   /** Steps already given in this guide. 0 for the first question. */
   step: number;
@@ -112,7 +114,47 @@ export interface TurnRequest {
   event?: string;
   /** What changed on the page since the last step, in words. */
   change?: string;
+  /** True when what the user just did was something other than the step they were shown. */
+  offTrack?: boolean;
   snapshot: Snapshot;
+}
+
+/**
+ * How a guide ended, as the widget saw it. A guide that never reports one was
+ * abandoned: the visitor closed the tab or walked away.
+ *
+ * Only "finished" is billed. Pricing (web/lib/site.ts) defines it as the
+ * visitor using the last control Haptic pointed at, or reaching the screen
+ * they asked for, and says a guide where Haptic cannot find the way is free.
+ *
+ * - finished: the visitor followed the steps and arrived, or used the control the last answer pointed at
+ * - shown: the first answer pointed at something or explained, and the visitor did not use what it pointed at
+ * - stopped: the visitor pressed Stop or closed the caption
+ * - nothing_to_point_at: the model was stuck, or had nothing on the page to show
+ * - loop: the same control was pointed at again with nothing changing
+ * - step_limit: the guide ran out of steps
+ * - error: a step failed
+ */
+export const GUIDE_OUTCOMES = ["finished", "shown", "stopped", "nothing_to_point_at", "loop", "step_limit", "error"] as const;
+export type GuideOutcome = (typeof GUIDE_OUTCOMES)[number];
+
+/** A guide id, as the widget makes it with crypto.randomUUID(). */
+export const GUIDE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+/** What the widget sends when a guide ends, and again if the visitor says whether it helped. */
+export interface GuideReport {
+  site: string;
+  outcome?: GuideOutcome;
+  helped?: boolean;
+}
+
+/** A question as typed, made comparable: masked, lower case, no punctuation, single spaces. */
+export function questionKey(question: string): string {
+  return cleanText(question, 300)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\[\] ]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** The format a step is streamed in: one JSON value per line. The widget asks for it in its Accept header. */
@@ -121,8 +163,12 @@ export const STREAM_TYPE = "application/x-ndjson";
 export interface TurnReply {
   /** Element id from the snapshot to point at, or null. */
   target: string | null;
-  /** "continue": the user must act on the target, then we go again. "done": nothing left to wait for. */
-  status: "continue" | "done";
+  /**
+   * "continue": the user must act on the target, then we go again.
+   * "done": nothing left to do, because the goal is reached or the question only needed an answer.
+   * "stuck": no way forward could be found. Kept apart from "done" because a guide that gets stuck is free.
+   */
+  status: "continue" | "done" | "stuck";
   /** One or two sentences shown next to the pointer. */
   say: string;
 }

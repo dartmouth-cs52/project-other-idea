@@ -72,3 +72,23 @@ test("what the visitor reads is tidied, whatever the model wrote", async () => {
   // A sentence that is already clean is left alone, brackets inside it included.
   assert.equal(tidySay('Click the link that reads "[email]".'), 'Click the link that reads "[email]".');
 });
+
+test("finding nothing on the first reply is stuck, and nothing left after some steps is done", async () => {
+  const first = await runTurn(site, { site: site.id, goal: "export invoices to pdf", step: 0, history: [], snapshot: { path: "/", title: "", headings: [], text: [], truncated: false, elements } });
+  assert.equal(first.status, "stuck");
+  assert.equal(first.target, null);
+  const later = await runTurn(site, {
+    site: site.id,
+    goal: "export invoices to pdf",
+    step: 2,
+    history: [],
+    snapshot: { path: "/", title: "", headings: [], text: [], truncated: false, elements },
+  });
+  assert.equal(later.status, "done");
+});
+
+test("the model is told that stuck is its own status, apart from done", () => {
+  const prompt = buildSystemPrompt(site);
+  assert.match(prompt, /"stuck" when you can't find a way forward/);
+  assert.doesNotMatch(prompt, /"done" when[^.]*can't find a way forward/);
+});

@@ -49,6 +49,11 @@ button { font: inherit; cursor: pointer; }
   border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; }
 .caption .close:hover { background: rgba(250,250,249,.25); }
 .caption .close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.helped { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 2px 8px 12px; }
+.helped span { margin-right: auto; color: #78716c; }
+.helped button { display: inline-flex; align-items: center; justify-content: center; height: 32px; border: 0; border-radius: 999px; padding: 0 14px;
+  background: #e7e5e4; color: #1c1917; font-weight: 500; }
+.helped button:hover { background: #d6d3d1; }
 @media (prefers-reduced-motion: reduce) { .cursor { transition: none; } }
 `;
 
@@ -68,6 +73,8 @@ export class Ui {
   private readonly cursor: HTMLElement;
   private readonly caption: HTMLElement;
   private readonly captionText: HTMLElement;
+  private readonly helped: HTMLElement;
+  private onHelped?: (helped: boolean) => void;
   private target?: Element;
   private frame = 0;
   /** Where the pointer last was, so each move starts from there. */
@@ -84,6 +91,7 @@ export class Ui {
       <div class="cursor" hidden><svg viewBox="0 0 24 24" width="24" height="24"><path d="${POINTER_PATH}"/></svg></div>
       <div class="dock ${side}">
         <div class="panel" hidden>
+          <div class="helped" hidden></div>
           <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
           <div class="status" hidden><span></span><button class="stop" type="button">Stop</button></div>
         </div>
@@ -99,6 +107,17 @@ export class Ui {
     this.cursor = pick(".cursor");
     this.caption = pick(".caption");
     this.captionText = pick(".caption span");
+    this.helped = pick(".helped");
+    this.helped.addEventListener("click", (event) => {
+      const answer = (event.target as Element).closest("button")?.dataset.helped;
+      if (!answer || !this.onHelped) return;
+      this.onHelped(answer === "yes");
+      this.onHelped = undefined;
+      // Thanks takes the question's place for a moment, then the ask box is all that is left.
+      this.helped.replaceChildren(Object.assign(document.createElement("span"), { textContent: "Thanks." }));
+      const shown = this.helped.firstChild;
+      setTimeout(() => this.helped.firstChild === shown && this.hideHelped(), 1500);
+    });
     const launcher = pick<HTMLButtonElement>(".launcher");
     pick(".launcher span").textContent = appearance.launcherLabel;
     this.at = { x: side === "left" ? 60 : window.innerWidth - 60, y: window.innerHeight - 40 };
@@ -155,8 +174,10 @@ export class Ui {
     this.form.hidden = text !== "";
     this.status.hidden = text === "";
     this.statusText.textContent = text;
-    if (text) this.panel.hidden = false;
-    else this.input.value = "";
+    if (text) {
+      this.panel.hidden = false;
+      this.hideHelped();
+    } else this.input.value = "";
   }
 
   closePanel() {
@@ -180,10 +201,47 @@ export class Ui {
     this.clearPointer();
     this.captionText.textContent = text;
     this.caption.hidden = false;
+    this.placeAboveDock();
+  }
+
+  /**
+   * Reopens the ask box with "Did this help?" above it. The caption keeps to
+   * one sentence and no buttons, so the question lives in the panel.
+   * `answer` is called once, if they tap Yes or No.
+   */
+  askIfHelped(answer: (helped: boolean) => void) {
+    this.onHelped = answer;
+    this.helped.replaceChildren(...this.helpedRow());
+    this.helped.hidden = false;
+    this.form.hidden = false;
+    this.status.hidden = true;
+    this.panel.hidden = false;
+    // The dock grew. A caption with no target sits above it, so it moves up too.
+    if (!this.target && !this.caption.hidden) this.placeAboveDock();
+  }
+
+  private helpedRow(): Node[] {
+    const span = Object.assign(document.createElement("span"), { textContent: "Did this help?" });
+    const yes = Object.assign(document.createElement("button"), { type: "button", textContent: "Yes" });
+    const no = Object.assign(document.createElement("button"), { type: "button", textContent: "No" });
+    yes.dataset.helped = "yes";
+    no.dataset.helped = "no";
+    return [span, yes, no];
+  }
+
+  private hideHelped() {
+    this.helped.hidden = true;
+    this.onHelped = undefined;
+  }
+
+  /** Puts a caption that has nothing to point at just above the launcher, and above the panel when it is open. */
+  private placeAboveDock() {
     const box = this.caption.getBoundingClientRect();
-    const left = this.host.shadowRoot?.querySelector(".dock.left") ? 20 : window.innerWidth - box.width - 20;
+    const dock = this.host.shadowRoot?.querySelector(".dock");
+    const left = dock?.classList.contains("left") ? 20 : window.innerWidth - box.width - 20;
+    const top = (dock?.getBoundingClientRect().top ?? window.innerHeight - 60) - box.height - 12;
     this.caption.style.left = `${Math.max(12, left)}px`;
-    this.caption.style.top = `${Math.max(12, window.innerHeight - box.height - 76)}px`;
+    this.caption.style.top = `${Math.max(12, top)}px`;
   }
 
   clearPointer() {

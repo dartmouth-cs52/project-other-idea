@@ -2,14 +2,15 @@
 // supplied: one address for the site, the request access form, and the static pages.
 
 import { checkRequest, cleanRequest, emailDomain, isPersonalEmail, type AccessField, type AccessRequest } from "../lib/access-request";
+import { appApi, approveLink, type AppEnv } from "./app-api";
+import { proxyAuth } from "./auth";
 
 export interface Assets {
   fetch(request: Request): Promise<Response> | Response;
 }
 
-export interface Env {
+export interface Env extends AppEnv {
   ASSETS?: Assets;
-  ACCESS_REQUESTS: { put(key: string, value: string): Promise<void> };
   /** Emails the team a copy of each request. Cloudflare only lets it send to an inbox verified under Email Routing. */
   EMAIL?: {
     send(message: { to: string; from: { email: string; name: string }; replyTo: string; subject: string; text: string }): Promise<{ messageId: string }>;
@@ -18,6 +19,8 @@ export interface Env {
   NOTIFY_TO?: string;
   /** Slows down anyone hammering the form. */
   FORM_LIMIT?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+  /** Slows down anyone hammering sign-in, which can send an email on each try. */
+  AUTH_LIMIT?: { limit(options: { key: string }): Promise<{ success: boolean }> };
 }
 
 const SITE = "joinhaptic.com";
@@ -34,6 +37,15 @@ export async function handle(request: Request, env: Env, assets: Assets): Promis
   }
 
   if (url.pathname === "/api/request-access") return requestAccess(request, env, url);
+  if (url.pathname.startsWith("/api/auth/")) {
+    // Signing in can send an email, and Neon sees every caller as this Worker, so the limit has to be kept here.
+    // Checking who is signed in is a GET and is not counted.
+    if (request.method !== "GET" && env.AUTH_LIMIT && !(await env.AUTH_LIMIT.limit({ key: request.headers.get("cf-connecting-ip") ?? "unknown" })).success) {
+      return json({ message: "Too many tries. Wait a minute and try again.", code: "TOO_MANY_REQUESTS" }, 429);
+    }
+    return proxyAuth(request, env);
+  }
+  if (url.pathname.startsWith("/api/app/")) return appApi(request, env, url);
 
   const response = await assets.fetch(request);
   // Anything that is not the real domain is a preview, and search engines should skip it.
@@ -84,8 +96,9 @@ async function requestAccess(request: Request, env: Env, url: URL): Promise<Resp
   }
 
   const at = new Date().toISOString();
-  await env.ACCESS_REQUESTS.put(`${at} ${crypto.randomUUID()}`, JSON.stringify({ ...entry, at }));
-  await notify(env, entry, at);
+  const key = `${at} ${crypto.randomUUID()}`;
+  await env.ACCESS_REQUESTS.put(key, JSON.stringify({ ...entry, at }));
+  await notify(env, entry, at, await approveLink(env, url.origin, key));
   return json({ ok: true }, 200);
 }
 
@@ -121,7 +134,7 @@ async function takesMail(domain: string): Promise<boolean> {
 }
 
 /** Emails the team a copy of a request. The request is already saved, so a failed email never fails the form. */
-async function notify(env: Env, entry: AccessRequest, at: string): Promise<void> {
+async function notify(env: Env, entry: AccessRequest, at: string, approve?: string): Promise<void> {
   if (!env.EMAIL || !env.NOTIFY_TO) return;
   const name = `${entry.firstName} ${entry.lastName}`;
   // A subject is one line, so drop anything that could start a new one.
@@ -141,6 +154,9 @@ async function notify(env: Env, entry: AccessRequest, at: string): Promise<void>
         "Details:",
         entry.details || "None",
         "",
+        ...(approve
+          ? ["To let them in, open this link and choose their address or their whole domain. Haptic then emails them a sign-in link:", approve, ""]
+          : []),
         `Sent from the request access form on ${SITE} at ${at}.`,
         "Reply to this email to answer them.",
       ].join("\n"),

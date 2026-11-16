@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Pointer } from "@/components/pointer";
 import { buttonVariants } from "@/components/ui/button";
-import { accessHref, site } from "@/lib/site";
+import { accessHref, signInHref, site } from "@/lib/site";
 
 export function SiteNav() {
   return (
@@ -16,6 +16,9 @@ export function SiteNav() {
         </Link>
         <Link href="/#faq" className="hidden text-muted-foreground transition-colors hover:text-foreground sm:block">
           FAQ
+        </Link>
+        <Link href={signInHref} className="text-muted-foreground transition-colors hover:text-foreground">
+          Sign in
         </Link>
         <Link href={accessHref} className={buttonVariants({ size: "lg" })}>
           Request access

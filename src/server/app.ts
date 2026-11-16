@@ -1,4 +1,15 @@
-import { STREAM_TYPE, type PublicSiteConfig, type SiteContext, type SnapElement, type Snapshot, type TurnRequest } from "../shared/types.ts";
+import {
+  GUIDE_ID,
+  GUIDE_OUTCOMES,
+  STREAM_TYPE,
+  type GuideOutcome,
+  type GuideReport,
+  type PublicSiteConfig,
+  type SiteContext,
+  type SnapElement,
+  type Snapshot,
+  type TurnRequest,
+} from "../shared/types.ts";
 import { measureTurn, TurnError, type TurnMeasure } from "./model.ts";
 
 // What the Haptic server answers: the widget file, each site's public
@@ -9,15 +20,34 @@ import { measureTurn, TurnError, type TurnMeasure } from "./model.ts";
 // the widget file comes from, and how callers are slowed down.
 
 export interface AppParts {
-  loadSite(id: string): Promise<SiteContext | undefined>;
+  /**
+   * The site with this id. `hurry` is true when a visitor is waiting on a
+   * step, so a host that keeps sites in memory should answer from what it
+   * holds and bring it up to date afterwards.
+   */
+  loadSite(id: string, hurry?: boolean): Promise<SiteContext | undefined>;
   /** The widget bundle, as the text of one script. */
   widget(): Promise<string>;
   /** How long browsers may keep the widget before asking again, in seconds. 0 for never. */
   widgetMaxAge: number;
   /** True when this caller has asked for too many steps lately. */
   overLimit(key: string): boolean | Promise<boolean>;
+  /**
+   * Told when a guide's first question arrives, before the model is asked.
+   * Recording it here means a guide whose first step fails, or whose visitor
+   * leaves before the answer, is still on record. Must not throw.
+   */
+  onAsk?(request: TurnRequest, site: SiteContext, origin: string | undefined): void;
   /** Told about each finished step, for logging. Must not throw. */
-  onTurn?(request: TurnRequest, measure: TurnMeasure): void;
+  onTurn?(request: TurnRequest, measure: TurnMeasure, site: SiteContext, origin: string | undefined): void;
+  /**
+   * Told each time the script calls from a page, allowed or not. This is how
+   * an install is seen to be live, and why it looks dead when the origin is not
+   * on the list. Must not throw.
+   */
+  onSeen?(site: SiteContext, origin: string, allowed: boolean): void;
+  /** Told how a guide ended, or whether it helped. Must not throw. */
+  onReport?(site: SiteContext, guide: string, report: GuideReport): void;
 }
 
 const MAX_BODY_BYTES = 512 * 1024;
@@ -47,7 +77,9 @@ export function createApp(parts: AppParts) {
     if (request.method === "GET" && siteMatch) {
       const site = await parts.loadSite(decodeURIComponent(siteMatch[1] ?? ""));
       if (!site) return json(404, { error: "No site with that id. Check the data-site attribute on the script tag." });
-      if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      const allowed = originAllowed(site, origin);
+      if (origin) parts.onSeen?.(site, origin, allowed);
+      if (!allowed) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
       const config: PublicSiteConfig = { name: site.name, appearance: site.appearance };
       return json(200, config);
     }
@@ -55,17 +87,18 @@ export function createApp(parts: AppParts) {
     if (request.method === "POST" && url.pathname === "/v1/turn") {
       const turn = parseTurn(await readJson(request));
       if (!turn) return json(400, { error: "That isn't a valid turn request." });
-      const site = await parts.loadSite(turn.site);
+      const site = await parts.loadSite(turn.site, true);
       if (!site) return json(404, { error: "No site with that id." });
       if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
       if (await parts.overLimit(`${site.id} ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
+      if (turn.step === 0 && turn.guide) parts.onAsk?.(turn, site, origin);
 
       // A widget that asks for it gets the step as it forms: the control to point at first, then the whole reply.
-      if ((request.headers.get("Accept") ?? "").includes(STREAM_TYPE)) return streamTurn(parts, site, turn, cors);
+      if ((request.headers.get("Accept") ?? "").includes(STREAM_TYPE)) return streamTurn(parts, site, turn, cors, origin);
 
       try {
         const measure = await measureTurn(site, turn);
-        parts.onTurn?.(turn, measure);
+        parts.onTurn?.(turn, measure, site, origin);
         return json(200, measure.reply);
       } catch (error) {
         if (!(error instanceof TurnError)) throw error;
@@ -74,8 +107,34 @@ export function createApp(parts: AppParts) {
       }
     }
 
+    // How a guide ended, and later whether it helped. The widget sends it as
+    // text/plain, which needs no preflight, so it still arrives when the page
+    // is being left.
+    const reportMatch = /^\/v1\/guides\/([^/]+)\/report$/.exec(url.pathname);
+    if (request.method === "POST" && reportMatch) {
+      const guide = reportMatch[1] ?? "";
+      const report = parseReport(await readJson(request));
+      if (!GUIDE_ID.test(guide) || !report) return json(400, { error: "That isn't a valid report." });
+      const site = await parts.loadSite(report.site, true);
+      if (!site) return json(404, { error: "No site with that id." });
+      if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      if (await parts.overLimit(`${site.id} ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
+      parts.onReport?.(site, guide, report);
+      return json(200, { ok: true });
+    }
+
     return undefined;
   };
+}
+
+function parseReport(body: unknown): GuideReport | undefined {
+  if (!body || typeof body !== "object") return undefined;
+  const raw = body as Record<string, unknown>;
+  if (typeof raw.site !== "string") return undefined;
+  const report: GuideReport = { site: raw.site };
+  if (GUIDE_OUTCOMES.includes(raw.outcome as GuideOutcome)) report.outcome = raw.outcome as GuideOutcome;
+  if (typeof raw.helped === "boolean") report.helped = raw.helped;
+  return report.outcome || report.helped !== undefined ? report : undefined;
 }
 
 /**
@@ -83,14 +142,14 @@ export function createApp(parts: AppParts) {
  * named the control, and the full reply follows as the last line. The status
  * line is already sent by then, so a failure arrives as `{"error":…,"code":…}`.
  */
-function streamTurn(parts: AppParts, site: SiteContext, turn: TurnRequest, cors: Record<string, string>): Response {
+function streamTurn(parts: AppParts, site: SiteContext, turn: TurnRequest, cors: Record<string, string>, origin: string | undefined): Response {
   const encoder = new TextEncoder();
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
       const line = (value: unknown) => controller.enqueue(encoder.encode(JSON.stringify(value) + "\n"));
       try {
         const measure = await measureTurn(site, turn, undefined, (id) => line({ target: id }));
-        parts.onTurn?.(turn, measure);
+        parts.onTurn?.(turn, measure, site, origin);
         line(measure.reply);
       } catch (error) {
         const known = error instanceof TurnError;
@@ -177,7 +236,9 @@ export function parseTurn(body: unknown): TurnRequest | undefined {
     .filter((turn) => turn.text);
 
   const request: TurnRequest = { site: raw.site, goal, step: Math.min(Math.max(Number(raw.step) || 0, 0), 100), history, snapshot };
+  if (typeof raw.guide === "string" && GUIDE_ID.test(raw.guide)) request.guide = raw.guide;
   if (raw.event) request.event = text(raw.event, 600);
   if (raw.change) request.change = text(raw.change, 2000);
+  if (raw.offTrack === true) request.offTrack = true;
   return request;
 }

@@ -1,4 +1,15 @@
-import { cleanText, describeElement, normalizePath, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import {
+  cleanText,
+  describeElement,
+  normalizePath,
+  type GuideOutcome,
+  type GuideReport,
+  type HistoryTurn,
+  type SnapElement,
+  type Snapshot,
+  type TurnReply,
+  type TurnRequest,
+} from "../shared/types.ts";
 import { describeChange, elementKey, isField, NOTHING_CHANGED, takeSnapshot } from "./snapshot.ts";
 import type { Ui } from "./ui.ts";
 
@@ -50,6 +61,8 @@ interface EarlyPointer {
 }
 
 interface SavedGuide {
+  /** Ties the guide's steps together on the server, across page loads. */
+  id?: string;
   goal: string;
   history: HistoryTurn[];
   step: number;
@@ -61,7 +74,21 @@ interface SavedGuide {
   savedAt: number;
 }
 
+/** Says how a guide went. Sent once per ending, and again when the visitor answers "Did this help?". */
+export type Reporter = (guide: string, report: Omit<GuideReport, "site">) => void;
+
+/** Endings worth asking "Did this help?" about. A stop or a failure already says no. */
+const ASK_IF_HELPED: GuideOutcome[] = ["finished", "shown", "nothing_to_point_at", "loop", "step_limit"];
+
 export class Guide {
+  /** Empty when no guide is under way, or once the current one has reported how it ended. */
+  private id = "";
+  /**
+   * Set while a first answer points at something and waits to see whether the
+   * visitor uses it. Asking something new, or closing the caption, ends the
+   * guide this way and not as stopped.
+   */
+  private unconfirmed?: GuideOutcome;
   private goal = "";
   private history: HistoryTurn[] = [];
   private step = 0;
@@ -77,15 +104,20 @@ export class Guide {
   constructor(
     private readonly ui: Ui,
     private readonly sendTurn: (request: Omit<TurnRequest, "site">, onTarget?: (id: string) => void) => Promise<TurnReply>,
+    private readonly report: Reporter = () => {},
   ) {}
 
   start(goal: string) {
+    // Asking something new while a guide is under way ends that one.
+    this.end(this.unconfirmed ?? "stopped");
     this.reset();
+    this.id = newGuideId();
     this.goal = goal;
     void this.turn(this.run);
   }
 
   stop() {
+    this.end(this.unconfirmed ?? "stopped");
     this.reset();
     this.ui.clear();
     this.ui.setBusy("");
@@ -96,6 +128,7 @@ export class Guide {
     const saved = load();
     if (!saved) return;
     this.reset();
+    this.id = saved.id ?? newGuideId();
     this.goal = saved.goal;
     this.history = saved.history;
     this.step = saved.step;
@@ -116,12 +149,13 @@ export class Guide {
     this.previous = undefined;
     this.last = undefined;
     this.strayed = false;
+    this.unconfirmed = undefined;
     forget();
   }
 
   private async turn(run: number, event?: string, nudged = false): Promise<void> {
     const { ui } = this;
-    if (this.step >= MAX_STEPS) return this.finish("That's as far as I can take this one. Ask again to keep going.");
+    if (this.step >= MAX_STEPS) return this.finish("That's as far as I can take this one. Ask again to keep going.", "step_limit");
     ui.setBusy(this.step === 0 ? "Finding it…" : this.strayed ? OFF_TRACK : "Next step…");
 
     ui.place();
@@ -146,7 +180,12 @@ export class Guide {
           waiting.acted = what;
           // If this click loads a new page before the reply is in, the next page still needs to know about it.
           this.strayed = !what.onTarget;
-          this.save(what.event);
+          // The step was shown and acted on, though its sentence is not in yet. Saved as done, so a page this
+          // click loads asks the next step and does not ask this one again over the top of it.
+          this.save(what.event, {
+            user: this.step === 0 ? this.goal : (event ?? "The page changed."),
+            assistant: listed ? `Pointed at ${describeElement(listed)}.` : "Pointed at a control.",
+          });
           whenActed?.(what);
         }),
       };
@@ -166,12 +205,14 @@ export class Guide {
     try {
       reply = await this.sendTurn(
         {
+          ...(this.id ? { guide: this.id } : {}),
           goal: this.goal,
           step: this.step,
           history: this.history.slice(-MAX_HISTORY),
           snapshot: page.snapshot,
           ...(event ? { event } : {}),
           ...(change ? { change } : {}),
+          ...(this.strayed ? { offTrack: true } : {}),
         },
         pointEarly,
       );
@@ -179,7 +220,7 @@ export class Guide {
       if (run !== this.run) return;
       dropEarly();
       console.warn("[Haptic]", error);
-      return this.finish("Something went wrong on our side. Try asking again.");
+      return this.finish("Something went wrong on our side. Try asking again.", "error");
     }
     if (run !== this.run) return;
 
@@ -199,7 +240,7 @@ export class Guide {
     // is a loop. Ask once more saying so, then give up rather than repeat.
     if (listed && this.last?.used && this.last.key === elementKey(listed) && change === NOTHING_CHANGED && reply.status === "continue") {
       dropEarly();
-      if (nudged) return this.finish("That step didn't change anything I can see, so I've stopped here. Ask again if there's more to do.");
+      if (nudged) return this.finish("That step didn't change anything I can see, so I've stopped here. Ask again if there's more to do.", "loop");
       const nudge = `You pointed at ${describeElement(listed)} again, but the user already used it and nothing changed. Don't point at it again: move on, or say it's done.`;
       return this.turn(run, `${event} ${nudge}`, true);
     }
@@ -210,9 +251,18 @@ export class Guide {
     this.last = listed ? { key: elementKey(listed), used: false } : undefined;
     this.strayed = false;
 
+    // Only a finished guide is billed. It is finished when the visitor followed the steps and is now
+    // where they asked to be, or when they used the control the last answer pointed at. A first answer
+    // that the visitor did not act on, or that only needed words, was shown, and is free.
+    const arrived = this.step > 1;
+    if (reply.status === "stuck") {
+      dropEarly();
+      return this.finish(reply.say, "nothing_to_point_at");
+    }
     if (!el || !el.isConnected) {
       dropEarly();
-      return this.finish(reply.say);
+      if (reply.status === "done") return this.finish(reply.say, arrived ? "finished" : "shown");
+      return this.finish(reply.say, "nothing_to_point_at");
     }
     if (early?.el !== el) {
       dropEarly();
@@ -222,14 +272,48 @@ export class Guide {
     if (!early?.acted) ui.pointAt(el, reply.say);
 
     if (reply.status === "done") {
-      // An explanation that points at something. Leave it up until they click anywhere.
-      early?.stop();
+      // The last answer points at something. Leave it up until they click anywhere but on Haptic itself.
       ui.setBusy("");
       ui.closePanel();
       forget();
-      const dismiss = () => run === this.run && ui.clear();
-      document.addEventListener("click", dismiss, { capture: true, once: true });
-      this.stopWaiting = () => document.removeEventListener("click", dismiss, true);
+      const dismiss = (event: MouseEvent) => {
+        if (event.composedPath().includes(ui.host)) return;
+        document.removeEventListener("click", dismiss, true);
+        if (run === this.run) ui.clear();
+      };
+      document.addEventListener("click", dismiss, true);
+
+      // After following steps, the visitor is on the screen they asked for.
+      if (arrived) {
+        early?.stop();
+        this.end("finished");
+        this.stopWaiting = () => document.removeEventListener("click", dismiss, true);
+        return;
+      }
+
+      // A first answer that points: finished if they use what it points at, shown if they do anything
+      // else, close the caption, ask something new, or leave the page.
+      this.unconfirmed = "shown";
+      let stopUse = () => {};
+      const conclude = (used: boolean) => {
+        if (run !== this.run || !this.unconfirmed) return;
+        this.unconfirmed = undefined;
+        window.removeEventListener("pagehide", left);
+        stopUse();
+        this.end(used ? "finished" : "shown");
+      };
+      const left = () => conclude(false);
+      window.addEventListener("pagehide", left);
+      this.stopWaiting = () => {
+        window.removeEventListener("pagehide", left);
+        stopUse();
+        document.removeEventListener("click", dismiss, true);
+      };
+      if (early?.acted) return conclude(early.acted.onTarget);
+      // The early pointer's own listener saves the guide for the next page, which must not happen once
+      // it has ended. So it stops, and a plain one takes over.
+      early?.stop();
+      stopUse = waitForAction(el, listed, ui.host, (what) => conclude(what.onTarget));
       return;
     }
 
@@ -253,20 +337,38 @@ export class Guide {
     else this.stopWaiting = waitForAction(el, listed, ui.host, acted);
   }
 
-  private finish(text: string) {
+  private finish(text: string, outcome: GuideOutcome) {
     this.stopWaiting?.();
     this.stopWaiting = undefined;
     forget();
     this.ui.setBusy("");
     this.ui.closePanel();
     this.ui.say(text);
+    this.end(outcome);
   }
 
-  private save(event?: string) {
+  /**
+   * Reports how the guide ended, once. For an ending where the answer is not
+   * obvious, the caption then asks whether it helped.
+   */
+  private end(outcome: GuideOutcome) {
+    const id = this.id;
+    if (!id) return;
+    this.id = "";
+    this.report(id, { outcome });
+    if (ASK_IF_HELPED.includes(outcome)) this.ui.askIfHelped((helped) => this.report(id, { helped }));
+  }
+
+  /** Saves the guide for the next page. `shown` is a step pointed at whose reply is still coming, counted as done. */
+  private save(event?: string, shown?: { user: string; assistant: string }) {
+    const history: HistoryTurn[] = shown
+      ? [...this.history, { role: "user", text: shown.user }, { role: "assistant", text: shown.assistant }]
+      : this.history;
     const saved: SavedGuide = {
+      ...(this.id ? { id: this.id } : {}),
       goal: this.goal,
-      history: this.history.slice(-MAX_HISTORY),
-      step: this.step,
+      history: history.slice(-MAX_HISTORY),
+      step: shown ? this.step + 1 : this.step,
       path: normalizePath(location.pathname),
       savedAt: Date.now(),
       ...(event ? { event } : {}),
@@ -278,6 +380,16 @@ export class Guide {
       // Storage full or blocked. The guide just won't survive a page load.
     }
   }
+}
+
+/** A random v4 UUID. crypto.randomUUID exists only on https pages, and some customers test on plain http. */
+function newGuideId(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function load(): SavedGuide | undefined {
