@@ -175,18 +175,23 @@ function recentEmails(context: SetupContext, now: number): SentEmail[] {
  * one address. The browser makes a key for each press of Send, so a retry of
  * the same press never sends twice: the key is kept with the email, and Resend
  * holds it for a day too.
+ *
+ * The key is bound to the site and the address, hashed together, so a key sent
+ * again with another address is a new email with its own key, held to every
+ * limit. Only a true retry, the same press to the same address, is let past
+ * them, and Resend answers that as it did the first time.
  */
 async function emailDeveloper(call: SetupRequest, id: string, input: Record<string, unknown>): Promise<Answer> {
   const { sql, org, user, env } = call;
   const checked = checkEmail(input.to);
   if (!checked.ok) return refuse(400, checked.message, "to");
   if (typeof input.key !== "string" || !KEY.test(input.key)) return refuse(400, "Send a key for this email.");
-  const key = input.key;
   const site = await siteOf(sql, org, id);
   if (!site) return refuse(404, "No such site.");
   if (!env.RESEND_API_KEY) return refuse(503, "Email isn't set up on this server yet. Copy the link and send it yourself.");
 
   const to = await hashOf(`${site.id} ${checked.email}`);
+  const key = await hashOf(`press ${input.key} ${site.id} ${checked.email}`);
   const recent = recentEmails(site.context, Date.now());
   const again = recent.some((item) => item.key === key);
   if (!again) {
@@ -222,7 +227,10 @@ async function emailDeveloper(call: SetupRequest, id: string, input: Record<stri
     scriptUrl: `${widget}/widget.js`,
   });
   const sent = await sendEmail(env, email, `developer-email/${site.id}/${key}`, call.fetcher ?? ((input, init) => fetch(input, init)));
-  if (!sent.ok) {
+  // 409: Resend has a request with this key already, which only an email already handed over can have made.
+  // Bound to the address as the key is, that was this email, so it went: it stays counted and is said to have gone.
+  if (!sent.ok && sent.status === 409) console.log("Resend already has this install email.", sent.detail);
+  else if (!sent.ok) {
     console.error("The install email was not sent:", sent.status, sent.detail);
     // Nothing went out, so it doesn't count against the day's emails.
     await sql
@@ -236,6 +244,6 @@ async function emailDeveloper(call: SetupRequest, id: string, input: Record<stri
     const why = sent.status === 0 ? "The email service could not be reached." : `The email service turned it down, with status ${sent.status}.`;
     return refuse(502, `${why} Copy the link and send it yourself.`);
   }
-  console.log("Sent an install email.", sent.id);
+  if (sent.ok) console.log("Sent an install email.", sent.id);
   return { status: 200, body: { sent: true, to: checked.email } };
 }

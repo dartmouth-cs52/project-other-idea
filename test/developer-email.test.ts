@@ -83,6 +83,42 @@ function call(sql: unknown, body: unknown, options: { org?: typeof ORG; fetcher?
 
 const site = (): Row => ({ id: SITE, company_id: ORG.id, origin: "https://app.example.com", context: {} });
 
+/**
+ * Resend, as its documentation describes idempotency keys: the same key with the same body answers as the
+ * first time without sending again, and the same key with a different body is a 409. It keeps who got what.
+ */
+function resendLikeTheDocs() {
+  const delivered: string[] = [];
+  const seen = new Map<string, { body: string; id: string }>();
+  const fetcher = async (_url: string, init?: RequestInit) => {
+    const key = new Headers(init?.headers).get("idempotency-key") ?? "";
+    const body = String(init?.body);
+    const before = seen.get(key);
+    if (before && before.body === body) return Response.json({ id: before.id });
+    if (before) return Response.json({ statusCode: 409, name: "invalid_idempotent_request", message: "Same idempotency key used with a different request payload." }, { status: 409 });
+    const id = `email_${delivered.length + 1}`;
+    seen.set(key, { body, id });
+    delivered.push((JSON.parse(body) as { to: string[] }).to[0]!);
+    return Response.json({ id });
+  };
+  return { delivered, fetcher };
+}
+
+/**
+ * The review's probe: send to one address, then send again with the same key to another. Before the fix the
+ * second press skipped the limits, Resend refused it with a 409, and the route took the first email off the
+ * count, so one site could send any number of emails to one address. `sql` is the fake or a real Postgres.
+ */
+async function reuseKeysForty(sql: unknown) {
+  const resend = resendLikeTheDocs();
+  for (let round = 0; round < 40; round++) {
+    const key = `probe-key-${String(round).padStart(4, "0")}`;
+    await call(sql, { to: "victim@example.org", key }, { fetcher: resend.fetcher });
+    await call(sql, { to: `x${round}@example.net`, key }, { fetcher: resend.fetcher });
+  }
+  return resend.delivered;
+}
+
 // Signed out (401) and from another site (403) are answered by app-api.ts before this route is reached,
 // and are tested with the site, in web/test/worker.test.ts.
 describe("who may send", () => {
@@ -107,7 +143,8 @@ describe("sending", () => {
     assert.deepEqual(body.to, ["dev@example.com"]);
     assert.equal(body.reply_to, "dana@example.com");
     assert.equal(body.subject, "Dana Reyes asked you to add Haptic to app.example.com");
-    assert.equal(idempotency, `developer-email/${SITE}/press-0001`);
+    assert.match(idempotency ?? "", new RegExp(`^developer-email/${SITE}/[0-9a-f]{32}$`), "the press's key, bound to the site and the address");
+    assert.ok(!idempotency?.includes("press-0001"));
     const kept = rows[0]!.context.developerEmails!;
     assert.equal(kept.length, 1);
     assert.match(kept[0]!.to, /^[0-9a-f]{32}$/);
@@ -179,6 +216,21 @@ describe("sending", () => {
   });
 });
 
+test("a key sent again with another address can't take an email off the count, so one address still gets at most 3", async () => {
+  const rows = [site()];
+  const delivered = await reuseKeysForty(fakeSql(rows));
+  assert.equal(delivered.filter((to) => to === "victim@example.org").length, EMAILS_PER_ADDRESS);
+  assert.ok(delivered.length <= EMAILS_PER_SITE, `${delivered.length} delivered from one site`);
+});
+
+test("Resend answering 409 for a key it has seen means the email went, so it stays counted and the person is told it was sent", async () => {
+  const rows = [site()];
+  const conflict = async () => Response.json({ statusCode: 409, name: "invalid_idempotent_request", message: "Same idempotency key used with a different request payload." }, { status: 409 });
+  const answer = await call(fakeSql(rows), { to: "dev@example.com", key: "press-409x" }, { fetcher: conflict });
+  assert.deepEqual(answer, { status: 200, body: { sent: true, to: "dev@example.com" } });
+  assert.equal(rows[0]!.context.developerEmails!.length, 1);
+});
+
 test("the email says who asked, links the install page, and carries the agent prompt and the tag, all escaped", () => {
   const email = developerEmail({
     to: "dev@example.com",
@@ -239,6 +291,13 @@ describe("against Postgres", { skip: TEST_DATABASE_URL ? false : "set TEST_DATAB
     assert.equal((await call(sql, { to: "other@example.com", key: "pg-press-f1" }, { fetcher: failing.fetcher }))?.status, 502);
     assert.equal((await context()).developerEmails!.length, EMAILS_PER_ADDRESS, "the failed one was given back");
     assert.equal(sent.length, EMAILS_PER_ADDRESS + 1);
+  });
+
+  test("a key sent again with another address can't take an email off the count", async () => {
+    reset();
+    const delivered = await reuseKeysForty(psqlSql(DB));
+    assert.equal(delivered.filter((to) => to === "victim@example.org").length, EMAILS_PER_ADDRESS);
+    assert.ok(delivered.length <= EMAILS_PER_SITE);
   });
 
   test("the database holds the day's limit itself, for two presses at the same moment", async () => {
