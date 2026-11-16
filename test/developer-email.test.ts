@@ -97,11 +97,11 @@ function resendLikeTheDocs() {
 function call(
   sql: unknown,
   body: unknown,
-  options: { org?: typeof ORG; user?: typeof USER; site?: string; fetcher?: SetupRequest["fetcher"]; key?: string | null; method?: string; what?: string } = {},
+  options: { org?: typeof ORG; user?: typeof USER; site?: string; fetcher?: SetupRequest["fetcher"]; key?: string | null; method?: string; what?: string; query?: string } = {},
 ) {
   const what = options.what ?? "developer-email";
   const site = options.site ?? SITE;
-  const url = new URL(`https://joinhaptic.com/api/app/sites/${site}/${what}`);
+  const url = new URL(`https://joinhaptic.com/api/app/sites/${site}/${what}${options.query ?? ""}`);
   return setupRoutes({
     request: new Request(url, { method: options.method ?? "POST", body: options.method === "GET" ? undefined : JSON.stringify(body) }),
     env: { RESEND_API_KEY: options.key === null ? undefined : (options.key ?? "re_test"), WIDGET_URL: "https://widget.joinhaptic.com" },
@@ -154,6 +154,15 @@ test("nothing that can carry a web address, an @ or an invisible character reach
   assert.throws(() => emailText("evil@example.com"), UnsafeText, "an @ where none belongs");
   assert.throws(() => emailText("a@b.com@c.com", { at: true }), UnsafeText);
   assert.throws(() => emailText("dana@example.com", { at: false }), UnsafeText);
+});
+
+test("the dashboard's numbers come for 7, 30 or 90 days, and anything else is refused", async () => {
+  const sql = fakeSql([site()]);
+  for (const days of ["1.5", "0", "-7", "365", "abc", "", "30.0001"]) {
+    assert.deepEqual(await call(sql, {}, { method: "GET", what: "metrics", query: `?days=${days}` }), { status: 400, body: { error: "Ask for 7, 30 or 90 days." } }, days);
+  }
+  assert.deepEqual(await call(sql, {}, { method: "GET", what: "metrics" }), { status: 400, body: { error: "Ask for 7, 30 or 90 days." } });
+  for (const days of ["7", "30", "90"]) assert.equal((await call(sql, {}, { method: "GET", what: "metrics", query: `?days=${days}`, org: OTHER_ORG }))?.status, 404, "a good range goes on to the site check");
 });
 
 test("a new address is checked like any other, and only for the company's own site", async () => {

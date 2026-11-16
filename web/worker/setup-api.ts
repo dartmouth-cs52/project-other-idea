@@ -77,6 +77,8 @@ interface SiteRow {
 
 const ROUTE = /^\/sites\/(site_[a-z0-9_]{3,40})\/(setup|address|developer-email|metrics)$/;
 const KEY = /^[A-Za-z0-9_-]{8,64}$/;
+/** The ranges the dashboard's top numbers come for, in days. */
+const RANGES = [7, 30, 90];
 
 /** Answers the paths above, or undefined for any other path, which app-api.ts then answers itself. */
 export async function setupRoutes(call: SetupRequest): Promise<Answer | undefined> {
@@ -88,8 +90,10 @@ export async function setupRoutes(call: SetupRequest): Promise<Answer | undefine
   if (what === "address" && method === "PUT") return changeAddress(call, id, await body(call.request));
   if (what === "developer-email" && method === "POST") return emailDeveloper(call, id, await body(call.request));
   if (what === "metrics" && method === "GET") {
+    // The dashboard offers these three. Anything else, a fraction included, is a mistake to say so about.
+    const days = Number(call.url.searchParams.get("days"));
+    if (!RANGES.includes(days)) return refuse(400, "Ask for 7, 30 or 90 days.");
     if (!(await siteOf(call.sql, call.org, id))) return refuse(404, "No such site.");
-    const days = Math.min(Math.max(Number(call.url.searchParams.get("days")) || 30, 1), 365);
     return { status: 200, body: await headline(call.sql, id, days) };
   }
   return undefined;
