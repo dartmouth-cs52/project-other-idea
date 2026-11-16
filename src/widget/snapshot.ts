@@ -1010,7 +1010,7 @@ function roleOf(el: Element, explicitRole: string, pointerStartsHere: boolean): 
   if (tag === "A" && (el.hasAttribute("onclick") || pointerStartsHere || isFocusable(el))) return "link";
   // A label that shows the pointer is pressed for its field, which is listed. Only when the field cannot be seen is the label what the visitor presses.
   if (tag === "LABEL") {
-    const field = (el as HTMLLabelElement).control;
+    const field = labelTarget(el as HTMLLabelElement);
     if (field && isRendered(field)) return "";
   }
   if (el.hasAttribute("onclick") || pointerStartsHere) return "clickable";
@@ -1018,6 +1018,44 @@ function roleOf(el: Element, explicitRole: string, pointerStartsHere: boolean): 
   // a menu or a grid that takes the keyboard does so to move it among its entries, which are what is used.
   if (isFocusable(el) && !FOCUSABLE_NOT_CLICKABLE.has(tag) && !ROVING.has(explicitRole) && !scrolls(el)) return "clickable";
   return "";
+}
+
+/** Elements HTML lets a <label> name: its fields, and its buttons. */
+function isLabelable(el: Element): el is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement {
+  return el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement || el instanceof HTMLButtonElement;
+}
+
+/** Whether an element says by its role that it is a control. */
+function hasControlRole(el: Element): boolean {
+  return (el.getAttribute("role") ?? "").split(/\s+/).some((role) => INTERACTIVE_ROLES.has(role));
+}
+
+/**
+ * The <label>s that name a control: those tied to it by `for` and the one
+ * around it. HTML ties them to its fields and buttons, a switch or a tick box
+ * drawn as a <button> among them. A box that is a control only by its role,
+ * like a switch drawn as a <div>, is named by a <label for> that points at it
+ * all the same, the way the page means it.
+ */
+function labelsOf(el: Element): HTMLLabelElement[] {
+  if (isLabelable(el)) return Array.from(el.labels ?? []);
+  if (!el.id || !hasControlRole(el)) return [];
+  const root = el.getRootNode() as Document | ShadowRoot;
+  try {
+    return Array.from(root.querySelectorAll<HTMLLabelElement>(`label[for="${CSS.escape(el.id)}"]`));
+  } catch {
+    // A root that cannot be searched. The control is named some other way.
+    return [];
+  }
+}
+
+/** The control a <label> names: the field or button HTML ties it to, or a control by role that its `for` points at. */
+function labelTarget(label: HTMLLabelElement): Element | null {
+  if (label.control) return label.control;
+  const id = label.getAttribute("for");
+  if (!id) return null;
+  const target = (label.getRootNode() as Document | ShadowRoot).getElementById?.(id) ?? null;
+  return target && hasControlRole(target) ? target : null;
 }
 
 /** A tag the browser itself treats as a control. */
@@ -1102,7 +1140,8 @@ function hasRealBox(el: Element, rect: DOMRect): boolean {
  * is listed, so its pointer does not make it a control of its own.
  */
 function pressedForAField(el: Element): boolean {
-  const field = (el.parentElement?.closest("label") as HTMLLabelElement | null)?.control;
+  const label = el.parentElement?.closest("label");
+  const field = label ? labelTarget(label) : null;
   return !!field && isRendered(field);
 }
 
@@ -1620,6 +1659,15 @@ function labelOf(el: Element, role: string): string {
   const given = byIds(el.getAttribute("aria-labelledby") ?? "") || el.getAttribute("aria-label")?.trim() || "";
   let raw = el.getAttribute("data-haptic-label") || (given && !typedIn && !namedByOwnWords && !choice && !SHOWS_A_VALUE.has(role) ? withShownWords(given, el) : given);
   const ticks = role === "checkbox" || role === "radio" || role === "switch";
+  // A button, or a control by its role, that a <label> names: a switch or a tick box drawn as a button, or the button
+  // of a date picker. The label is its name, as the accessibility tree has it, even when only a screen reader can
+  // see it. The words the button shows are not added: a picker's are the date the visitor chose.
+  if (!raw && !(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
+    raw = labelsOf(el)
+      .map((label) => labelWords(label) || label.getAttribute("aria-label") || "")
+      .join(" ")
+      .trim();
+  }
   if (!raw && (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
     // A label can carry its words as an aria-label of its own.
     raw = Array.from(el.labels ?? []).map((label) => labelWords(label) || label.getAttribute("aria-label") || "").join(" ").trim();
@@ -1723,8 +1771,7 @@ function markedRequired(name: Element): boolean {
 
 /** The elements whose words name an element: its labels and what aria-labelledby points to. */
 function namesOf(el: Element): Element[] {
-  const names: Element[] = [];
-  if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) names.push(...Array.from(el.labels ?? []));
+  const names: Element[] = [...labelsOf(el)];
   const root = el.getRootNode() as Document | ShadowRoot;
   for (const id of (el.getAttribute("aria-labelledby") ?? "").split(/\s+/)) {
     const named = id ? root.getElementById?.(id) : null;
