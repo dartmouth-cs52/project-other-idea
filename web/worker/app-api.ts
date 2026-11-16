@@ -453,8 +453,11 @@ async function readSite(sql: Sql, env: AppEnv, org: Organization, id: string, re
   const byPath = new Map(pages.map((page) => [page.path, page]));
   for (const page of batch.pages) byPath.set(page.path, page);
   const merged = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
-  await saveReadBatch(sql, { id, companyId: org.id, maxOrigins: MAX_ORIGINS }, batch, merged);
-  return readingSummary(batch.reading, merged);
+  const from = { origin: site.origin, startedAt: site.reading?.startedAt ?? null };
+  if (await saveReadBatch(sql, { id, companyId: org.id, maxOrigins: MAX_ORIGINS }, from, batch, merged)) return readingSummary(batch.reading, merged);
+  // The address changed while this batch was read, so it was dropped. Answer with the reading that is there now.
+  const now = await ownedSite(sql, org, id);
+  return readingSummary(now.reading, now.context.pages ?? []);
 }
 
 // Approving access requests ---------------------------------------------------
