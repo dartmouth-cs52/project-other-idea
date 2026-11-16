@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import type { Browser, Page } from "playwright";
-import { ask, BROWSERS, done, idOf, launch, page, point, reachable, ringAround, startHarness, turns, type Harness } from "./harness.ts";
+import { ask, BROWSERS, done, idOf, launch, page, point, reachable, markAround, startHarness, turns, type Harness } from "./harness.ts";
 
 // A page's modal <dialog> makes everything outside it inert, our element
 // included, and draws over it. The widget moves into the open dialog and shows
@@ -69,23 +69,24 @@ for (const name of BROWSERS) {
       const tab = await browser.newPage();
       await tab.goto(`${harness.url}/`);
       await ask(tab, "save the page");
-      assert.ok(await ringAround(tab, "#open"), "points at Open settings");
+      assert.ok(await markAround(tab, "#open"), "points at Open settings");
 
       await tab.click("#open");
       await movedTo(tab, "settings");
       const [, second] = await turns(harness, 2);
       assert.equal(second!.snapshot.dialog, "Settings", "the next step sees only the dialog");
       assert.ok(!second!.snapshot.elements.some((element) => element.label === "Save page"), "nothing behind the dialog is listed");
-      assert.ok(await ringAround(tab, "#close"), "points at Close, inside the dialog");
-      assert.ok(await reachable(tab, ".caption .close"), "the caption's stop button can be pressed while the dialog is open");
-      await tab.locator("haptic-root .caption .close").click({ trial: true, timeout: 1000 });
+      assert.ok(await markAround(tab, "#close"), "points at Close, inside the dialog");
+      assert.equal(await tab.locator("haptic-root .send").getAttribute("aria-label"), "Stop");
+      assert.ok(await reachable(tab, ".send"), "the chat's stop button can be pressed while the dialog is open");
+      await tab.locator("haptic-root .send").click({ trial: true, timeout: 1000 });
 
       await tab.click("#close");
       await movedTo(tab, "page");
       const [, , third] = await turns(harness, 3);
       assert.equal(third!.snapshot.dialog, undefined);
-      assert.ok(await ringAround(tab, "#save"), "points at Save page once the dialog has closed");
-      assert.ok(await reachable(tab, ".caption .close"));
+      assert.ok(await markAround(tab, "#save"), "points at Save page once the dialog has closed");
+      assert.ok(await reachable(tab, ".send"));
       await tab.close();
     });
 
@@ -101,25 +102,25 @@ for (const name of BROWSERS) {
       const tab = await browser.newPage();
       await tab.goto(`${harness.url}/`);
       await ask(tab, "more options");
-      assert.ok(await ringAround(tab, "#open"));
+      assert.ok(await markAround(tab, "#open"));
 
       await tab.click("#open");
       await movedTo(tab, "settings");
-      assert.ok(await ringAround(tab, "#nested"));
+      assert.ok(await markAround(tab, "#nested"));
 
       await tab.click("#nested");
       await movedTo(tab, "more");
       const [, , third] = await turns(harness, 3);
       assert.equal(third!.snapshot.dialog, "More options");
-      assert.ok(await ringAround(tab, "#more-done"), "points inside the inner dialog");
-      assert.ok(await reachable(tab, ".caption .close"));
+      assert.ok(await markAround(tab, "#more-done"), "points inside the inner dialog");
+      assert.ok(await reachable(tab, ".send"));
 
       await tab.click("#more-done");
       await movedTo(tab, "settings");
       const [, , , fourth] = await turns(harness, 4);
       assert.equal(fourth!.snapshot.dialog, "Settings", "back to the outer dialog");
-      assert.ok(await ringAround(tab, "#close"));
-      assert.ok(await reachable(tab, ".caption .close"));
+      assert.ok(await markAround(tab, "#close"));
+      assert.ok(await reachable(tab, ".send"));
 
       await tab.click("#close");
       await movedTo(tab, "page");

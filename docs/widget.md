@@ -1,10 +1,22 @@
 # How the widget follows a page
 
-The widget runs on pages it doesn't control. This covers how it keeps up with them: dialogs, controls something else covers, single-page apps that change the address, what it learns about a site from visits, and how to test it in real browsers. For the project overview, see the [README](../README.md).
+The widget runs on pages it doesn't control. This covers its chat, and how it keeps up with those pages: dialogs, controls something else covers, single-page apps that change the address, what it learns about a site from visits, and how to test it in real browsers. For the project overview, see the [README](../README.md).
+
+## The chat
+
+The chat is the one in the home page's demo (`web/components/demo/kit.tsx`), drawn by `src/widget/ui.ts`. It stays open from the question to the last step. The question is a bubble at the top. One line under it says what Haptic is doing: "Thinking", "Showing you how" with the pointer mark, or the green tick and "Done". The ask box's button sends the question, and while Haptic is thinking or pointing it is the stop button. Under the ask box, always, is the line that says Haptic is an AI and can be wrong.
+
+**The pointer.** It glides to the control from where it was, or from the chat if it was out of sight, in 400 to 700ms depending on how far it goes. The mark and the caption show when it lands. A click on the control is answered with a press: the mark and the pointer dip and come back in a quarter of a second, where they are, even if the click took the control off the page. Then the mark and the caption go, and the pointer waits there for the next step. Filling in a field, or clicking something else, gets no press.
+
+**Never on top of the control.** When the chat would cover the control being pointed at, or its caption, it closes for that step and comes back when the pointer leaves. For that step the caption carries a small × that stops the guide. It steps aside once for a control, so a visitor who opens the chat again keeps it open.
+
+**How it ends.** A sentence that ends a guide is a reply in the chat. The green tick and "Done" are for a guide the visitor followed to the end, which is the same ending that is billed (`finished`). An answer in words, a control that was shown and not used, and a sentence that says Haptic can't help end without it. "Did this help?" follows, and the answer is posted to `/v1/guides/<id>/report` and kept on the guide (`guides.helped`), where the dashboard counts it.
+
+**The thinking glow.** While the widget waits for the model, a pool of the accent colour gathers along the bottom of the chat over 0.6 seconds and laps there. When the reply arrives, which is when the pointer sets off or the answer shows, the pool breaks away: it swells into a dome, rises through the chat turning violet and then pink, and is gone 1.6 seconds later. A reply that says something went wrong, and a guide that was stopped, fade it where it is. The pool always finishes gathering first, and nothing waits for that. It is three layers of radial gradients with only their opacity and transform animated, multiplied into the chat so text stays sharp, and it never leaves the chat. The colours are worked out from the site's accent, so a site with its own accent gets a glow to match. With reduced motion on there is no glow, no shimmer and no glide. `test/browser/chat.test.ts` covers all of this.
 
 ## Modal dialogs
 
-A page's modal `<dialog>` makes everything outside it inert, Haptic's own element included. The widget moves its element into the open dialog the moment it opens, shows it again on top, and moves it back out when the dialog closes, so the pointer and the Stop button keep working through nested dialogs too. Escape in Haptic's ask box closes Haptic's panel and not the page's dialog.
+A page's modal `<dialog>` makes everything outside it inert, Haptic's own element included. The widget moves its element into the open dialog the moment it opens, shows it again on top, and moves it back out when the dialog closes, so the pointer and the chat's stop button keep working through nested dialogs too. Escape in Haptic's ask box closes Haptic's panel and not the page's dialog.
 
 ## Covered controls
 
@@ -30,4 +42,4 @@ A visitor who doesn't want the launcher in the corner can minimize it. A small b
 
 ## Testing in browsers
 
-`npm run test:browser` runs the widget in Chromium, Firefox and WebKit, on small pages made for each test, against a stand-in server that answers each step from a script (`test/browser/harness.ts`). It needs Playwright's browsers once: `npx playwright install chromium firefox webkit`. `BROWSERS=chromium npm run test:browser` runs one.
+`npm run test:browser` runs the widget in Chromium, Firefox and WebKit, on small pages made for each test, against a stand-in server that answers each step from a script (`test/browser/harness.ts`). It needs Playwright's browsers once: `npx playwright install chromium firefox webkit`. `BROWSERS=chromium npm run test:browser` runs one. On a machine that has Chromium but not Playwright's own download of it, `CHROMIUM_PATH=/path/to/chrome` runs the Chromium tests in that browser.

@@ -154,8 +154,10 @@ export function page(body: string, head = ""): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Fixture</title>${head}</head><body>${body}<script src="/widget.js" data-site="site_test" async></script></body></html>`;
 }
 
+/** CHROMIUM_PATH runs Chromium from a browser already on the machine, where Playwright's own download isn't there. */
 export async function launch(name: string): Promise<Browser> {
-  return ENGINES[name]!.launch();
+  const executablePath = name === "chromium" ? process.env.CHROMIUM_PATH : undefined;
+  return ENGINES[name]!.launch(executablePath ? { executablePath } : {});
 }
 
 /** Opens the panel, types the question and sends it. */
@@ -185,26 +187,38 @@ export function idOf(request: TurnRequest, label: string): string {
 export const point = (id: string, say = "Click it.", status: TurnReply["status"] = "continue"): Answer => ({ reply: { target: id, status, say } });
 export const done = (say = "That's it."): Answer => ({ reply: { target: null, status: "done", say } });
 
-/** True once the highlight ring is drawn around the element the selector picks. */
-export async function ringAround(tab: Page, selector: string, timeoutMs = 3000): Promise<boolean> {
+/** How far the mark stands off the control it is drawn around. */
+const MARK_GAP = 5;
+
+/** True once the mark is drawn around the element the selector picks. It lands when the pointer does, a little after the step arrives. */
+export async function markAround(tab: Page, selector: string, timeoutMs = 3000): Promise<boolean> {
   try {
     await tab.waitForFunction(
-      (selector) => {
+      ([selector, gap]) => {
         const host = document.querySelector("haptic-root");
-        const ring = host?.shadowRoot?.querySelector<HTMLElement>(".ring");
+        const mark = host?.shadowRoot?.querySelector<HTMLElement>(".mark");
         const target = document.querySelector(selector);
-        if (!ring || ring.hidden || !target) return false;
-        const a = ring.getBoundingClientRect();
+        if (!mark || mark.hidden || !target) return false;
+        // Its size is read from its style, since it scales a little as it lands.
+        const [left, top, width] = [mark.style.left, mark.style.top, mark.style.width].map(parseFloat) as [number, number, number];
         const b = target.getBoundingClientRect();
-        return Math.abs(a.left + 4 - b.left) < 2 && Math.abs(a.top + 4 - b.top) < 2 && Math.abs(a.width - 8 - b.width) < 2;
+        return Math.abs(left + gap - b.left) < 2 && Math.abs(top + gap - b.top) < 2 && Math.abs(width - gap * 2 - b.width) < 2;
       },
-      selector,
+      [selector, MARK_GAP] as const,
       { timeout: timeoutMs, polling: 20 },
     );
     return true;
   } catch {
     return false;
   }
+}
+
+/** What the line under the bubbles in the chat says, or "" when it is not showing. */
+export function stateOf(tab: Page): Promise<string> {
+  return tab.evaluate(() => {
+    const state = document.querySelector("haptic-root")?.shadowRoot?.querySelector<HTMLElement>(".state");
+    return !state || state.hidden ? "" : `${state.className.replace("state ", "")}: ${state.textContent?.trim()}`;
+  });
 }
 
 /** True when a click at the middle of the widget part this selector picks would reach it, and not land on the page or a dialog's backdrop. */

@@ -219,7 +219,9 @@ case is logged in web apps.
 The look is quiet and exact. Soft black on off-white, set in Geist, with no
 decoration. The pointer is the product, so it is the only thing on any screen
 that has colour and the only thing that moves with intent. Everything else stays
-still and grey so the pointer reads instantly.
+still and grey so the pointer reads instantly. The one exception is the glow in
+the chat while Haptic thinks, which hands over to the pointer the moment the
+reply arrives.
 
 The system sits on shadcn/ui and Tailwind's default scale. Sizes, radii and
 spacing come from those scales, never from one-off values, so anything built
@@ -237,7 +239,8 @@ mouse.
 ## Colors
 
 Two neutrals carry the whole interface. One colour belongs to the pointer, and
-one marks a finished task.
+one marks a finished task. The thinking glow starts in the pointer's colour and
+is the only place another hue is seen.
 Neutrals are Tailwind's stone scale, which has a slight warmth so the page never
 looks stark.
 
@@ -249,8 +252,14 @@ looks stark.
 - **Muted (#F5F5F4):** The fill of every card, and of the ask box.
 - **Muted text (#78716C):** Sub-copy and secondary labels. 4.6 to 1 on Paper.
 - **Border (#E7E5E4):** Hairlines and the secondary button.
-- **Pointer blue (#1E6EF4):** The pointer, the mark around its target and the
-  keyboard focus ring. Nothing else.
+- **Pointer blue (#1E6EF4):** The pointer, the mark around its target, the
+  keyboard focus ring and the start of the thinking glow. Nothing else.
+- **Thinking glow (#668CF7, #A953FB, #F69BEB):** Three soft layers in the chat
+  while Haptic thinks: a lighter Pointer blue, then violet, then pink. They are
+  worked out from the pointer's colour by turning its hue 4, 44 and 74 degrees
+  in OKLCH, so a customer's own accent gets a glow that suits it. The three hex
+  values are what Pointer blue gives, and what a browser without relative
+  colours falls back to. Never used flat, and never outside the glow.
 - **Done green (#008932):** The small round tick that says a task is finished.
   Blue means in progress and green means done, so the two never share a screen.
   Not for buttons, text or bubbles.
@@ -365,7 +374,9 @@ padding guesses.
 Flat. Hierarchy comes from the step between Paper and Card and from 1px borders,
 not from shadows. Three things are allowed a shadow, because they float above
 content: the demo window (`shadow-sm`), the widget's launcher and ask box, and
-the pointer with its caption. No gradients, no blur, no glass.
+the pointer with its caption. No gradients, no blur, no glass. The thinking
+glow is the one gradient, and it is soft colour inside the chat, never a blur
+of what is behind it.
 
 The pointer's shadow is two layers, a tight one and a soft one:
 `drop-shadow(0 1px 1px rgb(0 0 0 / .3)) drop-shadow(0 5px 9px rgb(0 0 0 / .26))`.
@@ -414,7 +425,7 @@ Components are shadcn/ui, restyled only through tokens and variants.
   confirms at the end.
 - **Pointer:** 24px. Glides to its target, and dips with the mark when the
   person clicks. No face, no mascot.
-- **Target mark:** A 2px Pointer blue outline that stands 3px off the control,
+- **Target mark:** A 2px Pointer blue outline that stands 5px off the control,
   with a thin white edge on both sides and a soft shadow, the same recipe as
   the pointer. The gap and the white edge are what stop it reading as the
   control's own keyboard focus ring.
@@ -430,9 +441,19 @@ Components are shadcn/ui, restyled only through tokens and variants.
 - **Bubbles and status:** shadcn's chat parts. The person's question is an Ink
   bubble on the right. Haptic's reply is a Muted bubble on the left. Status
   sits under them as one line. While Haptic thinks it is the word "Thinking"
-  with a lighter shade sweeping across it, shadcn's `shimmer`, with no icon.
-  While it points it reads "Showing you how". When it finishes it is the green
-  tick and "Done".
+  with a lighter shade sweeping across it, shadcn's `shimmer`, with no icon,
+  and the thinking glow gathers along the bottom of the chat. While it points
+  it reads "Showing you how". When it finishes it is the green tick and "Done".
+- **Thinking glow:** Soft colour inside the chat, drawn over it and multiplied
+  into it, so words and buttons stay sharp through it. On a dark chat it is
+  screened in. While Haptic waits for the model, a pool of Pointer blue gathers
+  along the bottom of the chat over 0.6 seconds and laps there. When the reply
+  arrives the pool breaks away: it swells into a dome, rises through the chat
+  turning violet and then pink, and is gone 1.6 seconds later. The pool always
+  finishes gathering before it breaks away, and nothing waits for it: the
+  pointer and the reply go ahead. A reply that failed, and a guide that was
+  stopped, fade the pool where it is, with no rise. It never leaves the chat,
+  so the customer's page is never tinted, dimmed or blurred.
 - **Form:** Labels above 44px inputs and one primary button. A required field
   has an Error red star after its label, and a field with no star may be left
   empty. A step that has a way back puts a secondary Back button to the left of
@@ -452,13 +473,14 @@ Components are shadcn/ui, restyled only through tokens and variants.
 
 **Motion.** Restrained. The pointer glide is the one signature movement. It
 eases out with `cubic-bezier(.2, .8, .2, 1)`, quick to leave and slow to land,
-and takes 400 to 700ms depending on how far it travels. It is the one movement
-allowed to run longer than 300ms, because the eye has to follow it. Everything
+and takes 400 to 700ms depending on how far it travels. It and the thinking
+glow are the two movements allowed to run longer than 300ms: the eye has to
+follow the glide, and the glow has to last as long as the wait. Everything
 else is a fade, a small scale or a height change of 150 to 250ms that eases
 out. Nothing grows from nothing: things arrive from within a few percent of
 their final size. A click is acknowledged like a pressed button, with the mark
 dipping to 97 percent and back in a quarter of a second, and no ripple. With reduced motion on, the pointer jumps
-to its target and each demo holds one still frame.
+to its target, there is no glow and no shimmer, and each demo holds one still frame.
 
 Scrolling never changes what a demo shows. A demo waits on its first frame,
 starts once about a third of it is on screen, and keeps playing until it has
@@ -467,34 +489,47 @@ left the screen completely. Nothing switches while any of it can be seen.
 ## Interaction
 
 How a guide should feel. Only what the designer has signed off belongs here.
-Behaviour that merely exists in the widget code is not a design decision, and
-the widget in `src/widget` does not follow this model yet.
+Behaviour that merely exists in the widget code is not a design decision. The
+widget in `src/widget` follows this model, and its chat is the one in the home
+page's demo.
 
 Signed off: Haptic sits in the bottom right, in the place of support chat,
 because it is meant to replace it. The chat stays open once a question is
-asked. Thinking is a shimmer across the word. The rest below is proposed.
+asked. Thinking is a shimmer across the word, with the thinking glow in the
+chat under it. A click on the control is answered with a press. A finished
+guide ends with the green tick and "Done". The line that says Haptic is an AI
+stays. The rest below is proposed.
 
 - **Haptic guides, the person acts.** Haptic points and explains. It does not
   click, type or scroll for anyone.
 - **Mark the control, leave the page alone.** One outline on the target. The
-  page is never dimmed, because the person may need to read it, and the edge of
-  the window never glows, because that is how agents signal that an AI has
-  taken control.
+  page is never dimmed or blurred, because the person may need to read it, and
+  the edge of the window never glows, because that is how agents signal that
+  an AI has taken control. The thinking glow stays inside the chat.
 - **Motion arrives, then stops.** The glide leads the eye. The mark draws in
-  from slightly larger as the pointer lands, then holds still. If nothing
-  happens for about four seconds the mark pulses once, and no more often than
-  that.
+  from slightly larger as the pointer lands, then holds still. Between steps
+  the mark and the caption go and the pointer waits where it is, so the next
+  glide starts from the control just used. If nothing happens for about four
+  seconds the mark pulses once, and no more often than that. The widget does
+  not pulse yet.
 - **Say one thing.** A caption names the next action in a short sentence. It
   carries no buttons.
 - **Keep the conversation and the exit in view.** The chat stays open for the
   whole guide, with the question at the top and a stop button in the ask box.
+- **Never cover the control.** When the chat would sit on the control being
+  pointed at, or on its caption, it closes for that step and comes back when
+  the pointer leaves. For that step only, the caption carries a small × that
+  stops the guide, so the exit is still in view.
 - **A wrong click is not an error, and Haptic says so.** The ask box shows
   "Finding the way from here" at once. The next caption opens with "Not that
   one." and names the step that gets the person back. It is plain text in the
   usual caption: no Error red, no alert. If the click also leads to the goal,
   Haptic carries on without comment.
-- **Finish plainly.** Haptic confirms in a sentence, shows the green tick, and
-  reopens the ask box.
+- **Finish plainly.** Haptic confirms in a sentence in the chat, shows the
+  green tick, and the ask box is ready again. The tick is only for a guide the
+  person followed to the end, the same ending that is billed. An answer in
+  words, a sentence that says Haptic can't help, and a control that was shown
+  and not used all end without it.
 - **An answer is read in the chat.** When Haptic answers in words, the chat
   shows the question as an Ink bubble on the right and the answer as a Muted
   bubble on the left. Under the answer, after a hairline, 12px Muted text says
@@ -546,7 +581,9 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
 - Don't use Done green for anything but the finished mark.
 - Don't add another colour, a gradient, an illustration or artwork. Paintings
   behind the demos were tried and turned down. The window dots on the demo
-  frame are the one borrowed exception.
+  frame and the thinking glow are the two exceptions.
+- Don't let the thinking glow out of the chat, loop it as decoration, or play
+  it for anything but Haptic working on a reply.
 - Don't use Bold, italics for emphasis, or text smaller than 12px.
 - Don't show logos, quotes or numbers that are not real.
 - Don't use punctuation beyond commas and periods in marketing copy.

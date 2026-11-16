@@ -30,8 +30,10 @@ const MAX_THREAD = 6;
 /** A field counts as filled in once typing pauses this long. */
 const TYPING_PAUSE_MS = 1200;
 const STORAGE_KEY = "haptic.guide";
+/** What the chat says while the next step is worked out. */
+const THINKING = "Thinking";
 /** Shown the moment the visitor does something other than the step, while the next step is worked out. */
-const OFF_TRACK = "Finding the way from here…";
+const OFF_TRACK = "Finding the way from here";
 /** A saved guide older than this isn't picked back up after a page load. */
 const RESUME_WINDOW_MS = 3 * 60 * 1000;
 const CLICKABLE = "a[href], button, summary, select, input, textarea, label, [role], [onclick]";
@@ -60,6 +62,8 @@ export function nameOfClicked(clicked: Element): string {
 interface Acted {
   event: string;
   onTarget: boolean;
+  /** They clicked the control they were shown, which the pointer answers with a press. Filling in a field is not a click. */
+  pressed: boolean;
 }
 
 /** A pointer shown before the rest of the reply was in, and what the visitor did with it, if anything yet. */
@@ -169,6 +173,7 @@ export class Guide {
     this.reset();
     this.id = newGuideId();
     this.goal = goal;
+    this.ui.ask(goal);
     void this.turn(this.run);
   }
 
@@ -178,9 +183,7 @@ export class Guide {
     this.thread = [];
     this.transcript = [];
     this.misses = 0;
-    this.ui.clear();
-    this.ui.clearAnswer();
-    this.ui.setBusy("");
+    this.ui.reset();
   }
 
   /** Pick up a guide that a full page load interrupted. */
@@ -197,7 +200,9 @@ export class Guide {
     const here = normalizePath(location.pathname);
     const moved = saved.path === here ? "The page reloaded." : `A new page loaded: the user went from ${saved.path} to ${here}.`;
     const run = this.run;
-    this.ui.setBusy(this.strayed ? OFF_TRACK : "Looking at this page…");
+    // The chat was open on the last page, with the question in it. It is again on this one.
+    this.ui.ask(saved.goal);
+    this.ui.setBusy(this.strayed ? OFF_TRACK : "Looking at this page");
     void settle(this.ui.host).then(() => this.turn(run, [saved.event, moved].filter(Boolean).join(" ")));
   }
 
@@ -218,7 +223,7 @@ export class Guide {
   private async turn(run: number, event?: string, nudged = false): Promise<void> {
     const { ui } = this;
     if (this.step >= MAX_STEPS) return this.finish("That's as far as I can take this one. Ask again to keep going.", "step_limit");
-    ui.setBusy(this.step === 0 ? "Finding it…" : this.strayed ? OFF_TRACK : "Next step…");
+    ui.setBusy(this.strayed ? OFF_TRACK : THINKING);
 
     ui.place();
     let page = takeSnapshot(ui.host);
@@ -252,6 +257,7 @@ export class Guide {
           waiting.acted = what;
           // If this click loads a new page before the reply is in, the next page still needs to know about it.
           this.strayed = !what.onTarget;
+          this.answer(what);
           // The step was shown and acted on, though its sentence is not in yet. Saved as done, so a page this
           // click loads asks the next step and does not ask this one again over the top of it.
           this.save(what.event, {
@@ -270,7 +276,7 @@ export class Guide {
       early.stop();
       if (this.stopWaiting === early.stop) this.stopWaiting = undefined;
       early = undefined;
-      ui.clearPointer();
+      ui.clear();
     };
 
     // If the address changes while the model is answering, the answer is about
@@ -288,7 +294,7 @@ export class Guide {
     const startOver = async () => {
       dropEarly();
       const here = normalizePath(location.pathname);
-      ui.setBusy(this.step === 0 ? "Finding it…" : "Next step…");
+      ui.setBusy(THINKING);
       await settle(ui.host);
       if (run !== this.run) return;
       return this.turn(run, `${event ?? ""} The user went from ${page.snapshot.path} to ${here}.`.trim());
@@ -311,7 +317,7 @@ export class Guide {
         {
           onTarget: pointEarly,
           // An answer takes a moment longer than a pointer, so say what the wait is for.
-          onMode: (mode) => run === this.run && mode === "answer" && ui.setBusy("Reading the help docs…"),
+          onMode: (mode) => run === this.run && mode === "answer" && ui.setBusy("Reading the help docs"),
         },
         abort.signal,
       );
@@ -364,13 +370,14 @@ export class Guide {
     this.strayed = false;
 
     // An answer in words, or a fixed sentence saying Haptic can't help, is read
-    // in the panel, where there is room for it and for the articles it rests on.
+    // in the chat, where there is room for it and for the articles it rests on.
     // A step's sentence stays beside the pointer, in the caption.
     const inPanel = reply.mode === "answer" || reply.mode === "cannot_help";
     if (inPanel) {
       // Earlier questions go to the model with the next one, so they are masked like it.
       this.thread = [...this.thread, { role: "user" as const, text: this.asked }, { role: "assistant" as const, text: reply.say }].slice(-MAX_THREAD);
-      ui.showAnswer(this.goal, reply);
+      // Saying it can't help is not something to mark with colour.
+      ui.showAnswer(reply, reply.mode === "answer");
     } else ui.clearAnswer();
 
     if (inPanel && (!el || !el.isConnected)) {
@@ -400,15 +407,19 @@ export class Guide {
 
     if (reply.status === "done") {
       // The last answer points at something. Leave it up until they click anywhere but on Haptic itself.
-      ui.setBusy("");
-      if (!inPanel) ui.closePanel();
       forget();
       // Going to another page some other way, like the back button, takes it down too.
       let stopAddress = () => {};
       const dismiss = (event?: MouseEvent) => {
-        if (event?.composedPath().includes(ui.host)) return;
+        const path = event?.composedPath() ?? [];
+        if (path.includes(ui.host)) return;
         unlisten();
-        if (run === this.run) ui.clear();
+        if (run !== this.run) return;
+        // A click on the control itself is answered with a press, like any other step.
+        if (path.includes(el) && !isField(el)) ui.press("clear");
+        else ui.clear();
+        // Still waiting to see whether they use it. The pointer is gone, so the chat stops saying it is showing them.
+        if (this.unconfirmed) ui.setBusy("");
       };
       const unlisten = () => {
         document.removeEventListener("click", dismiss, true);
@@ -416,10 +427,13 @@ export class Guide {
       };
       stopAddress = onAddressChange(() => dismiss());
       document.addEventListener("click", dismiss, true);
+      // They used it before the rest of the reply was in, so there is nothing left to show.
+      if (early?.acted) dismiss();
 
       // An answer in words that also points ends as answered, whatever the visitor does next. Answers are not billed.
       if (inPanel) {
         early?.stop();
+        ui.setBusy("");
         this.end("answered");
         this.stopWaiting = unlisten;
         return;
@@ -428,6 +442,7 @@ export class Guide {
       // After following steps, the visitor is on the screen they asked for.
       if (arrived) {
         early?.stop();
+        ui.showDone();
         this.end("finished");
         this.stopWaiting = unlisten;
         return;
@@ -442,6 +457,9 @@ export class Guide {
         this.unconfirmed = undefined;
         window.removeEventListener("pagehide", left);
         stopUse();
+        // They used what they were shown, so the question is done. Anything else just ends the showing.
+        if (used) ui.showDone();
+        else ui.setBusy("");
         this.end(used ? "finished" : "shown");
       };
       const left = () => conclude(false);
@@ -459,8 +477,7 @@ export class Guide {
       return;
     }
 
-    if (inPanel) ui.setBusy("");
-    else ui.closePanel();
+    // The chat stays open while the pointer shows the step, with the way to stop in its ask box.
     this.save();
     const acted = (what: Acted) => {
       this.stopWaiting = undefined;
@@ -470,8 +487,7 @@ export class Guide {
       this.strayed = !what.onTarget;
       // Saved straight away: if this click loads a new page, the next page needs to know about it.
       this.save(what.event);
-      ui.clearPointer();
-      ui.setBusy(this.strayed ? OFF_TRACK : "Next step…");
+      ui.setBusy(this.strayed ? OFF_TRACK : THINKING);
       void settle(ui.host).then(() => {
         if (run === this.run) void this.turn(run, what.event);
       });
@@ -479,7 +495,22 @@ export class Guide {
     // The early pointer is already listening. Hand its result over, now or when it comes.
     if (early?.acted) acted(early.acted);
     else if (early) whenActed = acted;
-    else this.stopWaiting = waitForAction(el, listed, ui.host, acted);
+    else
+      this.stopWaiting = waitForAction(el, listed, ui.host, (what) => {
+        this.answer(what);
+        acted(what);
+      });
+  }
+
+  /**
+   * Answers what the visitor just did, the moment they do it. A click on the
+   * control is acknowledged with a press. Either way the mark and the caption
+   * go, the pointer waits where it is, and the chat says Haptic is thinking.
+   */
+  private answer(what: Acted) {
+    if (what.pressed) this.ui.press("rest");
+    else this.ui.rest();
+    this.ui.setBusy(what.onTarget ? THINKING : OFF_TRACK);
   }
 
   /** Ends a question whose reply is in the panel: nothing to wait for, and the ask box comes back under the answer. */
@@ -492,13 +523,16 @@ export class Guide {
     this.end(outcome);
   }
 
+  /** Ends a guide with a sentence in the chat. One the visitor followed to the end gets the green tick as well. */
   private finish(text: string, outcome: GuideOutcome) {
     this.stopWaiting?.();
     this.stopWaiting = undefined;
     forget();
-    this.ui.setBusy("");
-    this.ui.closePanel();
-    this.ui.say(text);
+    this.ui.clear();
+    // A sentence that says it went wrong, or got nowhere, is not marked with colour.
+    this.ui.say(text, outcome === "finished" || outcome === "shown");
+    if (outcome === "finished") this.ui.showDone();
+    else this.ui.setBusy("");
     this.end(outcome);
   }
 
@@ -512,15 +546,15 @@ export class Guide {
     this.stopWaiting?.();
     this.stopWaiting = undefined;
     forget();
+    this.ui.clear();
+    this.ui.say(text, false);
     this.ui.setBusy("");
-    this.ui.closePanel();
-    this.ui.say(text);
     this.end("error");
   }
 
   /**
    * Reports how the guide ended, once. For an ending where the answer is not
-   * obvious, the caption then asks whether it helped.
+   * obvious, the chat then asks whether it helped.
    */
   private end(outcome: GuideOutcome) {
     const id = this.id;
@@ -649,9 +683,9 @@ function waitForAction(
   const startUrl = location.href;
   let typing: ReturnType<typeof setTimeout> | undefined;
 
-  const finish = (event: string, onTarget: boolean) => {
+  const finish = (event: string, onTarget: boolean, pressed = false) => {
     stop();
-    done({ event, onTarget });
+    done({ event, onTarget, pressed });
   };
   const filled = () => finish(`The user filled in ${name}. You can't see what they entered.`, true);
 
@@ -660,7 +694,7 @@ function waitForAction(
     if (path.includes(host)) return;
     if (path.includes(target)) {
       // For a field, clicking into it isn't the action. Typing or picking is.
-      if (!field) finish(`The user clicked ${name}.`, true);
+      if (!field) finish(`The user clicked ${name}.`, true, true);
       return;
     }
     const other = path.find((node): node is Element => node instanceof Element && node.matches(CLICKABLE));
