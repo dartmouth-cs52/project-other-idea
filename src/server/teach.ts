@@ -18,12 +18,13 @@ import type { SiteContext } from "../shared/types.ts";
 // together reach the session. Each caller is limited in how often it asks.
 
 /** Why a token was turned away. The widget logs it and shows nothing on the page. */
-export type TeachRefusal = "unknown" | "expired" | "used";
+export type TeachRefusal = "unknown" | "expired" | "used" | "closed";
 
 export const TEACH_REFUSED: Record<TeachRefusal, string> = {
   unknown: "That teaching link isn't valid for this site.",
   expired: "That teaching link has expired. Start again from the Haptic dashboard.",
   used: "That teaching link has already been used. Start again from the Haptic dashboard.",
+  closed: "That teaching session was closed. Start again from the Haptic dashboard.",
 };
 
 /** Where teach sessions are kept. Hashes only: neither the token nor the claim is ever stored. */
@@ -182,9 +183,10 @@ export class NeonTeachStore implements TeachStore {
   /** Why a token did not reach an open session. A token of another site is not told apart from one that does not exist. */
   private async why(site: string, tokenHash: string): Promise<TeachRefusal> {
     const [row] = (await this.sql`
-      select expires_at < now() as expired from teach_sessions where token_hash = ${tokenHash} and site_id = ${site}`) as { expired: boolean }[];
+      select expires_at < now() as expired, cancelled_at is not null as closed from teach_sessions
+      where token_hash = ${tokenHash} and site_id = ${site}`) as { expired: boolean; closed: boolean }[];
     if (!row) return "unknown";
-    return row.expired ? "expired" : "used";
+    return row.closed ? "closed" : row.expired ? "expired" : "used";
   }
 }
 
@@ -225,6 +227,7 @@ export class MemoryTeachStore implements TeachStore {
 
   private why(session: MemorySession | undefined, site: string): TeachRefusal {
     if (!session || session.site !== site) return "unknown";
+    if (session.cancelled) return "closed";
     return session.expiresAt <= this.now() ? "expired" : "used";
   }
 

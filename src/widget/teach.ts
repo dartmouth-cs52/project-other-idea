@@ -156,6 +156,7 @@ function refusal(answer: { status: number; data: Record<string, unknown> } | und
   if (why === "expired") return "This teaching link has expired. Start again from your Haptic dashboard.";
   if (why === "used") return "This teaching link has already been used. Start again from your Haptic dashboard.";
   if (why === "unknown") return "This teaching link isn't valid for this site. Start again from your Haptic dashboard.";
+  if (why === "closed") return "This teaching session was closed. Start again from your Haptic dashboard.";
   if (answer.status === 403) return "Haptic can't teach on this address, because the site doesn't allow it. Add it under allowed addresses in your Haptic dashboard.";
   if (answer.status === 429) return "Too many tries with teaching links. Wait a minute, then start again from your Haptic dashboard.";
   if (answer.status === 0) return "Haptic's server couldn't be reached to check this teaching link. Reload the page to try again.";
@@ -386,9 +387,20 @@ export class Teacher {
       return;
     }
     const why = typeof answer.data.error === "string" ? answer.data.error : answer.status === 0 ? "Haptic's server couldn't be reached." : `The server answered ${answer.status}.`;
-    const gone = answer.data.refused === "expired" || answer.data.refused === "used" || answer.data.refused === "unknown";
+    const gone = typeof answer.data.refused === "string";
     this.done.textContent = "Retry";
-    this.say(gone ? `${why} Your steps are still listed here, so you can note them before starting again.` : `The steps weren't sent. ${why} They are kept in this tab: press Retry.`, true);
+    if (gone) {
+      // The session is over, so Retry could never work. Said plainly, and the bar stays until it is closed.
+      this.end();
+      forget();
+      this.done.hidden = true;
+      this.undo.hidden = true;
+      const close = make("button", { type: "button" }, "Close");
+      close.addEventListener("click", () => this.host.remove());
+      this.cancel.replaceWith(close);
+      return this.say(`The steps weren't sent: ${why}`, true);
+    }
+    this.say(`The steps weren't sent. ${why} They are kept in this tab: press Retry.`, true);
   }
 
   private async stop() {
