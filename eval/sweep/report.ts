@@ -50,11 +50,7 @@ export function faultsOf(r: SiteResult): FaultSeen[] {
   if (idle && idle.layoutMoved > 0) add("idle layout", "The page's own elements moved with Haptic present and idle", `${idle.layoutMoved} of ${idle.layoutStable} moved: ${idle.layoutExamples.slice(0, 2).join("; ")}`);
   if (idle?.scrollChanged) add("idle scroll size", "The page's scrollable size changed with Haptic present", idle.scrollChanged);
   if (idle?.focusDiffers || idle?.initialFocusDiffers) add("idle focus", "The keyboard's order through the page changed with Haptic present", idle.initialFocusDiffers ?? idle.focusDiffers ?? "");
-  // Keys that reached the page's window, of the presses made while the page had the keyboard. Haptic stops none of those.
-  const reachedShare = (record: { pressed: number; reached: number } | undefined) => (record && record.pressed ? record.reached / record.pressed : -1);
-  const keysOf = (label: string) => reachedShare(r.loads.find((load) => load.label === label)?.keys);
-  if (idle && keysOf("B1") >= 0 && keysOf("A1") === keysOf("A2") && keysOf("A1") >= 0 && keysOf("B1") < keysOf("A1"))
-    add("idle keys", "Keys pressed on the page reached its window a different number of times with Haptic present", `${idle.keysReached.without[0]} without, ${idle.keysReached.with[0]} with, of ${idle.keysReached.pressed}`);
+  if (idle?.keysLost) add("idle keys", "A key pressed on the page reached the page's window without Haptic and not with it", idle.keysLost);
   if (r.stepThrows?.length) add("step throws", "Haptic threw an error into the page during the step", r.stepThrows[0]!);
 
   // Reading the page.
@@ -77,14 +73,17 @@ export function faultsOf(r: SiteResult): FaultSeen[] {
     // A control the accessibility tree names is the widget's fault. One nothing names is the page's, which a model can still place by its surroundings.
     const unnamedByRole = new Map<string, string[]>();
     for (const u of listed.unnamed) {
-      const key = `${u.line.split(" ")[0]!}|${u.treeName ? "named" : "nameless"}`;
+      const key = `${u.line.split(" ")[0]!}|${u.treeName ? "named" : u.inTree === false ? "not a control" : "nameless"}`;
       unnamedByRole.set(key, [...(unnamedByRole.get(key) ?? []), `${u.line}${u.treeName ? ` (tree: "${u.treeName}")` : ""} ${u.markup}`]);
     }
     for (const [key, examples] of unnamedByRole) {
       const [role, named] = key.split("|");
       if (named === "named") add(`unnamed ${role}`, `A ${role} the accessibility tree names is listed with no name`, examples.slice(0, 2).join("; "));
+      else if (named === "not a control") add(`unnamed box ${role}`, `A box the accessibility tree has no control for is listed as "${role}" with no name, taking a place in the list`, examples.slice(0, 2).join("; "));
       else add(`nameless ${role}`, `A ${role} that nothing on the page names is listed as just "${role}"`, examples.slice(0, 2).join("; "), "page");
     }
+    if (listed.covered > 0)
+      add("listed covered", "Controls listed as usable in the window, though something of the page's is over them and a click would land on that", listed.coveredExamples.slice(0, 2).map((c) => `${c.line} under ${c.blocker}`).join("; "));
     const apart = listed.duplicates.filter((d) => !d.treeSame);
     if (apart.length) add("same line apart", "Controls listed with the same whole line, though the accessibility tree names them apart", apart.slice(0, 2).map((d) => `${d.count} x ${d.line} ${d.markup}`).join("; "));
     const alike = listed.duplicates.filter((d) => d.treeSame);
@@ -100,12 +99,13 @@ export function faultsOf(r: SiteResult): FaultSeen[] {
   else if (s?.askNotes) add("ask trouble", "Asking took a second try", s.askNotes);
   if (s?.skipped === "the widget never sent the page after the question") add("no first step", "The widget never sent the page after the question", "");
   if (s?.kind) {
-    if (!s.pointed) add("step no pointer", "The pointer never went to the control it was given", `${s.line} ${s.markup}`);
+    if (!s.pointed && s.heard !== "failed") add("step no pointer", "The pointer never went to the control it was given", `${s.line} ${s.markup}`);
     else if (s.pointer && !s.pointer.tipHits) add("step tip off", "The pointer's tip is not on the control: a click there would land on something else", `${s.line}; tip ${s.pointer.tip.x},${s.pointer.tip.y} on ${s.pointer.underTip}; box ${JSON.stringify(s.pointer.box)}`);
     if (s.pointer && (s.pointer.captionOverMiddle || s.pointer.captionShare >= 0.3)) add("step caption covers", "Haptic's caption covers the control it points at", `${s.line}; ${Math.round(s.pointer.captionShare * 100)}% covered${s.pointer.captionOverMiddle ? ", the middle too" : ""}`);
     if (s.pointer && (s.pointer.dockOverMiddle || s.pointer.dockShare >= 0.3)) add("step launcher covers", "Haptic's launcher covers the control it points at", `${s.line}; ${Math.round(s.pointer.dockShare * 100)}% covered`);
     if (s.blocker && !s.coveredByHaptic) add("step page covers", "Something of the page's is in front of the control pointed at", `${s.line}; ${s.blocker}`);
-    if (s.heard === "none") add("step unheard", "After the visitor used the control, the widget never asked again", `${s.line} ${s.markup}; ${s.effect ?? ""}`);
+    if (s.heard === "none") add("step unheard", "After the visitor used the control, the widget never asked again", `${s.line} ${s.markup}; ${s.effect ?? ""}; ${s.why ?? ""}`);
+    if (s.heard === "failed") add("step failed", "The widget gave up with its own error message during the step", `${s.line}: ${s.why ?? ""}; ${[...(r.stepWarnings ?? [])].slice(0, 1).join("")}`);
     if (s.heard === "wrong") add("step heard wrong", "The widget said the visitor did something other than what they did", `${s.line}: ${s.event}`);
     if (s.heard === "unclear") add("step sentence", "The widget's sentence about the click does not name the control or what was done", `${s.line}: ${s.event ?? "(none)"}${s.why ? ` (${s.why})` : ""}`);
     if (s.navigated) add("step left page", "The control pointed at loaded another page", `${s.line} ${s.markup}`);
@@ -150,9 +150,9 @@ function stepCell(r: SiteResult): string {
 
 /** The table of every site, one row each. */
 export function siteTable(results: SiteResult[]): string {
-  const header = ["site", "result", "launcher", "read (fastest)", "listed", "found / expected (on screen)", "unnamed", "same lines", "Haptic idle", "step", "cannot ever"];
+  const header = ["site", "result", "launcher", "read (fastest)", "listed", "found / expected (on screen)", "unnamed", "same lines", "covered", "Haptic idle", "step", "cannot ever"];
   const rows = results.map((r) => {
-    if (r.status !== "tested") return [r.id, `${r.status}: ${r.whyNot ?? ""}`.slice(0, 140), "", "", "", "", "", "", "", "", ""];
+    if (r.status !== "tested") return [r.id, `${r.status}: ${r.whyNot ?? ""}`.slice(0, 140), "", "", "", "", "", "", "", "", "", ""];
     const l = r.launcher;
     // As in the faults: a pinned control anywhere, or one at the foot of the page that cannot be scrolled out from under.
     const covers = [...(l?.coveredTop ?? []).filter((c) => c.pinned), ...(l?.coveredBottom ?? [])].filter(coveredMuch);
@@ -171,7 +171,7 @@ export function siteTable(results: SiteResult[]): string {
       inv?.frames.some((f) => !f.sameOrigin && (f.controls ?? 0) > 0) ? `${inv.frames.filter((f) => !f.sameOrigin && (f.controls ?? 0) > 0).length} foreign frames` : "",
       lst?.closedShadow ? `${lst.closedShadow} in closed roots` : "",
     ].filter(Boolean).join(", ");
-    return [r.id, faultsOf(r).some((f) => f.kind === "wrong") ? "faults" : "passed", launcher, reading, listedCount, found, lst ? String(lst.unnamedCount) : "", lst ? `${lst.duplicateLines} in ${lst.duplicateGroups}` : "", idleBits, stepCell(r), never];
+    return [r.id, faultsOf(r).some((f) => f.kind === "wrong") ? "faults" : "passed", launcher, reading, listedCount, found, lst ? String(lst.unnamedCount) : "", lst ? `${lst.duplicateLines} in ${lst.duplicateGroups}` : "", lst ? String(lst.covered) : "", idleBits, stepCell(r), never];
   });
   return [header, header.map(() => "---"), ...rows].map((row) => `| ${row.map(cell).join(" | ")} |`).join("\n");
 }

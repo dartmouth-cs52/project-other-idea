@@ -20,6 +20,14 @@ export interface LoadRecord {
   hapticThrows: string[];
   /** Warnings Haptic printed, which it does when something of its own went wrong and it caught it. */
   hapticWarnings: string[];
+  /**
+   * The errors, and the count of stopped requests, as they stood at the end of
+   * the idle checks: the same moment in every load, before anything that only
+   * some loads do, like scrolling to the foot of the page or the step.
+   */
+  idleErrors?: string[];
+  idleWarnings?: string[];
+  idleStopped?: number;
   /** Requests the page tried that were not a plain read, stopped in the browser, by method, host and path. */
   stopped: Record<string, number>;
   /** WebSockets opened, and messages sent on them, which are counted and not stopped. */
@@ -29,8 +37,12 @@ export interface LoadRecord {
   layout?: { anchors: Record<string, string>; scroll: string };
   /** What had the keyboard after the page loaded, and after each press of Tab. */
   focus?: { initial: string; tabs: string[] };
-  /** Presses of Tab, and how many reached a listener on the page's window. */
-  keys?: { pressed: number; reached: number };
+  /**
+   * Presses of Tab made while the page had the keyboard, and how many reached
+   * a listener on the page's window. `presses` has, for each press, what had
+   * the keyboard before it and whether it reached the window.
+   */
+  keys?: { pressed: number; reached: number; presses?: [string, boolean][] };
   /** Why the site could not be tested: a bot check or a block. */
   blocked?: string;
   /** The load itself failed. */
@@ -105,7 +117,10 @@ export interface ListedResult {
   /** On-screen ones first. At most 25. */
   missing: MissingControl[];
   unnamedCount: number;
-  unnamed: { line: string; treeName: string; markup: string }[];
+  /** `inTree`: the accessibility tree has a control there, with `treeName` its name. */
+  unnamed: { line: string; treeName: string; inTree: boolean; markup: string }[];
+  /** Listed entries with no name that the accessibility tree has no control for. */
+  unnamedNotInTree: number;
   /** Groups of listed controls whose whole line is the same, and how many lines are in such groups. */
   duplicateGroups: number;
   duplicateLines: number;
@@ -114,6 +129,14 @@ export interface ListedResult {
   stateMissing: { line: string; treeState: string; markup: string }[];
   lines: number;
   distinct: number;
+  /**
+   * Listed controls inside the window that a click anywhere on them would not
+   * reach, because something of the page's is over them, and what is over them.
+   * Haptic's open box over a control is counted apart.
+   */
+  covered: number;
+  coveredExamples: { line: string; blocker: string }[];
+  underHaptic: number;
   /** The list read beside it to tie entries to elements was the same as the one the widget sent. */
   matchedSent: boolean;
   /** The accessibility tree had more controls than were looked at. */
@@ -148,7 +171,8 @@ export interface InventoryResult {
   lang: string;
 }
 
-export type Heard = "true" | "wrong" | "unclear" | "none" | "silent";
+/** "failed": the widget gave up with its own error message. */
+export type Heard = "true" | "wrong" | "unclear" | "none" | "silent" | "failed";
 
 /** The one scripted step: a pointer at a safe control, used with the real mouse. */
 export interface StepResult {
@@ -205,8 +229,10 @@ export interface IdleResult {
   layoutMoved: number;
   layoutExamples: string[];
   scrollChanged?: string;
-  /** The first place the order of Tab differed with Haptic, when the loads without it agreed. */
+  /** The first place the order of Tab differed with Haptic, when the loads without it agreed and the loads with it agreed. */
   focusCompared: number;
+  /** A press of Tab, from the same place, that reached the page's window in both loads without Haptic and in neither with it. */
+  keysLost?: string;
   focusDiffers?: string;
   initialFocusDiffers?: string;
   keysReached: { without: number[]; with: number[]; pressed: number };

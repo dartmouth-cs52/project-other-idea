@@ -40,7 +40,7 @@ export const SITES: Site[] = [
   { id: "nopcommerce", url: "https://demo.nopcommerce.com/", kinds: ["saas-demo", "shop"], why: "nopCommerce's own store demo: an ASP.NET shop of the kind mid-size retailers run, with category menus, filters and a cart." },
   { id: "opencart", url: "https://demo.opencart.com/", kinds: ["saas-demo", "shop"], why: "OpenCart's demo store: PHP with jQuery and Bootstrap dropdowns, the older stack many small shops still run." },
   { id: "prestashop", url: "https://demo.prestashop.com/", kinds: ["saas-demo", "shop", "frames"], why: "PrestaShop's demo shows the whole shop inside an iframe under a demo bar, so it stands for an app the widget sees only the frame of." },
-  { id: "vercel-commerce", url: "https://demo.vercel.store/", kinds: ["saas-demo", "shop", "react"], why: "Vercel's Next.js Commerce: React Server Components hydrating the whole document, which is where an element added to the page can upset hydration." },
+  { id: "vercel-commerce", url: "https://nextjs-commerce.vercel.app/", kinds: ["saas-demo", "shop", "react"], why: "Vercel's Next.js Commerce demo: React Server Components hydrating the whole document, which is where an element added to the page can upset hydration." },
   { id: "swagger-petstore", url: "https://petstore.swagger.io/", kinds: ["saas-demo", "docs", "react", "forms"], why: "Swagger UI, embedded in countless API products: every operation is an accordion that opens into a form." },
   { id: "home-assistant", url: "https://demo.home-assistant.io/", kinds: ["saas-demo", "admin", "web-components"], why: "Home Assistant's public demo: a dashboard built from Lit web components nested many shadow roots deep." },
   { id: "plausible", url: "https://plausible.io/plausible.io", kinds: ["saas-demo", "admin", "react"], why: "Plausible's own analytics shown publicly: a React dashboard with tabs over tables and a chart, the shape of most analytics SaaS." },
@@ -56,9 +56,9 @@ export const SITES: Site[] = [
   { id: "adminlte", url: "https://adminlte.io/themes/v3/", kinds: ["admin"], why: "AdminLTE, the most used free admin template: Bootstrap and jQuery, a tree menu in the sidebar, cards that collapse, charts on canvas." },
   { id: "tabler", url: "https://preview.tabler.io/", kinds: ["admin"], why: "Tabler's dashboard preview: Bootstrap 5 dropdown menus, data tables and charts, as in many internal tools." },
   { id: "material-dashboard", url: "https://demos.creative-tim.com/material-dashboard-react/#/dashboard", kinds: ["admin", "react"], why: "Creative Tim's Material Dashboard React: an MUI admin template with hash routing, a common starting point for internal apps." },
-  { id: "coreui", url: "https://coreui.io/demos/react/5.x/free/#/dashboard", kinds: ["admin", "react"], why: "CoreUI's React admin demo, with a sidebar of collapsible groups and a header of dropdowns." },
+  { id: "coreui", url: "https://coreui.io/demos/react/latest/free/#/dashboard", kinds: ["admin", "react"], why: "CoreUI's React admin demo, with a sidebar of collapsible groups and a header of dropdowns." },
   { id: "vuestic", url: "https://admin-demo.vuestic.dev/", kinds: ["admin", "vue"], why: "Vuestic Admin, a Vue 3 dashboard demo, for admin consoles built on Vue." },
-  { id: "ngx-admin", url: "https://demo.akveo.com/ngx-admin/pages/dashboard", kinds: ["admin", "angular"], why: "ngx-admin, an Angular dashboard on Nebular, for admin consoles built on Angular." },
+  { id: "ngx-admin", url: "https://demo.akveo.com/ngx-admin/", kinds: ["admin", "angular"], why: "ngx-admin, an Angular dashboard on Nebular, for admin consoles built on Angular." },
 
   // Canvas-heavy apps --------------------------------------------------------
   { id: "excalidraw", url: "https://excalidraw.com/", kinds: ["canvas", "react"], why: "A whiteboard drawn on a canvas, with a React toolbar around it: the widget can read the toolbar and never the drawing." },

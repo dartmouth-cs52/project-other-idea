@@ -100,9 +100,14 @@ export async function cspSite(browser: Browser, bundles: Bundles, sweepJs: strin
     }
     if (!(await page.evaluate("!!window.__hapticSweep"))) await page.evaluate(sweepJs);
     const signs: string = await page.evaluate(`window.__hapticSweep.blockSigns(${opened.record.status})`);
+    if (signs.startsWith("gone: ")) {
+      result.status = "could not reach";
+      result.whyNot = `the page is not there: ${signs.slice(6)}`;
+      return result;
+    }
     if (signs) {
       result.status = "could not test";
-      result.whyNot = `the site showed a bot check or a block: ${signs}`;
+      result.whyNot = `the site showed a bot check, a block or an error page: ${signs}`;
       return result;
     }
     const header = opened.headers["content-security-policy"];

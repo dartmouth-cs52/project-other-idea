@@ -27,8 +27,12 @@ const TABS = 8;
 const BETWEEN_LOADS_MS = 1500;
 /** How long the widget may take to send its first question: it waits up to twelve seconds for a page that lists nothing. */
 const FIRST_QUESTION_MS = 25_000;
-/** How long it may take to ask after the visitor used the control. */
-const NEXT_QUESTION_MS = 12_000;
+/**
+ * How long it may take to ask after the visitor used the control. The widget
+ * waits up to twelve seconds for a page that still shows it is loading, and a
+ * page whose request the net stopped can show that for good.
+ */
+const NEXT_QUESTION_MS = 20_000;
 /** At most this many of the accessibility tree's controls are looked at on one page. */
 const MAX_AX = 6000;
 
@@ -244,10 +248,14 @@ async function judgeListed(live: Live, state: PageState, sent: Snapshot): Promis
   const listed = state.reading.snapshot.elements;
   const unnamed: ListedResult["unnamed"] = [];
   let unnamedCount = 0;
-  for (const element of listed) {
-    if (element.label || element.icon) continue;
+  let unnamedNotInTree = 0;
+  // The ones the tree names come first: they are the widget's to fix.
+  const nameless = listed.filter((element) => !element.label && !element.icon).sort((a, b) => Number(!!treeName.get(b.id)) - Number(!!treeName.get(a.id)));
+  for (const element of nameless) {
     unnamedCount++;
-    if (unnamed.length < 10) unnamed.push({ line: lineOf(element), treeName: treeName.get(element.id) ?? "", markup: await live.toolkit<string>("markup", state.reading.ids[element.id]!) });
+    const inTree = treeName.has(element.id);
+    if (!inTree) unnamedNotInTree++;
+    if (unnamed.length < 12) unnamed.push({ line: lineOf(element), treeName: treeName.get(element.id) ?? "", inTree, markup: await live.toolkit<string>("markup", state.reading.ids[element.id]!) });
   }
   const stateMissing: ListedResult["stateMissing"] = [];
   let stateMissingCount = 0;
@@ -272,7 +280,16 @@ async function judgeListed(live: Live, state: PageState, sent: Snapshot): Promis
     const treeSame = new Set(group.map((element) => treeName.get(element.id) ?? "")).size === 1;
     if (duplicates.length < 10) duplicates.push({ line: line.slice(0, 160), count: group.length, treeSame, markup: await live.toolkit<string>("markup", state.reading.ids[group[0]!.id]!) });
   }
+  // Listed controls in the window that a click would not reach.
+  const inWindow = sent.elements.filter((element) => !element.offscreen).map((element) => element.id);
+  const handleOf = sentIds(state.reading, sent);
+  const coveredList = await live.sweep<{ handle: number; blocker: string; byHaptic: boolean }[]>("covered", inWindow.map((id) => handleOf.get(id)).filter((h): h is number => h !== undefined));
+  const lineByHandle = new Map([...handleOf].map(([id, handle]) => [handle, sent.elements.find((element) => element.id === id)!]));
+  const byPage = coveredList.filter((c) => !c.byHaptic);
   return {
+    covered: byPage.length,
+    coveredExamples: byPage.slice(0, 8).map((c) => ({ line: lineOf(lineByHandle.get(c.handle)!).slice(0, 120), blocker: c.blocker })),
+    underHaptic: coveredList.length - byPage.length,
     expected,
     found,
     onScreenExpected,
@@ -281,6 +298,7 @@ async function judgeListed(live: Live, state: PageState, sent: Snapshot): Promis
     missingByReason,
     missing,
     unnamedCount,
+    unnamedNotInTree,
     unnamed,
     duplicateGroups,
     duplicateLines,
@@ -296,27 +314,42 @@ async function judgeListed(live: Live, state: PageState, sent: Snapshot): Promis
 
 // Idle: what Haptic changes by being there ---------------------------------------
 
-async function idleChecks(live: Live, record: LoadRecord, tabs: boolean) {
+async function idleChecks(ctx: SweepContext, opened: Opened, live: Live, tabs: boolean) {
+  const record = opened.record;
   record.layout = await live.sweep("layout");
   record.focus = { initial: await live.sweep<string>("focusName"), tabs: [] };
-  if (!tabs) return;
+  const snapshot = () => {
+    countTraffic(ctx, opened);
+    record.idleErrors = [...record.errors];
+    record.idleWarnings = [...record.hapticWarnings];
+    record.idleStopped = stoppedCount(record);
+  };
+  if (!tabs) return snapshot();
   // Only a key pressed while the page has the keyboard counts. One pressed while Haptic's own launcher has it is Haptic's.
-  record.keys = { pressed: 0, reached: 0 };
+  record.keys = { pressed: 0, reached: 0, presses: [] };
   let from = record.focus.initial;
   for (let i = 0; i < TABS; i++) {
     const before = await live.sweep<number>("keys");
     await live.page.keyboard.press("Tab");
     await live.page.waitForTimeout(150);
+    const reached = (await live.sweep<number>("keys")) > before;
+    record.keys.presses!.push([from, reached]);
     if (from !== "haptic") {
       record.keys.pressed++;
-      if ((await live.sweep<number>("keys")) > before) record.keys.reached++;
+      if (reached) record.keys.reached++;
     }
     from = await live.sweep<string>("focusName");
     record.focus.tabs.push(from);
   }
+  snapshot();
+  // Tab may have scrolled the page or opened something on focus. The page is put back at its top.
+  await live.sweep("toTop");
 }
 
 const stoppedCount = (record: LoadRecord) => Object.values(record.stopped).reduce((sum, n) => sum + n, 0);
+
+/** Errors a page logs because the net stopped one of its requests. */
+const BY_THE_NET = /ERR_BLOCKED_BY_CLIENT|Failed to fetch|NetworkError|networking error|Load failed|net::ERR_FAILED|status of 0\b/i;
 
 /**
  * What differs with Haptic present and idle. Something counts only when both
@@ -324,21 +357,24 @@ const stoppedCount = (record: LoadRecord) => Object.values(record.stopped).reduc
  * disagree: a page that differs from load to load by itself says nothing.
  */
 export function compareIdle(a1: LoadRecord, a2: LoadRecord, b1: LoadRecord, b2: LoadRecord): IdleResult {
-  const without = new Set([...a1.errors, ...a2.errors]);
-  const errorsNew = b1.errors.filter((error) => b2.errors.includes(error) && !without.has(error));
-  const errorsGone = a1.errors.filter((error) => a2.errors.includes(error) && !b1.errors.includes(error) && !b2.errors.includes(error));
+  // An error about a request the net stopped comes whenever the page's timer sends it, with Haptic or without.
+  const errorsOf = (record: LoadRecord) => (record.idleErrors ?? record.errors).filter((error) => !BY_THE_NET.test(error));
+  const [e1, e2, f1, f2] = [errorsOf(a1), errorsOf(a2), errorsOf(b1), errorsOf(b2)];
+  const without = new Set([...e1, ...e2]);
+  const errorsNew = f1.filter((error) => f2.includes(error) && !without.has(error));
+  const errorsGone = e1.filter((error) => e2.includes(error) && !f1.includes(error) && !f2.includes(error));
   const result: IdleResult = {
     errorsNew,
     errorsGone,
     hapticThrows: [...new Set([...b1.hapticThrows, ...b2.hapticThrows])],
-    hapticWarnings: [...new Set([...b1.hapticWarnings, ...b2.hapticWarnings])],
+    hapticWarnings: [...new Set([...(b1.idleWarnings ?? b1.hapticWarnings), ...(b2.idleWarnings ?? b2.hapticWarnings)])],
     layoutStable: 0,
     layoutMoved: 0,
     layoutExamples: [],
     focusCompared: 0,
     keysReached: { without: [a1.keys?.reached ?? -1, a2.keys?.reached ?? -1], with: [b1.keys?.reached ?? -1], pressed: Math.min(a1.keys?.pressed ?? 0, b1.keys?.pressed ?? 0) },
-    stoppedWithout: Math.max(stoppedCount(a1), stoppedCount(a2)),
-    stoppedWith: Math.max(stoppedCount(b1), stoppedCount(b2)),
+    stoppedWithout: Math.max(a1.idleStopped ?? stoppedCount(a1), a2.idleStopped ?? stoppedCount(a2)),
+    stoppedWith: Math.max(b1.idleStopped ?? stoppedCount(b1), b2.idleStopped ?? stoppedCount(b2)),
   };
   const [la1, la2, lb1, lb2] = [a1.layout, a2.layout, b1.layout, b2.layout];
   if (la1 && la2 && lb1 && lb2) {
@@ -357,14 +393,26 @@ export function compareIdle(a1: LoadRecord, a2: LoadRecord, b1: LoadRecord, b2: 
   if (fa1 && fa2 && fb1 && fb2 && fa1.initial === fa2.initial && fb1.initial === fb2.initial && fa1.initial !== fb1.initial) {
     result.initialFocusDiffers = `${fa1.initial} -> ${fb1.initial}`;
   }
-  if (fa1 && fa2 && fb1) {
-    for (let i = 0; i < Math.min(fa1.tabs.length, fa2.tabs.length, fb1.tabs.length); i++) {
-      if (fa1.tabs[i] !== fa2.tabs[i]) break;
+  if (fa1 && fa2 && fb1 && fb2) {
+    for (let i = 0; i < Math.min(fa1.tabs.length, fa2.tabs.length, fb1.tabs.length, fb2.tabs.length); i++) {
+      if (fa1.tabs[i] !== fa2.tabs[i] || fb1.tabs[i] !== fb2.tabs[i]) break;
       result.focusCompared++;
       // Haptic's own launcher comes last in the order, after the page's: reaching it is not a difference.
       if (fb1.tabs[i] === "haptic") break;
       if (fb1.tabs[i] !== fa1.tabs[i]) {
         result.focusDiffers = `Tab ${i + 1}: ${fa1.tabs[i]} -> ${fb1.tabs[i]}`;
+        break;
+      }
+    }
+  }
+  // A key pressed from the same place reaches the window without Haptic and not with it.
+  const [ka1, ka2, kb1, kb2] = [a1.keys?.presses, a2.keys?.presses, b1.keys?.presses, b2.keys?.presses];
+  if (ka1 && ka2 && kb1 && kb2) {
+    for (let i = 0; i < Math.min(ka1.length, ka2.length, kb1.length, kb2.length); i++) {
+      const place = ka1[i]![0];
+      if (ka2[i]![0] !== place || kb1[i]![0] !== place || kb2[i]![0] !== place) break;
+      if (ka1[i]![1] && ka2[i]![1] && !kb1[i]![1] && !kb2[i]![1]) {
+        result.keysLost = `Tab ${i + 1}, from ${place}`;
         break;
       }
     }
@@ -470,6 +518,7 @@ interface Candidate {
   inNav: boolean;
   words: string;
   onScreen: boolean;
+  hitsItself: boolean;
   reachable: boolean;
   top: number;
   markup: string;
@@ -482,7 +531,7 @@ interface Candidate {
  * menu is used: none of them can submit, buy, sign in, delete or send.
  */
 function stepKind(element: SnapElement, c: Candidate): StepResult["kind"] | undefined {
-  if (c.disabled || c.consent || c.submits || c.newWindow || !c.reachable) return undefined;
+  if (c.disabled || c.consent || c.submits || c.newWindow || !c.reachable || !c.hitsItself) return undefined;
   if (NOT_A_STEP.has(element.role) || c.tag === "input" || c.tag === "select" || c.tag === "textarea") return undefined;
   if (RISKY.test(`${element.label} ${c.words}`)) return undefined;
   // A link that leads off the page is never used.
@@ -602,6 +651,16 @@ async function runStep(live: Live, session: Session, id: string, turn: Turn, sta
     target = remapped;
   }
   result.pointed = pointed;
+  if (!pointed) {
+    // A widget that gave up before pointing leaves nothing for the visitor to use.
+    const said = await live.sweep<{ caption: string; status: string; state: string }>("said").catch(() => undefined);
+    if (said?.caption && /went wrong/i.test(said.caption)) {
+      result.heard = "failed";
+      result.why = `the widget gave up before pointing, with "${said.caption}"`;
+      await shoot(live.page, `${id}-pointer`, sent);
+      return result;
+    }
+  }
   // The pointer glides there and the page may scroll to it: wait until both have stopped.
   await holdStill(live, handle);
   await live.page.waitForTimeout(800);
@@ -633,8 +692,18 @@ async function runStep(live: Live, session: Session, id: string, turn: Turn, sta
   if (!next) {
     // Something opened, and the widget waits, by design, for a pick in it. A pick is not made: it could lead anywhere.
     const opened = /expanded (false|-) -> true|open false -> true/.test(result.effect ?? "");
+    const said = await live.sweep<{ caption: string; status: string; state: string }>("said").catch(() => undefined);
+    if (said?.caption && /went wrong/i.test(said.caption)) {
+      result.heard = "failed";
+      result.why = `the widget gave up with "${said.caption}"`;
+      return result;
+    }
     result.heard = opened ? "silent" : "none";
-    result.why = opened ? "the widget asked nothing after the control opened something; it waits for a pick in it, by design" : "the widget never asked its next question";
+    result.why = opened
+      ? "the widget asked nothing after the control opened something; it waits for a pick in it, by design"
+      : said?.state === "asking"
+        ? `the widget heard the click and was still waiting for the page to settle ("${said.status}") ${NEXT_QUESTION_MS / 1000} seconds later`
+        : `the widget never asked its next question (it was "${said?.state ?? "gone"}"${said?.caption ? `, showing "${said.caption}"` : ""})`;
     return result;
   }
   result.event = next.request.event;
@@ -678,10 +747,15 @@ export async function sweepSite(browser: Browser, bundles: Bundles, sweepJs: str
     }
     if (opened.page && !opened.page.isClosed()) {
       const signs = await new Live(opened.page, sweepJs).sweep<string>("blockSigns", opened.record.status).catch(() => "");
+      if (signs.startsWith("gone: ")) {
+        result.status = "could not reach";
+        result.whyNot = `the page is not there: ${signs.slice(6)}`;
+        return undefined;
+      }
       if (signs) {
         opened.record.blocked = signs;
         result.status = "could not test";
-        result.whyNot = `${label === "A1" ? "" : `on load ${label}, `}the site showed a bot check or a block: ${signs}`;
+        result.whyNot = `${label === "A1" ? "" : `on load ${label}, `}the site showed a bot check, a block or an error page: ${signs}`;
         return undefined;
       }
     }
@@ -698,7 +772,7 @@ export async function sweepSite(browser: Browser, bundles: Bundles, sweepJs: str
     // A1: the page as it is.
     const a1 = await load("A1", "plain");
     if (!a1) return done();
-    await idleChecks(new Live(a1.page, sweepJs), a1.record, true);
+    await idleChecks(ctx, a1, new Live(a1.page, sweepJs), true);
     countTraffic(ctx, a1);
     await a1.page.close();
     log(`    A1 ${a1.record.status} "${a1.record.title.slice(0, 50)}" ${a1.record.ms} ms, ${a1.record.errors.length} errors`);
@@ -712,7 +786,7 @@ export async function sweepSite(browser: Browser, bundles: Bundles, sweepJs: str
       result.launcher = { there: false, shown: false, onTop: false, coveredTop: [], coveredBottom: [] };
     } else {
       const live = new Live(b1.page, sweepJs, b1.session);
-      await idleChecks(live, b1.record, true);
+      await idleChecks(ctx, b1, live, true);
       result.launcher = await launcherCheck(live, site.id);
     }
     countTraffic(ctx, b1);
@@ -725,7 +799,7 @@ export async function sweepSite(browser: Browser, bundles: Bundles, sweepJs: str
     if (!b2) return done();
     if (b2.session) {
       const live = new Live(b2.page, sweepJs, b2.session);
-      await idleChecks(live, b2.record, false);
+      await idleChecks(ctx, b2, live, true);
       const loadErrors = [...b2.record.errors];
       await live.toolkit("setContainer", await b2.session.handleOf(b2.page.locator("body")));
       try {
@@ -783,7 +857,7 @@ export async function sweepSite(browser: Browser, bundles: Bundles, sweepJs: str
     // A2: the page as it is, again.
     const a2 = await load("A2", "plain");
     if (!a2) return done();
-    await idleChecks(new Live(a2.page, sweepJs), a2.record, true);
+    await idleChecks(ctx, a2, new Live(a2.page, sweepJs), true);
     countTraffic(ctx, a2);
     await a2.page.close();
     if (loads.A1 && loads.A2 && loads.B1 && loads.B2) result.idle = compareIdle(loads.A1, loads.A2, loads.B1, loads.B2);

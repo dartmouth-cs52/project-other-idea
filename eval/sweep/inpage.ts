@@ -192,6 +192,8 @@ const sweep = {
     if (frames.some((src) => /challenges\.cloudflare\.com|captcha-delivery\.com|geo\.captcha|perimeterx|px-cdn|hcaptcha\.com\/captcha/.test(src)) && short) return "a bot check is in a frame";
     if (short && /verify you are (a )?human|unusual traffic|are you a robot|press (&|and) hold|captcha|you have been blocked|access denied|automated (access|queries)|incapsula incident|enable javascript and cookies to continue|checking your browser/i.test(text))
       return `the page says "${text.slice(0, 120)}"`;
+    // A single-page app can answer 404 and draw itself all the same: only a page that says it is not there is gone.
+    if ((status === 404 || status === 410) && short && /not found|n.t exist|does not exist|no longer|\b404\b/i.test(`${title} ${text}`)) return `gone: the address answered ${status}, "${text.slice(0, 80)}"`;
     if (status >= 400 && short) return `the site answered ${status} with "${text.slice(0, 100)}"`;
     // A challenge that runs as a script and then reloads the page: "202 Accepted" with next to nothing in it.
     if (status === 202 && text.length < 200) return `the site answered 202 with a page of ${text.length} characters, a challenge that has to send its answer back`;
@@ -465,6 +467,12 @@ const sweep = {
         inNav: !!closestDeep(el, 'nav, header, [role="navigation"], [role="banner"]'),
         words: wordsOf(el),
         onScreen: r.width > 0 && r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth,
+        // On screen, a click at its middle lands on it: nothing of the page's is over it, and it is not drawn away to nothing.
+        hitsItself: (() => {
+          if (!(r.width > 0 && r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth)) return true;
+          const hit = pageAt(r.left + r.width / 2, r.top + r.height / 2)[0];
+          return !!hit && (within(el, hit) || within(hit, el));
+        })(),
         // A box a visitor can bring into the window by scrolling: not a skip link parked above the page, not a speck.
         reachable:
           r.width >= 4 &&
@@ -478,6 +486,45 @@ const sweep = {
         disabled: el.hasAttribute("disabled") || el.getAttribute("aria-disabled") === "true",
       };
     });
+  },
+
+  /**
+   * For listed controls inside the window: whether a click anywhere on them
+   * would land on something else of the page's, and on what. Haptic's own
+   * parts are seen through, and said apart. A control drawn as a speck under
+   * its label, as styled tick boxes are, counts as its label.
+   */
+  covered(list: number[]) {
+    const out: { handle: number; blocker: string; byHaptic: boolean }[] = [];
+    for (const handle of list) {
+      const el = at(handle);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2 || r.bottom <= 0 || r.top >= innerHeight || r.right <= 0 || r.left >= innerWidth) continue;
+      const labels = Array.from((el as HTMLInputElement).labels ?? []);
+      const own = (hit: Element | undefined) => !!hit && (within(el, hit) || labels.some((label) => within(label, hit)) || (within(hit, el) && hit.getBoundingClientRect().width * hit.getBoundingClientRect().height <= Math.max(4 * r.width * r.height, 2500)));
+      let blocker: Element | undefined;
+      let byHaptic = false;
+      let reached = false;
+      for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]]) {
+        const x = r.left + r.width * fx!;
+        const y = r.top + r.height * fy!;
+        if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+        const top = document.elementFromPoint(x, y);
+        if (isHaptic(top)) {
+          byHaptic = true;
+          continue;
+        }
+        const hit = pageAt(x, y)[0];
+        if (own(hit)) {
+          reached = true;
+          break;
+        }
+        blocker ??= hit;
+      }
+      if (!reached && (blocker || byHaptic)) out.push({ handle, blocker: blocker ? markup(blocker, 200) : "", byHaptic: byHaptic && !blocker });
+    }
+    return out;
   },
 
   /** What a control and the page say now, to tell what a click did. */

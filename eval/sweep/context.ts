@@ -210,8 +210,8 @@ function emptyRecord(label: LoadRecord["label"], haptic: boolean): LoadRecord {
   return { label, haptic, status: 0, url: "", title: "", ms: 0, errors: [], hapticThrows: [], hapticWarnings: [], stopped: {}, sockets: 0, framesSent: 0 };
 }
 
-/** How long a page is given to finish its requests after its HTML is in, and then to settle. */
-const NETWORK_IDLE_MS = 10_000;
+/** How long a page is given to finish its requests after its HTML is in, and then to settle. The same as the toolkit suite's session gives a page with Haptic in it, so every load waits alike. */
+const NETWORK_IDLE_MS = 15_000;
 const SETTLE_MS = 1500;
 
 /**
