@@ -163,6 +163,33 @@ test("the closing question survives a page load", async () => {
   }
 });
 
+test("a connection that drops before the answer is asked once more and the guide goes on; one that drops again ends it", async () => {
+  // As a proxy closed the connection to the server mid-guide on Northpine: "Something went wrong" ended a guide that was going well.
+  const session = await start(EXPORT, (request) => point(request, "Export", "Click Export."));
+  try {
+    let tries = 0;
+    await session.page.context().route("**/v1/turn", (route: { abort(code: string): Promise<void>; fallback(): Promise<void> }) => (tries++ === 0 ? route.abort("connectionclosed") : route.fallback()));
+    await session.ask("export to PDF");
+    await session.untilState("pointing");
+    assert.equal(tries, 2);
+    assert.equal(await session.caption(), "Click Export.");
+  } finally {
+    await session.close();
+  }
+
+  const dropping = await start(EXPORT, (request) => point(request, "Export", "Click Export."));
+  try {
+    let tries = 0;
+    await dropping.page.context().route("**/v1/turn", (route: { abort(code: string): Promise<void> }) => (tries++, route.abort("connectionclosed")));
+    await dropping.ask("export to PDF");
+    await dropping.untilState("finished");
+    assert.equal(tries, 2);
+    assert.equal(await dropping.caption(), "Something went wrong on our side. Try asking again.");
+  } finally {
+    await dropping.close();
+  }
+});
+
 test("the guide is finished after a failure, after a reply with no pointer, and after the visitor stops it", async () => {
   const failing = await start(EXPORT, () => {
     throw new Error("The model is down.");

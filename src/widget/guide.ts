@@ -81,6 +81,13 @@ const ACT_SAYS = {
 } as const;
 /** However slow a site's requests, a click is not waited on longer than this for one to come back. */
 const MAX_PACE_MS = 2500;
+/** How long after a dropped connection the question is asked once more. */
+const RETRY_AFTER_MS = 600;
+
+/** Whether a request failed because its connection did, not because the server answered with an error: what `fetch` throws then. */
+function droppedConnection(error: unknown): boolean {
+  return error instanceof TypeError && /fetch|network|load failed|connection/i.test(error.message);
+}
 
 /**
  * Whether this page has begun to load another one. A click on an ordinary link
@@ -261,6 +268,8 @@ interface Asking {
   closing?: boolean;
   /** How many times in a row a sentence with no pointer has been asked about again because the page changed under it. */
   retries?: number;
+  /** This is the question asked once more because the connection dropped before an answer came. */
+  retried?: boolean;
 }
 
 export class Guide {
@@ -852,6 +861,13 @@ export class Guide {
       if (moved) return startOver();
       dropEarly();
       console.warn("[Haptic]", error);
+      // The connection dropped with no answer, as a network or a proxy now and then does: asked once more, as the
+      // visitor would by asking again, before the guide gives up. An error the server sent is not asked again.
+      if (!asking.retried && !abort.signal.aborted && droppedConnection(error)) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_AFTER_MS));
+        if (run !== this.run) return;
+        return this.turn(run, { ...asking, retried: true });
+      }
       return this.finish("Something went wrong on our side. Try asking again.", "error");
     }
     stopWatching();
