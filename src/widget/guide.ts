@@ -1178,8 +1178,8 @@ const NAMED_BY_ITS_TEXT =
  * person may have written is read. A control the page was read with keeps the
  * name the list gave it. Otherwise an aria-label is used, and failing that
  * the control's own words, when it is a real control, cannot be written in
- * and holds no field other than a tick box. A field, an editor, anything inside an editor and a
- * region of the page all come back with no name.
+ * and holds no field other than a tick box. A field, an editor, anything
+ * inside an editor and a region of the page all come back with no name.
  */
 export function nameOfClicked(clicked: Element, listing: Map<Element, SnapElement> = new Map()): string {
   const listed = listing.get(clicked);
