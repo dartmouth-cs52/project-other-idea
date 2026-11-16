@@ -1840,7 +1840,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   const usableAtStart = usable(target);
   const isGone = () => !target.isConnected || (usableAtStart && !usable(target));
   /** The visitor's last press or key, to say how what held the control came to close. */
-  let lastGesture: { at: number; kind: "escape" | "outside" | "inside" | "key" | "typed"; field?: string } | undefined;
+  let lastGesture: { at: number; kind: "escape" | "outside" | "inside" | "key" } | undefined;
   const numbers = new WeakMap<Element, number>();
   let numbered = 0;
   const numberOf = (el: Element): number => {
@@ -1991,7 +1991,6 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
       if (recent) return { closed: true, words: `${What} closed after something ${whom} did, without ${name} being used.` };
       return { closed: true, words: `${What} closed without ${name} being used.` };
     }
-    if (recent === "typed") return { closed: false, words: `${who} typed in ${lastGesture?.field ?? "a field"}, and ${name} is no longer on the page.` };
     if (recent) return { closed: false, words: `The page changed after something ${whom} did that could not be identified, and ${name} is no longer on the page.` };
     return { closed: false, words: `${name} is no longer on the page.` };
   };
@@ -2053,7 +2052,8 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     const key = (event as KeyboardEvent).key ?? "";
     // The keys that open a field's list or calendar, or a menu, from the keyboard.
     if (path.includes(target) && (["F4", "ArrowDown", "ArrowUp", "Enter"].includes(key) || (event as KeyboardEvent).altKey)) keyed = performance.now();
-    // Letters typed in a field are heard as typing, by the field's input.
+    // Letters typed in a field are no unidentified press: a search box that filters the control away leaves it simply gone.
+    // Naming the field in the sentence was tried on Northpine, and the model then left the visitor's search alone and stopped.
     if (key === "Escape") lastGesture = { at: performance.now(), kind: "escape" };
     else if (!(path[0] instanceof Element && isTyped(path[0])) || key === "Enter" || key === "Tab") lastGesture = { at: performance.now(), kind: "key" };
     feed({ type: "key", at: performance.now(), key: (event as KeyboardEvent).key ?? "", inTarget: path.includes(target), inTyped: on instanceof Element && isTyped(on) });
@@ -2061,11 +2061,6 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   const onInput = (event: Event) => {
     const path = outside(event);
     if (!path) return;
-    // Typing in another field, like a search box that filters the list the control is in. Only the field's name is kept.
-    if (!path.includes(target) && byActor(event)) {
-      const field = path.find((node): node is Element => node instanceof Element && listing.has(node));
-      lastGesture = { at: performance.now(), kind: "typed", field: field ? nameOf(listing.get(field)!) : "a field" };
-    }
     feed({ type: "input", at: performance.now(), inTarget: path.includes(target), ...(byActor(event) ? {} : { byPage: true }) });
   };
   const onLeave = (event: Event) => {

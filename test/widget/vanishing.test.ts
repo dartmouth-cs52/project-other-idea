@@ -295,7 +295,7 @@ test("a control the page drew the list again without is noticed within a second,
   }
 });
 
-test("a list the visitor filters by typing in a search box, which takes the control away, is noticed, and the field is named but not what was typed", async () => {
+test("a list the visitor filters by typing in a search box, which takes the control away, is noticed within a second, and typing is not an unidentified press", async () => {
   const session = await start(LIST, (request, index) => (index === 0 ? point(request, "Open INV-1003", "Open the draft.") : index === 1 ? point(request, "Search invoices", "Clear the search to see the draft again.") : words("Done.")));
   try {
     await session.ask("open the draft invoice");
@@ -303,7 +303,7 @@ test("a list the visitor filters by typing in a search box, which takes the cont
     await session.page.locator("#search").pressSequentially("overdue", { delay: 60 });
     await letGo(session, "Open the draft.", "the search took it out of the list");
     const second = await session.untilAsked(2, 3000);
-    assert.equal(second.event, 'The user typed in textbox "Search invoices", and button "Open INV-1003" is no longer on the page.');
+    assert.equal(second.event, 'button "Open INV-1003" is no longer on the page.');
     assert.ok(!JSON.stringify(second).toLowerCase().includes('"overdue"'), "what was typed was sent");
   } finally {
     await session.close();
