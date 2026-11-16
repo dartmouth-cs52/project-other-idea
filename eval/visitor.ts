@@ -225,7 +225,7 @@ function keysForNativeDate(type: string, value: string | undefined): string | un
  * so the function is handed over with a stand-in for that helper.
  */
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
-const inPage = (fn: Function) => new Function("...args", `const __name = (value) => value; return (${fn}).apply(null, args);`);
+export const inPage = (fn: Function) => new Function("...args", `const __name = (value) => value; return (${fn}).apply(null, args);`);
 
 /** What kind of control this is, for deciding how a person would use it. */
 function lookAt(el: Element) {
@@ -398,6 +398,23 @@ function choiceAt(index: number) {
   return state?.choices?.[index] ?? null;
 }
 
+/** Remembers that the visitor typed into `el`, for a guide that ends once the form holds what they came to enter. */
+export function markTyped(el: Element) {
+  const state = ((window as unknown as Record<symbol, { typed?: WeakSet<Element> }>)[Symbol.for("haptic benchmark visitor")] ??= {});
+  (state.typed ??= new WeakSet<Element>()).add(el);
+}
+
+/**
+ * Whether the visitor has typed into the first element `selector` matches, on
+ * this page since it loaded. Undefined when nothing matches. For eval/browser.ts.
+ */
+export function typedInto(selector: string): boolean | undefined {
+  const el = document.querySelector(selector);
+  if (!el) return undefined;
+  const state = (window as unknown as Record<symbol, { typed?: WeakSet<Element> } | undefined>)[Symbol.for("haptic benchmark visitor")];
+  return !!state?.typed?.has(el);
+}
+
 // ---------------------------------------------------------------------------
 
 /**
@@ -482,6 +499,7 @@ export async function use(page: Loose, element: Loose, shown: Shown): Promise<Us
     const keys = keysForNativeDate(control.hints.type, value);
     if (!keys) return { did: clicked, opened: true, ...covered };
     await page.keyboard.type(keys, { delay: 30 });
+    await element.evaluate(inPage(markTyped)).catch(() => undefined);
     return { did: `${clicked} and typed a ${control.hints.type === "time" ? "time" : "date"} on the keyboard`, ...covered };
   }
   if (value === undefined) {
@@ -500,6 +518,7 @@ export async function use(page: Loose, element: Loose, shown: Shown): Promise<Us
   if (!focused) await press(page, element, true);
   if (!control.empty) await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.type(value, { delay: 30 });
+  await element.evaluate(inPage(markTyped)).catch(() => undefined);
   let did = `${clicked} and typed "${value}"${source}`;
   if (/\b(press|hit)\s+(the\s+)?(enter|return)\b/i.test(shown.say)) {
     await page.keyboard.press("Enter");
@@ -570,6 +589,7 @@ export async function useAsBefore(_page: Loose, element: Loose, shown: Shown): P
   if (field) {
     const value = shown.scripted?.fill ?? valueAsBefore(shown.listed.label, field);
     await element.fill(value, { timeout: 8000 });
+    await element.evaluate(inPage(markTyped)).catch(() => undefined);
     let did = `typed "${value}"`;
     if (/\b(press|hit)\s+(enter|return)\b/i.test(shown.say)) {
       await element.press("Enter");

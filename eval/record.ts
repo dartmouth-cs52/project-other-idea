@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import type { TurnReply } from "../src/shared/types.ts";
-import { ask, launch, loadGuideSet, open, perform, reachedOrWhy, siteFor, type Browser } from "./browser.ts";
+import { ask, launch, loadGuideSet, open, perform, reachedAnyOrWhy, reachedOrWhy, siteFor, type Browser } from "./browser.ts";
 import { CASES_DIR, describeMatcher, findListed, type Case, type CaseFile } from "./cases.ts";
 import type { Guide, GuideSet } from "./guide.ts";
 
@@ -138,7 +138,8 @@ async function record(browser: Browser, set: GuideSet, guide: Guide, site: CaseF
       if (why) throw new Error(`${guide.id}: the script ran to its last step, but ${why}. Fix the script or the step's "given".`);
     }
     if (guide.reached) {
-      const why = await reachedOrWhy(page, guide.reached);
+      // The script's own walk has to reach one of the ends. One that also reads the widget's sentence cannot be shown by a script.
+      const why = await reachedAnyOrWhy(page, guide.reached);
       if (why) throw new Error(`${guide.id}: the script ran to its end, but ${why}. Fix the script or its "reached".`);
     } else if (last && !last.expect.length && guide.steps.length > 1) {
       throw new Error(`${guide.id}: it ends with DONE, so it needs a "reached" that says how to tell the visitor got there.`);

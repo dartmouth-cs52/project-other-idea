@@ -4,8 +4,9 @@ import { loadSite, SITES_DIR } from "../src/server/sites.ts";
 import { DEFAULT_APPEARANCE, STREAM_TYPE, type SiteContext, type TurnReply, type TurnRequest } from "../src/shared/types.ts";
 import { bundleWidget } from "../src/widget/build.ts";
 import { CASES_DIR, type CaseFile } from "./cases.ts";
-import { faults, type Act, type GuideSet, type Reached, type Says } from "./guide.ts";
+import { faults, reachedList, type Act, type GuideSet, type Reached, type ReadAnswer, type Says } from "./guide.ts";
 import { watch, type Net } from "./net.ts";
+import { inPage, markTyped, typedInto } from "./visitor.ts";
 
 // What the recorder, the whole-guide runs and the look tool share: a browser
 // with the real widget on a page, and a way to answer each step it asks for.
@@ -108,7 +109,11 @@ export async function perform(page: Page, act: Act): Promise<void> {
   else if ("select" in act) await page.locator(act.select[0]).first().selectOption({ label: act.select[1] });
   else if ("press" in act) await page.locator(act.press[0]).first().press(act.press[1]);
   else if ("hover" in act) await page.locator(act.hover).first().hover();
-  else await page.locator(act.fill[0]).first().fill(act.fill[1]);
+  else {
+    await page.locator(act.fill[0]).first().fill(act.fill[1]);
+    // Noted as the visitor notes what it types, for a "typedInto" test.
+    await page.locator(act.fill[0]).first().evaluate(inPage(markTyped)).catch(() => undefined);
+  }
 }
 
 /** Clicks away whatever the site puts in front of a first-time visitor. Each is tried once and may not be there. */
@@ -206,13 +211,36 @@ export async function open(browser: Browser, set: GuideSet, path: string, answer
   return { page, close: () => context.close(), ...(net ? { net } : {}) };
 }
 
-/** Whether the page is where a guide was meant to end. Says what is missing when it is not. */
-export async function reachedOrWhy(page: Page, reached: Reached, waitMs = 4000): Promise<string> {
+/**
+ * A test of an address against a guide's pattern: the address as it is, or
+ * with its escapes undone (%20 and + as spaces) and whatever the case. A query
+ * a visitor typed can be written many ways, and "created >= -7d" is easier to
+ * read and to get right than "created%20%3E%3D%20-7d".
+ */
+export function addressFits(pattern: string): (address: string) => boolean {
+  const raw = new RegExp(pattern);
+  const plain = new RegExp(pattern, "i");
+  return (address) => {
+    if (raw.test(address)) return true;
+    try {
+      return plain.test(decodeURIComponent(address.replace(/\+/g, "%20")));
+    } catch {
+      return false;
+    }
+  };
+}
+
+/**
+ * Whether the page is where a guide was meant to end. Says what is missing
+ * when it is not. `sentence` is the widget's sentence on show, for a test that
+ * reads it; with none, such a test does not pass.
+ */
+export async function reachedOrWhy(page: Page, reached: Reached, waitMs = 4000, sentence?: string): Promise<string> {
   if (reached.url) {
+    const fits = addressFits(reached.url);
     // The click that ends a guide may still be loading its page.
-    const pattern = new RegExp(reached.url);
-    for (const until = Date.now() + waitMs; !pattern.test(page.url()) && Date.now() < until; ) await page.waitForTimeout(100);
-    if (!pattern.test(page.url())) return `the address is ${page.url()}, which does not match ${reached.url}`;
+    for (const until = Date.now() + waitMs; !fits(page.url()) && Date.now() < until; ) await page.waitForTimeout(100);
+    if (!fits(page.url())) return `the address is ${page.url()}, which does not match ${reached.url}`;
   }
   const shown = async (locator: Page) => {
     try {
@@ -232,7 +260,44 @@ export async function reachedOrWhy(page: Page, reached: Reached, waitMs = 4000):
       return `${reached.absent} is still on the page`;
     }
   }
+  if (reached.typedInto) {
+    // The visitor keeps its own note of the fields it typed into on a page, which the page never sees: a field's
+    // value alone cannot tell, since a page that fills its form from a script leaves no "value the page gave it".
+    const typed = (await page.evaluate(inPage(typedInto), reached.typedInto).catch(() => undefined)) as boolean | undefined;
+    if (typed === undefined) return `there is no field ${reached.typedInto} on the page`;
+    if (!typed) return `the visitor has not typed into ${reached.typedInto}`;
+  }
+  if (reached.request) {
+    const to = new RegExp(reached.request.to);
+    const has = new RegExp(reached.request.has);
+    // The page's own record of every address it has fetched since it loaded, in order.
+    const fetched = ((await page.evaluate(() => performance.getEntriesByType("resource").map((entry) => entry.name)).catch(() => [])) as string[]).filter((address) => to.test(address));
+    const latest = fetched[fetched.length - 1];
+    if (!latest) return `the page has made no request to ${reached.request.to} since it loaded`;
+    if (!has.test(latest)) return `the page's last request to ${reached.request.to} was ${latest}, which does not match ${reached.request.has}`;
+  }
+  if (reached.said !== undefined) {
+    if (sentence === undefined) return `only the widget's sentence can say this is the place, and there was none to read`;
+    if (!new RegExp(reached.said, "i").test(sentence)) return `the sentence does not say ${reached.said}`;
+  }
   return "";
+}
+
+/**
+ * Whether the page is at any of a guide's ends. Says why it is at none of them
+ * when it is not. Each end is given the time to arrive: the click that ends a
+ * guide may still be loading its page.
+ */
+export async function reachedAnyOrWhy(page: Page, reached: Reached | Reached[], waitMs = 4000, sentence?: string): Promise<string> {
+  const ends = reachedList(reached);
+  const why: string[] = [];
+  for (const [index, end] of ends.entries()) {
+    // Once the first has waited, the page has had its time to arrive, and the rest are looked at as it is.
+    const one = await reachedOrWhy(page, end, index === 0 ? waitMs : Math.min(waitMs, 300), sentence);
+    if (!one) return "";
+    why.push(one);
+  }
+  return why.length > 1 ? `none of the ${why.length} ways of getting there holds: ${why.join("; ")}` : (why[0] ?? "the script has no test of the page");
 }
 
 /** The words of a text, lower case, for comparing what was said with what the page shows. */
@@ -251,9 +316,20 @@ function pieces(texts: string[], part: string | undefined): string[] {
   return texts.map((text) => (part ? (new RegExp(part, "i").exec(text)?.[0] ?? "") : text).trim());
 }
 
+/**
+ * Words that say nothing about an answer once the rest is right: "$149 a month",
+ * "$149 per month" and "$149/month" are one price. They are left out of both
+ * sides when a sentence is compared with what the page shows.
+ */
+const FILLER = new Set(["a", "an", "per"]);
+/** A word as it is compared: one thing or several is the same word, so "button names" says "the names of buttons". */
+const stem = (word: string) => (word.length > 3 ? word.replace(/s$/, "") : word);
+const comparable = (words: string[]) => words.filter((word) => !FILLER.has(word)).map(stem);
+
 /** Whether a sentence says a piece of text: its words in order, or in any order when `anyOrder` is set. */
-function sayIt(said: string[], piece: string, anyOrder = false): boolean {
-  const wanted = wordsOf(piece);
+function sayIt(saidAll: string[], piece: string, anyOrder = false): boolean {
+  const said = comparable(saidAll);
+  const wanted = comparable(wordsOf(piece));
   if (!wanted.length) return false;
   if (anyOrder) return wanted.every((word) => said.includes(word));
   return said.some((_, start) => wanted.every((word, offset) => said[start + offset] === word));
@@ -315,8 +391,21 @@ export async function readAnswers(page: Page, says: Says | undefined, when: "sta
   const read: Read = {};
   // The page a guide starts on may still be drawing its data. It is there all along, so it is worth a short wait.
   const wait = when === "start" ? 5000 : 0;
-  if (says?.shown && (says.shown.when ?? "end") === when) read.shown = await visibleTexts(page, says.shown.selector, wait);
-  if (says?.notShown && (says.notShown.when ?? "end") === when) read.notShown = await visibleTexts(page, says.notShown.selector, wait);
+  const readOne = async (answer: ReadAnswer) => {
+    if (!answer.from || when !== "start") return visibleTexts(page, answer.selector, wait);
+    // Another page of the site, in a tab of its own, so that the visitor's page is left as it is.
+    const other = await page.context().newPage();
+    try {
+      await other.goto(new URL(answer.from, page.url()).href, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      return await visibleTexts(other, answer.selector, wait);
+    } catch {
+      return [];
+    } finally {
+      await other.close().catch(() => undefined);
+    }
+  };
+  if (says?.shown && (says.shown.when ?? "end") === when) read.shown = await readOne(says.shown);
+  if (says?.notShown && (says.notShown.when ?? "end") === when) read.notShown = await readOne(says.notShown);
   return read;
 }
 

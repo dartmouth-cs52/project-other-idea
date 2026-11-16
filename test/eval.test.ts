@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseModel } from "../eval/ask.ts";
 import { findListed, KINDS, loadCaseFiles, matches, plausibleRange, score, type Case } from "../eval/cases.ts";
-import { saidOrWhy } from "../eval/browser.ts";
+import { addressFits, saidOrWhy } from "../eval/browser.ts";
 import { DONE, faults, type Guide, type GuideSet } from "../eval/guide.ts";
 import { judge, Net, onlyQueries } from "../eval/net.ts";
 import { NEUTRAL, valueAsked } from "../eval/visitor.ts";
@@ -296,4 +296,26 @@ test("the visitor types what the sentence asks for, in quotes of any kind or aft
   }
   // With nothing asked for, the made-up text is long enough for a field that wants five characters.
   assert.ok(NEUTRAL.length >= 5);
+});
+
+test("a guide's other ends are checked like its own: patterns that can be read, and controls that are not pressed", () => {
+  const base: Guide = { id: "g", start: "/", goal: "x", steps: [{ expect: [{ label: "A" }], act: { click: "#a" } }, { expect: [{ label: "Delete" }] }] };
+  const one = (guide: Guide): GuideSet => ({ siteId: "s", origin: "https://example.com", hasTag: false, guides: [guide] });
+  assert.deepEqual(faults(one({ ...base, otherEnds: [{ expect: [{ label: "Remove", role: "menuitem" }], given: { selector: "[aria-expanded=true]" } }] })), []);
+  assert.match(faults(one({ ...base, otherEnds: [{ expect: [{ label: "Remove" }], act: { click: "#remove" } }] }))[0] ?? "", /each of "otherEnds" is a control that is pointed at and not pressed/);
+  assert.match(faults(one({ ...base, otherEnds: [{ expect: [{ label: "Remove" }], given: { url: "(" } }] }))[0] ?? "", /otherEnds\[0\]\.given\.url is not a pattern/);
+  assert.deepEqual(faults(one({ ...base, steps: [base.steps[0]!, DONE], reached: [{ url: "/a$" }, { url: "/b$", said: "\\bB\\b" }] })), []);
+  assert.match(faults(one({ ...base, steps: [base.steps[0]!, DONE], reached: [{ url: "/a$" }, { said: "(" }] }))[0] ?? "", /reached\[1\]\.said is not a pattern/);
+  assert.match(faults(one({ ...base, steps: [base.steps[0]!, DONE], reached: { request: { to: "/api", has: "[" } } }))[0] ?? "", /reached\.request\.has is not a pattern/);
+  assert.match(faults(one({ ...base, steps: [base.steps[0]!, DONE], reached: [] }))[0] ?? "", /empty list/);
+  assert.match(faults(one({ ...base, says: { shown: { selector: "p", from: "/" } } }))[0] ?? "", /read "from" another page is read when the guide starts/);
+});
+
+test("an address is matched as it is, or as a visitor would write it", () => {
+  const kafka = addressFits("[?&]jql=project\\s*=\\s*kafka\\s+and\\s+created\\s*>=\\s*-7d(?:&|$)");
+  assert.equal(kafka("https://issues.apache.org/jira/issues/?jql=project%20%3D%20KAFKA%20AND%20created%20%3E%3D%20-7d"), true);
+  assert.equal(kafka("https://issues.apache.org/jira/issues/?jql=project+%3D+KAFKA+AND+created+%3E%3D+-7d"), true);
+  assert.equal(kafka("https://issues.apache.org/jira/issues/?jql=created%20%3E%3D%20-7d"), false);
+  // A pattern written for the address as it is still works.
+  assert.equal(addressFits("created%20%3E%3D%20-7d")("https://x/?jql=created%20%3E%3D%20-7d"), true);
 });
