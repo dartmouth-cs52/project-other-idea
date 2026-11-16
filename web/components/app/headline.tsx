@@ -5,7 +5,7 @@ import { ArrowDownRight, ArrowUpRight, ExternalLink, Minus } from "lucide-react"
 import { cn } from "cn";
 import { buttonVariants } from "@/components/ui/button";
 import { api } from "@/lib/app-api";
-import { countChange, duration, durationChange, hostOf, rateChange, type Change } from "@/lib/setup";
+import { countChange, duration, durationChange, hostOf, rateChange, utcDayLabel, type Change } from "@/lib/setup";
 import type { Headline as HeadlineData } from "@/worker/insights";
 import { Card } from "./parts";
 
@@ -95,7 +95,9 @@ export function Headline({ siteId, origin, days, ranges, refreshKey }: { siteId:
       </div>
       <Card className="gap-3">
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-          <h3 className="text-base font-medium">Guides started and finished, each day</h3>
+          <h3 className="text-base font-medium">
+            Guides started and finished, each day <span className="text-sm font-normal text-muted-foreground">in UTC</span>
+          </h3>
           <ul className="flex items-center gap-4 text-sm text-muted-foreground" aria-label="Legend">
             <li className="flex items-center gap-2">
               <span className="size-2.5 rounded-[2px] bg-muted-foreground" aria-hidden />
@@ -182,9 +184,8 @@ function niceTop(max: number): number {
   return 10 * power;
 }
 
-function dayName(day: string, short = false): string {
-  return new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, short ? { month: "short", day: "numeric", timeZone: "UTC" } : { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
-}
+/** The chart's days are UTC days, named in UTC, so the last one is named by its date, not "Today". */
+const dayName = (day: string, short = false) => utcDayLabel(day, undefined, !short);
 
 /** One column per day: started in Muted text grey, finished in Ink over it from the same baseline. */
 function DailyChart({ daily }: { daily: HeadlineData["daily"] }) {
@@ -259,7 +260,7 @@ function DailyChart({ daily }: { daily: HeadlineData["daily"] }) {
                 {dayName(daily[0]!.day, true)}
               </text>
               <text x={width} y={HEIGHT - 6} textAnchor="end" className="fill-muted-foreground text-xs">
-                Today
+                {dayName(daily[daily.length - 1]!.day, true)}
               </text>
             </>
           )}

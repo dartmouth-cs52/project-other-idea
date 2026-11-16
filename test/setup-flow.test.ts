@@ -23,6 +23,7 @@ import {
   SETUP_STEPS,
   stepFor,
   stepLabel,
+  utcDayLabel,
   WAITING_AFTER_MS,
   type ReadPage,
 } from "../web/lib/setup.ts";
@@ -273,4 +274,10 @@ test("changes against the days before read as plain sentences", () => {
   assert.equal(duration(42_400), "42 s");
   assert.equal(duration(180_000), "3 min");
   assert.equal(duration(3_840_000), "1 h 4 min");
+});
+
+test("the chart's days are named by their date in UTC, the last one too, never \"Today\"", () => {
+  assert.equal(utcDayLabel("2026-11-16", "en-US"), "Nov 16");
+  assert.equal(utcDayLabel("2026-01-01", "en-US"), "Jan 1", "the same day wherever the browser is");
+  assert.equal(utcDayLabel("2026-11-16", "en-US", true), "Mon, Nov 16");
 });

@@ -312,6 +312,14 @@ export function durationChange(now: number | null, before: number | null, period
   return { direction: seconds > 0 ? "up" : "down", text: `${duration(Math.abs(seconds) * 1000)} ${seconds > 0 ? "slower" : "faster"} than ${period}` };
 }
 
+/**
+ * A day of the dashboard's chart, "2026-11-16", named as "Nov 16", or "Mon, Nov 16" with `weekday`. The
+ * days are UTC days, so they are named in UTC too, the same wherever the browser is.
+ */
+export function utcDayLabel(day: string, locale?: string, weekday = false): string {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString(locale, { ...(weekday ? { weekday: "short" as const } : {}), month: "short", day: "numeric", timeZone: "UTC" });
+}
+
 /** "42 s", "3 min 5 s", "1 h 4 min". */
 export function duration(ms: number | null): string {
   if (ms === null) return "";
