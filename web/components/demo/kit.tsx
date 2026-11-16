@@ -488,11 +488,21 @@ export function Chat({ view, compact, className }: { view: ChatView; compact?: b
   return (
     <motion.div
       data-home
-      className={cn("flex w-full flex-col rounded-xl border bg-card shadow-lg", compact ? "gap-2 p-1.5" : "gap-3 p-2", className)}
+      // isolate keeps the glow's blending inside the chat.
+      className={cn("relative isolate flex w-full flex-col rounded-xl border bg-card shadow-lg", compact ? "gap-2 p-1.5" : "gap-3 p-2", className)}
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
     >
+      {/* While Haptic thinks, a pool of colour gathers along the bottom of the chat. When the reply arrives it
+          rises through the chat and is gone. It is the widget's own glow (src/widget/ui.ts), styled in globals.css. */}
+      <div className="thinking-glow" data-phase={view.status === "thinking" ? "gather" : view.status === "idle" ? undefined : "bloom"}>
+        <div>
+          <i className="c" />
+          <i className="b" />
+          <i className="a" />
+        </div>
+      </div>
       {view.question && (
         <div className="flex flex-col gap-2 px-1 pt-1">
           <Message align="end">
@@ -520,7 +530,7 @@ export function Chat({ view, compact, className }: { view: ChatView; compact?: b
             </Marker>
           )}
           {view.status === "thinking" && (
-            // No icon. A lighter shade sweeps across the word while Haptic works.
+            // No icon. A lighter shade sweeps across the word while Haptic works, and the glow gathers under it.
             <Marker>
               <MarkerContent className="shimmer">Thinking</MarkerContent>
             </Marker>
