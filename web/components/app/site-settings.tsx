@@ -1,12 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { AlertCircleIcon } from "lucide-react";
 import { cn } from "cn";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Field, FieldError, FieldWithButton, FormAlert, failureFrom, useFieldErrors, type Failure } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api, type Site } from "@/lib/app-api";
 import { Card, CardTitle } from "./parts";
@@ -28,15 +26,6 @@ export function SiteSettings({ site, onChange, onDeleted }: { site: Site; onChan
   );
 }
 
-function Failure({ message }: { message: string }) {
-  return (
-    <Alert variant="destructive">
-      <AlertCircleIcon />
-      <AlertDescription>{message}</AlertDescription>
-    </Alert>
-  );
-}
-
 /** The widget's colour, corner and button label, and the company's notes, saved together. */
 function LookAndNotes({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
   const [accent, setAccent] = useState(site.appearance.accent);
@@ -44,21 +33,25 @@ function LookAndNotes({ site, onChange }: { site: Site; onChange: (site: Site) =
   const [label, setLabel] = useState(site.appearance.launcherLabel);
   const [notes, setNotes] = useState(site.notes);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const fields = useFieldErrors({ accent: "accent", launcherLabel: "launcher-label", notes: "notes" });
   const changed =
     accent.toUpperCase() !== site.appearance.accent.toUpperCase() || position !== site.appearance.position || label.trim() !== site.appearance.launcherLabel || notes.trim() !== site.notes;
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!HEX.test(accent)) return setError("The colour must be a hex value like #1E6EF4.");
-    if (!label.trim()) return setError("Give the button a label, such as Ask.");
-    setError(null);
+    setFailure(null);
+    const found = {
+      accent: HEX.test(accent) ? undefined : "The colour must be a hex value like #1E6EF4.",
+      launcherLabel: label.trim() ? undefined : "Give the button a label, such as Ask.",
+    };
+    if (fields.show(found)) return;
     setStatus("saving");
     try {
       onChange(await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { appearance: { accent, position, launcherLabel: label }, notes } }));
       setStatus("saved");
     } catch (failure) {
-      setError((failure as Error).message);
+      if (!fields.showRefusal(failure)) setFailure(failureFrom("Couldn't save your changes", failure));
       setStatus("idle");
     }
   }
@@ -69,20 +62,36 @@ function LookAndNotes({ site, onChange }: { site: Site; onChange: (site: Site) =
         <CardTitle>How the widget looks</CardTitle>
         <div className="grid gap-6 md:grid-cols-2">
           <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="accent">Pointer colour</Label>
+            <Field
+              id="accent"
+              label="Pointer colour"
+              required
+              error={fields.errors.accent}
+              hint="The pointer and the mark around what it points at. Everything else stays black and white."
+            >
               <div className="flex gap-2">
                 <input
                   type="color"
                   aria-label="Pick a colour"
                   value={HEX.test(accent) ? accent : "#1E6EF4"}
-                  onChange={(event) => setAccent(event.target.value.toUpperCase())}
+                  onChange={(event) => {
+                    setAccent(event.target.value.toUpperCase());
+                    fields.clear("accent");
+                  }}
                   className="h-11 w-14 shrink-0 cursor-pointer rounded-lg border bg-card p-1"
                 />
-                <Input id="accent" value={accent} onChange={(event) => setAccent(event.target.value.trim())} className={FIELD} aria-invalid={!HEX.test(accent) || undefined} />
+                <Input
+                  {...fields.control("accent", { hint: true })}
+                  required
+                  value={accent}
+                  onChange={(event) => {
+                    setAccent(event.target.value.trim());
+                    fields.clear("accent");
+                  }}
+                  className={FIELD}
+                />
               </div>
-              <p className="text-sm text-muted-foreground">The pointer and the mark around what it points at. Everything else stays black and white.</p>
-            </div>
+            </Field>
             <div className="flex flex-col gap-2">
               <span className="text-sm font-medium">Corner</span>
               <div role="radiogroup" aria-label="Corner" className="flex gap-2">
@@ -103,10 +112,19 @@ function LookAndNotes({ site, onChange }: { site: Site; onChange: (site: Site) =
                 ))}
               </div>
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="launcher-label">Button label</Label>
-              <Input id="launcher-label" value={label} maxLength={24} onChange={(event) => setLabel(event.target.value)} className={FIELD} />
-            </div>
+            <Field id="launcher-label" label="Button label" required error={fields.errors.launcherLabel}>
+              <Input
+                {...fields.control("launcherLabel")}
+                required
+                value={label}
+                maxLength={24}
+                onChange={(event) => {
+                  setLabel(event.target.value);
+                  fields.clear("launcherLabel");
+                }}
+                className={FIELD}
+              />
+            </Field>
           </div>
           <Preview accent={HEX.test(accent) ? accent : site.appearance.accent} position={position} label={label.trim() || "Ask"} />
         </div>
@@ -119,15 +137,22 @@ function LookAndNotes({ site, onChange }: { site: Site; onChange: (site: Site) =
           answer.
         </p>
         <Textarea
+          {...fields.control("notes", { hint: true })}
           aria-label="Notes"
           value={notes}
-          onChange={(event) => setNotes(event.target.value)}
+          onChange={(event) => {
+            setNotes(event.target.value);
+            fields.clear("notes");
+          }}
           rows={8}
           maxLength={20_000}
           placeholder="Invoices are under Billing, not Settings. A workspace is what other tools call a team."
           className="min-h-40 bg-card px-3.5 py-3 md:text-base"
         />
-        <p className="text-sm text-muted-foreground">{notes.length.toLocaleString()} of 20,000 characters</p>
+        <FieldError id="notes" error={fields.errors.notes} />
+        <p id="notes-hint" className="text-sm text-muted-foreground">
+          {notes.length.toLocaleString()} of 20,000 characters
+        </p>
       </Card>
 
       <div className="flex flex-wrap items-center gap-4">
@@ -136,7 +161,7 @@ function LookAndNotes({ site, onChange }: { site: Site; onChange: (site: Site) =
         </Button>
         {status === "saved" && !changed && <span className="text-sm text-muted-foreground">Saved. The widget picks it up within a minute.</span>}
       </div>
-      {error && <Failure message={error} />}
+      <FormAlert failure={failure} />
     </form>
   );
 }
@@ -170,33 +195,45 @@ function HelpDocs({ site, onChange }: { site: Site; onChange: (site: Site) => vo
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const fields = useFieldErrors({ url: "doc-url", title: "doc-title", text: "doc-text" });
   const { docs } = site;
   const share = Math.min(100, (docs.used / docs.budget) * 100);
 
   async function add(event: FormEvent) {
     event.preventDefault();
+    setFailure(null);
+    const found =
+      mode === "url"
+        ? { url: url.trim() ? undefined : "Paste the address of a help article." }
+        : { title: title.trim() ? undefined : "Give the doc a title.", text: text.trim() ? undefined : "Paste the doc's text." };
+    if (fields.show(found)) return;
     setBusy(true);
-    setError(null);
     try {
       onChange(await api<Site>(`/sites/${site.id}/docs`, { method: "POST", body: mode === "url" ? { url } : { title, text } }));
       setUrl("");
       setTitle("");
       setText("");
     } catch (failure) {
-      setError((failure as Error).message);
+      if (!fields.showRefusal(failure)) setFailure(failureFrom("Couldn't add the doc", failure));
     } finally {
       setBusy(false);
     }
   }
 
   async function remove(source: string) {
-    setError(null);
+    setFailure(null);
     try {
       onChange(await api<Site>(`/sites/${site.id}/docs?source=${encodeURIComponent(source)}`, { method: "DELETE" }));
     } catch (failure) {
-      setError((failure as Error).message);
+      setFailure(failureFrom("Couldn't remove the doc", failure));
     }
+  }
+
+  function choose(next: "url" | "paste") {
+    setMode(next);
+    fields.show({});
+    setFailure(null);
   }
 
   return (
@@ -244,7 +281,7 @@ function HelpDocs({ site, onChange }: { site: Site; onChange: (site: Site) => vo
               type="button"
               role="tab"
               aria-selected={mode === value}
-              onClick={() => setMode(value)}
+              onClick={() => choose(value)}
               className={cn(
                 "inline-flex h-8 items-center rounded-full px-3.5 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                 mode === value ? "bg-primary text-primary-foreground" : "bg-card text-foreground hover:bg-secondary",
@@ -255,32 +292,63 @@ function HelpDocs({ site, onChange }: { site: Site; onChange: (site: Site) => vo
           ))}
         </div>
         {mode === "url" ? (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="flex flex-1 flex-col gap-2">
-              <Label htmlFor="doc-url">Address of a help article</Label>
-              <Input id="doc-url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://help.example.com/billing" className={FIELD} />
-            </div>
-            <Button type="submit" variant="secondary" size="xl" disabled={busy || !url.trim()}>
-              {busy ? "Reading" : "Add"}
-            </Button>
-          </div>
+          <FieldWithButton
+            id="doc-url"
+            label="Address of a help article"
+            required
+            error={fields.errors.url}
+            button={
+              <Button type="submit" variant="secondary" size="xl" disabled={busy}>
+                {busy ? "Reading" : "Add"}
+              </Button>
+            }
+          >
+            <Input
+              {...fields.control("url")}
+              required
+              value={url}
+              onChange={(event) => {
+                setUrl(event.target.value);
+                fields.clear("url");
+              }}
+              placeholder="https://help.example.com/billing"
+              className={FIELD}
+            />
+          </FieldWithButton>
         ) : (
           <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="doc-title">Title</Label>
-              <Input id="doc-title" value={title} onChange={(event) => setTitle(event.target.value)} className={FIELD} />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="doc-text">Text</Label>
-              <Textarea id="doc-text" value={text} onChange={(event) => setText(event.target.value)} rows={8} className="min-h-40 bg-card px-3.5 py-3 md:text-base" />
-            </div>
-            <Button type="submit" variant="secondary" size="xl" className="self-start" disabled={busy || !title.trim() || !text.trim()}>
+            <Field id="doc-title" label="Title" required error={fields.errors.title}>
+              <Input
+                {...fields.control("title")}
+                required
+                value={title}
+                onChange={(event) => {
+                  setTitle(event.target.value);
+                  fields.clear("title");
+                }}
+                className={FIELD}
+              />
+            </Field>
+            <Field id="doc-text" label="Text" required error={fields.errors.text}>
+              <Textarea
+                {...fields.control("text")}
+                required
+                value={text}
+                onChange={(event) => {
+                  setText(event.target.value);
+                  fields.clear("text");
+                }}
+                rows={8}
+                className="min-h-40 bg-card px-3.5 py-3 md:text-base"
+              />
+            </Field>
+            <Button type="submit" variant="secondary" size="xl" className="self-start" disabled={busy}>
               {busy ? "Adding" : "Add"}
             </Button>
           </div>
         )}
       </form>
-      {error && <Failure message={error} />}
+      <FormAlert failure={failure} />
     </Card>
   );
 }
@@ -290,17 +358,19 @@ function DeleteSite({ site, onDeleted }: { site: Site; onDeleted: () => void }) 
   const host = new URL(site.origin).host;
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const fields = useFieldErrors({ confirm: "confirm-delete" });
 
   async function remove(event: FormEvent) {
     event.preventDefault();
+    setFailure(null);
+    if (fields.show({ confirm: typed.trim().toLowerCase() === host.toLowerCase() ? undefined : `Type ${host} to confirm.` })) return;
     setBusy(true);
-    setError(null);
     try {
       await api(`/sites/${site.id}`, { method: "DELETE", body: { confirm: typed } });
       onDeleted();
     } catch (failure) {
-      setError((failure as Error).message);
+      if (!fields.showRefusal(failure)) setFailure(failureFrom("Couldn't delete the site", failure));
       setBusy(false);
     }
   }
@@ -311,16 +381,33 @@ function DeleteSite({ site, onDeleted }: { site: Site; onDeleted: () => void }) 
       <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
         The script tag stops working at once, and every question, guide and setting for this site is deleted. This cannot be undone.
       </p>
-      <form onSubmit={remove} className="flex flex-col gap-2 sm:flex-row sm:items-end" noValidate>
-        <div className="flex flex-1 flex-col gap-2">
-          <Label htmlFor="confirm-delete">Type {host} to confirm</Label>
-          <Input id="confirm-delete" value={typed} onChange={(event) => setTyped(event.target.value)} autoComplete="off" className={FIELD} />
-        </div>
-        <Button type="submit" variant="destructive" size="xl" disabled={busy || typed.trim().toLowerCase() !== host.toLowerCase()}>
-          {busy ? "Deleting" : "Delete site"}
-        </Button>
+      <form onSubmit={remove} noValidate>
+        <FieldWithButton
+          id="confirm-delete"
+          label={`Type ${host} to confirm`}
+          required
+          error={fields.errors.confirm}
+          button={
+            // Stays off until the address matches, so a site is never deleted by a stray press.
+            <Button type="submit" variant="destructive" size="xl" disabled={busy || typed.trim().toLowerCase() !== host.toLowerCase()}>
+              {busy ? "Deleting" : "Delete site"}
+            </Button>
+          }
+        >
+          <Input
+            {...fields.control("confirm")}
+            required
+            value={typed}
+            onChange={(event) => {
+              setTyped(event.target.value);
+              fields.clear("confirm");
+            }}
+            autoComplete="off"
+            className={FIELD}
+          />
+        </FieldWithButton>
       </form>
-      {error && <Failure message={error} />}
+      <FormAlert failure={failure} />
     </Card>
   );
 }

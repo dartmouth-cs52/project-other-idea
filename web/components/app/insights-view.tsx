@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { cn } from "cn";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { api, OUTCOME_LABEL, type FinishedList, type GuideDetail, type Insights } from "@/lib/app-api";
-import { Card, CardTitle, DoneMark, seconds, when } from "./parts";
+import { Card, CardTitle, DoneMark, FailedCard, seconds, when } from "./parts";
 
 const RANGES = [7, 30, 90];
 
@@ -18,6 +18,8 @@ export function InsightsView({ siteId, refreshKey }: { siteId: string; refreshKe
   const [data, setData] = useState<Insights | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  // Bumped by Try again, to ask once more without waiting for the next refresh.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -27,9 +29,21 @@ export function InsightsView({ siteId, refreshKey }: { siteId: string; refreshKe
     return () => {
       live = false;
     };
-  }, [siteId, days, refreshKey]);
+  }, [siteId, days, refreshKey, attempt]);
 
-  if (error) return <Card><p className="text-base text-muted-foreground">{error}</p></Card>;
+  if (error) {
+    return (
+      <FailedCard
+        level={2}
+        title="Couldn't load the questions"
+        message={error}
+        retry={() => {
+          setError(null);
+          setAttempt((count) => count + 1);
+        }}
+      />
+    );
+  }
   if (!data) return <Card><p className="text-base text-muted-foreground">Loading questions</p></Card>;
 
   const { summary } = data;
