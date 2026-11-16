@@ -386,6 +386,40 @@ export function isForwardName(name: string): boolean {
   return FORWARD_ENTRIES.some((entry) => (entry.cjk ? cjk === entry.cjk && !words.length : !cjk && words.join(" ") === entry.words.join(" ")));
 }
 
+/**
+ * Verbs that start the name of a button that opens something to look at or
+ * fill in and changes nothing by itself: "Edit limits", "New budget", "Open
+ * expense". "Add" and "Create" are not among them: a button named with them
+ * often does it at once.
+ */
+const OPENING_ENTRIES = entries(
+  "open|new|edit|view|manage|browse|preview|" +
+    "abrir|nuevo|nueva|editar|ver|gestionar|administrar|" +
+    "ouvrir|nouveau|nouvelle|modifier|voir|afficher|gerer|" +
+    "offnen|neu|neue|neuer|neues|bearbeiten|ansehen|anzeigen|verwalten|" +
+    "novo|nova|gerenciar|visualizar|" +
+    "apri|nuovo|nuova|modifica|visualizza|vedi|gestisci|" +
+    "openen|nieuw|nieuwe|bewerken|bekijken|beheren|" +
+    "開く|新規|編集|打开|新建|编辑|查看",
+);
+
+/**
+ * Whether a button's name says it opens something: it starts with an opening
+ * verb ("Edit limits", "New budget", "Open expense", "Nuevo presupuesto") and
+ * holds no word of any class that commits. Only a button outside any form is
+ * judged by this (gate.ts), and its press is watched: one that sends anything
+ * to the site stops acting at once.
+ */
+export function opensByName(name: string): boolean {
+  const folded = fold(name);
+  const words = wordsOf(folded).filter((word) => !FILLER_WORDS.has(word));
+  const cjk = cjkOf(folded);
+  const first = words[0];
+  const starts = first !== undefined ? OPENING_ENTRIES.some((entry) => entry.words.length === 1 && entry.words[0] === first) : OPENING_ENTRIES.some((entry) => !!entry.cjk && cjk.startsWith(entry.cjk));
+  if (!starts) return false;
+  return !readName(name, { dialog: true }).commit;
+}
+
 /** The whole names of a button that only puts a dialog away, in every shipped language. */
 const DISMISS_ENTRIES = entries(`${CANCEL_CLOSE}|dismiss|not now|no thanks|go back|back|x`);
 /** A close drawn as a mark rather than written. */

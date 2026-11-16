@@ -1,4 +1,4 @@
-import { ASKED_CLASSES, checkAction, CLASS_DOES, classAsked, fold, grounded, isDismissName, isForwardName, isSearchName, isSecretField, isTypeToConfirm, readName, type CommitClass } from "../shared/act-rules.ts";
+import { ASKED_CLASSES, checkAction, CLASS_DOES, classAsked, fold, grounded, isDismissName, isForwardName, isSearchName, isSecretField, isTypeToConfirm, opensByName, readName, type CommitClass } from "../shared/act-rules.ts";
 import { actingAllowedAt, actionsAllowed, ACTING_LIMITS, describeElement, type Act, type ActingSettings, type Refusal, type SnapElement, type Snapshot, type TurnReply } from "../shared/types.ts";
 import { currentPath, findOpenModal } from "./snapshot.ts";
 
@@ -23,7 +23,9 @@ import { currentPath, findOpenModal } from "./snapshot.ts";
 //  7. Destructive styling: red, or a toolkit's danger class.
 //  8. Safe by what it is: a same-origin link, a control that opens something,
 //     a tab, a choice in a list Haptic opened, a staged field, Enter in a
-//     search box.
+//     search box. Also a button outside any
+//     form whose name says it opens something ("Edit limits", "New budget"),
+//     pressed with the tripwire armed.
 //  9. Safe by its words: "Next", "Back", "Cancel", ...
 // 10. Anything else is not acted on.
 
@@ -49,6 +51,13 @@ export interface GateSession {
   repeats?: { el: Element; count: number };
   /** "I couldn't do this one" hand-backs in a row. */
   failures: number;
+  /**
+   * The last press the gate let through on its name alone, while a save it
+   * started may still be on its way: when it was armed (`performance.now()`)
+   * and how the control is named. The engine looks once more before its next
+   * action, and stops if such a request has come back since.
+   */
+  lastPress?: { armed: number; name: string; described: string };
 }
 
 /** The site's settings as the widget has them, and what the page itself says. */
@@ -87,7 +96,7 @@ export interface ActPlan {
   want?: boolean;
   /** A tick box or radio set by Haptic whose words the visitor did not write: listed at the hand-over as "my choice, check it". */
   mine?: boolean;
-  /** Arm `tripwire` on `el` just before acting: setting a tick box, switch, radio or select. */
+  /** Arm `tripwire` on `el` just before acting: setting a tick box, switch, radio or select, or pressing a button that opens something by its words. */
   tripwire: boolean;
   /** The press may load another page: the guide records the load it expects (DESIGN 4.6) before the press. */
   navigates: boolean;
@@ -138,18 +147,23 @@ export type Plan = ActPlan | VisitorPlan | HandoverPlan | StopPlan | AgainPlan;
 /** Where to press, after the engine has brought the control on screen. */
 export type Reach = { ok: true; x: number; y: number; hit: Element } | { ok: false; plan: VisitorPlan | StopPlan };
 
-/** Watches for a sign that a field Haptic just set was saved at once. */
+/** Watches for a sign that a field Haptic just set, or a button it just pressed, saved at once. */
 export interface Tripwire {
   /** True once a data request finished, or a status or alert region appeared, since it was armed. */
   tripped(): boolean;
   stop(): void;
+  /** When it was armed, on the page's clock (`performance.now()`). */
+  armed: number;
 }
 
 /** The widget's own sentences while acting. English in this version. `name` is the control as the visitor sees it. */
 export const SAYS = {
   secret: "I don't type passwords, payment details or confirmations. Fill this in and I'll carry on.",
   leaves: (name: string) => `This opens somewhere else, so I'll leave it to you. Click ${name} and I'll carry on.`,
-  unknown: (name: string) => `This could save something, so I'll leave it to you. Click ${name} and I'll carry on.`,
+  unknown: (name: string) => `I can't tell what ${name} does, so I'll leave it to you. Click it and I'll carry on.`,
+  commits: (name: string, does: string) => `I'll leave ${name} to you: it ${does}. Click it and I'll carry on.`,
+  writes: (name: string) => `I'll leave ${name} to you: it sends something to the site. Click it and I'll carry on.`,
+  styled: (name: string) => `I'll leave ${name} to you: the page marks it as dangerous. Click it and I'll carry on.`,
   live: (name: string) => `This may save as soon as it changes, so I'll leave it to you. Set ${name} and I'll carry on.`,
   ungrounded: "You'll need to fill this one in: I only enter what you told me.",
   covered: (name: string) => `Something is in the way, so I'll leave this one to you. Click ${name} and I'll carry on.`,
@@ -159,6 +173,7 @@ export const SAYS = {
   class: (name: string, does: string) => `I stopped before ${name}: it ${does}, and you didn't ask for that.`,
   cap: "That's as far as I'll go on my own. Here's what I did.",
   tripwire: "That may have been saved straight away. Check it before going on.",
+  pressSent: (name: string) => `Pressing ${name} sent something to the site, so I've stopped. Check that nothing was saved before going on.`,
   failed: (name: string) => `I couldn't do this one. Click ${name} yourself and I'll carry on.`,
   handover: (name: string) => `Click ${name} when it looks right.`,
   actingOff: "I'll show you the way instead.",
@@ -322,6 +337,11 @@ function isControl(el: Element): boolean {
   if (isAnchor(el) || el instanceof HTMLButtonElement || el.tagName === "SUMMARY") return true;
   if (el instanceof HTMLInputElement && ["button", "submit", "reset", "image"].includes(el.type)) return true;
   return ["button", "link", "menuitem", "menuitemcheckbox", "menuitemradio", "option", "tab", "treeitem"].includes(roleOf(el));
+}
+
+/** Whether it sits in a form, or is tied to one: a script can send a form from any button in it. */
+function inForm(el: Element): boolean {
+  return !!(el as HTMLButtonElement).form || !!el.closest("form, [role='form']");
 }
 
 /** Whether it says it opens a menu, a list or a dialog. */
@@ -620,10 +640,10 @@ const WHY: Partial<Record<Refusal, string>> = {
   off: "the site keeps it for the visitor",
   secret: "you never type passwords, payment details or confirmations",
   leaves: "it opens somewhere else",
-  writes: "it may save something",
-  words: "it may save something",
-  styled: "it may save something",
-  unknown: "it may save something",
+  writes: "it sends something to the site",
+  words: "its words say it commits",
+  styled: "the page marks it as dangerous",
+  unknown: "you can't tell what it does",
   live: "it may save as soon as it changes",
   ungrounded: "the visitor did not say what to enter",
   covered: "something covers it",
@@ -664,7 +684,14 @@ function sayFor(reason: Refusal, name: string, commit?: CommitClass): string {
     case "covered":
       return SAYS.covered(name);
     case "off":
+    case "marked":
       return SAYS.off(name);
+    case "words":
+      return commit ? SAYS.commits(name, CLASS_DOES[commit]) : SAYS.unknown(name);
+    case "writes":
+      return SAYS.writes(name);
+    case "styled":
+      return SAYS.styled(name);
     case "unfit":
     case "enter":
     case "changed":
@@ -683,10 +710,11 @@ function sayFor(reason: Refusal, name: string, commit?: CommitClass): string {
   }
 }
 
-function visitorPlan(el: Element, listed: SnapElement | undefined, reason: Refusal, act?: Act, value?: string): VisitorPlan {
+/** A step the gate gives the visitor, with a sentence for them and one for the model that each say the real reason. `commit` is the class of the words that stopped it, when words did. */
+function visitorPlan(el: Element, listed: SnapElement | undefined, reason: Refusal, act?: Act, value?: string, commit?: CommitClass): VisitorPlan {
   const name = nameFor(el, listed);
-  const why = WHY[reason] ?? "it may save something";
-  return { kind: "visitor", reason, el, say: sayFor(reason, name), event: `You did not ${verbFor(act, value)} ${describeFor(el, listed)}: ${why}, so the visitor has it.` };
+  const why = reason === "words" && commit ? `its words say it ${CLASS_DOES[commit]}` : (WHY[reason] ?? "you can't tell what it does");
+  return { kind: "visitor", reason, el, say: sayFor(reason, name, commit), event: `You did not ${verbFor(act, value)} ${describeFor(el, listed)}: ${why}, so the visitor has it.` };
 }
 
 function classStop(el: Element, listed: SnapElement | undefined, commit: CommitClass): StopPlan {
@@ -776,7 +804,10 @@ function decide(reply: TurnReply, target: Element | undefined, listed: SnapEleme
       }
       return { kind: "visitor", reason: "asked", el, say: reply.say, event: "" };
     }
-    if (withheld && withheld !== "contradiction") return visitorPlan(el, listed, withheld === "changed" ? "unfit" : withheld, reply.do ?? undefined, reply.enter ?? undefined);
+    if (withheld && withheld !== "contradiction") {
+      const reason = withheld === "changed" ? "unfit" : withheld;
+      return visitorPlan(el, listed, reason, reply.removed ?? reply.do ?? undefined, reply.enter ?? undefined, reason === "words" ? commitClassOf(el, listed, session, config) : undefined);
+    }
     return { kind: "visitor", reason: "asked", el, say: reply.say, event: "" };
   }
 
@@ -784,7 +815,7 @@ function decide(reply: TurnReply, target: Element | undefined, listed: SnapEleme
   const value = typeof out.enter === "string" ? out.enter.trim() : undefined;
   const refuse = (reason: Refusal, at: Element = el, commit?: CommitClass): Plan => {
     if (unasked(commit, session)) return classStop(at, at === el ? listed : undefined, commit);
-    return visitorPlan(el, listed, reason, act, value);
+    return visitorPlan(el, listed, reason, act, value, commit);
   };
 
   // Caps (4.2).
@@ -823,7 +854,7 @@ function decide(reply: TurnReply, target: Element | undefined, listed: SnapEleme
       if (fromField && !isStaged(opened!.from, session, config)) return refuse("live");
       return actPlan(el, act, control, name, { tripwire: fromField });
     }
-    return actPlan(el, act, control, name, {});
+    return actPlan(el, act, control, name, { tripwire: !!pressed.opens });
   }
 
   // Fields: Enter only in a search box or a list Haptic opened.
@@ -850,18 +881,25 @@ function decide(reply: TurnReply, target: Element | undefined, listed: SnapEleme
  * planned and again right before the press, so a "Next" that has become
  * "Delete" in between is not pressed.
  */
-function judgePress(el: Element, control: ControlKind, listedName: string, session: GateSession, config: GateConfig): { refused?: Refused } {
+function judgePress(el: Element, control: ControlKind, listedName: string, session: GateSession, config: GateConfig): { refused?: Refused; opens?: boolean } {
   const link = control === "link";
   const choice = control === "option";
-  const verdict = readName([listedName, liveName(el)].join(" "), { link: link || choice, dialog: inDialog(el, session.host), opener: isOpener(el), extra: config.acting?.commitWords });
+  const name = [listedName, liveName(el)].join(" ");
+  const verdict = readName(name, { link: link || choice, dialog: inDialog(el, session.host), opener: isOpener(el), extra: config.acting?.commitWords });
   if (verdict.commit) return { refused: { reason: verdict.marked ? "marked" : "words", commit: verdict.commit, at: el } };
   const asks = dialogAsks(el, session);
   if (asks) return { refused: { reason: "words", commit: asks, at: el } };
   if (styledDestructive(el)) return { refused: { reason: "styled", at: el } };
   // Rule 8: safe because of what it is. A choice is judged further where it is planned.
   if (link || choice || control === "tab" || control === "combobox" || isOpener(el)) return {};
-  // Rule 9: safe because of its words. Rule 10: anything else is not pressed.
-  return verdict.safe ? {} : { refused: { reason: "unknown", at: el } };
+  // Rule 9: safe because of its words.
+  if (verdict.safe) return {};
+  // Also rule 8, by its words: a button whose name says it opens something to look at or fill in, with no commit word of any
+  // class, outside any form, which it could send. Nothing before the press can tell it from one that also saves, so the press
+  // is watched: one that sends anything to the site stops acting at once (the engine's tripwire).
+  if (control === "button" && !inForm(el) && opensByName(name)) return { opens: true };
+  // Rule 10: anything else is not pressed.
+  return { refused: { reason: "unknown", at: el } };
 }
 
 function actPlan(el: Element, act: Act, control: ControlKind, name: string, extra: { value?: string; want?: boolean; mine?: boolean; tripwire?: boolean; navigates?: boolean }): ActPlan {
@@ -944,7 +982,7 @@ export function reachable(el: Element, plan: ActPlan, session: GateSession, conf
       if (refused) {
         const commit = refused.commit;
         if (unasked(commit, session)) return { ok: false, plan: classStop(refused.at, undefined, commit) };
-        return { ok: false, plan: visitorPlan(el, undefined, refused.reason, plan.act, plan.value) };
+        return { ok: false, plan: visitorPlan(el, undefined, refused.reason, plan.act, plan.value, commit) };
       }
       return { ok: true, x, y, hit };
     }
@@ -970,7 +1008,7 @@ function isControlOtherThan(hit: Element, el: Element, frame: Element): boolean 
 export function planPick(option: Element, plan: ActPlan, session: GateSession, config: GateConfig): ActPlan | VisitorPlan | StopPlan {
   try {
     const words = (option.getAttribute("aria-label") || (option instanceof HTMLOptionElement ? option.label || option.text : wordsIn(option, 120))).replace(/\s+/g, " ").trim();
-    const refuse = (reason: Refusal) => visitorPlan(plan.el, undefined, reason, "choose", plan.value);
+    const refuse = (reason: Refusal, commit?: CommitClass) => visitorPlan(plan.el, undefined, reason, "choose", plan.value, commit);
     if (!option.isConnected || disabled(option) || (option instanceof HTMLOptionElement && option.disabled)) return refuse("unfit");
     const native = option instanceof HTMLOptionElement && option.parentElement !== null && plan.el instanceof HTMLSelectElement && within(plan.el, option);
     const opened = session.opened;
@@ -984,7 +1022,7 @@ export function planPick(option: Element, plan: ActPlan, session: GateSession, c
     const verdict = readName(words, { link: true, extra: config.acting?.commitWords });
     if (verdict.commit) {
       if (unasked(verdict.commit, session)) return classStop(option, undefined, verdict.commit);
-      return refuse(verdict.marked ? "marked" : "words");
+      return refuse(verdict.marked ? "marked" : "words", verdict.commit);
     }
     return actPlan(option, "click", "option", words.slice(0, 60), { value: words, tripwire: plan.tripwire });
   } catch (error) {
@@ -1040,6 +1078,32 @@ export function keyAllowed(el: Element, key: string, plan: ActPlan, session: Gat
   }
 }
 
+/**
+ * Whether a finished request is one the tripwire counts: it carries data and
+ * went out within a second of `armed`. A field's tripwire counts only one
+ * that also came back within that second; a press's (`byStart`) counts one
+ * that went out in it, however long it took.
+ */
+function sentInWindow(entry: PerformanceResourceTiming, armed: number, byStart: boolean): boolean {
+  if (!DATA_REQUEST.has(entry.initiatorType)) return false;
+  if (entry.startTime < armed - 50 || entry.startTime > armed + TRIPWIRE_MS) return false;
+  return byStart || entry.responseEnd <= armed + TRIPWIRE_MS;
+}
+
+/**
+ * Whether the page sent a data request within a second of `armed` that has
+ * come back since the tripwire stopped watching: a slow save started by a
+ * press, found before Haptic acts again. Read from the page's own list of
+ * finished requests; nothing is installed.
+ */
+export function sentAfter(armed: number): boolean {
+  try {
+    return (performance.getEntriesByType("resource") as PerformanceResourceTiming[]).some((entry) => sentInWindow(entry, armed, true));
+  } catch {
+    return false;
+  }
+}
+
 /** Whether a request a page made carries data: fetch, XHR and beacons, not pictures and styles. */
 const DATA_REQUEST = new Set(["fetch", "xmlhttprequest", "beacon", "other"]);
 /** How soon after Haptic set a field a request, or a status, means the page may have saved it. */
@@ -1052,7 +1116,7 @@ const TRIPWIRE_MS = 1000;
  * `ignoreOrigins` (Haptic's own server) do not count. Stop it once the step is
  * checked.
  */
-export function tripwire(el: Element, host: Element, options: { ignoreOrigins?: string[] } = {}): Tripwire {
+export function tripwire(el: Element, host: Element, options: { ignoreOrigins?: string[]; byStart?: boolean } = {}): Tripwire {
   const armed = performance.now();
   let tripped = false;
   let resources: PerformanceObserver | undefined;
@@ -1068,7 +1132,7 @@ export function tripwire(el: Element, host: Element, options: { ignoreOrigins?: 
     resources = new PerformanceObserver((list) => {
       for (const entry of list.getEntries() as PerformanceResourceTiming[]) {
         if (!DATA_REQUEST.has(entry.initiatorType) || ignored(entry.name)) continue;
-        if (entry.startTime >= armed - 50 && entry.responseEnd <= armed + TRIPWIRE_MS) tripped = true;
+        if (sentInWindow(entry, armed, !!options.byStart)) tripped = true;
       }
     });
     resources.observe({ type: "resource", buffered: false });
@@ -1098,6 +1162,7 @@ export function tripwire(el: Element, host: Element, options: { ignoreOrigins?: 
   }
   void el;
   return {
+    armed,
     tripped: () => tripped,
     stop: () => {
       resources?.disconnect();

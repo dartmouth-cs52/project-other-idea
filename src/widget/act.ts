@@ -1,5 +1,5 @@
 import { cleanText, describeElement, type Refusal, type SnapElement } from "../shared/types.ts";
-import { keyAllowed, openConfirmation, planPick, reachable, SAYS, tripwire, type ActPlan, type GateConfig, type GateSession, type StopPlan, type Tripwire, type VisitorPlan } from "./gate.ts";
+import { keyAllowed, openConfirmation, planPick, reachable, SAYS, sentAfter, tripwire, type ActPlan, type GateConfig, type GateSession, type StopPlan, type Tripwire, type VisitorPlan } from "./gate.ts";
 import { markOwn, type Verdict } from "./observe.ts";
 import { isDrawn, isLayer, POPUP_ROLES, watchPopups, type Popups } from "./popups.ts";
 import { findOpenModal } from "./snapshot.ts";
@@ -115,6 +115,10 @@ export async function perform(step: ActStep, ctx: ActContext): Promise<Outcome> 
   const run = new Run(step, ctx);
   try {
     if (!ctx.alive()) return { kind: "stopped" };
+    // The last press let through on its name alone may have started a save that came back since: nothing more is done.
+    const last = ctx.session.lastPress;
+    ctx.session.lastPress = undefined;
+    if (last && sentAfter(last.armed)) return pressSentStop(last.name, last.described);
     return await act(run);
   } catch (error) {
     if (error instanceof Halt) return error.outcome(run);
@@ -189,6 +193,8 @@ class Run {
   private heardSoFar: Heard | undefined;
   /** What has been typed so far, for "What I did" when Stop comes part way. */
   partly: DidLine | undefined;
+  /** The tripwire on a press, once armed, and when. */
+  wire: { wire: Tripwire; at: number } | undefined;
   private readonly cleanups: (() => void)[] = [];
 
   constructor(
@@ -321,9 +327,23 @@ async function act(run: Run): Promise<Outcome> {
 /**
  * A link or a button: press it and look for what came of it. A control that
  * says it opens something is first rested on, in case it opens on hover, and
- * whatever it opens becomes the list Haptic opened (`session.opened`).
+ * whatever it opens becomes the list Haptic opened (`session.opened`). A
+ * button the gate let through only because its name says it opens something
+ * comes with the tripwire: a press that sends anything to the site, or brings
+ * up a status, stops acting at once, and the visitor is told.
  */
 async function pressAndLook(run: Run, kind: "link" | "button"): Promise<Outcome> {
+  const outcome = await pressAndLookOnce(run, kind);
+  const wire = run.wire;
+  if (outcome.kind !== "done" || !wire) return outcome;
+  const stop = await pressTripped(run, wire.wire, wire.at);
+  if (stop) return stop;
+  // A save that is slower than the wait is still found before Haptic acts again.
+  run.session.lastPress = { armed: wire.wire.armed, name: cleanText(run.plan.name, 60) || "it", described: run.name };
+  return outcome;
+}
+
+async function pressAndLookOnce(run: Run, kind: "link" | "button"): Promise<Outcome> {
   const el = run.plan.el;
   // What comes on show while the pointer rests on the control, and what comes on show once it is pressed, are watched apart:
   // a banner or a tooltip that appeared while the pointer was on its way is not what the press opened.
@@ -339,6 +359,12 @@ async function pressAndLook(run: Run, kind: "link" | "button"): Promise<Outcome>
   const ready = () => {
     before = pageSigns(run, el);
     pressing = watchPopups(el);
+    // Armed right before the first event of the press, so that nothing that happened on the way there counts.
+    if (run.plan.tripwire && !run.wire) {
+      const wire = tripwire(el, run.session.host, { byStart: true });
+      run.wire = { wire, at: Date.now() };
+      run.onEnd(() => wire.stop());
+    }
   };
 
   if (opener(el) && !expanded(el)) {
@@ -558,6 +584,19 @@ function tickWord(kind: "checkbox" | "radio" | "switch", on: boolean, state: boo
   if (kind === "switch") return state ? (on ? "on" : "off") : on ? "turned on" : "turned off";
   if (kind === "radio") return state ? (on ? "chosen" : "not chosen") : on ? "chose" : "cleared";
   return state ? (on ? "ticked" : "not ticked") : on ? "ticked" : "unticked";
+}
+
+/** After a press the gate let through on its name alone: the tripwire, read once a second has passed since the press. A request or a status that came in that time stops acting. */
+async function pressTripped(run: Run, wire: Tripwire, startedAt: number): Promise<Outcome | undefined> {
+  const left = TRIPWIRE_MS - (Date.now() - startedAt);
+  if (left > 0) await run.pause(left);
+  if (!wire.tripped()) return undefined;
+  return pressSentStop(cleanText(run.plan.name, 60) || "it", run.name, run.plan.el);
+}
+
+/** Acting stops because a press sent something to the site. */
+function pressSentStop(name: string, described: string, el?: Element): Outcome {
+  return { kind: "stop", reason: "tripwire", say: SAYS.pressSent(name), ...(el?.isConnected ? { el } : {}), event: `You clicked ${described}, and the page sent something to its server at once, so you stopped.` };
 }
 
 /** After a field was set: the tripwire, read once a second has passed since the action. A request or a status that came in that time stops acting. */

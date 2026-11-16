@@ -218,9 +218,94 @@ test("a form's submit button the model says does not commit is not pressed: the 
       await session.untilState("pointing", 10_000);
       assert.equal(await session.pointed(), "issue");
       assert.equal(await session.status(), "Your turn");
-      assert.match(await session.caption(), /This could save something, so I'll leave it to you/);
+      assert.equal(await session.caption(), "I'll leave Issue card to you: it saves something. Click it and I'll carry on.");
       await session.page.waitForTimeout(500);
       assert.deepEqual(await reached(session), []);
+    },
+  ));
+
+// Buttons that open something, and buttons that only look as if they do --------------------------------
+
+/** A page whose button does something at once when clicked: adds a row and tells the server. */
+const ACTS_AT_ONCE = (button: string, extra = "") => `${WATCH}<h1>Team</h1>${extra}<ul id="rows"></ul>${button}
+  <script>for (const el of document.querySelectorAll('[data-at-once]')) el.addEventListener('click', () => { fetch('/data/0', { method: 'POST' }); document.getElementById('rows').append(Object.assign(document.createElement('li'), { textContent: 'Sam' })); });</script>`;
+
+test("an Add member that adds at once, a Create that creates at once and a New inside a form that sends it are never pressed, whatever the model says", async () => {
+  const cases: [string, string, string][] = [
+    [`<button id="add" type="button" data-watch data-at-once>Add member</button>`, "Add member", "I can't tell what Add member does, so I'll leave it to you. Click it and I'll carry on."],
+    [`<button id="create" type="button" data-watch data-at-once>Create</button>`, "Create", "I'll leave Create to you: it saves something. Click it and I'll carry on."],
+    [
+      `<form id="draft" data-watch><label>Title <input id="title"></label><button id="new" type="button" data-watch onclick="this.form.requestSubmit()">New</button></form>
+      <script>document.getElementById('draft').addEventListener('submit', (event) => { event.preventDefault(); fetch('/data/0', { method: 'POST' }); });</script>`,
+      "New",
+      "I can't tell what New does, so I'll leave it to you. Click it and I'll carry on.",
+    ],
+  ];
+  for (const [button, label, say] of cases) {
+    await run(ACTS_AT_ONCE(button), (request) => doing(request, label, "click", `Opening ${label}.`), async (session) => {
+      await session.ask("can you add Sam to the team", { act: true });
+      await session.untilState("pointing", 10_000);
+      assert.equal(await session.status(), "Your turn", label);
+      assert.equal(await session.caption(), say);
+      await session.page.waitForTimeout(800);
+      assert.deepEqual(await reached(session), [], `${label} was reached`);
+      assert.deepEqual(await sent(session), [], `${label} sent something`);
+      assert.equal(await session.page.locator("#rows li").count(), 0);
+    });
+  }
+});
+
+test("a New that sends something to the site the moment it is pressed stops acting at once, and the visitor is told; the next step is not done", () =>
+  run(
+    ACTS_AT_ONCE(`<button id="new" type="button" data-watch data-at-once>New member</button><label>Note <input id="note" data-watch></label>`),
+    (request, index) => (index === 0 ? doing(request, "New member", "click", "Opening New member.") : doing(request, "Note", "type", "Typing the note.", "Sam")),
+    async (session) => {
+      await session.ask("can you add a new member called Sam", { act: true });
+      await session.untilState("finished", 10_000);
+      assert.equal(await session.caption(), "Pressing New member sent something to the site, so I've stopped. Check that nothing was saved before going on.");
+      assert.deepEqual(await sent(session), ["/data/0"]);
+      await session.page.waitForTimeout(800);
+      assert.equal(session.requests.length, 1, "acting asked for another step after the press sent something");
+      assert.deepEqual((await reached(session)).filter((entry) => entry.startsWith("note:")), []);
+    },
+  ));
+
+// The save here is sent as a GET only because the tests' net answers a POST at once; the tripwire cannot tell them apart, and does not try.
+test("a save a press started that comes back only after the step is found before the next action, and nothing more is done", () =>
+  run(
+    `${WATCH}<h1>Team</h1><button id="new" type="button" data-watch>New member</button><p id="opened" hidden>A new member, not saved yet.</p><form><label>Note <input id="note" data-watch></label></form>
+    <script>document.getElementById('new').addEventListener('click', () => { document.getElementById('opened').hidden = false; fetch('/data/2200'); });</script>`,
+    async (request, index) => {
+      if (index === 0) return doing(request, "New member", "click", "Opening New member.");
+      // The model takes its time, as it does: by now the slow save has come back.
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      return doing(request, "Note", "type", "Typing the note.", "Sam");
+    },
+    async (session) => {
+      await session.ask("can you add a new member called Sam", { act: true });
+      await session.untilState("finished", 15_000);
+      assert.equal(await session.caption(), "Pressing New member sent something to the site, so I've stopped. Check that nothing was saved before going on.");
+      assert.match(session.requests[1]?.event ?? "", /^You clicked button "New member"\./);
+      assert.deepEqual((await reached(session)).filter((entry) => entry.startsWith("note:")), [], "Haptic typed after the save came back");
+    },
+  ));
+
+test("an Edit limits that only opens a dialog is pressed, and acting carries on in the dialog", () =>
+  run(
+    `${WATCH}<h1>Card</h1><button id="edit" type="button" data-watch>Edit limits</button>
+    <div id="limits" role="dialog" aria-modal="true" aria-label="Edit limits" hidden><label>Spending limit <input id="limit" data-watch></label><button type="button">Cancel</button> <button id="save" type="button" data-watch>Save limits</button></div>
+    <script>document.getElementById('edit').addEventListener('click', () => { document.getElementById('limits').hidden = false; });</script>`,
+    (request, index) =>
+      index === 0 ? doing(request, "Edit limits", "click", "Opening Edit limits.") : index === 1 ? doing(request, "Spending limit", "type", "Typing 2500.", "2500") : handOver(request, "Save limits", "Ready. Click Save limits."),
+    async (session) => {
+      await session.ask("can you raise the limit to $2,500", { act: true });
+      await session.untilAsked(3, 15_000);
+      assert.match(session.requests[1]?.event ?? "", /^You clicked button "Edit limits"\./);
+      assert.match(session.requests[2]?.event ?? "", /^You typed "2500" in textbox "Spending limit"/);
+      await session.untilState("pointing", 10_000);
+      assert.equal(await session.pointed(), "save");
+      assert.deepEqual(await sent(session), []);
+      assert.deepEqual((await reached(session)).filter((entry) => entry.startsWith("save:")), []);
     },
   ));
 

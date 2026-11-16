@@ -308,8 +308,9 @@ test("a button with no type inside a form submits it, so it is not pressed, even
   try {
     const next = await page.plan("#next", { do: "click" }, "go on");
     assert.deepEqual([next.kind, next.reason], ["visitor", "writes"]);
-    assert.match(next.say ?? "", /This could save something, so I'll leave it to you\. Click Next and I'll carry on\./);
-    assert.match(next.event ?? "", /^You did not click button "Next": it may save something, so the visitor has it\.$/);
+    // The visitor and the model are each told the real reason.
+    assert.equal(next.say, "I'll leave Next to you: it sends something to the site. Click it and I'll carry on.");
+    assert.match(next.event ?? "", /^You did not click button "Next": it sends something to the site, so the visitor has it\.$/);
     // A control inside it is the same button: a click there submits the form.
     const words = await page.plan("#next-words", { do: "click" }, "go on", { as: { role: "button", label: "Next" } });
     assert.deepEqual([words.kind, words.reason], ["visitor", "writes"]);
@@ -538,11 +539,13 @@ test("commit words on live buttons in every shipped language are not pressed; fo
 });
 
 test("an unknown button is the visitor's, and acting carries on after their click", async () => {
-  const page = await open(`<h1>Bills</h1><button type="button" id="new" data-watch>New bill</button><button type="button" id="icon" data-watch><svg class="lucide lucide-trash-2" width="16" height="16"></svg></button>`);
+  const page = await open(`<h1>Bills</h1><button type="button" id="new" data-watch>Add bill</button><button type="button" id="icon" data-watch><svg class="lucide lucide-trash-2" width="16" height="16"></svg></button>`);
   try {
     const seen = await page.plan("#new", { do: "click" }, "pay the Acme bill");
     assert.deepEqual([seen.kind, seen.reason], ["visitor", "unknown"]);
-    assert.equal(seen.say, "This could save something, so I'll leave it to you. Click New bill and I'll carry on.");
+    // It says why: Haptic cannot tell what the button does, not that it saves.
+    assert.equal(seen.say, "I can't tell what Add bill does, so I'll leave it to you. Click it and I'll carry on.");
+    assert.equal(seen.event, 'You did not click button "Add bill": you can\'t tell what it does, so the visitor has it.');
     // An icon-only trash button is read by its icon, and ends something the visitor did not ask to end.
     const trash = await page.plan("#icon", { do: "click" }, "pay the Acme bill");
     assert.deepEqual([trash.kind, trash.reason], ["stop", "class"]);
@@ -604,6 +607,47 @@ test("values come only from the visitor's words: typed text, and the option the 
     const outside = await page.plan("#month", { do: "click" }, CARD);
     assert.deepEqual([outside.kind, outside.reason], ["visitor", "unknown"]);
     assert.deepEqual((await page.press()).hits, []);
+  } finally {
+    await page.close();
+  }
+});
+
+test("a button outside any form whose name says it opens something is pressed with the tripwire armed; named otherwise, with a commit word, red or in a form it is not", async () => {
+  // Seen live: Northpine's Edit limits, New budget, Open expense and Delegate approvals, each handed back with "This could save something".
+  const page = await open(`<h1>Cards</h1>
+    <section><h2>Spending</h2><button type="button" id="edit" data-watch>Edit limits</button></section>
+    <button type="button" id="new-budget" data-watch><svg class="lucide lucide-plus" width="12" height="12"></svg> New budget</button>
+    <button type="button" id="open-expense" aria-label="Open expense" data-watch><svg class="lucide lucide-arrow-up-right" width="12" height="12"></svg></button>
+    <button type="button" id="delegate" data-watch>Delegate approvals</button>
+    <button type="button" id="add" data-watch>Add member</button>
+    <button type="button" id="create" data-watch>Create</button>
+    <button type="button" id="edit-save" data-watch>Edit and save</button>
+    <button type="button" id="new-red" style="background:#d11;color:#fff" data-watch>New entry</button>
+    <form id="draft"><input aria-label="Title"><button type="button" id="new-in-form" data-watch onclick="this.form.requestSubmit()">New</button></form>
+    <div role="form" aria-label="Draft"><button type="button" id="new-in-role-form" data-watch>New</button></div>`);
+  try {
+    for (const id of ["edit", "new-budget", "open-expense"]) {
+      const seen = await page.plan(`#${id}`, { do: "click" }, "raise the limit and set a marketing budget");
+      assert.deepEqual([id, seen.kind, seen.control, seen.tripwire], [id, "act", "button", true]);
+      assert.deepEqual((await page.press()).hits?.slice(-1), [id]);
+    }
+    const before = (await page.press()).hits?.length;
+    const refused: [string, string, string][] = [
+      // No word says it only opens something: it could do it at once.
+      ["delegate", "unknown", "I can't tell what Delegate approvals does, so I'll leave it to you. Click it and I'll carry on."],
+      ["add", "unknown", "I can't tell what Add member does, so I'll leave it to you. Click it and I'll carry on."],
+      ["create", "words", "I'll leave Create to you: it saves something. Click it and I'll carry on."],
+      ["edit-save", "words", "I'll leave Edit and save to you: it saves something. Click it and I'll carry on."],
+      ["new-red", "styled", "I'll leave New entry to you: the page marks it as dangerous. Click it and I'll carry on."],
+      // In a form, a script can send it from any button.
+      ["new-in-form", "unknown", "I can't tell what New does, so I'll leave it to you. Click it and I'll carry on."],
+      ["new-in-role-form", "unknown", "I can't tell what New does, so I'll leave it to you. Click it and I'll carry on."],
+    ];
+    for (const [id, reason, say] of refused) {
+      const seen = await page.plan(`#${id}`, { do: "click" }, "add Sam and make a new draft");
+      assert.deepEqual([id, seen.kind, seen.reason, seen.say], [id, "visitor", reason, say]);
+    }
+    assert.equal((await page.press()).hits?.length, before, "a refused button was pressed");
   } finally {
     await page.close();
   }
@@ -685,7 +729,8 @@ test("the hand-over: on a commit it hands over, adding the control's name when t
     // The server removed the do: the visitor gets the gate's own sentence, not the model's narration.
     const withheld = await page.plan("#issue", { do: null, withheld: "words", status: "continue", say: "Issuing the card." }, CARD);
     assert.deepEqual([withheld.kind, withheld.reason], ["visitor", "words"]);
-    assert.equal(withheld.say, "This could save something, so I'll leave it to you. Click Issue card and I'll carry on.");
+    assert.equal(withheld.say, "I'll leave Issue card to you: it saves something. Click it and I'll carry on.");
+    assert.match(withheld.event ?? "", /: its words say it saves something, so the visitor has it\.$/);
     assert.deepEqual((await page.press()).hits, []);
   } finally {
     await page.close();

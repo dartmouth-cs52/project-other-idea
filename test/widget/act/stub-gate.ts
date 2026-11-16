@@ -84,7 +84,12 @@ export function keyAllowed(el: Element, key: string): boolean {
 
 export function tripwire(el: Element): Tripwire {
   stub().calls.push({ fn: "tripwire", el });
-  return { tripped: () => stub().tripped, stop: () => undefined };
+  return { tripped: () => stub().tripped, stop: () => undefined, armed: performance.now() };
+}
+
+/** No slow save is ever found here: a test that wants one sets the tripwire instead. */
+export function sentAfter(): boolean {
+  return false;
 }
 
 export function openConfirmation(): Element | undefined {
