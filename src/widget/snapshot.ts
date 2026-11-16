@@ -1671,6 +1671,28 @@ function inFrontOf(el: Element, seen: DOMRect, ignore: Element, frame: FrameView
   return first && first.ownerDocument === el.ownerDocument ? deepest(first, (left + right) / 2, (top + bottom) / 2) : first;
 }
 
+/** Controls that hold a value or a tick, which a page often draws with a box of its own around a field it hides. */
+const HOLDS_A_VALUE = 'input, select, textarea, [role="slider"], [role="checkbox"], [role="radio"], [role="switch"], [role="spinbutton"]';
+
+/**
+ * Whether a field that cannot be seen itself is drawn by a box around it of
+ * about its size that can be: a slider's thumb around its input, a tick box's
+ * square around its checkbox.
+ */
+function drawnByItsBox(el: Element, facts: Map<Element, BoxFacts>): boolean {
+  if (!el.matches(HOLDS_A_VALUE)) return false;
+  const own = el.getBoundingClientRect();
+  const most = Math.max(4 * own.width * own.height, 2500);
+  for (let node = drawnParent(el), depth = 0; node && depth < 3; node = drawnParent(node), depth++) {
+    if (!isElement(node)) continue;
+    if (isPageEdge(node)) return false;
+    const box = node.getBoundingClientRect();
+    if (box.width * box.height > most) return false;
+    if (box.width >= 2 && box.height >= 2 && !seenOf(node, box, facts).hidden) return true;
+  }
+  return false;
+}
+
 /** Whether a control has a <label> that can be seen, which is pressed for it. */
 function shownLabel(el: Element, facts: Map<Element, BoxFacts>): boolean {
   return labelsOf(el).some((label) => {
@@ -1894,8 +1916,9 @@ function keepReachable(candidates: Candidate[], ignore: Element, findLayer: bool
       continue;
     }
     if (seen.hidden || parkedOutside(c.rect, !!seen.fixed, pageRtl, view)) {
-      // A tick box or a switch hidden away and drawn by its label is pressed through the label.
-      if (!shownLabel(c.el, facts) && (hover || !showsAnyway(c))) left.add(c);
+      // A tick box or a switch hidden away and drawn by its label is pressed through the label, and a field cut down to
+      // nothing inside the box that draws it, like a slider's input in its thumb, is that box's control.
+      if (!shownLabel(c.el, facts) && !drawnByItsBox(c.el, facts) && (hover || !showsAnyway(c))) left.add(c);
       continue;
     }
     // The field that has the keyboard is typed in, whatever is drawn over it, like the list it opened.

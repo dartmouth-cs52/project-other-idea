@@ -98,6 +98,13 @@ test("a see-through menu under the page is left out, and a see-through field ove
   assert.deepEqual(lines(snapshot), ['button "Menu" (collapsed) [header]', 'checkbox "Remember me" [main]', 'combobox "Template" [main]']);
 });
 
+test("a field cut down to nothing inside the box that draws it, as a slider's input in its thumb is, is still listed", { skip }, async () => {
+  const snapshot = await read(`<h1>Sound</h1><span style="position:relative;display:inline-block;width:300px;height:20px;margin:20px">
+    <span style="position:absolute;top:0;left:90px;width:20px;height:20px;border-radius:50%;background:#1976d2">
+      <input type="range" aria-label="Volume" value="30" style="position:absolute;width:100%;height:100%;overflow:hidden;clip:rect(0 0 0 0);border:0;margin:-1px;padding:0"></span></span>`);
+  assert.deepEqual(lines(snapshot), ['slider "Volume" [Sound]']);
+});
+
 // Under something pinned to the window ----------------------------------------------
 
 test("a control under a header pinned to the window is above the visible area, and one under a notice pinned to its foot is below", { skip }, async () => {

@@ -36,8 +36,9 @@ test("a press that acts when the mouse comes up, and takes the control away, is 
 });
 
 test("a pressed option that is moved out from under the mouse, not removed, is heard", async () => {
-  // The list acts as the mouse goes down: it clips the option and moves it away, and no click on it follows.
-  const page = `<h1>Tools</h1><div id="list" style="position:relative;height:40px"><div id="opt" role="option" tabindex="0" style="position:absolute;left:0;top:0;padding:8px;width:200px;border:1px solid #999">What links here</div></div><p id="out"></p>
+  // The list acts as the mouse goes down: it clips the option and moves it away, and no click on it follows. The page
+  // has another control, as pages do: one that lists nothing once the option has gone is waited on as still loading.
+  const page = `<h1>Tools</h1><div id="list" style="position:relative;height:40px"><div id="opt" role="option" tabindex="0" style="position:absolute;left:0;top:0;padding:8px;width:200px;border:1px solid #999">What links here</div></div><p id="out"></p><button type="button">Close</button>
     <script>document.getElementById('opt').addEventListener('mousedown', (event) => { const el = event.currentTarget; el.style.left = '-5000px'; el.style.clip = 'rect(0,0,0,0)'; document.getElementById('out').textContent = 'Pages that link to this one are listed here.'; })</script>`;
   const session = await pointing(page, "What links here");
   try {
