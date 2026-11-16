@@ -4,6 +4,7 @@
 // which company they belong to:
 //
 //   PUT  /api/app/sites/:id/setup            the screen the setup is on, Finish later, or done
+//   PUT  /api/app/sites/:id/address          a new address, for a site the script has never called from
 //   POST /api/app/sites/:id/developer-email  email the install steps to the company's developer
 //   GET  /api/app/sites/:id/metrics?days=    finished guides, finish rate, couldn't guide, time to finish, by day
 //
@@ -11,7 +12,7 @@
 // server doesn't read. The emails sent are counted in their own table,
 // developer_emails (db/migrations/0013), so deleting a site doesn't reset them.
 
-import { checkEmail, isSetupStep, mailboxOf, NEEDS_SIGN_IN, pageControls, riskyControls, type SetupState } from "../lib/setup";
+import { checkAddress, checkEmail, isSetupStep, mailboxOf, NEEDS_SIGN_IN, pageControls, riskyControls, type SetupState } from "../lib/setup";
 import type { PageNode, SiteContext } from "../../src/shared/types";
 import type { Organization, Sql } from "./db";
 import { developerEmail, UnsafeText } from "./developer-email";
@@ -74,7 +75,7 @@ interface SiteRow {
   context: SetupContext;
 }
 
-const ROUTE = /^\/sites\/(site_[a-z0-9_]{3,40})\/(setup|developer-email|metrics)$/;
+const ROUTE = /^\/sites\/(site_[a-z0-9_]{3,40})\/(setup|address|developer-email|metrics)$/;
 const KEY = /^[A-Za-z0-9_-]{8,64}$/;
 
 /** Answers the paths above, or undefined for any other path, which app-api.ts then answers itself. */
@@ -84,6 +85,7 @@ export async function setupRoutes(call: SetupRequest): Promise<Answer | undefine
   const [, id = "", what] = match;
   const method = call.request.method;
   if (what === "setup" && method === "PUT") return saveSetup(call, id, await body(call.request));
+  if (what === "address" && method === "PUT") return changeAddress(call, id, await body(call.request));
   if (what === "developer-email" && method === "POST") return emailDeveloper(call, id, await body(call.request));
   if (what === "metrics" && method === "GET") {
     if (!(await siteOf(call.sql, call.org, id))) return refuse(404, "No such site.");
@@ -134,6 +136,40 @@ async function saveSetup(call: SetupRequest, id: string, input: Record<string, u
   )) as { setup: SetupState }[];
   if (!rows[0]) return refuse(404, "No such site.");
   return { status: 200, body: { setup: rows[0].setup } };
+}
+
+/**
+ * A new address for a site, from the setup's first screen, changed in place so
+ * nothing set up is lost: notes, help docs, corrections, Never point at and the
+ * setup itself stay, and the site keeps its id, so a tag or a link already sent
+ * still works. The old address is replaced in the allowed list, the pages read
+ * from it are dropped, and reading starts again from the new one.
+ *
+ * Only while the script has never called from anywhere. After that the address
+ * may be in someone's live tag, so it changes on the dashboard instead, by
+ * allowing the new one.
+ */
+async function changeAddress(call: SetupRequest, id: string, input: Record<string, unknown>): Promise<Answer> {
+  const checked = checkAddress(typeof input.url === "string" ? input.url : "");
+  if (!checked.ok) return refuse(400, checked.message, "url");
+  const site = await siteOf(call.sql, call.org, id);
+  if (!site) return refuse(404, "No such site.");
+  if (checked.origin === site.origin) return { status: 200, body: { id, origin: site.origin } };
+  const reading = { queue: [checked.url], seen: [], failed: [], thin: [], max: site.context.source?.maxPages ?? 30, startedAt: new Date().toISOString() };
+  const rows = await call.sql.query(
+    `update sites set
+      origin = $3,
+      allowed_origins = case when $3 = any(allowed_origins) then array_remove(allowed_origins, origin) else array_replace(allowed_origins, origin, $3) end,
+      context = jsonb_set(jsonb_set(jsonb_set(context, '{origin}', to_jsonb($3::text)), '{pages}', '[]'::jsonb), '{source}',
+        coalesce(context->'source', '{}'::jsonb) || jsonb_build_object('url', $4::text)),
+      reading = $5::jsonb,
+      updated_at = now()
+    where id = $1 and company_id = $2 and not exists (select 1 from site_origins o where o.site_id = $1)
+    returning id, origin`,
+    [id, call.org.id, checked.origin, checked.url, JSON.stringify(reading)],
+  );
+  if (!rows[0]) return refuse(409, "Haptic's script has already run for this site, so its address can't change here. Allow the new address under Where Haptic may run on your dashboard.", "url");
+  return { status: 200, body: rows[0] };
 }
 
 /** The setup as the dashboard reads it with the site. Null for a site added before there were setup screens. */

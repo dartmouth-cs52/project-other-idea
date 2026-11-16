@@ -156,6 +156,12 @@ test("nothing that can carry a web address, an @ or an invisible character reach
   assert.throws(() => emailText("dana@example.com", { at: false }), UnsafeText);
 });
 
+test("a new address is checked like any other, and only for the company's own site", async () => {
+  const sql = fakeSql([site()]);
+  assert.deepEqual(await call(sql, { url: "acme" }, { method: "PUT", what: "address" }), { status: 400, body: { error: "That address is missing its domain, like .com.", field: "url" } });
+  assert.equal((await call(sql, { url: "www.example.com" }, { method: "PUT", what: "address", org: OTHER_ORG }))?.status, 404);
+});
+
 test("where the setup is: one step at a time, Finish later, done, and only for the company's own site", async () => {
   const rows = [site()];
   const sql = fakeSql(rows);
@@ -369,6 +375,39 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     exec(DB, `insert into developer_emails (key, company_id, site_id, sender, recipient, sent_at) values ('old3', '${ORG.id}', '${SITE}', 'u', 'r', now() - interval '30 hours')`);
     await forgetOldEmails(sql() as unknown as SetupRequest["sql"]);
     assert.equal((await rows()).length, 1);
+  });
+
+  test("a new address for a site the script has never called from changes it in place, keeping everything set up", async () => {
+    reset();
+    exec(
+      DB,
+      `update sites set allowed_origins = '{https://app.example.com,https://staging.example.com}', reading = '{"queue":[],"seen":["/"],"failed":[],"thin":[],"max":30,"startedAt":"2026-11-16T00:00:00Z","finishedAt":"2026-11-16T00:01:00Z"}',
+        context = '{"origin":"https://app.example.com","notes":"Invoices live under Billing.","docs":[{"title":"Help","source":"pasted:help","text":"x"}],"corrections":[{"id":"c1"}],"blocked":[{"label":"Delete"}],"pages":[{"path":"/old"}],"source":{"url":"https://app.example.com/","maxPages":30,"docs":[]},"setup":{"step":"reading"}}'
+        where id = '${SITE}'`,
+    );
+    const answer = await call(sql(), { url: "www.example.com/start" }, { method: "PUT", what: "address" });
+    assert.deepEqual(answer, { status: 200, body: { id: SITE, origin: "https://www.example.com" } });
+    const [row] = (await sql().query(`select origin, allowed_origins, reading, context from sites where id = $1`, [SITE])) as { origin: string; allowed_origins: string[]; reading: { queue: string[]; seen: string[]; finishedAt?: string }; context: Record<string, unknown> }[];
+    assert.equal(row!.origin, "https://www.example.com");
+    assert.deepEqual(row!.allowed_origins, ["https://www.example.com", "https://staging.example.com"], "the old address is replaced, the others kept");
+    assert.deepEqual(row!.reading.queue, ["https://www.example.com/start"]);
+    assert.equal(row!.reading.finishedAt, undefined, "reading starts again");
+    assert.deepEqual(row!.context.pages, [], "the old site's pages go");
+    assert.equal(row!.context.notes, "Invoices live under Billing.");
+    assert.deepEqual(row!.context.blocked, [{ label: "Delete" }]);
+    assert.deepEqual(row!.context.corrections, [{ id: "c1" }]);
+    assert.equal((row!.context.docs as unknown[]).length, 1);
+    assert.deepEqual(row!.context.setup, { step: "reading" });
+    assert.equal((row!.context.source as { url: string }).url, "https://www.example.com/start");
+  });
+
+  test("once the script has called from anywhere, the address can't change here, and nothing is touched", async () => {
+    reset();
+    exec(DB, `insert into site_origins (site_id, origin, allowed) values ('${SITE}', 'http://localhost:3000', false)`);
+    const answer = await call(sql(), { url: "www.example.com" }, { method: "PUT", what: "address" });
+    assert.equal(answer?.status, 409);
+    assert.match((answer?.body as { error: string }).error, /already run/);
+    assert.equal((await sql().query(`select origin from sites where id = $1`, [SITE]))[0]!.origin, "https://app.example.com");
   });
 
   test("the setup's step is kept in the site, beside what the reader wrote", async () => {

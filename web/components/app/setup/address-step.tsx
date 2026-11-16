@@ -73,7 +73,11 @@ export function AddressStep({
             label={<span className="text-base">Your app&apos;s address</span>}
             required
             error={fields.errors.url}
-            hint={current ? "A different address starts reading again from that one." : "The address people use your product at. You can add staging and others later."}
+            hint={
+              current
+                ? "A different address keeps everything you set up here, and Haptic reads your pages again from it."
+                : "The address people use your product at. You can add staging and others later."
+            }
           >
             <Input
               {...fields.control("url", { hint: true })}

@@ -18,6 +18,42 @@ describe("the setup screens in chromium", { skip: HAS_WEB ? false : "web/node_mo
     await flow?.close();
   });
 
+  describe("changing the address", () => {
+    const deletes = () => state.calls.filter((call) => call.method === "DELETE");
+
+    test("Back to the address and a new one changes the site in place, and never deletes it", async () => {
+      state = siteState({ setup: { step: "reading" }, notes: "Keep me", blocked: [{ label: "Delete" }] });
+      const page = await openSetup(flow);
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      const field = page.getByLabel("Your app's address");
+      await field.fill("www.example.com");
+      await page.keyboard.press("Enter");
+      await page.getByRole("heading", { name: "Reading your site" }).waitFor();
+      assert.deepEqual(deletes(), []);
+      assert.ok(state.calls.some((call) => call.method === "PUT" && call.path.endsWith("/address") && (call.body as { url: string }).url === "https://www.example.com/"));
+      assert.equal(state.calls.filter((call) => call.method === "POST" && call.path === "/sites").length, 0, "no second site");
+      assert.equal(state.site.origin, "https://www.example.com");
+      assert.equal(state.site.notes, "Keep me");
+      assert.ok(await page.getByText("www.example.com", { exact: false }).first().isVisible());
+      await page.close();
+    });
+
+    test("when the address can't change, the person is told why, and the site is left as it was", async () => {
+      state = siteState({ setup: { step: "reading" } });
+      state.fail[`PUT /sites/site_a1b2c3d4e5f6/address`] = 409;
+      const page = await openSetup(flow);
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await page.getByLabel("Your app's address").fill("www.example.com");
+      await page.keyboard.press("Enter");
+      await page.getByRole("alert").getByText("The server failed on purpose.").waitFor();
+      await page.waitForTimeout(3500);
+      assert.equal(await page.getByLabel("Your app's address").inputValue(), "www.example.com", "still on the address, with what they typed");
+      assert.deepEqual(deletes(), []);
+      assert.equal(state.site.origin, "https://app.example.com");
+      await page.close();
+    });
+  });
+
   describe("Never touch saves what the screen shows", () => {
     test("Continue with everything ticked, come Back, untick two, Continue: those two are no longer ruled out", async () => {
       state = siteState();

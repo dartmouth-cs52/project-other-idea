@@ -115,15 +115,23 @@ export function SetupFlow() {
     router.push(`/dashboard/?site=${siteId}`);
   }
 
-  /** Step 1's answer: the same address carries on, a new one replaces a site that hasn't connected, and none makes one. Resolves with any failure. */
+  /**
+   * Step 1's answer. The same address carries on. A new one changes this site in place, keeping all
+   * that was set up and its id: the Worker refuses, with a reason shown on the screen, once the script
+   * has called from anywhere. With no site yet, one is added. A site is never deleted from here.
+   * Resolves with any failure.
+   */
   async function choose(origin: string, url: string): Promise<unknown> {
     try {
       if (current && current.origin === origin) {
         go("reading");
         return;
       }
-      if (current && !current.connected) {
-        await api(`/sites/${current.id}`, { method: "DELETE", body: { confirm: new URL(current.origin).host } });
+      if (current) {
+        await api(`/sites/${current.id}/address`, { method: "PUT", body: { url } });
+        await load();
+        go("reading");
+        return;
       }
       const added = await api<{ id: string }>("/sites", { method: "POST", body: { url } });
       await api(`/sites/${added.id}/setup`, { method: "PUT", body: { step: "reading" } }).catch(() => {});
