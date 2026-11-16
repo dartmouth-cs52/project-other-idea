@@ -470,9 +470,10 @@ const cleanText = (text: string, max = 80): string => maskAndTrim(text, max, own
  * or one control would be named two ways. `near` is the control last used,
  * whose surroundings are the page text that matters most after the screen:
  * by default the one Haptic's pointer last pointed at, which the pointer
- * keeps on Haptic's element.
+ * keeps on Haptic's element. A reading given no question, as by a tool that
+ * reads the page beside the widget, leaves nothing unmasked.
  */
-export function takeSnapshot(ignore: Element, question: string, near = (ignore as Element & { pointedAt?: Element }).pointedAt): PageSnapshot {
+export function takeSnapshot(ignore: Element, question = "", near = (ignore as Element & { pointedAt?: Element }).pointedAt): PageSnapshot {
   own = namedIn(question);
   untiedLabels = Array.from(document.querySelectorAll("label")).some((label) => !label.hasAttribute("for") && !(label as HTMLLabelElement).control);
   const candidates: Candidate[] = [];
