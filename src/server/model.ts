@@ -4,7 +4,7 @@ import { z } from "zod";
 import { checkAction } from "../shared/act-rules.ts";
 import { ACTING_LIMITS, ACTS, actionsAllowed, type Act, type SiteContext, type SnapElement, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { actingFor, type NotActing } from "./acting.ts";
-import { namedButNotPointed, namedButNotPointedNote } from "./check.ts";
+import { namedButNotDone, namedButNotDoneNote, namedButNotPointed, namedButNotPointedNote } from "./check.ts";
 import { buildSystemPrompt, buildUserMessage } from "./prompt.ts";
 
 // One model call per step. HAPTIC_MODEL picks the model, or "mock" for a
@@ -32,6 +32,13 @@ type Effort = "low" | "medium" | "high";
  * questions it caught 9 replies (0.5%), all 9 wrong, such as "Click FAQ in the
  * top bar to read it" with nothing pointed at. Nothing can have been reached
  * before the first step, so there a control the sentence names is the step.
+ *
+ * In act mode "ask" also asks once more at any step when a reply of
+ * "continue" points at nothing and its sentence names a control Haptic could
+ * press itself (check.ts, namedButNotDone). There every step is Haptic's to
+ * do, and such a reply leaves the visitor waiting on nothing: on Northpine's
+ * card wizard, 2 demo runs in 9 stopped on "Virtual is already selected, so
+ * I'm skipping that choice. Next to open Limits and controls."
  */
 export type Recheck = "off" | "log" | "ask";
 
@@ -97,8 +104,11 @@ export interface TurnMeasure {
   /** The sentence exactly as the model wrote it, before tidySay. The benchmark compares the two. */
   wrote: string;
   tokens?: { input: number; cacheRead: number; cacheWrite: number; output: number };
-  /** The listed control the first reply's sentence told the visitor to use while it pointed at nothing, and whether the model was asked again. */
-  recheck?: { named: string; asked: boolean };
+  /**
+   * The listed control the first reply's sentence told the visitor to use while it pointed at nothing, and whether the model was asked again.
+   * `act` is set when it was an act reply of "continue" naming a control Haptic could press (namedButNotDone).
+   */
+  recheck?: { named: string; asked: boolean; act?: true };
   /**
    * Set when the widget asked to act. `refused`: why the step was answered as
    * a guide. `capped`: the step was past the site's cap, so the model was not
@@ -335,15 +345,24 @@ export async function measureTurn(
   // The model can only point at what's on the page it was shown.
   if (!onPage(answer.reply.target)) answer.reply.target = null;
 
-  const named = settings.model === "mock" || settings.recheck === "off" ? undefined : namedButNotPointed(request.snapshot, answer.reply);
-  if (named) {
-    const ask = settings.recheck === "ask" && request.step === 0 && !request.event;
+  const checking = settings.model !== "mock" && settings.recheck !== "off";
+  // In act mode at any step: a "continue" that points at nothing stops the run, so a control it names that Haptic could press is asked about.
+  const stalled = checking && acting.act ? namedButNotDone(request, answer.reply, acting.settings.commitWords) : undefined;
+  const named = checking && !stalled ? namedButNotPointed(request.snapshot, answer.reply) : undefined;
+  const found = stalled ?? named;
+  if (found) {
+    const ask = settings.recheck === "ask" && (stalled !== undefined || (request.step === 0 && !request.event));
     // Ids only: the server's log holds nothing from the visitor's page.
-    console.log(`recheck ${site.id} step ${request.step}: the sentence tells the visitor to use ${named.id} and nothing is pointed at${ask ? ", asking again" : ""}`);
-    answer.recheck = { named: named.id, asked: ask };
+    console.log(
+      stalled
+        ? `recheck ${site.id} step ${request.step}: an act reply of "continue" names ${found.id}, which Haptic could press, and nothing is pointed at${ask ? ", asking again" : ""}`
+        : `recheck ${site.id} step ${request.step}: the sentence tells the visitor to use ${found.id} and nothing is pointed at${ask ? ", asking again" : ""}`,
+    );
+    answer.recheck = { named: found.id, asked: ask, ...(stalled ? { act: true as const } : {}) };
     if (ask) {
       try {
-        const again = await claudeTurn(site, request, settings, targetKnown, { reply: answer.reply, note: namedButNotPointedNote(named) });
+        const note = stalled ? namedButNotDoneNote(stalled) : namedButNotPointedNote(found);
+        const again = await claudeTurn(site, request, settings, targetKnown, { reply: answer.reply, note });
         if (!onPage(again.reply.target)) again.reply.target = null;
         answer = { ...again, tokens: added(answer.tokens, again.tokens), recheck: answer.recheck };
       } catch (error) {
