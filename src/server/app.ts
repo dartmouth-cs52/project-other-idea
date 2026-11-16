@@ -187,8 +187,10 @@ function parseReport(body: unknown): GuideReport | undefined {
 
 /**
  * One JSON value per line. `{"target":"e12"}` goes out the moment the model has
- * named the control, and the full reply follows as the last line. The status
- * line is already sent by then, so a failure arrives as `{"error":…,"code":…}`.
+ * named the control, and the full reply follows as the last line. On a site
+ * with Answers on, `{"mode":"answer"}` goes out before either, so the widget
+ * knows what kind of reply is coming. The status line is already sent by
+ * then, so a failure arrives as `{"error":…,"code":…}`.
  */
 function streamTurn(
   parts: AppParts,
@@ -201,7 +203,7 @@ function streamTurn(
 ): Response {
   return lines(cors, async (line) => {
     try {
-      const measure = await measureTurn(site, turn, undefined, (id) => line({ target: id }));
+      const measure = await measureTurn(site, turn, undefined, { onMode: (mode) => line({ mode }), onTarget: (id) => line({ target: id }) });
       charge(parts, site, caller, admitted, measure.usd, 1);
       parts.onTurn?.(turn, measure, site, origin);
       line(measure.reply);

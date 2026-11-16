@@ -40,6 +40,38 @@ npm run tag ──▶ data/sites/<id>.json ──▶ server ◀── widget.js 
 
 **How a step works.** The widget lists every control on the page with a short id (`e12`), its role, label and state. It never reads what's typed into fields or anything inside an area a visitor writes in, and it masks emails, phone numbers and long numbers, in the question and the page's address as well. Nothing inside a writing area is listed, not even a control: a rich-text editor whose toolbar, mention chips or task checkboxes sit inside its editable element cannot be pointed at there. The model replies with the id to point at, a sentence to show, and whether to wait for the visitor. The reply is streamed, so the pointer moves as soon as the id is known, before the sentence is finished. After the visitor acts, the widget waits for the page to stop changing and sends the new page with a summary of what changed. If they click something else, Haptic says so and gives the step that gets them back. Guide state is kept in `sessionStorage`, so a click that loads a new page picks up where it left off.
 
+**Answers.** A pointer cannot answer "what does this do" or "why did that happen". A site with Answers switched on gets replies that can also answer in words, from its own help docs. Each reply is one of three kinds, which the model names in the reply's first field so the widget knows what is coming:
+
+| Kind | When | What the visitor gets |
+|---|---|---|
+| `guide` | They want to do something, and there is a control or a link toward it | The pointer and a sentence, as before |
+| `answer` | They ask what something is, what it does or why, and a help article says | One to four sentences, with the title, link and date of each article they rest on. It can point as well |
+| `cannot_help` | The docs do not cover it, it is one for a person, or it has nothing to do with the site | A fixed sentence |
+
+What matters most is decided by the server after the model has replied, in `src/server/answers.ts`, and not by the prompt:
+
+- When Haptic cannot help, the visitor reads a fixed sentence. The model only picks which one, and what it wrote is thrown away.
+- An answer has to name at least one of the site's own help articles. If it names none, the visitor is told the docs do not cover it.
+- Prices, refunds, billing disputes, legal and medical matters, deadlines and anything about the visitor's own account are never answered in words, whatever the docs say. Pointing at the page where the visitor can see their own plan is still allowed.
+- An answer is held to the same rules as any sentence: plain text, with no web address, email address or number to call.
+
+It is off unless a site switches it on, and a site without it is asked exactly as before: the same prompt, and the same three fields in each reply. A test holds the old prompt to a fingerprint, so it cannot change by accident.
+
+```bash
+npm run tag -- --id site_ab12cd34ef --answers on --stale-days 365
+```
+
+With Answers on, up to about 100,000 tokens of help docs go in the prompt, where a site without it gets about 24,000. A text doc can say where it lives and when it last changed, in a few lines at its top, and those are what the visitor is shown under an answer:
+
+```
+---
+url: https://help.example.com/articles/inviting-teammates
+updated: 2026-10-02
+---
+```
+
+A doc fetched from a URL is linked to that URL. **Answers has not been tried with a real model yet.** Run the benchmark with `--answers` before switching it on for anyone (see [`eval/README.md`](eval/README.md)).
+
 **What a step costs.** The rules and everything known about the site are the same on every step, so the model provider keeps them ready (a prompt cache) and charges a fraction of the price to read them again. They are kept for an hour after a site's last step. `HAPTIC_CACHE=5m` keeps them for five minutes, which is cheaper to write and only wins on a site that is never quiet that long. Every step logs how many tokens were read from the cache and how many had to be written.
 
 The crawl only sees HTML the server sends. Pages drawn by JavaScript or behind a login come back nearly empty, and the command says so when that happens. The widget reads each page live either way, so those sites lean on notes and docs for now.

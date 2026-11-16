@@ -1,11 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import type { SiteContext, TurnReply, TurnRequest } from "../shared/types.ts";
+import { MODES, REASONS, type Mode, type Reason, type SiteContext, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { declinedReply, finishAnswer, neverDecided, type Finished, type ModelReply, type Overruled } from "./answers.ts";
 import type { Ceiling } from "./budget.ts";
 import { costOf } from "./prices.ts";
-import { buildSystemPrompt, buildUserMessage } from "./prompt.ts";
-import { checkSay, type Rule } from "./rules.ts";
+import { answersOn, articlesOf, buildSystemPrompt, buildUserMessage } from "./prompt.ts";
+import { checkSay, SAY_WITHOUT_WORDS, tidySay, type Rule } from "./rules.ts";
+
+export { SAY_WITHOUT_WORDS, tidySay };
 
 // One model call per step. HAPTIC_MODEL picks the model, or "mock" for a
 // keyword matcher that needs no API key. The reply is streamed, so the control
@@ -80,6 +83,12 @@ export interface TurnMeasure {
   ms: number;
   /** Until the control to point at was known, which is when the pointer can start moving. */
   msToTarget: number;
+  /** On a site with Answers on: until the kind of reply was known, which is the first thing the visitor can be shown. */
+  msToMode?: number;
+  /** The help articles an answer rests on, by where each came from. Empty for anything else. */
+  cited: string[];
+  /** Set when the server did not let the reply through as the model wrote it, with why. */
+  overruled?: Overruled;
   /** The sentence exactly as the model wrote it, before it was tidied and checked. The benchmark compares the two. */
   wrote: string;
   /** The rules in rules.ts that changed the sentence. Empty for nearly every step. */
@@ -95,23 +104,23 @@ const Reply = z.object({
   say: z.string().describe("One or two short sentences for the visitor"),
 });
 
-/** The reply's first field, as soon as it is complete in the text streamed so far. */
-const TARGET_SO_FAR = /"target"\s*:\s*(?:"([^"]*)"|null)/;
-
 /**
- * The sentence a visitor reads, tidied: no blank space at either end, and no
- * closing brace left over from the reply's own JSON. Some settings add one.
- * Sonnet with thinking off did in about one reply in eight.
+ * The reply on a site with Answers on. The order matters: the kind of reply
+ * and the control to point at come first, so both can be acted on while the
+ * sentence is still being written.
  */
-export function tidySay(say: string): string {
-  return say.replace(/[\s}]+$/, "").trimStart();
-}
+const AnswerReply = z.object({
+  mode: z.enum(MODES).describe("\"guide\": a step, or the sentence that ends a guide. \"answer\": an explanation taken from the help articles, with or without a pointer. \"cannot_help\": neither is possible."),
+  target: z.string().nullable().describe("Id of the element to point at, like \"e12\", or null. Always null with \"cannot_help\"."),
+  status: z.enum(["continue", "done"]).describe("\"continue\" if the visitor must act on the target before the next step. Otherwise \"done\". Always \"done\" with \"cannot_help\"."),
+  reason: z.enum(REASONS).nullable().describe("null unless mode is \"cannot_help\". Then \"not_covered\", \"sensitive\" or \"off_topic\"."),
+  say: z.string().describe("With \"guide\", one or two short sentences. With \"answer\", one to four. With \"cannot_help\", an empty string."),
+  sources: z.array(z.string()).describe("Ids of the help articles the answer is taken from, like [\"a2\"]. Empty unless mode is \"answer\"."),
+});
 
-/** What a visitor reads when every sentence the model wrote had to be dropped. */
-export const SAY_WITHOUT_WORDS = {
-  pointing: "This is the one to use.",
-  nothing: "I can't help with that one.",
-} as const;
+/** The first fields of a reply, as soon as each is complete in the text streamed so far. */
+const MODE_SO_FAR = /"mode"\s*:\s*"([a-z_]+)"/;
+const TARGET_SO_FAR = /"target"\s*:\s*(?:"([^"]*)"|null)/;
 
 /** Thrown for failures the visitor's browser should hear about with a specific status. */
 export class TurnError extends Error {
@@ -154,44 +163,92 @@ export async function runTurn(site: SiteContext, request: TurnRequest): Promise<
   return (await measureTurn(site, request)).reply;
 }
 
+/** What a caller is told while a reply is still forming. Each is called at most once. */
+export interface Watch {
+  /** The kind of reply, on a site with Answers on. */
+  onMode?(mode: Mode): void;
+  /** The control to point at, and only if it is on the page the model was shown. */
+  onTarget?(id: string): void;
+}
+
+/** What the model returned, before the server has checked it. */
+interface Answered {
+  reply: ModelReply;
+  model: string;
+  tokens?: TurnMeasure["tokens"];
+  /** What the call cost, in US dollars. */
+  usd: number;
+  /** The provider declined the request, so there is no reply to check. */
+  declined?: true;
+}
+
 /**
- * One step, timed. `onTarget` is called once, as soon as the control to point
- * at is known and only if it is on the page the model was shown. The benchmark
- * calls this with the settings it wants to compare.
+ * One step, timed. `watch` hears the kind of reply and the control to point at
+ * as soon as each is known. The benchmark calls this with the settings it
+ * wants to compare.
  */
-export async function measureTurn(
-  site: SiteContext,
-  request: TurnRequest,
-  settings: TurnSettings = SETTINGS,
-  onTarget?: (id: string) => void,
-): Promise<TurnMeasure> {
+export async function measureTurn(site: SiteContext, request: TurnRequest, settings: TurnSettings = SETTINGS, watch: Watch = {}): Promise<TurnMeasure> {
   const started = Date.now();
+  const answers = answersOn(site);
   let msToTarget: number | undefined;
+  let msToMode: number | undefined;
+  let declining = false;
   const onPage = (id: string | null): id is string => id !== null && request.snapshot.elements.some((element) => element.id === id);
+  const modeKnown = (mode: string | undefined) => {
+    if (msToMode !== undefined || !MODES.includes(mode as Mode)) return;
+    msToMode = Date.now() - started;
+    declining = mode === "cannot_help";
+    watch.onMode?.(mode as Mode);
+  };
   const targetKnown = (id: string | null) => {
     if (msToTarget !== undefined) return;
     msToTarget = Date.now() - started;
-    if (onPage(id)) onTarget?.(id);
+    // A reply that declines points at nothing, whatever it names.
+    if (onPage(id) && !declining) watch.onTarget?.(id);
   };
 
-  let answer: Omit<TurnMeasure, "ms" | "msToTarget" | "wrote" | "broke">;
+  let answered: Answered;
   if (settings.model === "mock") {
-    const reply = mockTurn(request);
+    const reply = answers ? mockAnswerTurn(site, request) : mockTurn(request);
     if (mockPauseMs > 0) {
+      modeKnown(reply.mode);
       targetKnown(reply.target);
       await new Promise((resolve) => setTimeout(resolve, mockPauseMs));
     }
-    answer = { reply, model: "mock", usd: mockUsd };
-  } else answer = await claudeTurn(site, request, settings, targetKnown);
-  // The model can only point at what's on the page it was shown.
-  if (!onPage(answer.reply.target)) answer.reply.target = null;
-  targetKnown(answer.reply.target);
-  const wrote = answer.reply.say;
-  const { say, broke } = checkSay(tidySay(wrote));
-  // Nothing fit to show was left. The pointer, if there is one, still says where to go.
-  answer.reply.say = say || (answer.reply.target ? SAY_WITHOUT_WORDS.pointing : SAY_WITHOUT_WORDS.nothing);
+    answered = { reply, model: "mock", usd: mockUsd };
+  } else answered = await claudeTurn(site, request, settings, answers, modeKnown, targetKnown);
+
+  const wrote = answered.reply.say;
+  let finished: Finished;
+  if (answered.declined) finished = declinedReply(site, answers);
+  else if (answers) finished = finishAnswer(site, request, answered.reply);
+  else {
+    // The model can only point at what's on the page it was shown.
+    const target = onPage(answered.reply.target) ? answered.reply.target : null;
+    const { say, broke } = checkSay(tidySay(wrote));
+    // Nothing fit to show was left. The pointer, if there is one, still says where to go.
+    finished = { reply: { target, status: answered.reply.status, say: say || (target ? SAY_WITHOUT_WORDS.pointing : SAY_WITHOUT_WORDS.nothing) }, cited: [], broke };
+  }
+  const { reply, cited, broke, overruled } = finished;
+  modeKnown(reply.mode);
+  targetKnown(reply.target);
   if (broke.length) console.warn(`turn ${site.id} step ${request.step}: the sentence broke the rules for ${broke.join(", ")}.`);
-  return { ...answer, ms: Date.now() - started, msToTarget: msToTarget ?? Date.now() - started, wrote, broke };
+  if (overruled) console.warn(`turn ${site.id} step ${request.step}: the reply was overruled (${overruled}).`);
+
+  const ms = Date.now() - started;
+  return {
+    reply,
+    model: answered.model,
+    ms,
+    msToTarget: msToTarget ?? ms,
+    ...(answers ? { msToMode: msToMode ?? ms } : {}),
+    wrote,
+    broke,
+    cited,
+    ...(overruled ? { overruled } : {}),
+    ...(answered.tokens ? { tokens: answered.tokens } : {}),
+    usd: answered.usd,
+  };
 }
 
 /**
@@ -208,8 +265,10 @@ async function claudeTurn(
   site: SiteContext,
   request: TurnRequest,
   settings: TurnSettings,
+  answers: boolean,
+  modeKnown: (mode: string | undefined) => void,
   targetKnown: (id: string | null) => void,
-): Promise<Omit<TurnMeasure, "ms" | "msToTarget" | "wrote" | "broke">> {
+): Promise<Answered> {
   client ??= new Anthropic(apiKey ? { apiKey } : {});
   const messages: Anthropic.Beta.BetaMessageParam[] = request.history.map((turn) => ({ role: turn.role, content: turn.text }));
   // The conversation has to start with a user message.
@@ -237,13 +296,14 @@ async function claudeTurn(
       max_tokens: MAX_TOKENS,
       ...fallback,
       ...(settings.thinking === "off" ? withoutThinking(settings.model) : {}),
-      output_config: { effort: settings.effort, format: betaZodOutputFormat(Reply) },
+      output_config: { effort: settings.effort, format: betaZodOutputFormat(answers ? AnswerReply : Reply) },
       // Rules and site knowledge are the same for every turn on a site, so they're cached.
       system: [{ type: "text", text: buildSystemPrompt(site), cache_control: { type: "ephemeral", ttl: settings.cache } }],
       messages,
     });
-    // The reply is JSON with "target" first, so it is the first thing that can be acted on.
+    // The reply is JSON with the fields that can be acted on first: the kind of reply where there is one, then "target".
     stream.on("text", (_delta, soFar) => {
+      if (answers) modeKnown(MODE_SO_FAR.exec(soFar)?.[1]);
       const found = TARGET_SO_FAR.exec(soFar);
       if (found) targetKnown(found[1] ?? null);
     });
@@ -279,7 +339,7 @@ async function claudeTurn(
     cacheWrite: usage.cache_creation_input_tokens ?? 0,
     output: usage.output_tokens,
   };
-  if (response.stop_reason === "refusal") return { reply: { target: null, status: "stuck", say: SAY_WITHOUT_WORDS.nothing }, model: response.model, tokens, usd };
+  if (response.stop_reason === "refusal") return { reply: { target: null, status: "stuck", say: SAY_WITHOUT_WORDS.nothing }, model: response.model, tokens, usd, declined: true };
   if (!response.parsed_output) throw new TurnError(502, `The model's reply couldn't be read (stop reason: ${response.stop_reason}).`, usd);
   return { reply: response.parsed_output, model: response.model, tokens, usd };
 }
@@ -302,11 +362,45 @@ function usdOf(usage: Anthropic.Beta.BetaUsage, model: string, cache: CacheLife,
 }
 
 /**
+ * The stand-in on a site with Answers on. A question that asks what, why,
+ * when or who is answered with the opening of the help article that shares
+ * the most words with it. Anything else is pointed at as before, and a first
+ * question with nothing to point at is not covered. It exists so that every
+ * kind of reply can be seen without a key, not to be right.
+ */
+function mockAnswerTurn(site: SiteContext, request: TurnRequest): ModelReply {
+  const cannot = (reason: Reason): ModelReply => ({ mode: "cannot_help", target: null, status: "done", reason, say: "", sources: [] });
+  const first = request.step === 0 && !request.event;
+  const goal = request.goal.toLowerCase();
+  if (first && /\b(?:poem|joke|weather|recipe|your instructions|your rules|system prompt)\b/.test(goal)) return cannot("off_topic");
+  if (first && /^(?:what|why|when|who|which|does|do|is|are|can|will|how (?:long|many|often))\b/.test(goal)) {
+    if (neverDecided(request.goal, "")) return cannot("sensitive");
+    const words = new Set(goal.match(/[a-z]{4,}/g) ?? []);
+    let best: { id: string; say: string; score: number } | undefined;
+    for (const { id, doc } of articlesOf(site)) {
+      const score = new Set((`${doc.title} ${doc.text}`.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((word) => words.has(word))).size;
+      if (score < 2 || score <= (best?.score ?? 0)) continue;
+      // The article's opening, without its heading.
+      const body = doc.text.replace(/^#.*$/gm, "").replace(/\s+/g, " ").trim();
+      best = { id, score, say: body.split(/(?<=[.!?])\s+/).slice(0, 2).join(" ") };
+    }
+    if (best) {
+      // "…and where is it" gets a pointer too, when the control the question names is on the page.
+      const named = request.snapshot.elements.find((element) => element.label.length > 3 && goal.includes(element.label.toLowerCase()));
+      return { mode: "answer", target: named?.id ?? null, status: "done", reason: null, say: best.say, sources: [best.id] };
+    }
+  }
+  const step = mockTurn(request);
+  if (first && !step.target) return cannot(neverDecided(request.goal, "") ? "sensitive" : "not_covered");
+  return { ...step, mode: "guide", reason: null, sources: [] };
+}
+
+/**
  * Stand-in for the model: points at the element whose label shares the most
  * words with the goal, and never at the same label twice. Good enough to test
  * everything around the model, not to guide anyone.
  */
-function mockTurn(request: TurnRequest): TurnReply {
+function mockTurn(request: TurnRequest): ModelReply {
   const words = (text: string) => text.toLowerCase().match(/[a-z]{3,}/g) ?? [];
   const goal = new Set(words(request.goal));
   const used = request.history.filter((turn) => turn.role === "assistant").map((turn) => turn.text);

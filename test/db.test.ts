@@ -45,6 +45,7 @@ const measure: TurnMeasure = {
   msToTarget: 800,
   wrote: "Click Billing.",
   broke: [],
+  cited: [],
   tokens: { input: 600, cacheRead: 24_000, cacheWrite: 0, output: 150 },
   usd: 0.0051,
 };
@@ -82,4 +83,21 @@ test("the stand-in model has no cost to record, and a broken rule is recorded ev
   const broke = standIn();
   await new Store(broke.sql).recordStep(request, { ...measure, model: "mock", tokens: undefined, usd: 0, broke: ["link"] }, undefined);
   assert.deepEqual(broke.sent[2]!.values, [null, null, null, null, null, ["link"], GUIDE, 2]);
+});
+
+test("on a site with Answers, the kind of reply and the docs it rested on are added too", async () => {
+  const { sql, sent } = standIn();
+  const answer: TurnMeasure = {
+    ...measure,
+    reply: { target: null, status: "done", say: "The link works for 7 days.", mode: "answer", sources: [{ title: "Inviting teammates" }] },
+    cited: ["help/inviting.md"],
+  };
+  await new Store(sql).recordStep(request, answer, undefined);
+  assert.equal(sent.length, 4);
+  assert.match(sent[3]!.text, /^update steps set mode = \?, reason = \?, sources = \?, overruled = \? where guide_id = \? and n = \?$/);
+  assert.deepEqual(sent[3]!.values, ["answer", null, ["help/inviting.md"], null, GUIDE, 2]);
+
+  const declined = standIn();
+  await new Store(declined.sql).recordStep(request, { ...measure, reply: { target: null, status: "done", say: "The help docs don't cover that.", mode: "cannot_help", reason: "not_covered" }, overruled: "no_source" }, undefined);
+  assert.deepEqual(declined.sent[3]!.values, ["cannot_help", "not_covered", [], "no_source", GUIDE, 2]);
 });

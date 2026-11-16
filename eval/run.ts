@@ -21,6 +21,8 @@ const HELP = `Usage: npm run eval -- --models <list> [options]
   --cases <names>   Comma-separated case files from eval/cases, without ".json". Default: all of them.
   --repeat <n>      Ask each case this many times. Default 1. More gives steadier timings.
   --limit <n>       Only the first n cases, for a quick check.
+  --answers         Ask every case as a site with Answers on would be asked: the longer prompt and the reply
+                    with a mode. The right pointers are the same, so this shows whether guiding got worse.
   --yes             Don't stop to show the number of calls first.
 
 Real models need ANTHROPIC_API_KEY, and every call is billed.`;
@@ -67,6 +69,7 @@ async function main() {
       cases: { type: "string" },
       repeat: { type: "string", default: "1" },
       limit: { type: "string" },
+      answers: { type: "boolean", default: false },
       yes: { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
@@ -78,13 +81,15 @@ async function main() {
   const models = values.models.split(",").filter(Boolean).map(parseModel);
   const repeat = Math.max(1, Number(values.repeat) || 1);
   const files = await loadCaseFiles(values.cases?.split(",").filter(Boolean));
-  let work = files.flatMap(({ name, file }) => file.cases.map((item) => ({ file: name, site: file.site, item })));
+  // With --answers each site is asked as if it had Answers switched on. Its help docs and everything else stay as they were.
+  const asked = (site: (typeof files)[number]["file"]["site"]) => (values.answers ? { ...site, answers: { ...site.answers, enabled: true } } : site);
+  let work = files.flatMap(({ name, file }) => file.cases.map((item) => ({ file: name, site: asked(file.site), item })));
   if (values.limit) work = work.slice(0, Math.max(1, Number(values.limit) || 1));
   if (!work.length) throw new Error("There are no cases to run. See eval/README.md for how to make some.");
 
   const calls = work.length * models.length * repeat;
   const billed = models.filter((model) => model.settings.model !== "mock").length * work.length * repeat;
-  console.log(`${work.length} cases from ${files.map((file) => file.name).join(", ")}, ${models.length} model setting${models.length === 1 ? "" : "s"}, ${calls} calls${billed ? `, ${billed} of them billed` : ""}.`);
+  console.log(`${work.length} cases from ${files.map((file) => file.name).join(", ")}${values.answers ? ", asked with Answers on" : ""}, ${models.length} model setting${models.length === 1 ? "" : "s"}, ${calls} calls${billed ? `, ${billed} of them billed` : ""}.`);
   if (billed && !values.yes) {
     console.log("Add --yes to run it.");
     return;

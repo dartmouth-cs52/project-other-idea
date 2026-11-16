@@ -27,6 +27,8 @@ Options:
   --accent <hex>       Color of the pointer and its highlight. Default ${DEFAULT_APPEARANCE.accent}.
   --position <side>    bottom-right or bottom-left. Default bottom-right.
   --label <text>       Text on the launcher button. Default "${DEFAULT_APPEARANCE.launcherLabel}".
+  --answers <on|off>   Answers: reply in words from the help docs as well as pointing. Off by default.
+  --stale-days <n>     With Answers on, mark an answer from an article older than this as possibly out of date.
   --budget-hour <usd>  The most the site may spend on the model in an hour, in US dollars. Default: the server's.
   --budget-day <usd>   The same for a day.
   --visitor-steps <n>  Steps one visitor may take in a day. For a public demo. Default: no limit.
@@ -45,6 +47,8 @@ const { values, positionals } = parseArgs({
     accent: { type: "string" },
     position: { type: "string" },
     label: { type: "string" },
+    answers: { type: "string" },
+    "stale-days": { type: "string" },
     "budget-hour": { type: "string" },
     "budget-day": { type: "string" },
     "visitor-steps": { type: "string" },
@@ -93,6 +97,12 @@ async function build(base: SiteContext): Promise<SiteContext> {
   if (left.length) {
     console.warn(`  ${left.length} help docs don't fit in the prompt and won't be used: ${left.map((doc) => doc.source).join(", ")}.\n  Trim them or pass fewer. Looking docs up by question is the fix for this and isn't built yet.`);
   }
+  if (site.answers?.enabled) {
+    const linked = docs.filter((doc) => doc.url).length;
+    const dated = docs.filter((doc) => doc.updated).length;
+    console.log(`  Answers is on. ${linked} of ${docs.length} help docs have an address to link to, and ${dated} have a date.`);
+    if (!docs.length) console.warn("  There are no help docs, so nothing can be answered in words. Haptic will still point, and say when it can't help.");
+  }
   console.log(`  The site knowledge sent with each question is about ${Math.round(buildSystemPrompt(site).length / 4).toLocaleString()} tokens.`);
   return site;
 }
@@ -140,6 +150,12 @@ async function main() {
     budget[field] = amount;
   }
 
+  if (values.answers && values.answers !== "on" && values.answers !== "off") fail("--answers is on or off.");
+  const staleDays = values["stale-days"] === undefined ? existing?.answers?.staleAfterDays : Number(values["stale-days"]);
+  if (staleDays !== undefined && !(Number.isInteger(staleDays) && staleDays > 0)) fail(`--stale-days has to be a whole number above 0, not "${values["stale-days"]}".`);
+  const answersOn = values.answers ? values.answers === "on" : existing?.answers?.enabled === true;
+  const answers = answersOn || staleDays !== undefined ? { enabled: answersOn, ...(staleDays !== undefined ? { staleAfterDays: staleDays } : {}) } : undefined;
+
   const origin = new URL(url).origin;
   const source: SiteSource = { url, maxPages, docs: values.docs ?? existing?.source.docs ?? [] };
   const notesFile = values.notes ?? existing?.source.notesFile;
@@ -162,6 +178,7 @@ async function main() {
     source,
     ...(existing?.off ? { off: true } : {}),
     ...(Object.keys(budget).length ? { budget } : {}),
+    ...(answers ? { answers } : {}),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
