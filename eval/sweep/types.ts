@@ -135,7 +135,9 @@ export interface ListedResult {
    * Haptic's open box over a control is counted apart.
    */
   covered: number;
-  coveredExamples: { line: string; blocker: string }[];
+  /** `why`: drawn invisible, clipped out of view inside a box, or under a consent notice, a dialog, a frame, a pinned bar or something else. */
+  coveredExamples: { line: string; blocker: string; why: string }[];
+  coveredWhy: Record<string, number>;
   underHaptic: number;
   /** The list read beside it to tie entries to elements was the same as the one the widget sent. */
   matchedSent: boolean;
@@ -297,6 +299,8 @@ export interface CspResult {
 
 export interface SweepRun {
   mode: "sweep" | "csp";
+  /** What a reader of the results should know about how they were made, like sites run again. */
+  notes?: string[];
   widget: { checkout: string; commit: string; fingerprint: string };
   startedAt: string;
   finishedAt: string;

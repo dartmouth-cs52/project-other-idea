@@ -44,7 +44,12 @@ function reg(el: Element): number {
 const at = (handle: number): Element | undefined => byHandle.get(handle);
 
 /** Parent across shadow roots. */
-const up = (node: Node): Node | null => node.parentNode ?? (node instanceof ShadowRoot ? node.host : null);
+/**
+ * The parent as the page is drawn: a node put into a <slot> is drawn inside
+ * the slot, not where it sits among its host's children; a shadow root sits
+ * in its host.
+ */
+const up = (node: Node): Node | null => (node as Element | Text).assignedSlot ?? node.parentNode ?? (node instanceof ShadowRoot ? node.host : null);
 
 function within(outer: Element, inner: Node | null): boolean {
   for (let node: Node | null = inner; node; node = up(node)) if (node === outer) return true;
@@ -155,6 +160,61 @@ function pinned(el: Element): boolean {
     if (position === "fixed" || position === "sticky") return true;
   }
   return false;
+}
+
+/** Whether a box is where descendants with this position are laid out from, which is what makes it clip them. As in the toolkit suite. */
+function holds(box: CSSStyleDeclaration, position: string): boolean {
+  const makesBlock = box.transform !== "none" || box.filter !== "none" || /paint|layout|strict|content/.test(box.contain) || box.willChange.includes("transform");
+  if (position === "fixed") return makesBlock;
+  if (position === "absolute") return box.position !== "static" || makesBlock;
+  return true;
+}
+
+/** The part of an element's box not clipped away by a scrolling or clipping box around it, as the page is drawn. As in the toolkit suite. */
+function visibleRect(el: Element): DOMRect | undefined {
+  const rect = el.getBoundingClientRect();
+  let [left, top, right, bottom] = [rect.left, rect.top, rect.right, rect.bottom];
+  let position = getComputedStyle(el).position;
+  let node = up(el);
+  for (let depth = 0; node && depth < 80; depth++, node = up(node)) {
+    if (!(node instanceof Element)) continue;
+    const style = getComputedStyle(node);
+    if (!holds(style, position)) continue;
+    if (style.position !== "static" || position === "fixed") position = style.position === "static" ? "relative" : style.position;
+    if (style.overflowX === "visible" && style.overflowY === "visible") continue;
+    const clip = node.getBoundingClientRect();
+    if (style.overflowX !== "visible") [left, right] = [Math.max(left, clip.left), Math.min(right, clip.right)];
+    if (style.overflowY !== "visible") [top, bottom] = [Math.max(top, clip.top), Math.min(bottom, clip.bottom)];
+  }
+  if (right - left <= 0 || bottom - top <= 0) return undefined;
+  return new DOMRect(left, top, right - left, bottom - top);
+}
+
+/** Whether the element is drawn so that nobody sees it: no opacity, hidden, or clipped to nothing by its own style. */
+function drawnInvisible(el: Element): boolean {
+  for (let node: Node | null = el; node; node = up(node)) {
+    if (!(node instanceof Element)) continue;
+    const style = getComputedStyle(node);
+    if (Number(style.opacity) === 0 || style.visibility === "hidden") return true;
+    if (style.clipPath !== "none" && /inset\(50%|circle\(0|polygon\(0/.test(style.clipPath)) return true;
+    if (style.clip && style.clip !== "auto" && /rect\(\s*(0|1)px,?\s*(0|1)px/.test(style.clip)) return true;
+  }
+  return false;
+}
+
+/** Why something of the page's is over a control: what kind of thing the blocker is. */
+function blockerKind(blocker: Element): string {
+  for (let node: Node | null = blocker; node; node = up(node)) {
+    if (!(node instanceof Element)) continue;
+    const named = `${node.id} ${typeof node.className === "string" ? node.className : ""} ${node.getAttribute("title") ?? ""}`;
+    if (/cookie|consent|gdpr|cmp|onetrust|didomi|usercentrics|sp_message|privacy/i.test(named)) return "a consent notice";
+    if (node.matches('dialog, [role="dialog"], [role="alertdialog"], [aria-modal="true"]') || /overlay|backdrop|modal/i.test(named)) {
+      return node.getRootNode() instanceof ShadowRoot ? "a dialog inside a shadow root" : "a dialog or its backdrop";
+    }
+  }
+  if (blocker.tagName === "IFRAME") return "a frame";
+  if (pinned(blocker)) return "a bar pinned to the window";
+  return "something else of the page's";
 }
 
 /** Where the widget draws a thing of its own, if it is on show. */
@@ -388,7 +448,7 @@ const sweep = {
     const dialogOpen = deepAll().find((el) => !isHaptic(el) && el.matches('dialog:modal, [aria-modal="true"]') && el.getClientRects().length > 0);
     return list.map((handle) => {
       const el = at(handle);
-      if (!el) return { closed: false, open: false, onScreen: false, outsideDialog: false, tag: "", pinned: false };
+      if (!el) return { closed: false, open: false, onScreen: false, outsideDialog: false, tag: "", pinned: false, haptic: false };
       let closed = false;
       let open = false;
       for (let node: Node | null = el; node; node = up(node)) {
@@ -405,6 +465,11 @@ const sweep = {
         outsideDialog: !!dialogOpen && !within(dialogOpen, el),
         tag: el.tagName.toLowerCase(),
         pinned: pinned(el),
+        // Haptic's own, found by walking up to its element, which holds even where a page patches the DOM.
+        haptic: (() => {
+          for (let node: Node | null = el; node; node = up(node)) if (node instanceof Element && node.tagName === "HAPTIC-ROOT") return true;
+          return false;
+        })(),
       };
     });
   },
@@ -495,7 +560,7 @@ const sweep = {
    * its label, as styled tick boxes are, counts as its label.
    */
   covered(list: number[]) {
-    const out: { handle: number; blocker: string; byHaptic: boolean }[] = [];
+    const out: { handle: number; blocker: string; byHaptic: boolean; why: string }[] = [];
     for (const handle of list) {
       const el = at(handle);
       if (!el) continue;
@@ -522,7 +587,11 @@ const sweep = {
         }
         blocker ??= hit;
       }
-      if (!reached && (blocker || byHaptic)) out.push({ handle, blocker: blocker ? markup(blocker, 200) : "", byHaptic: byHaptic && !blocker });
+      if (!reached && (blocker || byHaptic)) {
+        // Why a click misses it: the control is not drawn where its box says, or something is over it.
+        const why = drawnInvisible(el) ? "drawn invisible" : !visibleRect(el) ? "clipped out of view inside a scrolling or clipping box" : blocker ? `under ${blockerKind(blocker)}` : "under Haptic";
+        out.push({ handle, blocker: blocker ? markup(blocker, 200) : "", byHaptic: byHaptic && !blocker, why });
+      }
     }
     return out;
   },

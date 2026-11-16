@@ -1,3 +1,4 @@
+import { SITES } from "./sites.ts";
 import type { CspResult, SiteResult, SweepRun } from "./types.ts";
 
 // The tables and the list of faults, printed from a run's results. Kept apart
@@ -68,7 +69,9 @@ export function faultsOf(r: SiteResult): FaultSeen[] {
   const listed = r.listed;
   if (listed) {
     const byRole = new Map<string, string[]>();
-    for (const m of listed.missing.filter((m) => m.reason === "not read" && m.onScreen)) byRole.set(m.role, [...(byRole.get(m.role) ?? []), `${m.role} "${m.name}" ${m.markup}`]);
+    // Haptic's own buttons are not the page's. A page that patches the DOM, as YouTube's ShadyDOM does, can hide from the check that they are Haptic's.
+    const hapticOwn = (m: { markup: string }) => /class="(dock (left|right)|status|panel)"|class="(launcher|stop|send|close)"/.test(m.markup);
+    for (const m of listed.missing.filter((m) => m.reason === "not read" && m.onScreen && !hapticOwn(m))) byRole.set(m.role, [...(byRole.get(m.role) ?? []), `${m.role} "${m.name}" ${m.markup}`]);
     for (const [role, examples] of byRole) add(`missing ${role}`, `A ${role} on screen that the accessibility tree has is not listed`, examples.slice(0, 2).join("; "));
     // A control the accessibility tree names is the widget's fault. One nothing names is the page's, which a model can still place by its surroundings.
     const unnamedByRole = new Map<string, string[]>();
@@ -82,8 +85,11 @@ export function faultsOf(r: SiteResult): FaultSeen[] {
       else if (named === "not a control") add(`unnamed box ${role}`, `A box the accessibility tree has no control for is listed as "${role}" with no name, taking a place in the list`, examples.slice(0, 2).join("; "));
       else add(`nameless ${role}`, `A ${role} that nothing on the page names is listed as just "${role}"`, examples.slice(0, 2).join("; "), "page");
     }
-    if (listed.covered > 0)
-      add("listed covered", "Controls listed as usable in the window, though something of the page's is over them and a click would land on that", listed.coveredExamples.slice(0, 2).map((c) => `${c.line} under ${c.blocker}`).join("; "));
+    // Grouped by why a click would miss: each is a different thing for the widget to see.
+    const byWhy = new Map<string, string[]>();
+    // A control the widget lists as showing on hover is hidden by design, and the list says so.
+    for (const c of (listed.coveredExamples ?? []).filter((c) => !c.line.includes("shows on hover"))) byWhy.set(c.why ?? "", [...(byWhy.get(c.why ?? "") ?? []), `${c.line} (${c.blocker.slice(0, 160)})`]);
+    for (const [why, examples] of byWhy) add(`covered ${why}`, `Controls listed as usable in the window that a click cannot reach: ${why || "something of the page's is over them"}`, examples.slice(0, 2).join("; "));
     const apart = listed.duplicates.filter((d) => !d.treeSame);
     if (apart.length) add("same line apart", "Controls listed with the same whole line, though the accessibility tree names them apart", apart.slice(0, 2).map((d) => `${d.count} x ${d.line} ${d.markup}`).join("; "));
     const alike = listed.duplicates.filter((d) => d.treeSame);
@@ -100,6 +106,8 @@ export function faultsOf(r: SiteResult): FaultSeen[] {
   if (s?.skipped === "the widget never sent the page after the question") add("no first step", "The widget never sent the page after the question", "");
   if (s?.kind) {
     if (!s.pointed && s.heard !== "failed") add("step no pointer", "The pointer never went to the control it was given", `${s.line} ${s.markup}`);
+    else if (s.pointer && !s.pointer.tipHits && s.pointer.tipInBox && !s.blocker)
+      add("step tip edge", "The pointer's tip is inside the control's box, on a spot where a click lands on the box around it", `${s.line}; tip ${s.pointer.tip.x},${s.pointer.tip.y} on ${s.pointer.underTip}; box ${JSON.stringify(s.pointer.box)}`);
     else if (s.pointer && !s.pointer.tipHits) add("step tip off", "The pointer's tip is not on the control: a click there would land on something else", `${s.line}; tip ${s.pointer.tip.x},${s.pointer.tip.y} on ${s.pointer.underTip}; box ${JSON.stringify(s.pointer.box)}`);
     if (s.pointer && (s.pointer.captionOverMiddle || s.pointer.captionShare >= 0.3)) add("step caption covers", "Haptic's caption covers the control it points at", `${s.line}; ${Math.round(s.pointer.captionShare * 100)}% covered${s.pointer.captionOverMiddle ? ", the middle too" : ""}`);
     if (s.pointer && (s.pointer.dockOverMiddle || s.pointer.dockShare >= 0.3)) add("step launcher covers", "Haptic's launcher covers the control it points at", `${s.line}; ${Math.round(s.pointer.dockShare * 100)}% covered`);
@@ -108,7 +116,6 @@ export function faultsOf(r: SiteResult): FaultSeen[] {
     if (s.heard === "failed") add("step failed", "The widget gave up with its own error message during the step", `${s.line}: ${s.why ?? ""}; ${[...(r.stepWarnings ?? [])].slice(0, 1).join("")}`);
     if (s.heard === "wrong") add("step heard wrong", "The widget said the visitor did something other than what they did", `${s.line}: ${s.event}`);
     if (s.heard === "unclear") add("step sentence", "The widget's sentence about the click does not name the control or what was done", `${s.line}: ${s.event ?? "(none)"}${s.why ? ` (${s.why})` : ""}`);
-    if (s.navigated) add("step left page", "The control pointed at loaded another page", `${s.line} ${s.markup}`);
   }
   return out;
 }
@@ -235,6 +242,11 @@ export function cspHeadline(results: CspResult[]): string {
 }
 
 export function printRun(run: SweepRun): string {
-  if (run.mode === "csp") return `Widget ${run.widget.fingerprint} from ${run.widget.checkout} at ${run.widget.commit}.\n\n${cspHeadline(run.csp)}\n\n${cspTable(run.csp)}`;
-  return [`Widget ${run.widget.fingerprint} from ${run.widget.checkout} at ${run.widget.commit}.`, headline(run.results), siteTable(run.results), faultList(run.results)].join("\n\n");
+  // In the order of the list of sites, whatever order they were run in.
+  const order = new Map(SITES.map((site, i) => [site.id, i]));
+  const byList = <T extends { id: string }>(list: T[]) => [...list].sort((a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999));
+  const about = [`Widget ${run.widget.fingerprint} from ${run.widget.checkout} at ${run.widget.commit}, ${run.startedAt.slice(0, 16)} to ${run.finishedAt.slice(0, 16)}.`, ...(run.notes ?? [])].join("\n");
+  if (run.mode === "csp") return `${about}\n\n${cspHeadline(run.csp)}\n\n${cspTable(byList(run.csp))}`;
+  const results = byList(run.results);
+  return [about, headline(results), siteTable(results), faultList(results)].join("\n\n");
 }

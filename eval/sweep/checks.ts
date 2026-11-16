@@ -204,7 +204,12 @@ async function judgeListed(live: Live, state: PageState, sent: Snapshot): Promis
   const expectedAll = state.controls;
   const related = await live.toolkit<(string | undefined)[]>("relate", expectedAll.map((c) => c.handle), state.reading.ids);
   const unmatched = expectedAll.map((c, i) => ({ c, i })).filter(({ i }) => !related[i]);
-  const placed = await live.sweep<{ closed: boolean; open: boolean; onScreen: boolean; outsideDialog: boolean; tag: string }[]>("whereMissing", unmatched.map(({ c }) => c.handle));
+  const placedAll = await live.sweep<{ closed: boolean; open: boolean; onScreen: boolean; outsideDialog: boolean; tag: string; haptic: boolean }[]>("whereMissing", unmatched.map(({ c }) => c.handle));
+  // Haptic's own controls are not the page's, wherever the tree put them.
+  const ownIndex = new Set(unmatched.filter((_, n) => placedAll[n]!.haptic).map(({ i }) => i));
+  const kept = unmatched.map((u, n) => ({ u, p: placedAll[n]! })).filter(({ p }) => !p.haptic);
+  unmatched.splice(0, unmatched.length, ...kept.map(({ u }) => u));
+  const placed = kept.map(({ p }) => p);
   // Read again with the length limits lifted, to tell "cut by the limit" from "not read".
   let cut: (string | undefined)[] = [];
   const wasCut = state.reading.snapshot.truncated;
@@ -223,6 +228,7 @@ async function judgeListed(live: Live, state: PageState, sent: Snapshot): Promis
   const closedSet = new Set<number>();
   unmatched.forEach(({ i }, n) => placed[n]!.closed && closedSet.add(i));
   expectedAll.forEach((_, i) => {
+    if (ownIndex.has(i)) return;
     if (closedSet.has(i)) {
       closedShadow++;
       return;
@@ -280,15 +286,16 @@ async function judgeListed(live: Live, state: PageState, sent: Snapshot): Promis
     const treeSame = new Set(group.map((element) => treeName.get(element.id) ?? "")).size === 1;
     if (duplicates.length < 10) duplicates.push({ line: line.slice(0, 160), count: group.length, treeSame, markup: await live.toolkit<string>("markup", state.reading.ids[group[0]!.id]!) });
   }
-  // Listed controls in the window that a click would not reach.
-  const inWindow = sent.elements.filter((element) => !element.offscreen).map((element) => element.id);
+  // Listed controls in the window that a click would not reach. One the list marks as showing on hover is hidden by design.
+  const inWindow = sent.elements.filter((element) => !element.offscreen && !element.state?.includes("shows on hover")).map((element) => element.id);
   const handleOf = sentIds(state.reading, sent);
-  const coveredList = await live.sweep<{ handle: number; blocker: string; byHaptic: boolean }[]>("covered", inWindow.map((id) => handleOf.get(id)).filter((h): h is number => h !== undefined));
+  const coveredList = await live.sweep<{ handle: number; blocker: string; byHaptic: boolean; why: string }[]>("covered", inWindow.map((id) => handleOf.get(id)).filter((h): h is number => h !== undefined));
   const lineByHandle = new Map([...handleOf].map(([id, handle]) => [handle, sent.elements.find((element) => element.id === id)!]));
   const byPage = coveredList.filter((c) => !c.byHaptic);
   return {
     covered: byPage.length,
-    coveredExamples: byPage.slice(0, 8).map((c) => ({ line: lineOf(lineByHandle.get(c.handle)!).slice(0, 120), blocker: c.blocker })),
+    coveredExamples: byPage.slice(0, 8).map((c) => ({ line: lineOf(lineByHandle.get(c.handle)!).slice(0, 120), blocker: c.blocker, why: c.why })),
+    coveredWhy: byPage.reduce<Record<string, number>>((all, c) => ({ ...all, [c.why]: (all[c.why] ?? 0) + 1 }), {}),
     underHaptic: coveredList.length - byPage.length,
     expected,
     found,
@@ -718,10 +725,15 @@ async function runStep(live: Live, session: Session, id: string, turn: Turn, sta
 
 // One site ---------------------------------------------------------------------------
 
-/** Drops what is only needed to compare loads, to keep the saved results small. */
-function slim(record: LoadRecord): LoadRecord {
-  const { layout: _layout, ...rest } = record;
-  return { ...rest, ...(record.layout ? { layout: { anchors: {}, scroll: record.layout.scroll } } : {}) };
+/** Drops what is only needed to compare loads, to keep the saved results small. What the comparison found is kept in `idle`. */
+export function slim(record: LoadRecord): LoadRecord {
+  const { layout, focus, keys, idleErrors: _errors, idleWarnings: _warnings, ...rest } = record;
+  return {
+    ...rest,
+    ...(layout ? { layout: { anchors: {}, scroll: layout.scroll } } : {}),
+    ...(focus ? { focus: { initial: focus.initial, tabs: [] } } : {}),
+    ...(keys ? { keys: { pressed: keys.pressed, reached: keys.reached } } : {}),
+  };
 }
 
 export async function sweepSite(browser: Browser, bundles: Bundles, sweepJs: string, site: Site, log: (line: string) => void): Promise<SiteResult> {
@@ -750,6 +762,12 @@ export async function sweepSite(browser: Browser, bundles: Bundles, sweepJs: str
       if (signs.startsWith("gone: ")) {
         result.status = "could not reach";
         result.whyNot = `the page is not there: ${signs.slice(6)}`;
+        return undefined;
+      }
+      if (signs && label === "A2") {
+        // Everything but the comparison with the page as it is was done already.
+        opened.record.blocked = signs;
+        result.notes.push(`The fourth load, without Haptic, met a bot check, a block or an error page (${signs}), so the page with Haptic idle was not compared with it.`);
         return undefined;
       }
       if (signs) {
@@ -800,6 +818,11 @@ export async function sweepSite(browser: Browser, bundles: Bundles, sweepJs: str
     if (b2.session) {
       const live = new Live(b2.page, sweepJs, b2.session);
       await idleChecks(ctx, b2, live, true);
+      // Tab moves focus, and focus scrolls boxes inside the page. The page is loaded again, so the reading and the step start from it as it first showed.
+      await b2.page.reload({ waitUntil: "domcontentloaded", timeout: 45_000 });
+      await b2.page.waitForSelector("haptic-root", { state: "attached", timeout: 30_000 });
+      await b2.page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
+      await b2.page.waitForTimeout(1500);
       const loadErrors = [...b2.record.errors];
       await live.toolkit("setContainer", await b2.session.handleOf(b2.page.locator("body")));
       try {
