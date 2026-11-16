@@ -22,7 +22,7 @@ To keep a site's context current, run `npm run tag -- refresh --all` on a schedu
 
 ## The database
 
-Sites, and every guide and step, are kept in Neon, in the project called haptic. The tables are in `db/migrations`, and `npm run db:migrate` applies the ones a database is missing, to the database in `DATABASE_URL`. It talks to Neon over HTTPS. The Worker reads the connection string from a secret:
+Sites, and every guide and step, are kept in Neon, in the project called haptic. The tables are in `db/migrations`, and `npm run db:migrate` applies the ones a database is missing, to the database in `DATABASE_URL`. It talks to Neon over HTTPS. With a `DATABASE_URL` repository secret in GitHub, each deploy of the widget server applies them first; without one the deploy warns, and they have to be applied by hand. Until they are, the server and the dashboard still work, and what needs a missing table or column is skipped and logged. The Worker reads the connection string from a secret:
 
 ```bash
 npx wrangler secret put DATABASE_URL

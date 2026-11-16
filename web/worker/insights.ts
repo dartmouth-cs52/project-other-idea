@@ -25,6 +25,21 @@ const OUTCOME = `case
 
 const UNANSWERED = `(g.helped is distinct from true and (g.helped = false or (${OUTCOME}) in ('nothing_to_point_at', 'loop', 'step_limit', 'error', 'not_covered', 'abandoned')))`;
 
+/**
+ * The new cards need db/migrations/0011. Until it is applied they come back empty, and the rest of the
+ * dashboard still loads, so a deploy that lands before the migration breaks nothing.
+ */
+async function untilMigrated<T>(what: string, query: Promise<T[]>): Promise<T[]> {
+  try {
+    return await query;
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code !== "42703" && code !== "42P01" && code !== "42883") throw error;
+    console.error(`insights: ${what} needs db/migrations/0011, which isn't applied yet.`);
+    return [];
+  }
+}
+
 export async function insights(sql: Sql, site: string, days: number) {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
 
@@ -70,10 +85,13 @@ export async function insights(sql: Sql, site: string, days: number) {
       [site, since],
     ),
     // The lead: what people asked and couldn't find, grouped by meaning and counted by person.
-    cantFind(sql, site, since),
+    untilMigrated("what people can't find", cantFind(sql, site, since)),
     // Groups whose guides stopped finishing, week over week, always over the last eight weeks.
-    guideHealth(sql, site),
-    sql.query(`select question_group as key, max(sent_at) as sent_at, bool_or(emailed) as emailed from health_alerts where site_id = $1 and sent_at > now() - interval '30 days' group by 1`, [site]),
+    untilMigrated("guide health", guideHealth(sql, site)),
+    untilMigrated(
+      "health alerts",
+      sql.query(`select question_group as key, max(sent_at) as sent_at, bool_or(emailed) as emailed from health_alerts where site_id = $1 and sent_at > now() - interval '30 days' group by 1`, [site]),
+    ),
   ]);
 
   return { days, summary: summary[0], outcomes, recent, abandonedAt, wrongClicks, cantFind: cannotFind, health, alerts };
@@ -119,7 +137,8 @@ export function finishedCsv(list: Awaited<ReturnType<typeof finishedGuides>>): s
 export async function guideSteps(sql: Sql, site: string, guide: string) {
   if (!/^[0-9a-f-]{36}$/.test(guide)) return undefined;
   const rows = await sql.query(
-    `select g.id, g.question, g.started_at, g.ended_at, g.started_path, g.origin, g.helped, g.cancelled_steps, ${OUTCOME} as outcome from guides g where g.id = $1 and g.site_id = $2`,
+    `select g.id, g.question, g.started_at, g.ended_at, g.started_path, g.origin, g.helped,
+      coalesce((to_jsonb(g)->>'cancelled_steps')::int, 0) as cancelled_steps, ${OUTCOME} as outcome from guides g where g.id = $1 and g.site_id = $2`,
     [guide, site],
   );
   if (!rows[0]) return undefined;
