@@ -717,8 +717,13 @@ export function elementKey(element: Pick<SnapElement, "role" | "label" | "icon" 
  * same address path on every screen, so that part counts too.
  */
 export function currentPath(): string {
-  const route = location.hash.startsWith("#/") ? normalizePath(location.hash.slice(1)) : "";
-  return normalizePath(location.pathname) + (route && route !== "/" ? `#${route}` : "");
+  return normalizePath(location.pathname) + routeOf(location.hash);
+}
+
+/** The screen of an app that keeps its place after a "#/", as "#/orders/:id", or nothing for its first screen and for any other "#". */
+function routeOf(hash: string): string {
+  const route = hash.startsWith("#/") ? normalizePath(hash.slice(1)) : "";
+  return route && route !== "/" ? `#${route}` : "";
 }
 
 /**
@@ -1541,10 +1546,12 @@ function hrefOf(el: Element): string | undefined {
   // address it carries is for a browser without scripts, and would be taken for where a click leads.
   if (el.hasAttribute("aria-expanded") || !["", "false"].includes((el.getAttribute("aria-haspopup") ?? "").toLowerCase())) return undefined;
   const raw = el.getAttribute("href");
-  if (!raw || raw.startsWith("#") || raw.startsWith("javascript:")) return undefined;
+  // "#reviews" is a place further down this page. "#/orders" is a screen of an app that keeps its place after the "#".
+  if (!raw || (raw.startsWith("#") && !raw.startsWith("#/")) || raw.startsWith("javascript:")) return undefined;
   try {
     const url = new URL(el.href, location.href);
-    return url.origin === location.origin ? normalizePath(url.pathname) + whichPage(url.searchParams) : `external:${url.hostname}`;
+    // The route is kept in the same form as the page's own path, or every link of such an app would show one address.
+    return url.origin === location.origin ? normalizePath(url.pathname) + whichPage(url.searchParams) + routeOf(url.hash) : `external:${url.hostname}`;
   } catch {
     return undefined;
   }

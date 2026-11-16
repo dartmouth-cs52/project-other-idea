@@ -710,3 +710,25 @@ test("a field is not named by a box before it that is listed as a control becaus
     'clickable "Send me a copy" [main › Records]',
   ]);
 });
+
+test("a link in an app that keeps its place after '#/' keeps its route, and the page's path does too", { skip }, async () => {
+  const snapshot = await read(
+    `<nav>
+      <a href="#/products">Products</a>
+      <a href="#/orders/8812?tab=lines">Latest order</a>
+      <a href="/app/index.html#/cart">Cart</a>
+      <a href="#/">Home</a>
+      <a href="#reviews">Reviews</a>
+    </nav>`,
+    { path: "/app/index.html#/products/8812" },
+  );
+  assert.equal(snapshot.path, "/app/index.html#/products/:id");
+  assert.deepEqual(lines(snapshot), [
+    'link "Products" [nav] → /app/index.html#/products',
+    'link "Latest order" [nav] → /app/index.html#/orders/:id',
+    'link "Cart" [nav] → /app/index.html#/cart',
+    // The app's first screen, and a place further down this page, which is not somewhere else to go.
+    'link "Home" [nav] → /app/index.html',
+    'link "Reviews" [nav]',
+  ]);
+});
