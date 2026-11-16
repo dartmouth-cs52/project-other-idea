@@ -720,6 +720,8 @@ export class Ui {
       this.showActs();
     }
     this.keepPlaced();
+    // The ask box opening or closing changes what the question must keep off.
+    this.showAsked();
   }
 
   /** A line under the status, in the widget's own words. */

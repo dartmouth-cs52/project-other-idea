@@ -131,3 +131,31 @@ test("in presentation mode the caption moves off a menu that opens where it is",
     await session.close();
   }
 });
+
+test("in presentation mode the question keeps off the ask box while the answer is worked out, in a narrow window", async () => {
+  const session = await start(
+    ORDERS,
+    async (request) => {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      return point(request, "Export", "Click Export.");
+    },
+    "/",
+    { present: true },
+  );
+  try {
+    await session.page.setViewportSize({ width: 1024, height: 576 });
+    await session.ask("how do I export every order from this month as a spreadsheet");
+    await session.untilState("asking");
+    await session.page.waitForTimeout(600);
+    const [asked, dock] = (await session.page.evaluate(() =>
+      [".asked", ".dock"].map((selector) => {
+        const rect = document.querySelector("haptic-root")!.shadowRoot!.querySelector(selector)!.getBoundingClientRect();
+        return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+      }),
+    )) as [Box, Box];
+    assert.equal((await drawn(session)).asked, "“how do I export every order from this month as a spreadsheet”");
+    assert.ok(!overlap(asked, dock), `the question ${JSON.stringify(asked)} covers the ask box ${JSON.stringify(dock)}`);
+  } finally {
+    await session.close();
+  }
+});
