@@ -52,12 +52,12 @@ const ask = (goal: string, extra: Partial<TurnRequest> = {}): TurnRequest => ({
 const wrote = (reply: Partial<ModelReply>): ModelReply => ({ mode: "answer", target: null, status: "done", reason: null, say: "", sources: [], ...reply });
 
 test("a site without Answers gets the prompt the benchmark measured, to the letter", async () => {
-  // These are fingerprints of the Guides prompt for the benchmark's two sites, as #20 leaves it: the
-  // prompt the benchmark scored, with "stuck" kept apart from "done". Answers must not change it. If one
+  // These are fingerprints of the Guides prompt for the benchmark's two sites, with captions held to one
+  // short sentence ("Click Pricing.") and "stuck" kept apart from "done". Answers must not change it. If one
   // changes, the Guides prompt has changed: run the benchmark again before changing it here.
   const measured: Record<string, string> = {
-    demo: "bf9c4d7cfddb6858bdfeca026d26b7498370c1cdcaa9b760165618f219b61ad7",
-    joinhaptic: "7266793673494e1abd060cf9fa87e4932e0989a3e245db07835ec2813f97aed1",
+    demo: "bd229ea333dd7f6a9f6006cf5e23949fa443080f8e067c82090fe27021503e43",
+    joinhaptic: "acc9ac613f570c609a35ff6afed3953682ec7e968c89c8a77d6f002e60bc6103",
   };
   for (const { name, file } of await loadCaseFiles(Object.keys(measured))) {
     assert.equal(createHash("sha256").update(buildSystemPrompt(file.site)).digest("hex"), measured[name], name);

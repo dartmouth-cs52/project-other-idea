@@ -103,7 +103,7 @@ export interface TurnMeasure {
 const Reply = z.object({
   target: z.string().nullable().describe('Id of the element to point at, like "e12", or null'),
   status: z.enum(["continue", "done", "stuck"]),
-  say: z.string().describe("One or two short sentences for the visitor"),
+  say: z.string().describe("One short sentence for the visitor, like \"Click Pricing.\""),
 });
 
 /**
@@ -116,7 +116,7 @@ const AnswerReply = z.object({
   target: z.string().nullable().describe("Id of the element to point at, like \"e12\", or null. Always null with \"cannot_help\"."),
   status: z.enum(["continue", "done"]).describe("\"continue\" if the visitor must act on the target before the next step. Otherwise \"done\". Always \"done\" with \"cannot_help\"."),
   reason: z.enum(REASONS).nullable().describe("null unless mode is \"cannot_help\". Then \"not_covered\", \"sensitive\" or \"off_topic\"."),
-  say: z.string().describe("With \"guide\", one or two short sentences. With \"answer\", one to four. With \"cannot_help\", an empty string."),
+  say: z.string().describe("With \"guide\", one short sentence, like \"Click Pricing.\" With \"answer\", one to four. With \"cannot_help\", an empty string."),
   sources: z.array(z.string()).describe("Ids of the help articles the answer is taken from, like [\"a2\"]. Empty unless mode is \"answer\"."),
   controls: z.array(z.string()).describe("The visible label of each control the answer tells the visitor to use, like [\"Send invite\"]. Empty unless mode is \"answer\"."),
 });

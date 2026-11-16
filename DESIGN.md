@@ -479,8 +479,10 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
   from slightly larger as the pointer lands, then holds still. If nothing
   happens for about four seconds the mark pulses once, and no more often than
   that.
-- **Say one thing.** A caption names the next action in a short sentence. It
-  carries no buttons.
+- **Say one thing.** A caption names the next action and the control in one
+  short sentence, like "Click Pricing." The pointer already shows where, so
+  the caption never says where, or what will happen next. It carries no
+  buttons.
 - **Keep the conversation and the exit in view.** The chat stays open for the
   whole guide, with the question at the top and a stop button in the ask box.
 - **A wrong click is not an error, and Haptic says so.** The ask box shows
@@ -508,6 +510,8 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
   visitor's mail program, whichever the company set. When the form is sent the
   chat says "Sent to the team. A person will reply by email.", so nobody
   thinks the AI is still the one answering.
+- **Close where you opened.** While the ask box is open, the launcher under it
+  becomes its close button: an × and the word "Close". Escape closes it too.
 - **Say it is an AI.** One line of 12px Muted text sits under the ask box,
   "Haptic is an AI guide and can be wrong." It looks like plain text, with no
   underline. Its last words are a link to the page that says what Haptic reads

@@ -24,6 +24,9 @@ button { font: inherit; cursor: pointer; }
   background: #1c1917; color: #fafaf9; font-weight: 500; box-shadow: 0 4px 14px rgba(0,0,0,.22); }
 .launcher svg { width: 16px; height: 16px; flex: none; }
 .launcher path { fill: currentColor; }
+.launcher .shut { fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.launcher .when-open, .launcher[aria-expanded="true"] .when-shut { display: none; }
+.launcher[aria-expanded="true"] .when-open { display: inline-flex; }
 .panel { width: min(320px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 14px;
   padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.16); }
 [hidden] { display: none !important; }
@@ -138,7 +141,7 @@ export class Ui {
           <div class="status" hidden><span></span><button class="stop" type="button">Stop</button></div>
           <p class="note">Haptic <a href="${ABOUT_URL}" target="_blank" rel="noopener noreferrer">is an AI guide and can be wrong.</a></p>
         </div>
-        <button class="launcher" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${POINTER_PATH}"/></svg><span></span></button>
+        <button class="launcher" type="button" aria-expanded="false"><svg class="when-shut" viewBox="0 0 24 24" aria-hidden="true"><path d="${POINTER_PATH}"/></svg><span class="when-shut"></span><svg class="when-open" viewBox="0 0 24 24" aria-hidden="true"><path class="shut" d="M18 6 6 18M6 6l12 12"/></svg><span class="when-open">Close</span></button>
       </div>`;
     const pick = <T extends Element>(selector: string) => root.querySelector(selector) as T;
     this.panel = pick(".panel");
@@ -164,7 +167,12 @@ export class Ui {
       setTimeout(() => this.helped.firstChild === shown && this.hideHelped(), 1500);
     });
     const launcher = pick<HTMLButtonElement>(".launcher");
-    pick(".launcher span").textContent = appearance.launcherLabel;
+    pick(".launcher span.when-shut").textContent = appearance.launcherLabel;
+    // While the ask box is open the launcher is its close button. The box is opened and closed from many
+    // places, so the launcher follows the box's hidden attribute instead of each of them.
+    const syncLauncher = () => launcher.setAttribute("aria-expanded", String(!this.panel.hidden));
+    new MutationObserver(syncLauncher).observe(this.panel, { attributes: true, attributeFilter: ["hidden"] });
+    syncLauncher();
     this.at = { x: side === "left" ? 60 : window.innerWidth - 60, y: window.innerHeight - 40 };
 
     launcher.addEventListener("click", () => {
