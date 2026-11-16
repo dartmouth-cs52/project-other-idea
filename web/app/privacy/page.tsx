@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Privacy", alternates: { canonical: "
 
 export default function Privacy() {
   return (
-    <LegalPage title="Privacy" updated="November 15, 2026">
+    <LegalPage title="Privacy" updated="November 16, 2026">
       <p>
         {site.company} makes Haptic. This page says what we collect on this website, and what Haptic reads when it runs
         inside a product.
@@ -29,6 +29,10 @@ export default function Privacy() {
       <p>
         When you add a site, we read its public pages the way a visitor would, to learn what your product calls
         things. We do not sign in to anything and we do not send forms.
+      </p>
+      <p>
+        Haptic runs on this website too, so you can try it. If you ask it something here, it works as the next part
+        of this page describes, and we are the company that sees your questions.
       </p>
 
       <h2>Haptic inside a product</h2>
@@ -78,6 +82,12 @@ export default function Privacy() {
         how much each visitor can ask in a day, a scrambled form of the address is kept with that day&apos;s count, by
         Cloudflare, which runs our server. It is scrambled with a random value made for that day, and both are cleared
         when the day ends. The address is not kept with their questions.
+      </p>
+      <p>
+        When Haptic cannot help, it may offer a way to reach the company. If you use its form, the email address and
+        note you type are passed to that company with the conversation so far, as you typed it, so that a person
+        there can reply. We do not keep the email address or the note. The company can tell which guide in its
+        dashboard the message came from.
       </p>
       <p>
         We keep the record of each guide until the company asks us to delete it. Nothing deletes it on a schedule yet:

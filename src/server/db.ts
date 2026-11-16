@@ -137,7 +137,44 @@ export class Store {
       ]);
     });
     this.track(guide, write);
-    return write.then(() => this.recordCost(guide, request.step, measure));
+    return write
+      .then(() => this.recordCost(guide, request.step, measure))
+      .then(() => this.recordKind(guide, request.step, measure))
+      .then(() => this.recordUnseen(guide, request.step, measure));
+  }
+
+  /**
+   * Adds the controls an answer named that are nowhere Haptic can see. With
+   * the step's sources, that says which help articles may be out of date. The
+   * column is from db/migrations/0007.
+   *
+   * Only a site with Answers on can have any, so a site without sends nothing.
+   * On one with, every step sends it, as nothing when there are none: a step
+   * written again, when the widget asks for it a second time, must not keep
+   * the list from the first answer.
+   */
+  private recordUnseen(guide: string, step: number, measure: TurnMeasure): Promise<void> {
+    const unseen = measure.unseen?.length ? measure.unseen : null;
+    if (!unseen && !measure.reply.mode) return Promise.resolve();
+    return this.quietly("record controls an answer named that aren't in the product (has db/migrations/0007 been applied?)", async () => {
+      await this.sql`update steps set unseen = ${unseen} where guide_id = ${guide} and n = ${step}`;
+    });
+  }
+
+  /**
+   * On a site with Answers on, adds what kind of reply the step was and the
+   * help docs it rested on. Like the cost, it is a statement of its own for
+   * columns that came later (db/migrations/0005). A site without Answers
+   * sends nothing here.
+   */
+  private recordKind(guide: string, step: number, measure: TurnMeasure): Promise<void> {
+    const { mode, reason } = measure.reply;
+    if (!mode) return Promise.resolve();
+    return this.quietly("record what kind of reply a step was (has db/migrations/0005 been applied?)", async () => {
+      await this.sql`
+        update steps set mode = ${mode}, reason = ${reason ?? null}, sources = ${measure.cited}, overruled = ${measure.overruled ?? null}
+        where guide_id = ${guide} and n = ${step}`;
+    });
   }
 
   /**
@@ -186,6 +223,10 @@ export class Store {
         }
         if (report.helped !== undefined) {
           await this.sql`update guides set helped = ${report.helped} where id = ${guide} and site_id = ${site.id}`;
+        }
+        // Last, because the column came later (db/migrations/0006): if it is missing, what is above is already written.
+        if (report.handoff) {
+          await this.sql`update guides set handed_off = true where id = ${guide} and site_id = ${site.id}`;
         }
         return;
       }

@@ -17,6 +17,7 @@ npm run lint
 - `components/demo.tsx`: the scripted demo. One task on a loop, driven by a list of steps at the top of the file.
 - `components/pointer.tsx`: the Haptic pointer. Same path as `../assets/pointer.svg` and the widget in `../src/widget/ui.ts`.
 - `lib/site.ts`: the name, contact address, links, FAQ copy and the pricing plans. A price is changed there and nowhere else. Nothing is charged yet: there is no checkout and no billing.
+- `components/haptic-tag.tsx` and `haptic-notes.md`: Haptic itself, running on this site so people can try it. See [Haptic on this site](#haptic-on-this-site).
 - `public/sitemap.xml` and `public/robots.txt`: the list of pages for search engines. Add a line to the sitemap when a page is added.
 - `app/globals.css`: the colour, radius and motion tokens from `../DESIGN.md`.
 
@@ -78,6 +79,24 @@ npx wrangler dev --port 8787 --local-upstream localhost:8787
 4. In Neon, under Auth, Configuration, Webhooks for the main branch, turn webhooks on with the URL `https://joinhaptic.com/api/neon-auth-hook` and the event `send.magic_link` only.
 
 To go back to Neon's own email, turn the webhook off. Neon's webhook URL must be public HTTPS, so this cannot be tried against `wrangler dev`. `test/neon-hook.test.ts` at the top of the repository signs requests the way Neon does instead.
+
+## Haptic on this site
+
+Haptic runs on joinhaptic.com, so people can try it before they ask for access. `components/haptic-tag.tsx` is the tag our install steps give a Next.js customer, and the footer draws it, so it is on every public page and not on the dashboard or the approve page, which have no footer. Once loaded, the widget stays in the page through Next.js's moves between pages, so those two pages are always left with a full page load (`leaveFor` in `components/app/parts.tsx`): Back cannot bring it to them. Keep it that way when adding a link out of them. It loads `https://widget.joinhaptic.com/widget.js` for the site `site_joinhaptic`, whose one allowed origin is https://joinhaptic.com. Anywhere else, such as haptic-web.joinhaptic.workers.dev or `npm run preview`, the widget server turns it away and no launcher shows.
+
+To try it against a widget server on your machine, build with `NEXT_PUBLIC_WIDGET_URL=http://localhost:4000` and `NEXT_PUBLIC_HAPTIC_SITE` set to a site of yours that allows the address you open. Set `NEXT_PUBLIC_HAPTIC_SITE` to nothing to build without it.
+
+What the guide knows about the site beyond the page in front of it is in `haptic-notes.md`, with what it read from the live public pages. Build that and publish it before the tag first goes live, and again after changing the notes or once a change to the pages is live, from the top of the repository:
+
+```bash
+HAPTIC_PUBLIC_URL=https://widget.joinhaptic.com npm run tag -- --url https://joinhaptic.com --id site_joinhaptic --name Haptic --notes web/haptic-notes.md --visitor-steps 60
+```
+
+```bash
+npm run site:publish -- site_joinhaptic
+```
+
+The second needs `DATABASE_URL` for Neon's main branch in `.env`. Until it has run, the widget server answers from the copy of `site_joinhaptic` it held before, which has no notes and no limit for each visitor. Anyone can use the guide here, so it is held to the server's budget for a site, $2 an hour and $10 a day, and one visitor gets 60 steps a day. A visitor is told apart by network address, so people sharing one, as on an office or campus network, share the 60. Past any of these, visitors read a fixed sentence instead of a step. For a busy day, such as a demo to a room, rebuild with a higher `--visitor-steps`, and `--budget-hour` and `--budget-day` if needed, and publish again. `npm run site:off -- site_joinhaptic` takes the launcher off the site without a deploy.
 
 ## Deploying
 

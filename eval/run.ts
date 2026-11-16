@@ -1,8 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { DEFAULT_CACHE, measureTurn, tidySay, TurnError, type TurnSettings } from "../src/server/model.ts";
+import { measureTurn, tidySay, TurnError, type TurnSettings } from "../src/server/model.ts";
 import { loadCaseFiles, plausibleRange, score, type Case } from "./cases.ts";
+import { middle, parseModel, percent } from "./models.ts";
 
 // Runs every benchmark case against one or more models and prints how often
 // each pointed at a right control, and how long a step took.
@@ -21,6 +22,8 @@ const HELP = `Usage: npm run eval -- --models <list> [options]
   --cases <names>   Comma-separated case files from eval/cases, without ".json". Default: all of them.
   --repeat <n>      Ask each case this many times. Default 1. More gives steadier timings.
   --limit <n>       Only the first n cases, for a quick check.
+  --answers         Ask every case as a site with Answers on would be asked: the longer prompt and the reply
+                    with a mode. The right pointers are the same, so this shows whether guiding got worse.
   --yes             Don't stop to show the number of calls first.
 
 Real models need ANTHROPIC_API_KEY, and every call is billed.`;
@@ -45,21 +48,6 @@ interface Run {
   error?: string;
 }
 
-function parseModel(spec: string): { name: string; settings: TurnSettings } {
-  const [model = "", ...flags] = spec.trim().split("@");
-  const settings: TurnSettings = { model, effort: "low", thinking: "default", cache: DEFAULT_CACHE };
-  for (const flag of flags) {
-    if (flag === "low" || flag === "medium" || flag === "high") settings.effort = flag;
-    else if (flag === "off") settings.thinking = "off";
-    else throw new Error(`"${flag}" in "${spec}" isn't a setting. Use low, medium, high or off.`);
-  }
-  if (!model) throw new Error("A model is missing from --models.");
-  return { name: spec.trim(), settings };
-}
-
-const percent = (part: number, whole: number) => (whole ? `${Math.round((100 * part) / whole)}%` : "n/a");
-const middle = (sorted: number[], share: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * share))] ?? 0;
-
 async function main() {
   const { values } = parseArgs({
     options: {
@@ -67,6 +55,7 @@ async function main() {
       cases: { type: "string" },
       repeat: { type: "string", default: "1" },
       limit: { type: "string" },
+      answers: { type: "boolean", default: false },
       yes: { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
@@ -78,13 +67,15 @@ async function main() {
   const models = values.models.split(",").filter(Boolean).map(parseModel);
   const repeat = Math.max(1, Number(values.repeat) || 1);
   const files = await loadCaseFiles(values.cases?.split(",").filter(Boolean));
-  let work = files.flatMap(({ name, file }) => file.cases.map((item) => ({ file: name, site: file.site, item })));
+  // With --answers each site is asked as if it had Answers switched on. Its help docs and everything else stay as they were.
+  const asked = (site: (typeof files)[number]["file"]["site"]) => (values.answers ? { ...site, answers: { ...site.answers, enabled: true } } : site);
+  let work = files.flatMap(({ name, file }) => file.cases.map((item) => ({ file: name, site: asked(file.site), item })));
   if (values.limit) work = work.slice(0, Math.max(1, Number(values.limit) || 1));
   if (!work.length) throw new Error("There are no cases to run. See eval/README.md for how to make some.");
 
   const calls = work.length * models.length * repeat;
   const billed = models.filter((model) => model.settings.model !== "mock").length * work.length * repeat;
-  console.log(`${work.length} cases from ${files.map((file) => file.name).join(", ")}, ${models.length} model setting${models.length === 1 ? "" : "s"}, ${calls} calls${billed ? `, ${billed} of them billed` : ""}.`);
+  console.log(`${work.length} cases from ${files.map((file) => file.name).join(", ")}${values.answers ? ", asked with Answers on" : ""}, ${models.length} model setting${models.length === 1 ? "" : "s"}, ${calls} calls${billed ? `, ${billed} of them billed` : ""}.`);
   if (billed && !values.yes) {
     console.log("Add --yes to run it.");
     return;

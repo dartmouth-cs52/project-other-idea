@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { ApiError, api, type Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
 import { accessHref } from "@/lib/site";
-import { AppNav, Card } from "./parts";
+import { AppNav, Card, leaveFor } from "./parts";
 import { SiteView } from "./site-view";
 
 type State = { kind: "loading" } | { kind: "failed"; message: string } | { kind: "ready"; me: Me };
@@ -88,10 +88,9 @@ function SiteSwitch({ me, chosen }: { me: Me; chosen: string | null }) {
 }
 
 function NotApproved({ me }: { me: Me }) {
-  const router = useRouter();
   async function signOut() {
     await auth().signOut();
-    router.push("/sign-in/");
+    leaveFor("/sign-in/");
   }
   return (
     <Card className="max-w-2xl">
@@ -102,9 +101,10 @@ function NotApproved({ me }: { me: Me }) {
           : `Haptic is in early access, and ${me.user.email} is not on the list yet. Request access and we will be in touch. If your company already uses Haptic, ask whoever set it up to get your address approved.`}
       </p>
       <div className="flex flex-wrap gap-2">
-        <Link href={accessHref} className={buttonVariants({ size: "xl" })}>
+        {/* A plain link, not next/link: see leaveFor. */}
+        <a href={accessHref} className={buttonVariants({ size: "xl" })}>
           Request access
-        </Link>
+        </a>
         <Button variant="secondary" size="xl" onClick={signOut}>
           Use a different account
         </Button>

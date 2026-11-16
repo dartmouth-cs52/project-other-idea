@@ -85,8 +85,8 @@ async function record(browser: { newContext: () => Promise<Page> }, set: GuideSe
   await page.goto(set.origin + guide.start);
   await page.waitForSelector("haptic-root", { state: "attached" });
   await page.locator("haptic-root .launcher").click();
-  await page.locator("haptic-root .panel input").fill(guide.goal);
-  await page.locator("haptic-root .panel input").press("Enter");
+  await page.locator("haptic-root .ask input").fill(guide.goal);
+  await page.locator("haptic-root .ask input").press("Enter");
 
   for (const [index, step] of guide.steps.entries()) {
     await turn(index + 1);
