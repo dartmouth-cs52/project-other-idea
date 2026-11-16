@@ -632,6 +632,11 @@ const PROPER_END = new RegExp(`[${STOP}]["'”’»«)\\]]*$`);
 const BREAK_TAG = /<\/?(?:br|p|div)\s*\/?>/gi;
 /** Tags that only dress the words between them. */
 const DRESS_TAG = /<\/?(?:b|i|em|strong|u|code|span)\s*\/?>/gi;
+/**
+ * A tag named after a field of the reply itself ("enter" is left out: "<Enter>" is a key). Seen on Northpine's staging
+ * on 16 November, shown to the visitor: "…then open it to add the receipt.</say>".
+ */
+const FIELD_TAG = /<\/?(?:say|target|status|reply)\s*\/?>/gi;
 /** Characters that take no room and mean nothing here. */
 const NO_WIDTH = /[\u200B\u2060\uFEFF]/g;
 /** The two joiners are part of how some languages are written, but only between letters, never beside a space or at an end. */
@@ -711,6 +716,7 @@ export function tidySay(say: string, maxChars = SAY_MAX_CHARS): string {
   const prose = say
     .replace(BREAK_TAG, " ")
     .replace(DRESS_TAG, "")
+    .replace(FIELD_TAG, "")
     .replace(NO_WIDTH, "")
     .replace(LOOSE_JOINER, "")
     .replace(SIGN_AFTER_STOP, " ")
