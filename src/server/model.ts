@@ -4,7 +4,7 @@ import { z } from "zod";
 import { checkAction } from "../shared/act-rules.ts";
 import { ACTING_LIMITS, ACTS, actionsAllowed, type Act, type SiteContext, type SnapElement, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { actingFor, type NotActing } from "./acting.ts";
-import { namedButNotDone, namedButNotDoneNote, namedButNotPointed, namedButNotPointedNote } from "./check.ts";
+import { namedButNotDone, namedButNotDoneNote, namedButNotPointed, namedButNotPointedNote, pressLeftToVisitor } from "./check.ts";
 import { buildSystemPrompt, buildUserMessage } from "./prompt.ts";
 
 // One model call per step. HAPTIC_MODEL picks the model, or "mock" for a
@@ -39,6 +39,10 @@ type Effort = "low" | "medium" | "high";
  * do, and such a reply leaves the visitor waiting on nothing: on Northpine's
  * card wizard, 2 demo runs in 9 stopped on "Virtual is already selected, so
  * I'm skipping that choice. Next to open Limits and controls."
+ *
+ * Whatever this is set to, a reply in act mode that points at a control
+ * Haptic could press, with "do" null, and only tells the visitor to click it
+ * is made a click (check.ts, pressLeftToVisitor). That takes no model call.
  */
 export type Recheck = "off" | "log" | "ask";
 
@@ -113,9 +117,12 @@ export interface TurnMeasure {
    * Set when the widget asked to act. `refused`: why the step was answered as
    * a guide. `capped`: the step was past the site's cap, so the model was not
    * asked. `modelDo`: the model's own "do", before the server's check.
-   * Names from Haptic's own code only, never anything from the page.
+   * `converted`: the model left a click to the visitor on a control Haptic
+   * could press, and the server made it Haptic's (check.ts,
+   * pressLeftToVisitor). Names from Haptic's own code only, never anything
+   * from the page.
    */
-  acting?: { refused?: NotActing; capped?: boolean; modelDo?: Act | null };
+  acting?: { refused?: NotActing; capped?: boolean; modelDo?: Act | null; converted?: true };
 }
 
 const Reply = z.object({
@@ -376,8 +383,15 @@ export async function measureTurn(
   answer.reply.say = tidySay(wrote);
   if (acting.act) {
     const modelDo = answer.reply.do ?? null;
+    // A press the model left to the visitor that Haptic could make itself is made Haptic's, with no model call (check.ts). The check below and the widget's gate judge it as any other.
+    const pressed = pressLeftToVisitor(request, answer.reply, acting.settings.commitWords);
+    if (pressed) {
+      // Ids only: the server's log holds nothing from the visitor's page.
+      console.log(`press ${site.id} step ${request.step}: an act reply of "continue" left a click on ${pressed.element.id} to the visitor, which Haptic could press, so Haptic clicks it`);
+      answer.reply = { ...answer.reply, do: "click", enter: null, say: pressed.say };
+    }
     answer.reply = { ...checked(asAct(answer.reply), request, acting.settings.commitWords), mode: "act" };
-    answer.acting = { ...actingMeasure, modelDo };
+    answer.acting = { ...actingMeasure, modelDo, ...(pressed ? { converted: true as const } : {}) };
   } else {
     answer.reply = asGuide(answer.reply);
     if (actingMeasure) answer.acting = actingMeasure;

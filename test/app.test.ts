@@ -349,18 +349,22 @@ test("each step is counted for the server's log with nothing from the visitor or
   // A role the reading never gives is not written to the log as the page wrote it.
   scriptMock({ target: "e4", do: "click", enter: null, commits: false, status: "continue", say: "Clicking." });
   await answer(app, body({ version: 3, mode: "act", step: 7 }));
+  // A click the model left to the visitor on a control Haptic could press is made Haptic's, and counted as that.
+  scriptMock({ target: "e2", do: null, enter: null, commits: false, status: "continue", say: "Click Team to see who is on it." });
+  await answer(app, body({ version: 3, mode: "act", step: 8 }));
 
   for (const line of counted) {
     const written = JSON.stringify(line);
     for (const word of ["Malika", "malika", "Billing", "billing", "Card holder", "/people", "Click", "Typing"]) assert.ok(!written.includes(word), `${word} in ${written}`);
     for (const value of Object.values(line)) assert.ok(["string", "number", "boolean"].includes(typeof value));
   }
-  const [guide, acted, refused, withheld, handover, capped, chose, typedInRadio, oddRole] = counted;
+  const [guide, acted, refused, withheld, handover, capped, chose, typedInRadio, oddRole, converted] = counted;
   // A guide's step is counted as before acting existed: nothing on acting.
   assert.equal(guide?.acting, undefined);
   assert.equal(guide?.version, 2);
   assert.equal(guide?.pointed, true);
-  assert.deepEqual([acted?.acting, acted?.modelDo, acted?.do, acted?.withheld, acted?.handover], ["on", "click", "click", "none", false]);
+  assert.deepEqual([acted?.acting, acted?.modelDo, acted?.do, acted?.withheld, acted?.handover, acted?.converted], ["on", "click", "click", "none", false, false]);
+  assert.deepEqual([converted?.modelDo, converted?.do, converted?.converted, converted?.role], ["none", "click", true, "link"]);
   assert.equal(refused?.acting, "site");
   assert.equal(refused?.do, undefined);
   // Typing into a link: the model's act and the reason are counted, the text it would have typed is not.

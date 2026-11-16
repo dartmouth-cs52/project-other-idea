@@ -120,8 +120,9 @@ const LISTED_ROLES = new Set([
  * One step as counts, for the server's log: nothing the visitor wrote and
  * nothing from their page, not even its address. The fields on acting are
  * there only when the widget asked to act: whether it was answered in act
- * mode (or why not), what the model said to do, what the server's check left
- * and why it removed the rest, and whether the step was the hand-over.
+ * mode (or why not), what the model said to do, whether the server took
+ * over a click the model had left to the visitor, what the server's check
+ * left and why it removed the rest, and whether the step was the hand-over.
  */
 export function turnCounts(request: TurnRequest, measure: TurnMeasure): TurnCounts {
   const { reply } = measure;
@@ -143,6 +144,8 @@ export function turnCounts(request: TurnRequest, measure: TurnMeasure): TurnCoun
   if (reply.mode !== "act") return counts;
   counts.capped = measure.acting.capped === true;
   counts.modelDo = measure.acting.modelDo ?? "none";
+  // The model left a click on a control Haptic could press to the visitor, and the server made it Haptic's.
+  counts.converted = measure.acting.converted === true;
   counts.do = reply.do ?? "none";
   counts.withheld = reply.withheld ?? "none";
   // Which act the check took away, and the kind of control it was on: "choose" on a "radio", "unfit".

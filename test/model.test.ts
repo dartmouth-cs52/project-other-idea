@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import Anthropic from "@anthropic-ai/sdk";
-import { namedButNotDone, namedButNotPointed } from "../src/server/check.ts";
+import { namedButNotDone, namedButNotPointed, pressLeftToVisitor } from "../src/server/check.ts";
 import { configure, measureTurn } from "../src/server/model.ts";
+import { checkAction } from "../src/shared/act-rules.ts";
 import { DEFAULT_APPEARANCE, type SiteContext, type Snapshot, type TurnReply, type TurnRequest } from "../src/shared/types.ts";
 
 // The model's service, played by a stand-in that answers from a script, so
@@ -322,6 +323,143 @@ test("a guide's later step is not asked about again, the same page and words inc
     assert.notEqual(measure.recheck?.asked, true);
     assert.equal(measure.recheck?.act, undefined);
   }
+});
+
+// Act mode: a press written as the visitor's. At the wizard's Limits page the
+// model pointed at Next with "do" null and a guide's sentence in 2 demo runs
+// of the last 3, and the visitor was given a turn for it.
+
+const step8 = actStep(limits, 8, 'You chose "Per month" from the list that combobox "Limit interval" opened. It is e29 in the list now.');
+// Runs 1 and 2, call 9, exactly as the model wrote them.
+const clickNextRun1 = act({ target: "e36", status: "continue", say: "Click Next to go to the Review step. The $500 monthly limit is set." });
+const clickNextRun2 = act({ target: "e36", status: "continue", say: "Click Next to move on to the Review step, where you can issue the card." });
+/** The sentence Haptic says when it makes the press, or undefined when the press stays the visitor's. */
+const made = (request: TurnRequest, reply: TurnReply, words?: readonly string[]) => pressLeftToVisitor(request, reply, words)?.say;
+const sayingAt = (target: string, say: string) => act({ target, status: "continue", say });
+
+/** Runs a step with the server's log caught, and gives back the lines that are not the model call's own. */
+async function logging<T>(run: () => Promise<T>): Promise<{ result: T; lines: string[] }> {
+  const lines: string[] = [];
+  const log = console.log;
+  console.log = (...words: unknown[]) => void lines.push(words.join(" "));
+  try {
+    const result = await run();
+    return { result, lines: lines.filter((line) => !line.startsWith("turn ")) };
+  } finally {
+    console.log = log;
+  }
+}
+
+test("in act mode, a reply that points at a control Haptic could press and only tells the visitor to click it is made Haptic's click", () => {
+  assert.equal(pressLeftToVisitor(step8, clickNextRun1)?.element.id, "e36");
+  assert.equal(made(step8, clickNextRun1), "Clicking Next to go to the Review step. The $500 monthly limit is set.");
+  assert.equal(made(step8, clickNextRun2), "Clicking Next to move on to the Review step, where you can issue the card.");
+  // As it was written at the same page in earlier rounds.
+  assert.equal(
+    made(step8, sayingAt("e36", "Click Next in the footer to go to the Review step. The limit is $500 and resets monthly.")),
+    "Clicking Next in the footer to go to the Review step. The limit is $500 and resets monthly.",
+  );
+  assert.equal(
+    made(step8, sayingAt("e36", "Click Next at the bottom to go to the Review step, where you can issue the card.")),
+    "Clicking Next at the bottom to go to the Review step, where you can issue the card.",
+  );
+  // Inside a sentence it reads as the model writes its own steps.
+  assert.equal(made(step8, sayingAt("e36", "The limit is set, so click Next to go to the Review step.")), "The limit is set, so I'm clicking Next to go to the Review step.");
+  // Only the instruction changes: a "please", quote marks and the kind of control are kept or dropped with it.
+  assert.equal(made(step8, sayingAt("e36", 'Please click "Next" to continue.')), 'Clicking "Next" to continue.');
+  assert.equal(made(step8, sayingAt("e36", "Tap the Next button to go on.")), "Tapping the Next button to go on.");
+  assert.equal(made(onCardType, sayingAt("e32", "Virtual is already selected. Press Next to open Limits and controls.")), "Virtual is already selected. Pressing Next to open Limits and controls.");
+});
+
+test("in act mode, the press stays the visitor's when the sentence leaves them more than the click, when it is not that control's, and when the control is a field, a list or a commit", () => {
+  const left: [TurnRequest, TurnReply][] = [
+    // A check, a choice or a value said to be theirs. The first three were written at this wizard in earlier rounds.
+    [step8, sayingAt("e36", "Click Next to go to the Review step, where you can check the card before issuing it.")],
+    [onCardType, sayingAt("e32", "Click Next to move on to Card type, where you can choose Virtual. Limits come after that.")],
+    [onCardType, sayingAt("e32", "Virtual is already selected, so click Next to go to Limits and controls, where you can set the $500 monthly limit.")],
+    [step8, sayingAt("e36", "Check that the limit is $500, then click Next.")],
+    [step8, sayingAt("e36", "Make sure the limit reads $500 and click Next.")],
+    [step8, sayingAt("e36", "Click Next, or Back to change the limit.")],
+    [step8, sayingAt("e36", "If you want, click Next to go to the Review step.")],
+    [step8, sayingAt("e36", "Click Next when you're ready.")],
+    [step8, sayingAt("e36", "Ready for the Review step? Click Next.")],
+    [step8, sayingAt("e36", "Click Next and pick Monthly there.")],
+    [step8, sayingAt("e36", "Click Next, and click Issue card on the Review step.")],
+    // Not an instruction to press it, or an instruction to press another control.
+    [step8, sayingAt("e36", "Don't click Next yet.")],
+    [step8, sayingAt("e36", "Now you can click Next to go on.")],
+    [step8, sayingAt("e36", "The limit is set. Next takes you to the Review step.")],
+    [step8, sayingAt("e36", "Click Back to change the limit.")],
+    // A field and a list are filled in or picked from, never pressed in their place.
+    [step8, sayingAt("e28", "Click Spending limit and type 500.")],
+    [step8, sayingAt("e29", "Click Limit interval to pick Monthly.")],
+    [step8, sayingAt("e29", "Check that Resets under Limit interval is set to Monthly. Change it if it isn't, then click Next.")],
+    // A control that commits.
+    [onReview, sayingAt("e33", "Click Issue card to create it.")],
+    // The hand-over, a reply that already does something, and the answer to a closing question.
+    [step8, { ...clickNextRun1, status: "done" }],
+    [step8, { ...clickNextRun1, commits: true }],
+    [step8, { ...clickNextRun1, target: null }],
+    [{ ...step8, closing: true }, clickNextRun1],
+  ];
+  for (const [request, reply] of left) assert.equal(made(request, reply), undefined, reply.say);
+  // A control the site marks with its own commit words.
+  assert.equal(made(step8, clickNextRun1, ["Next"]), undefined);
+});
+
+test("in act mode, the step 8 reply is sent as Haptic's click with no second model call, and the conversion is logged with ids only", async () => {
+  for (const recheck of ["ask", "off"]) {
+    const { sent } = use([{ streams: '{"target":"e36"', reply: clickNextRun1 }, { reply: clickNextRun2 }], recheck);
+    const early: string[] = [];
+    const { result: measure, lines } = await logging(() => measureTurn(actingSite, step8, undefined, (id) => early.push(id)));
+    assert.equal(sent.length, 1, recheck);
+    assert.deepEqual(measure.reply, {
+      target: "e36",
+      do: "click",
+      enter: null,
+      commits: false,
+      status: "continue",
+      say: "Clicking Next to go to the Review step. The $500 monthly limit is set.",
+      mode: "act",
+    });
+    assert.deepEqual(measure.acting, { modelDo: null, converted: true });
+    assert.equal(measure.wrote, clickNextRun1.say);
+    assert.equal(measure.recheck, undefined);
+    assert.deepEqual(early, ["e36"]);
+    assert.deepEqual(lines, ['press site_acting step 8: an act reply of "continue" left a click on e36 to the visitor, which Haptic could press, so Haptic clicks it']);
+  }
+});
+
+test("a guide's step is never made a click, the same page and words included", async () => {
+  const guideStep: TurnRequest = { ...step8, event: 'The user chose "Per month" from the list that combobox "Limit interval" opened.' };
+  delete guideStep.mode;
+  const asGuide: TurnReply = { target: "e36", status: "continue", say: clickNextRun1.say };
+  for (const [on, request, reply] of [
+    [site, guideStep, asGuide],
+    [actingSite, guideStep, asGuide],
+    // The widget asked to act where the site has acting off: answered as a guide.
+    [site, step8, clickNextRun1],
+  ] as const) {
+    const { sent } = use([{ reply }], "ask");
+    const { result: measure, lines } = await logging(() => measureTurn(on, request));
+    assert.equal(sent.length, 1);
+    assert.deepEqual(measure.reply, asGuide);
+    assert.equal(measure.acting?.converted, undefined);
+    assert.deepEqual(lines, []);
+  }
+});
+
+test('in act mode, "Click Issue card" on the commit with do null and commits false stays the visitor\'s, and the click it asks for is refused', async () => {
+  const onIssueCard = sayingAt("e33", "Click Issue card to create it.");
+  const { sent } = use([{ reply: onIssueCard }], "ask");
+  const { result: measure, lines } = await logging(() => measureTurn(actingSite, onReview));
+  assert.equal(sent.length, 1);
+  assert.deepEqual(measure.reply, { ...onIssueCard, mode: "act" });
+  assert.deepEqual(measure.acting, { modelDo: null });
+  assert.deepEqual(lines, []);
+  // Made a click all the same, it would not be pressed. The widget runs this same check before its gate, and the gate then reads the live button's words (test/widget/gate.test.ts).
+  const asClick = checkAction({ ...onIssueCard, do: "click", say: "Clicking Issue card to create it." }, onReview);
+  assert.deepEqual([asClick.withheld, asClick.reply.do, asClick.reply.removed], ["words", null, "click"]);
 });
 
 test.after(() => configure({ HAPTIC_MODEL: "mock" }));

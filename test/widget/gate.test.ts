@@ -791,6 +791,27 @@ test("the hand-over: on a commit it hands over, adding the control's name when t
   }
 });
 
+test('"Click Issue card" on the commit with do null and commits false is the visitor\'s turn, and made a click it is refused; the Next the server makes a click is pressed', async () => {
+  // The server makes a click of a press the model left to the visitor only on a control Haptic could press (src/server/check.ts,
+  // pressLeftToVisitor), and leaves this reply as it is. The gate judges both forms on the live button all the same.
+  const page = await open(`${WIZARD}<button type="button" id="issue" data-watch>Issue card</button>`);
+  try {
+    const asWritten = await page.plan("#issue", { do: null, enter: null, commits: false, status: "continue", say: "Click Issue card to create it." }, CARD);
+    assert.deepEqual([asWritten.kind, asWritten.reason, asWritten.say], ["visitor", "asked", "Click Issue card to create it."]);
+    assert.deepEqual((await page.press()).hits, []);
+    const asClick = await page.plan("#issue", { do: "click", enter: null, commits: false, status: "continue", say: "Clicking Issue card to create it." }, CARD);
+    assert.deepEqual([asClick.kind, asClick.reason], ["visitor", "words"]);
+    assert.equal(asClick.say, "I'll leave Issue card to you: it saves something. Click it and I'll carry on.");
+    assert.deepEqual((await page.press()).hits, []);
+    // The step 8 reply as the server sends it once it is a click: Next is pressed.
+    const next = await page.plan("#next", { do: "click", enter: null, commits: false, status: "continue", say: "Clicking Next to go to the Review step. The $500 monthly limit is set." }, CARD);
+    assert.deepEqual([next.kind, next.control], ["act", "button"]);
+    assert.deepEqual((await page.press()).hits, ["next"]);
+  } finally {
+    await page.close();
+  }
+});
+
 test("nothing is acted on where acting is off: no echo, no site setting, the page or path excluded; and caps stop it", async () => {
   const page = await open(WIZARD);
   try {
