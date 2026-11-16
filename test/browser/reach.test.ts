@@ -122,7 +122,9 @@ test("a control under a small box pinned over the page, like a menu that is open
 });
 
 test("a wall of cookie choices over the whole window is all of the page that can be used, and is named like a dialog", { skip }, async () => {
-  const snapshot = await read(`<header><a href="/">Home</a><a href="/news">News</a></header><main><h1>Today</h1><a href="/story">Read the story</a></main>
+  // A link that shows when the keyboard reaches it is under the wall all the same.
+  const snapshot = await read(`<style>${SKIP_STYLES}</style><a class="skip" href="#main">Skip to main content</a>
+    <header><a href="/">Home</a><a href="/news">News</a></header><main id="main"><h1>Today</h1><a href="/story">Read the story</a></main>
     <div style="height:3000px"><a href="/far" style="margin-top:2500px;display:block">Far down</a></div>
     <div class="wall" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10">
       <div style="margin:100px auto;width:400px;background:#fff"><h2>Your privacy</h2><p>We and our partners use cookies.</p>

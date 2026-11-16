@@ -540,6 +540,8 @@ interface Candidate {
  */
 function stepKind(element: SnapElement, c: Candidate): StepResult["kind"] | undefined {
   if (c.disabled || c.consent || c.submits || c.newWindow || !c.reachable || !c.hitsItself) return undefined;
+  // One the list says shows only when the keyboard reaches it is not for the mouse the step is taken with.
+  if (element.state?.includes("shows on focus")) return undefined;
   if (NOT_A_STEP.has(element.role) || c.tag === "input" || c.tag === "select" || c.tag === "textarea") return undefined;
   if (RISKY.test(`${element.label} ${c.words}`)) return undefined;
   // A link that leads off the page is never used.

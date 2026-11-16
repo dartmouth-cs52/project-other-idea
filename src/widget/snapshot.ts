@@ -1830,15 +1830,21 @@ function layersOverPage(ignore: Element): Element[] {
 
 /** What a layer over the page is called: the dialog in it, its own name, a frame's title, or its first words. */
 function layerLabel(layer: Element): string {
-  let inner: Document | null = null;
-  try {
-    inner = layer.matches("iframe, frame") ? (layer as HTMLIFrameElement).contentDocument : null;
-  } catch {
-    inner = null;
-  }
-  const dialog = layer.matches(DIALOGS) ? layer : (inner ?? layer).querySelector(DIALOGS);
+  const dialog = layer.matches(DIALOGS) ? layer : layer.querySelector(DIALOGS);
   if (dialog) return dialogLabel(dialog);
-  if (layer.matches("iframe, frame")) return cleanText(nameOfBox(layer) || layer.getAttribute("title") || "", 60);
+  // A layer that is a frame, or holds one, is named by the dialog drawn in the frame, or by the frame.
+  const frame = layer.matches("iframe, frame") ? layer : layer.querySelector("iframe, frame");
+  if (frame) {
+    let inner: Document | null = null;
+    try {
+      inner = (frame as HTMLIFrameElement).contentDocument;
+    } catch {
+      inner = null;
+    }
+    const drawn = inner?.querySelector(DIALOGS);
+    const named = drawn ? dialogLabel(drawn) : cleanText(nameOfBox(frame) || frame.getAttribute("title") || "", 60);
+    if (named) return named;
+  }
   return dialogLabel(layer);
 }
 
@@ -1906,14 +1912,20 @@ function keepReachable(candidates: Candidate[], ignore: Element, findLayer: bool
   // Each is tried at its middle first, and only one a click there misses is tried around it.
   const started = performance.now();
   const missed: { c: Candidate; seen: DOMRect; clear: boolean; blocker: Element }[] = [];
+  /** Controls a click was seen to reach. */
+  const reached = new Set<Candidate>();
   for (const one of toTry) {
     if (performance.now() - started > MAX_TRYING_MS) break;
     const blocker = inFrontOf(one.c.el, one.seen, ignore, one.c.frame, MIDDLE);
     if (blocker) missed.push({ ...one, blocker });
+    else reached.add(one.c);
   }
   for (const { c, seen, clear, blocker } of missed) {
     if (performance.now() - started > MAX_TRYING_MS) break;
-    if (!inFrontOf(c.el, seen, ignore, c.frame, AROUND)) continue;
+    if (!inFrontOf(c.el, seen, ignore, c.frame, AROUND)) {
+      reached.add(c);
+      continue;
+    }
     // See-through and under something else: nobody sees it, and a click there takes the other thing. One fading in is on its way.
     const box = clear ? seeThroughBox(c.el) : undefined;
     if (box && !fadingIn(box)) {
@@ -1925,14 +1937,14 @@ function keepReachable(candidates: Candidate[], ignore: Element, findLayer: bool
   const kept = left.size ? candidates.filter((c) => !left.has(c)) : candidates.slice();
   if (!under.length) return { kept };
   if (findLayer) {
-    const covered = new Set(under.map((u) => u.c));
     for (const layer of layersOverPage(ignore)) {
       // A layer over the page hides more of the page's controls than it holds. A layout pinned to the window holds the page.
       const inside = new Set(kept.filter((c) => drawnWithin(layer, c.el)));
       const hides = under.filter((u) => drawnWithin(layer, u.blocker)).length;
       if (!hides || hides < inside.size) continue;
-      // Only what is in the layer, or drawn over it, can be used, and nothing out of the window can be scrolled to past it.
-      return { kept: kept.filter((c) => inside.has(c) || (!c.offscreen && !covered.has(c))), layer };
+      // Only what is in the layer, or what a click was seen to reach over it, can be used: nothing out of the window can
+      // be scrolled to past it, and nothing hidden can be shown under it.
+      return { kept: kept.filter((c) => inside.has(c) || reached.has(c)), layer };
     }
   }
   // Under a bar that stays put while the page scrolls, as headers and cookie notices do: scrolling brings it out.

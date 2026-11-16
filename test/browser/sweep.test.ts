@@ -89,10 +89,16 @@ test("controls in a frame of the page's own origin are listed where they are dra
 });
 
 test("a frame of the page's own origin over the whole window, holding a dialog of cookie choices, is all of the page that can be used", { skip }, async () => {
+  const consent = `<div role="dialog" aria-label="Cookie consent" style="margin:100px auto;width:400px"><p>We use cookies.</p><button>Decline</button><button>Accept</button></div>`;
   const snapshot = await read(`<header><a href="/">Home</a><button>Run</button></header>
-    ${frame(`<div role="dialog" aria-label="Cookie consent" style="margin:100px auto;width:400px"><p>We use cookies.</p><button>Decline</button><button>Accept</button></div>`, 'title="Consent" style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:10"')}`);
+    ${frame(consent, 'title="Consent" style="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:10"')}`);
   assert.equal(snapshot.dialog, "Cookie consent");
   assert.deepEqual(lines(snapshot), ['button "Decline"', 'button "Accept"']);
+  // The same, with the frame in a box pinned over the window, as W3Schools draws it: the box is named by the dialog in the frame.
+  const boxed = await read(`<header><a href="/">Home</a><button>Run</button></header>
+    <div style="position:fixed;inset:0;z-index:10">${frame(consent, 'title="Consent" style="width:100%;height:100%;border:0"')}</div>`);
+  assert.equal(boxed.dialog, "Cookie consent");
+  assert.deepEqual(lines(boxed), ['button "Decline"', 'button "Accept"']);
 });
 
 test("what a visitor typed in a frame's field is not sent, nor the frame's words that repeat it", { skip }, async () => {
