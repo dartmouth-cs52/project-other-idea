@@ -136,10 +136,15 @@ async function quietCounts(session: Session, during?: () => Promise<void>): Prom
   }, before);
 }
 
-/** The one listener of Haptic's allowed while nothing is in use: a page's dialog or popover opening on the top layer, heard on the document in the capture phase. */
-const IDLE = { calls: 0, observers: 0, listeners: ["d:toggle:true"] };
+/**
+ * The two listeners of Haptic's allowed while nothing is in use: a page's
+ * dialog or popover opening on the top layer, heard on the document in the
+ * capture phase, and the window changing size, which can bring a control of
+ * the page's under the launcher.
+ */
+const IDLE = { calls: 0, observers: 0, listeners: ["d:toggle:true", "w:resize:false"] };
 
-test("nothing of Haptic's runs on a page where no guide is running: no timer, no frame, no observer, and no listener but the one for the top layer", async () => {
+test("nothing of Haptic's runs on a page where no guide is running: no timer, no frame, no observer, and no listener but those for the top layer and the window's size", async () => {
   const session = await start(COUNTED, () => words("Saving is done with the Save button at the top."));
   try {
     // The widget's own start-up listener for the page to finish loading is gone once it has.
@@ -160,6 +165,16 @@ test("nothing of Haptic's runs on a page where no guide is running: no timer, no
       await session.page.evaluate(() => (document.getElementById("layer") as HTMLElement).hidePopover());
     });
     assert.deepEqual(dialogs, IDLE, "after the page opened and closed its dialogs");
+    // A resize while nothing is in use: the launcher's corner is looked at once a frame at most, and nothing is left running.
+    const resized = await quietCounts(session, async () => {
+      for (const width of [1200, 1000, 900]) {
+        await session.page.setViewportSize({ width, height: 800 });
+        await session.page.waitForTimeout(50);
+      }
+    });
+    assert.ok(resized.calls >= 1 && resized.calls <= 3, `the launcher's corner was looked at ${resized.calls} times for three sizes`);
+    assert.deepEqual({ ...resized, calls: 0 }, IDLE, "after the window was resized");
+    assert.deepEqual(await quietCounts(session), IDLE, "once the window was left alone");
   } finally {
     await session.close();
   }

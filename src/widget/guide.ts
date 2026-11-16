@@ -245,6 +245,7 @@ export class Guide {
   start(goal: string, act = false) {
     this.reset();
     this.goal = goal;
+    this.ui.showQuestion(goal);
     if (act && this.config.acting && !this.config.pageOff) this.beginActing();
     this.watchPage(true);
     this.ui.setState("asking");
@@ -434,6 +435,7 @@ export class Guide {
     if (!saved) return;
     this.reset();
     this.goal = saved.goal;
+    this.ui.showQuestion(saved.goal);
     this.history = saved.history;
     this.step = saved.step;
     this.strayed = saved.strayed === true;
@@ -1970,12 +1972,37 @@ function loadingMark(ignore: Element): Element | undefined {
     if (ignore.contains(el) || stuckMarks.has(el) || !el.getClientRects().length) continue;
     // A progress bar that gives a value is measuring something. If it is moving, the page is changing and is waited for anyway.
     if (el.getAttribute("role") === "progressbar" && el.hasAttribute("aria-valuenow")) continue;
+    if (!markInView(el)) continue;
     return el;
   }
   // A page whose main part says only "Loading" has not drawn itself yet.
   const main = document.querySelector("main, [role='main']");
   if (main && !stuckMarks.has(main) && main.getElementsByTagName("*").length < 60 && /^(?:loading|please wait)\b[\s.…]*$/i.test(((main as HTMLElement).innerText ?? "").trim())) return main;
   return undefined;
+}
+
+/**
+ * Whether a loading mark is one the visitor can see, and so a sign of
+ * something they are waiting for. Shops keep placeholders in the page where
+ * nobody sees them: under the pictures that loaded over them, hidden from
+ * screen readers; in the part of a carousel scrolled out of its box; in a
+ * part of the page far below the window that loads only when it is
+ * scrolled to. IKEA's front page keeps eighteen. None of them goes away
+ * while the visitor waits, and none says the page in view is unfinished.
+ */
+function markInView(el: Element): boolean {
+  if (el.closest('[aria-hidden="true"]')) return false;
+  const rect = el.getBoundingClientRect();
+  if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= window.innerHeight || rect.left >= window.innerWidth) return false;
+  if (typeof el.checkVisibility === "function" && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
+  // Clipped away: outside a box around it that shows only what is inside its own edges.
+  for (let at = el.parentElement; at && at !== document.body && at !== document.documentElement; at = at.parentElement) {
+    const style = getComputedStyle(at);
+    if (style.overflowX === "visible" && style.overflowY === "visible") continue;
+    const box = at.getBoundingClientRect();
+    if (rect.bottom <= box.top || rect.top >= box.bottom || rect.right <= box.left || rect.left >= box.right) return false;
+  }
+  return true;
 }
 
 /** A transition or animation that ends later than this is part of the page, not something on its way in or out. */

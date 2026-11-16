@@ -11,6 +11,13 @@ import type { Appearance } from "../shared/types.ts";
 const POINTER_PATH =
   "M3.271 4.871A1.678 1.678 0 0 1 5.604 2.907L19.822 9.597A1.678 1.678 0 0 1 19.705 12.684L13.956 14.875A.622.622 0 0 0 13.643 15.139L10.506 20.431A1.678 1.678 0 0 1 7.444 20.021Z";
 const POINTER_TIP = { x: 3.81, y: 3.14 };
+/** The pointer's glide in presentation mode: a little slower than usual, so the eye can follow it across a large screen. */
+const PRESENT_GLIDE_MS = 800;
+/** How many times larger the pointer is drawn in presentation mode. */
+const PRESENT_SCALE = 2;
+/** The cross on the caption's close button, and the arrow on the send button. */
+const CROSS_PATH = "M18 6 6 18M6 6l12 12";
+const ARROW_PATH = "M12 19V5M5 12l7-7 7 7";
 
 const CSS = `
 :host { all: initial; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
@@ -75,7 +82,34 @@ button { font: inherit; cursor: pointer; }
   border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; pointer-events: auto; }
 .caption .close:hover { background: rgba(250,250,249,.25); }
 .caption .close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.asked { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); max-width: min(760px, calc(100vw - 300px)); min-width: 0;
+  background: #fff; color: #1c1917; border: 2px solid #1c1917; border-radius: 999px; padding: 8px 22px; font-size: 22px; line-height: 30px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 24px rgba(0,0,0,.22); pointer-events: none; }
+.asked.top { bottom: auto; top: 16px; }
 @media (prefers-reduced-motion: reduce) { .cursor { transition: none; } .ring.turn { animation: none; } .ripple { display: none; } }
+`;
+
+/**
+ * Presentation mode, for a demo on a projector or a shared screen, where the
+ * audience sits far from the screen: a pointer twice the size, a caption in
+ * large type and wider, a thick ring with a strong halo in an accent dark
+ * enough to stand out, a slower glide, and the question kept on show. Only a
+ * page that asks for it, with data-present on the script tag, gets it.
+ */
+const PRESENT_CSS = `
+.cursor { width: 48px; height: 48px; transition-duration: ${PRESENT_GLIDE_MS / 1000}s;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,.45)) drop-shadow(0 8px 14px rgba(0,0,0,.35)); }
+.cursor svg { width: 48px; height: 48px; }
+.cursor path { stroke-width: 2.5; }
+.ring { border-width: 6px; border-radius: 14px;
+  box-shadow: 0 0 0 3px #fff, 0 0 0 14px color-mix(in srgb, var(--accent) 40%, transparent), 0 0 32px 16px rgba(0,0,0,.2); }
+.ring.turn { animation-name: breathe-present; }
+@keyframes breathe-present { 50% { box-shadow: 0 0 0 3px #fff, 0 0 0 22px color-mix(in srgb, var(--accent) 24%, transparent), 0 0 32px 16px rgba(0,0,0,.2); } }
+.ripple { width: 56px; height: 56px; margin: -28px 0 0 -28px; border-width: 5px; }
+.caption { max-width: min(780px, calc(100vw - 32px)); gap: 14px; border-radius: 20px; padding: 14px 14px 14px 24px; font-size: 27px; line-height: 36px;
+  box-shadow: 0 0 0 3px var(--accent), 0 14px 40px rgba(0,0,0,.4); }
+.caption .close { width: 36px; height: 36px; }
+.caption .close svg { width: 16px; height: 16px; }
 `;
 
 /**
@@ -181,8 +215,18 @@ export class Ui {
   private readonly caption: HTMLElement;
   private readonly captionText: HTMLElement;
   private readonly dock: HTMLElement;
-  /** The side the site put the launcher on. It moves to the other side only while it would cover what is pointed at. */
+  /** The side the site put the launcher on. */
   private readonly side: "left" | "right";
+  /**
+   * Where the launcher sits: the site's corner, or the nearest place to it
+   * that covers none of the page's own controls for good (see `findHome`).
+   * `away` is the nearest such place on the other side, where it goes only
+   * while it would cover what is pointed at.
+   */
+  private home: Spot;
+  private away: Spot;
+  /** A look for the launcher's place, waiting for the next frame after the window was resized. */
+  private homeFrame = 0;
   /** The control the guide pointed at. */
   private pointed?: Element;
   /** What the pointer is on: the control, or the part of it that takes a click. */
@@ -193,8 +237,8 @@ export class Ui {
   private tip?: { box: string; dx: number; dy: number };
   /** The caption is above the control rather than below it, because something opened where it was. */
   private captionAbove = false;
-  /** What lay under the caption once it was placed, and whether the caption has moved for this control yet. */
-  private under?: { el: Element | null; moved: boolean };
+  /** What lay under the caption once it was placed, at each place looked at, and whether the caption has moved for this control yet. */
+  private under?: { els: (Element | null)[]; moved: boolean };
   private looked = 0;
   /**
    * Something on the page that took the keyboard from the ask box the moment
@@ -226,26 +270,63 @@ export class Ui {
   private lostAt = -Infinity;
   /** Where the pointer last was, so each move starts from there. */
   private at: { x: number; y: number };
+  /** Presentation mode: switched on by the page, with data-present on the script tag. */
+  private readonly present: boolean;
+  /** Where the pointer's tip is in its own box, at the size it is drawn. */
+  private readonly tipIn: { x: number; y: number };
+  /** How long the pointer's glide takes, as its transition sets it. */
+  private readonly glideMs: number;
+  /** The visitor's question, kept on show in presentation mode while its guide runs. */
+  private readonly asked: HTMLElement;
+  private question = "";
+  /** In presentation mode, places the caption has been moved off because something opened there. */
+  private captionAvoid: Box[] = [];
+  /** Where the pointed control was last seen, to know it again when the page draws it anew. */
+  private pointedBox?: Box;
 
-  constructor(appearance: Appearance, handlers: UiHandlers, acting?: UiActing) {
+  constructor(appearance: Appearance, handlers: UiHandlers, acting?: UiActing, options: { present?: boolean } = {}) {
+    this.present = options.present === true;
+    this.tipIn = this.present ? { x: POINTER_TIP.x * PRESENT_SCALE, y: POINTER_TIP.y * PRESENT_SCALE } : POINTER_TIP;
+    this.glideMs = this.present ? PRESENT_GLIDE_MS : GLIDE_MS;
     this.host = document.createElement("haptic-root");
-    this.host.style.setProperty("--accent", appearance.accent);
+    this.host.style.setProperty("--accent", this.present ? strongAccent(appearance.accent) : appearance.accent);
     const root = this.host.attachShadow({ mode: "open" });
     const side = appearance.position === "bottom-left" ? "left" : "right";
-    root.innerHTML = `<style>${CSS}</style>
-      <div class="ring" hidden></div>
-      <div class="caption" hidden><span></span><button class="close" aria-label="Stop guide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
-      <div class="cursor" hidden><svg viewBox="0 0 24 24" width="24" height="24"><path d="${POINTER_PATH}"/></svg></div>
-      <div class="dock ${side}">
-        <div class="panel" hidden>
-          <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><div class="row"><button class="doit" type="button" title="Do it with me (Ctrl+Enter)">Do it</button><button class="send" type="button" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div></form>
-          <div class="first" hidden><span></span><button class="go" type="button">Go</button></div>
-          <div class="status" hidden><span></span><button class="resume" type="button">Carry on</button><button class="stop" type="button">Stop</button></div>
-          <div class="note" hidden></div>
-          <div class="did" hidden><h2></h2><ul></ul><p></p></div>
-        </div>
-        <button class="launcher" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${POINTER_PATH}"/></svg><span></span></button>
-      </div>`;
+    // Built from elements and a stylesheet object, never from text: a page whose
+    // policy forbids inline style, or requires Trusted Types, refuses a <style>
+    // element and markup set as a string, and would leave the widget unstyled or not there at all.
+    adoptStyles(root, this.present ? CSS + PRESENT_CSS : CSS);
+    const hidden = { hidden: "" };
+    root.append(
+      make("div", { class: "ring", ...hidden }),
+      make("div", { class: "caption", ...hidden }, make("span"), make("button", { class: "close", "aria-label": "Stop guide" }, icon(CROSS_PATH, { "aria-hidden": "true" }))),
+      make("div", { class: "cursor", ...hidden }, icon(POINTER_PATH, { width: "24", height: "24" })),
+      make("div", { class: "asked", ...hidden }),
+      make(
+        "div",
+        { class: `dock ${side}` },
+        make(
+          "div",
+          { class: "panel", ...hidden },
+          make(
+            "form",
+            {},
+            make("input", { type: "text", placeholder: "What do you want to do?", "aria-label": "Ask a question", maxlength: "300" }),
+            make(
+              "div",
+              { class: "row" },
+              make("button", { class: "doit", type: "button", title: "Do it with me (Ctrl+Enter)" }, "Do it"),
+              make("button", { class: "send", type: "button", "aria-label": "Send" }, icon(ARROW_PATH, { "aria-hidden": "true" })),
+            ),
+          ),
+          make("div", { class: "first", ...hidden }, make("span"), make("button", { class: "go", type: "button" }, "Go")),
+          make("div", { class: "status", ...hidden }, make("span"), make("button", { class: "resume", type: "button" }, "Carry on"), make("button", { class: "stop", type: "button" }, "Stop")),
+          make("div", { class: "note", ...hidden }),
+          make("div", { class: "did", ...hidden }, make("h2"), make("ul"), make("p")),
+        ),
+        make("button", { class: "launcher", type: "button" }, icon(POINTER_PATH, { "aria-hidden": "true" }), make("span")),
+      ),
+    );
     const pick = <T extends Element>(selector: string) => root.querySelector(selector) as T;
     this.panel = pick(".panel");
     this.form = pick("form");
@@ -260,7 +341,10 @@ export class Ui {
     this.first = pick(".first");
     this.note = pick(".note");
     this.did = pick(".did");
+    this.asked = pick(".asked");
     this.side = side;
+    this.home = corner(side);
+    this.away = corner(side === "left" ? "right" : "left");
     this.acting = acting;
     pick(".first span").textContent = ACTING_WORDS.first;
     pick(".did h2").textContent = ACTING_WORDS.did;
@@ -331,11 +415,65 @@ export class Ui {
     this.keepPressesOurs();
     this.watchKeyboard();
     this.host.setAttribute("popover", "manual");
-    // The one thing of ours that listens on the page while nothing is in use: see `onToggle`.
+    // What of ours listens on the page while nothing is in use: a dialog opening on the top layer (`onToggle`), and the
+    // window changing size, which can bring a control of the page's into the launcher's corner (`onResize`).
     document.addEventListener("toggle", this.onToggle, true);
+    window.addEventListener("resize", this.onResize, { passive: true });
     this.setState("idle");
     this.place();
+    this.findHome();
+    // A page still loading may put its own buttons in the corner yet. It is looked at once more when it has loaded.
+    if (document.readyState !== "complete") window.addEventListener("load", this.onLoad);
   }
+
+  /** The page has loaded: the one look at the launcher's corner that waited for it. Nothing stays listening. */
+  private onLoad = () => {
+    window.removeEventListener("load", this.onLoad);
+    this.findHome();
+  };
+
+  /** The window was resized: the launcher's corner is looked at again, once, in the next frame. */
+  private onResize = () => {
+    if (this.homeFrame) return;
+    this.homeFrame = requestAnimationFrame(() => {
+      this.homeFrame = 0;
+      this.findHome();
+    });
+  };
+
+  /**
+   * Finds where the launcher sits: in the site's own corner, unless a control
+   * of the page's is there for good. A control is there for good when it
+   * stays put as the page scrolls, like a chat button or a Feedback tab, or
+   * when it is at the foot of the page, where no scrolling brings it out from
+   * under the launcher. Then the launcher goes to the nearest place that is
+   * free, up its side of the window or along the bottom, and to the other
+   * side only when its own has no free place. Looked at when the widget
+   * starts, when the page has loaded, when the window is resized, and when a
+   * guide is put away: never on a timer, and never while the visitor is using
+   * the widget, so it does not move under their hand.
+   */
+  findHome = () => {
+    try {
+      const launcher = this.dock.querySelector(".launcher")?.getBoundingClientRect();
+      if (!launcher?.width || !launcher.height) return;
+      const size = { w: launcher.width, h: launcher.height };
+      const blocked = lastingControls(this.host, size);
+      const other = this.side === "left" ? "right" : "left";
+      const own = nearestFree(this.side, size, blocked);
+      const theirs = nearestFree(other, size, blocked);
+      this.home = own ?? theirs ?? corner(this.side);
+      this.away = this.home.side === this.side ? (theirs ?? corner(other)) : (own ?? corner(this.side));
+      if (this.inUse()) return;
+      this.dockAt(this.home);
+      if (this.cursor.hidden) {
+        const box = this.dock.getBoundingClientRect();
+        this.at = { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
+      }
+    } catch (error) {
+      console.warn("[Haptic]", error);
+    }
+  };
 
   /**
    * A popover or a dialog the page opens goes into the top layer above our
@@ -372,6 +510,8 @@ export class Ui {
       this.placing = undefined;
       // Back to its own place, out of anything of the page's that could be taken away with it while nothing watches.
       this.place();
+      // The page may have put a control of its own in the launcher's corner while the widget was in use.
+      this.findHome();
     }
   }
 
@@ -580,6 +720,8 @@ export class Ui {
       this.showActs();
     }
     this.keepPlaced();
+    // The ask box opening or closing changes what the question must keep off.
+    this.showAsked();
   }
 
   /** A line under the status, in the widget's own words. */
@@ -684,15 +826,17 @@ export class Ui {
     this.held = { x, y };
     this.at = { x, y };
     this.cursor.hidden = false;
-    this.cursor.style.transform = `translate(${x - POINTER_TIP.x}px, ${y - POINTER_TIP.y}px)`;
+    this.cursor.style.transform = `translate(${x - this.tipIn.x}px, ${y - this.tipIn.y}px)`;
     if (lessMotion() || far < 2) return Promise.resolve();
     // The glide's own length, a little less for a short way.
-    return new Promise((resolve) => setTimeout(resolve, far < 80 ? 250 : GLIDE_MS));
+    return new Promise((resolve) => setTimeout(resolve, far < 80 ? 250 : this.glideMs));
   }
 
   /** Between two of Haptic's steps: the caption and the ring go, and the pointer rests where it is, so the next glide starts there. */
   rest() {
     this.pointed = undefined;
+    this.pointedBox = undefined;
+    this.captionAvoid = [];
     this.target = undefined;
     this.tip = undefined;
     this.under = undefined;
@@ -728,18 +872,23 @@ export class Ui {
   pointAt(el: Element, text: string) {
     this.saying = false;
     if (el !== this.pointed) {
+      // A control the page drew again, in the same place, is the same control: the caption stays off what it opened.
+      const same = !!this.pointedBox && sameBox(this.pointedBox, el.getBoundingClientRect());
       this.pointed = el;
       this.held = undefined;
       this.tip = undefined;
-      this.captionAbove = false;
-      this.under = undefined;
+      if (!same) {
+        this.captionAbove = false;
+        this.under = undefined;
+        this.captionAvoid = [];
+      }
       this.aim(el);
     }
     this.captionText.textContent = text;
     this.caption.hidden = text === "";
     this.cursor.hidden = false;
     // Paint once at the old spot so the transition has somewhere to start from.
-    this.cursor.style.transform = `translate(${this.at.x - POINTER_TIP.x}px, ${this.at.y - POINTER_TIP.y}px)`;
+    this.cursor.style.transform = `translate(${this.at.x - this.tipIn.x}px, ${this.at.y - this.tipIn.y}px)`;
     cancelAnimationFrame(this.frame);
     this.frame = requestAnimationFrame(this.track);
   }
@@ -751,6 +900,7 @@ export class Ui {
     this.caption.hidden = false;
     this.saying = true;
     this.placeSaid();
+    this.showAsked();
   }
 
   /** Places a caption with nothing to point at above the launcher, and above the panel when it is open. */
@@ -758,7 +908,7 @@ export class Ui {
     if (!this.saying || this.caption.hidden) return;
     const box = this.caption.getBoundingClientRect();
     const dock = this.dock.getBoundingClientRect();
-    const left = this.host.shadowRoot?.querySelector(".dock.left") ? 20 : window.innerWidth - box.width - 20;
+    const left = this.dock.classList.contains("left") ? dock.left : dock.right - box.width;
     this.caption.style.left = `${Math.max(12, left)}px`;
     this.caption.style.top = `${Math.max(12, Math.min(window.innerHeight - box.height - 76, dock.top - box.height - 16))}px`;
   }
@@ -766,12 +916,14 @@ export class Ui {
   clearPointer() {
     this.saying = false;
     this.pointed = undefined;
+    this.pointedBox = undefined;
+    this.captionAvoid = [];
     this.held = undefined;
     this.target = undefined;
     this.tip = undefined;
     this.under = undefined;
     this.captionAbove = false;
-    this.dockOn(this.side);
+    this.dockAt(this.home);
     this.mark(undefined);
     cancelAnimationFrame(this.frame);
     this.ring.hidden = true;
@@ -781,6 +933,32 @@ export class Ui {
   clear() {
     this.clearPointer();
     this.caption.hidden = true;
+    this.showAsked();
+  }
+
+  /**
+   * The visitor's question, for presentation mode, where it stays on show
+   * while its guide runs and while its last sentence is up, so an audience
+   * that came in late can read what was asked. Nothing is shown otherwise.
+   */
+  showQuestion(question: string) {
+    this.question = question;
+    this.asked.textContent = question ? `\u201c${question}\u201d` : "";
+    this.showAsked();
+  }
+
+  /** Shows the question, or hides it, as the guide stands, and keeps it off what is pointed at and its caption. */
+  private showAsked(avoid: Box[] = []) {
+    const state = this.state;
+    const running = state === "asking" || state === "pointing" || state === "watching" || state === "acting" || state === "paused";
+    const show = this.present && this.question !== "" && (running || (state === "finished" && !this.caption.hidden));
+    if (this.asked.hidden === show) this.asked.hidden = !show;
+    if (!show) return;
+    // At the foot of the window unless that covers what the visitor is shown, the launcher or the ask box. Then at the top.
+    this.asked.classList.remove("top");
+    const box = this.asked.getBoundingClientRect();
+    const covered = [...avoid, this.dock.getBoundingClientRect(), ...(this.caption.hidden ? [] : [this.caption.getBoundingClientRect()])];
+    if (covered.some((other) => overlaps(box, other, 8))) this.asked.classList.add("top");
   }
 
   /** Where the guide is. Kept as a property of our own element, beside `pointedAt`, and nowhere on the customer's page. */
@@ -791,6 +969,7 @@ export class Ui {
   setState(state: GuideState) {
     (this.host as HTMLElement & { guideState?: GuideState }).guideState = state;
     this.keepPlaced();
+    this.showAsked();
   }
 
   /**
@@ -839,22 +1018,30 @@ export class Ui {
       rect = el.getBoundingClientRect();
     }
 
-    const pad = 4;
+    // In presentation mode the ring is thicker, and stands further out so it does not cover the control's edge.
+    const pad = this.present ? 10 : 4;
+    this.pointedBox = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
     this.ring.style.left = `${rect.left - pad}px`;
     this.ring.style.top = `${rect.top - pad}px`;
     this.ring.style.width = `${rect.width + pad * 2}px`;
     this.ring.style.height = `${rect.height + pad * 2}px`;
 
     this.at = this.held ?? this.tipOn(el, rect);
-    this.cursor.style.transform = `translate(${this.at.x - POINTER_TIP.x}px, ${this.at.y - POINTER_TIP.y}px)`;
+    this.cursor.style.transform = `translate(${this.at.x - this.tipIn.x}px, ${this.at.y - this.tipIn.y}px)`;
 
     // The caption goes below the control, or above it when there is no room below or when something opened below.
+    // In presentation mode it looks for its place another way: see `presentedCaption`.
     const box = this.caption.getBoundingClientRect();
-    const fitsBelow = rect.bottom + 14 + box.height < window.innerHeight;
-    const fitsAbove = rect.top - box.height - 12 >= 8;
-    const above = this.captionAbove ? fitsAbove || !fitsBelow : !fitsBelow;
-    const top = above ? Math.max(8, rect.top - box.height - 12) : rect.bottom + 14;
-    const left = Math.min(Math.max(8, rect.left), window.innerWidth - box.width - 8);
+    let left: number;
+    let top: number;
+    if (this.present) ({ left, top } = this.presentedCaption(rect, pad, box));
+    else {
+      const fitsBelow = rect.bottom + 14 + box.height < window.innerHeight;
+      const fitsAbove = rect.top - box.height - 12 >= 8;
+      const above = this.captionAbove ? fitsAbove || !fitsBelow : !fitsBelow;
+      top = above ? Math.max(8, rect.top - box.height - 12) : rect.bottom + 14;
+      left = Math.min(Math.max(8, rect.left), window.innerWidth - box.width - 8);
+    }
     this.caption.style.left = `${left}px`;
     this.caption.style.top = `${top}px`;
 
@@ -864,6 +1051,56 @@ export class Ui {
     const caption = this.caption.hidden ? undefined : { left, top, right: left + box.width, bottom: top + box.height };
     this.keepLauncherOff(rect, caption);
     if (caption) this.keepCaptionOff(el, caption);
+    if (this.present) this.showAsked([this.ring.getBoundingClientRect(), this.pointerBox()]);
+  }
+
+  /** The box the pointer is drawn in, round its tip, at the size it is drawn. */
+  private pointerBox(): Box {
+    const scale = this.present ? PRESENT_SCALE : 1;
+    return { left: this.at.x - 4, top: this.at.y - 4, right: this.at.x + 18 * scale, bottom: this.at.y + 20 * scale };
+  }
+
+  /**
+   * Where the caption goes in presentation mode, where it is large: above the
+   * control first, then to its left, to its right, and below it last, the
+   * first place that fits in the window and keeps off the control, the
+   * pointer that hangs from it, every list, menu or calendar open over the
+   * page (the whole of one the control is in, so a choice's caption does not
+   * hide the other choices), and every place something opened over since.
+   * Above comes first because what a control opens, a list, a menu or a
+   * calendar, opens below it, and in a form the next field is below it too.
+   */
+  private presentedCaption(rect: DOMRect, pad: number, box: DOMRect): { left: number; top: number } {
+    const gap = 14;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const ring = { left: rect.left - pad - 6, top: rect.top - pad - 6, right: rect.right + pad + 6, bottom: rect.bottom + pad + 6 };
+    const pointer = this.pointerBox();
+    const open = openLayers(this.host, this.target);
+    // Round the control, its pointer, and the list it is a choice in, if it is in one.
+    const near = [ring, pointer, ...(open.around ? [open.around] : [])];
+    const all = { left: Math.min(...near.map((b) => b.left)), top: Math.min(...near.map((b) => b.top)), right: Math.max(...near.map((b) => b.right)), bottom: Math.max(...near.map((b) => b.bottom)) };
+    const clampX = (x: number) => Math.min(Math.max(12, x), width - box.width - 12);
+    const clampY = (y: number) => Math.min(Math.max(12, y), height - box.height - 12);
+    const middle = clampY(rect.top + rect.height / 2 - box.height / 2);
+    const places: { left: number; top: number }[] = [];
+    for (const round of open.around ? [ring, all] : [ring]) {
+      const bottom = Math.max(round.bottom, pointer.bottom);
+      const right = Math.max(round.right, pointer.right);
+      places.push(
+        { left: clampX(rect.left), top: round.top - gap - box.height },
+        { left: clampX(rect.right - box.width), top: round.top - gap - box.height },
+        { left: round.left - gap - box.width, top: middle },
+        { left: right + gap, top: middle },
+        { left: clampX(rect.left), top: bottom + gap },
+        { left: clampX(rect.right - box.width), top: bottom + gap },
+      );
+    }
+    const fits = (place: { left: number; top: number }) => place.left >= 12 && place.top >= 12 && place.left + box.width <= width - 12 && place.top + box.height <= height - 12;
+    const avoid = [ring, pointer, ...this.captionAvoid, ...open.boxes];
+    const free = (place: { left: number; top: number }) =>
+      !avoid.some((other) => overlaps({ left: place.left, top: place.top, right: place.left + box.width, bottom: place.top + box.height }, other, 0));
+    return places.find((place) => fits(place) && free(place)) ?? places.find(fits) ?? { left: clampX(rect.left), top: clampY(ring.bottom + gap) };
   }
 
   /**
@@ -891,40 +1128,59 @@ export class Ui {
    * Keeps the caption off what the control opens. A list, a menu or a
    * calendar opens beside the control, usually right where the caption is. If
    * something new comes up under the caption, it moves to the other side, once.
+   * In presentation mode the caption is large, and what lies under it is
+   * looked at in six places across it rather than at its middle; what opened
+   * is kept clear from then on, and the caption looks for its place again, a
+   * few times at most.
    */
-  private keepCaptionOff(el: Element, caption: { left: number; top: number; right: number; bottom: number }) {
-    const x = (caption.left + caption.right) / 2;
-    const y = (caption.top + caption.bottom) / 2;
-    const hit = x >= 0 && y >= 0 && x <= window.innerWidth && y <= window.innerHeight ? document.elementFromPoint(x, y) : null;
-    const now = hit && hit !== this.host ? hit : null;
+  private keepCaptionOff(el: Element, caption: Box) {
+    const across = this.present ? [0.15, 0.5, 0.85] : [0.5];
+    const down = this.present ? [0.25, 0.75] : [0.5];
+    const hits: (Element | null)[] = [];
+    for (const fy of down) {
+      for (const fx of across) {
+        const x = caption.left + (caption.right - caption.left) * fx;
+        const y = caption.top + (caption.bottom - caption.top) * fy;
+        const hit = x >= 0 && y >= 0 && x <= window.innerWidth && y <= window.innerHeight ? document.elementFromPoint(x, y) : null;
+        hits.push(hit && hit !== this.host ? hit : null);
+      }
+    }
     if (!this.under) {
-      this.under = { el: now, moved: false };
+      this.under = { els: hits, moved: false };
       return;
     }
-    const was = this.under.el;
-    if (this.under.moved || !now || now === was || now.contains(el) || el.contains(now) || (was && now.contains(was))) return;
-    // Inside what was there before, only a box drawn over it is new. Text that scrolls under the caption is not.
-    if (was?.contains(now) && !drawnOver(now, was)) return;
+    if (this.under.moved) return;
+    const under = this.under;
+    const now = hits.find((hit, index) => cameUp(hit, under.els[index] ?? null, el));
+    if (!now) return;
+    if (this.present) {
+      this.captionAvoid.push(layerOf(now).getBoundingClientRect(), caption);
+      this.under = this.captionAvoid.length >= 6 ? { els: [], moved: true } : undefined;
+      return;
+    }
     this.captionAbove = !this.captionAbove;
-    this.under = { el: null, moved: true };
+    this.under = { els: [], moved: true };
   }
 
-  /** Keeps the launcher off the control being pointed at and off its caption, by moving it to the other corner while it would cover them. */
+  /** Keeps the launcher off the control being pointed at and off its caption, by moving it to the other side while it would cover them. */
   private keepLauncherOff(rect: DOMRect, caption?: { left: number; top: number; right: number; bottom: number }) {
     const box = this.dock.getBoundingClientRect();
-    const at = (side: "left" | "right") => {
-      const left = side === "left" ? 20 : window.innerWidth - 20 - box.width;
-      return { left, right: left + box.width, top: box.top, bottom: box.bottom };
-    };
-    const covers = (side: "left" | "right") => overlaps(at(side), rect, 8) || (!!caption && overlaps(at(side), caption, 4));
-    const other = this.side === "left" ? "right" : "left";
-    this.dockOn(covers(this.side) && !covers(other) ? other : this.side);
+    const size = { w: box.width, h: box.height };
+    const covers = (spot: Spot) => overlaps(boxAt(spot, size), rect, 8) || (!!caption && overlaps(boxAt(spot, size), caption, 4));
+    this.dockAt(covers(this.home) && !covers(this.away) ? this.away : this.home);
   }
 
-  private dockOn(side: "left" | "right") {
-    if (this.dock.classList.contains(side)) return;
-    this.dock.classList.remove("left", "right");
-    this.dock.classList.add(side);
+  /** Puts the launcher, and the ask box above it, at a place. */
+  private dockAt(spot: Spot) {
+    const other = spot.side === "left" ? "right" : "left";
+    if (!this.dock.classList.contains(spot.side)) {
+      this.dock.classList.remove(other);
+      this.dock.classList.add(spot.side);
+    }
+    // Set through the element's style object, which a page's policy on inline style does not reach.
+    this.dock.style.setProperty(spot.side, `${spot.x}px`);
+    this.dock.style.setProperty(other, "auto");
+    this.dock.style.setProperty("bottom", `${spot.y}px`);
   }
 }
 
@@ -937,6 +1193,44 @@ function lessMotion(): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Gives our shadow root its styles as a stylesheet object, which a page's
+ * policy on inline style does not reach. A browser without stylesheet objects
+ * gets a <style> element instead, which works wherever the page allows inline style.
+ */
+function adoptStyles(root: ShadowRoot, css: string) {
+  try {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(css);
+    root.adoptedStyleSheets = [sheet];
+    return;
+  } catch {
+    // No stylesheet objects in this browser.
+  }
+  const style = document.createElement("style");
+  style.textContent = css;
+  root.append(style);
+}
+
+/** One of our elements, with its attributes and what goes in it. Text goes in as text, never as markup. */
+function make<K extends keyof HTMLElementTagNameMap>(tag: K, attributes: Record<string, string> = {}, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
+  const el = document.createElement(tag);
+  for (const [name, value] of Object.entries(attributes)) el.setAttribute(name, value);
+  el.append(...children);
+  return el;
+}
+
+/** One of our icons: a single path on a 24 by 24 grid. */
+function icon(path: string, attributes: Record<string, string> = {}): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  for (const [name, value] of Object.entries(attributes)) svg.setAttribute(name, value);
+  const shape = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  shape.setAttribute("d", path);
+  svg.append(shape);
+  return svg;
 }
 
 /** Where the visitor's "I've seen the first-use line" is kept: this browser only, for this site. */
@@ -1014,6 +1308,106 @@ interface Box {
   bottom: number;
 }
 
+/**
+ * Whether `now`, under a part of the caption where `was` lay before, is
+ * something that came up there: not the control `el` or what holds it, not
+ * what was there, and, inside what was there, only a box drawn over it. Text
+ * that scrolls under the caption is not.
+ */
+function cameUp(now: Element | null, was: Element | null, el: Element): boolean {
+  if (!now || now === was || now.contains(el) || el.contains(now) || (was && now.contains(was))) return false;
+  return !(was?.contains(now) && !drawnOver(now, was));
+}
+
+/** The box drawn over the page that `el` sits in: a list, a menu, or anything positioned on its own. `el` itself when there is none. */
+function layerOf(el: Element): Element {
+  for (let at: Element | null = el; at && at !== document.body; at = at.parentElement) {
+    if (at.matches('[role="listbox"], [role="menu"], [role="tree"], [role="grid"], [role="dialog"], [role="tooltip"], [popover]')) return at;
+    const position = getComputedStyle(at).position;
+    if (position === "absolute" || position === "fixed") return at;
+  }
+  return el;
+}
+
+/** What a control opens, by its role: a list, a menu, a tree, a grid of days, or a dialog. */
+const OPENS = '[role="listbox"], [role="menu"], [role="tree"], [role="grid"], [role="dialog"], [popover]';
+
+/**
+ * The boxes of the lists, menus and calendars open over the page now: each
+ * one's box drawn over the page, when it is shown, and `around`, the one the
+ * control is in, if it is in one. A dialog the control is in is where the
+ * caption has to go, and is not one of them.
+ */
+function openLayers(ignore: Element, target: Element | undefined): { boxes: Box[]; around?: Box } {
+  const found: Box[] = [];
+  let around: Box | undefined;
+  const seenLayers = new Set<Element>();
+  for (const el of document.querySelectorAll(OPENS)) {
+    if (ignore.contains(el) || el === ignore || seenLayers.size > 20) continue;
+    let layer: Element | null = el;
+    while (layer && layer !== document.body && !isLayer(layer)) layer = layer.parentElement;
+    if (!layer || layer === document.body || seenLayers.has(layer)) continue;
+    seenLayers.add(layer);
+    if (typeof layer.checkVisibility === "function" ? !layer.checkVisibility({ visibilityProperty: true }) : !layer.getClientRects().length) continue;
+    const box = layer.getBoundingClientRect();
+    if (!box.width || !box.height) continue;
+    const share = (box.width * box.height) / (window.innerWidth * window.innerHeight);
+    // A dialog, or anything as big, with the control in it: the caption goes inside it.
+    if (target && layer.contains(target) && (layer.matches('[role="dialog"], dialog') || share > 0.4)) continue;
+    // A dialog that shuts out the page, or fills a good part of it, is where the visitor is working, not something a control opened.
+    if (el.matches('[role="dialog"], dialog') && (el.getAttribute("aria-modal") === "true" || share > 0.25 || isModal(el))) continue;
+    found.push(box);
+    if (target && layer.contains(target)) around = box;
+  }
+  return { boxes: found, ...(around ? { around } : {}) };
+}
+
+/** Whether an element is the browser's own modal dialog. */
+function isModal(el: Element): boolean {
+  try {
+    return el.matches("dialog:modal");
+  } catch {
+    return false;
+  }
+}
+
+/** Whether an element is drawn over the page on its own: positioned against the window or a box, or on the top layer. */
+function isLayer(el: Element): boolean {
+  if (el.hasAttribute("popover")) {
+    try {
+      return el.matches(":popover-open");
+    } catch {
+      // No popovers in this browser: it is drawn where its position puts it.
+    }
+  }
+  const position = getComputedStyle(el).position;
+  return position === "absolute" || position === "fixed";
+}
+
+/** Whether two boxes are the same, to the pixel. */
+function sameBox(a: Box, b: Box): boolean {
+  return Math.abs(a.left - b.left) < 1 && Math.abs(a.top - b.top) < 1 && Math.abs(a.right - b.right) < 1 && Math.abs(a.bottom - b.bottom) < 1;
+}
+
+/**
+ * The site's accent for presentation mode: dark enough to stand out from far
+ * away on a light page, at least 6 to 1 against white, darkened in small
+ * steps with its hue kept. An accent that is not a six-digit hex colour is
+ * used as it is.
+ */
+function strongAccent(accent: string): string {
+  const hex = /^#?([0-9a-f]{6})$/i.exec(accent.trim())?.[1];
+  if (!hex) return accent;
+  let [r, g, b] = [0, 2, 4].map((at) => parseInt(hex.slice(at, at + 2), 16)) as [number, number, number];
+  const light = (channel: number) => {
+    const value = channel / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  const contrast = () => 1.05 / (0.2126 * light(r) + 0.7152 * light(g) + 0.0722 * light(b) + 0.05);
+  for (let step = 0; step < 40 && contrast() < 6; step++) [r, g, b] = [r * 0.95, g * 0.95, b * 0.95];
+  return `#${[r, g, b].map((channel) => Math.round(channel).toString(16).padStart(2, "0")).join("")}`;
+}
+
 /** Whether `el` sits in a box drawn over the page, inside `within`: a list, a menu, or anything positioned on its own. */
 function drawnOver(el: Element, within: Element): boolean {
   for (let at: Element | null = el; at && at !== within; at = at.parentElement) {
@@ -1026,6 +1420,138 @@ function drawnOver(el: Element, within: Element): boolean {
 
 function overlaps(a: Box, b: Box, margin: number): boolean {
   return a.left < b.right + margin && a.right > b.left - margin && a.top < b.bottom + margin && a.bottom > b.top - margin;
+}
+
+/** Where the launcher sits: on which side of the window, how far in from that side, and how far up from the bottom. */
+interface Spot {
+  side: "left" | "right";
+  x: number;
+  y: number;
+}
+
+/** The launcher's own distance from the window's edges, in its corner. */
+const EDGE = 20;
+/** The room kept between the launcher and a control of the page's it moved off. */
+const CLEAR = 12;
+/** The room kept above the launcher for the ask box, which opens above it. */
+const BOX_ROOM = 220;
+
+const corner = (side: "left" | "right"): Spot => ({ side, x: EDGE, y: EDGE });
+
+/** The box the launcher would take at a place, for a launcher of this size. */
+function boxAt(spot: Spot, size: { w: number; h: number }): Box {
+  const left = spot.side === "left" ? spot.x : window.innerWidth - spot.x - size.w;
+  const bottom = window.innerHeight - spot.y;
+  return { left, right: left + size.w, top: bottom - size.h, bottom };
+}
+
+/** The highest the launcher goes up its side, so the ask box above it still fits in the window. */
+const highest = (size: { h: number }) => window.innerHeight - size.h - BOX_ROOM;
+
+/**
+ * The free place on one side nearest that side's corner: the corner itself,
+ * or, step by step, just above or just beside each control in the way. Not
+ * past the middle of the window, and not so high that the ask box would not
+ * fit above it. None when that side has no free place.
+ */
+function nearestFree(side: "left" | "right", size: { w: number; h: number }, blocked: Box[]): Spot | undefined {
+  const top = highest(size);
+  const across = window.innerWidth / 2 - size.w;
+  const queue: Spot[] = [corner(side)];
+  const seen = new Set<string>();
+  for (let tries = 0; queue.length && tries < 40; tries++) {
+    queue.sort((a, b) => a.x + a.y - (b.x + b.y));
+    const spot = queue.shift()!;
+    const key = `${Math.round(spot.x)},${Math.round(spot.y)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const box = boxAt(spot, size);
+    const inWay = blocked.filter((control) => overlaps(box, control, 4));
+    if (!inWay.length) return spot;
+    for (const control of inWay) {
+      const up = Math.ceil(window.innerHeight - control.top + CLEAR);
+      if (up <= top) queue.push({ side, x: spot.x, y: up });
+      const beside = Math.ceil(side === "right" ? window.innerWidth - control.left + CLEAR : control.right + CLEAR);
+      if (beside <= across) queue.push({ side, x: beside, y: spot.y });
+    }
+  }
+  return undefined;
+}
+
+/** The most controls read when the launcher's place is looked for: a few milliseconds' work on the longest pages. */
+const MAX_READ = 3000;
+
+/** What a visitor can use on a page, as far as the launcher's place goes. */
+const USABLE =
+  'a[href], button, input:not([type="hidden"]), select, textarea, summary, iframe, [role="button"], [role="link"], [role="tab"], [role="checkbox"], [role="switch"], [role="radio"], [role="menuitem"], [role="combobox"], [tabindex]:not([tabindex="-1"])';
+
+/**
+ * The boxes of the page's controls that the launcher would cover for good
+ * in the lower part of the window where it can go: those that stay put as
+ * the page scrolls, where they are now, and the others where they will be
+ * once the part they scroll in is at its end. A control that scrolling
+ * takes out from under the launcher is not in the way. Read once, when the
+ * place is looked for, and never watched.
+ */
+function lastingControls(ignore: Element, size: { w: number; h: number }): Box[] {
+  const height = window.innerHeight;
+  const from = height - highest(size) - size.h - CLEAR;
+  const page = document.scrollingElement ?? document.documentElement;
+  const pageLeft = Math.max(0, page.scrollHeight - page.clientHeight - page.scrollTop);
+  const inBand = (top: number, bottom: number) => bottom > from && top < height;
+  const found: Box[] = [];
+  const all = document.querySelectorAll(USABLE);
+  // On a very long page only the last controls are read: the foot of the page, and what scripts add at its end, like a chat button.
+  for (let index = all.length - 1; index >= Math.max(0, all.length - MAX_READ); index--) {
+    const el = all[index]!;
+    if (ignore.contains(el)) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2 || rect.right <= 0 || rect.left >= window.innerWidth) continue;
+    const now = inBand(rect.top, rect.bottom);
+    if (!now && !inBand(rect.top - pageLeft, rect.bottom - pageLeft)) continue;
+    // A box as big as a good part of the window holds controls rather than being one: covering a corner of it hides nothing.
+    if (rect.width * rect.height > (window.innerWidth * height) / 3) continue;
+    if (!seen(el)) continue;
+    if (pinned(el)) {
+      if (now) found.push(rect);
+      continue;
+    }
+    const left = scrollLeftUnder(el, page, pageLeft);
+    if (inBand(rect.top - left, rect.bottom - left)) found.push({ left: rect.left, right: rect.right, top: rect.top - left, bottom: rect.bottom - left });
+  }
+  return found;
+}
+
+/** Whether an element can be seen: drawn, not see-through, not hidden. */
+function seen(el: Element): boolean {
+  if (typeof el.checkVisibility === "function") return el.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+  return el.getClientRects().length > 0;
+}
+
+/** The parent of a node, or the element that holds its shadow root. */
+const up = (node: Node): Node | null => node.parentNode ?? (node as ShadowRoot).host ?? null;
+
+/** Whether an element, or a box it sits in, stays put on screen when the page scrolls. */
+function pinned(el: Element): boolean {
+  for (let at: Node | null = el; at; at = up(at)) {
+    if (!(at instanceof Element)) continue;
+    const position = getComputedStyle(at).position;
+    if (position === "fixed" || position === "sticky") return true;
+  }
+  return false;
+}
+
+/**
+ * How much further up an element goes once the part it scrolls in is
+ * scrolled to its end: the nearest box around it that scrolls, or the page.
+ */
+function scrollLeftUnder(el: Element, page: Element, pageLeft: number): number {
+  for (let at = el.parentElement; at && at !== page && at !== document.body; at = at.parentElement) {
+    if (at.scrollHeight <= at.clientHeight + 1) continue;
+    const overflow = getComputedStyle(at).overflowY;
+    if (overflow === "auto" || overflow === "scroll") return Math.max(0, at.scrollHeight - at.clientHeight - at.scrollTop);
+  }
+  return pageLeft;
 }
 
 /** Whether a click at this point would land on `el`. A point off the screen cannot be tested and counts. */

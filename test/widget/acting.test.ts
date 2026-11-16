@@ -443,7 +443,7 @@ async function quiet(session: Session): Promise<{ calls: number; observers: numb
   }, before);
 }
 
-test("once acting is over, by the visitor's click on the commit or by Stop, nothing of Haptic's is left running but the one top-layer listener", async () => {
+test("once acting is over, by the visitor's click on the commit or by Stop, nothing of Haptic's is left running but the listeners for the top layer and the window's size", async () => {
   const session = await start(
     `${COUNTED}${CARD_FORM}`,
     (request) => {
@@ -454,7 +454,7 @@ test("once acting is over, by the visitor's click on the commit or by Stop, noth
     "/",
     { acting: { ...ACTING_ON, confirmFirst: false } },
   );
-  const idle = { calls: 0, observers: 0, listeners: ["d:toggle:true"] };
+  const idle = { calls: 0, observers: 0, listeners: ["d:toggle:true", "w:resize:false"] };
   // The ask box is put away, as a visitor done with it does. While it is open the widget is in use.
   const putAway = async () => {
     if (await session.page.locator("haptic-root .panel").isVisible()) await session.page.locator("haptic-root .launcher").click();

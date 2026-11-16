@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { ask, launch, open, type Browser, type Page } from "../../eval/browser.ts";
-import type { PublicSiteConfig, SnapElement, TurnReply, TurnRequest } from "../../src/shared/types.ts";
+import { DEFAULT_APPEARANCE, type PublicSiteConfig, type SnapElement, type TurnReply, type TurnRequest } from "../../src/shared/types.ts";
 
 // What the widget's browser tests share: small pages served from this
 // machine, the real widget put on them, and a model whose answers the test
@@ -73,8 +73,17 @@ const page = (body: string) => `<!doctype html><html><head><meta charset="utf-8"
  * Opens a local page with the widget on it. `pages` maps a path to the HTML
  * of its body, or to a whole document when it starts with "<!doctype".
  */
-export async function start(pages: string | Record<string, string>, script: Script, path = "/", settings: { acting?: PublicSiteConfig["acting"] } = {}): Promise<Session> {
+export async function start(
+  pages: string | Record<string, string>,
+  script: Script,
+  path = "/",
+  settings: { acting?: PublicSiteConfig["acting"]; appearance?: Partial<PublicSiteConfig["appearance"]>; present?: boolean } = {},
+): Promise<Session> {
   const served = typeof pages === "string" ? { "/": pages } : pages;
+  // The tag as a page that asks for presentation mode writes it: data-present="1", there before the widget's script runs.
+  const presenting = settings.present
+    ? `<script>new MutationObserver((records) => { for (const record of records) for (const node of record.addedNodes) if (node.dataset && node.dataset.site) node.dataset.present = "1"; }).observe(document.body, { childList: true });</script>`
+    : "";
   const server: Server = createServer((request, response) => {
     const asked = (request.url ?? "/").split(/[?#]/)[0] ?? "/";
     // "/data/<ms>" answers after that many milliseconds, for pages that fetch what they show.
@@ -88,7 +97,7 @@ export async function start(pages: string | Record<string, string>, script: Scri
       response.writeHead(404).end("Not found");
       return;
     }
-    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(html.startsWith("<!doctype") ? html : page(html));
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(html.startsWith("<!doctype") ? html : page(presenting + html));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -102,7 +111,7 @@ export async function start(pages: string | Record<string, string>, script: Scri
       return script(request, requests.length - 1);
     },
     undefined,
-    settings.acting ? { acting: settings.acting } : {},
+    { ...(settings.acting ? { acting: settings.acting } : {}), ...(settings.appearance ? { appearance: { ...DEFAULT_APPEARANCE, ...settings.appearance } } : {}) },
   );
   const until: Session["until"] = async (check, what, ms = 8000) => {
     for (const deadline = Date.now() + ms; Date.now() < deadline; ) {

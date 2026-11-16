@@ -172,3 +172,99 @@ test("the space around the launcher and the ask box takes no clicks: a page butt
     await session.close();
   }
 });
+
+// Where the launcher sits while no guide runs. Sites keep their own controls
+// in the window's lower corners: a chat button, a Feedback tab, a "Customize"
+// button pinned there, and at the foot of a page the footer's last links,
+// which no scrolling brings out from under the launcher.
+
+const overlap = (a: Box, b: Box) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+const boxOf = async (session: Session, selector: string): Promise<Box> => {
+  const box = (await session.page.locator(selector).boundingBox({ timeout: 5000 }))!;
+  return { left: box.x, top: box.y, right: box.x + box.width, bottom: box.y + box.height };
+};
+/** The launcher is free of every one of these controls, and a click at the middle of each lands on it. */
+async function launcherClearOf(session: Session, selectors: string[]): Promise<Box> {
+  const launcher = await ours(session, ".launcher");
+  for (const selector of selectors) {
+    const box = await boxOf(session, selector);
+    assert.ok(!overlap(launcher, box), `the launcher (${JSON.stringify(launcher)}) covers ${selector} (${JSON.stringify(box)})`);
+    assert.equal(await hitAt(session, box), selector.slice(1), `a click on ${selector} lands on something else`);
+  }
+  return launcher;
+}
+
+test("the launcher does not sit on a chat button the page pins in its corner, and stays near that corner", async () => {
+  const page = `<h1>Store</h1><p>Find the right Mac for you.</p>
+    <button id="chat" type="button" aria-label="Chat with a specialist" style="position:fixed;right:20px;bottom:20px;width:56px;height:56px;border-radius:28px">Chat</button>`;
+  const session = await start(page, () => words("Use Chat."));
+  try {
+    await session.page.waitForTimeout(300);
+    const launcher = await launcherClearOf(session, ["#chat"]);
+    assert.ok(launcher.left > 683 && launcher.bottom > 800 - 160, `the launcher went far from its corner: ${JSON.stringify(launcher)}`);
+    // It still opens the ask box, where it now is.
+    await session.ask("talk to someone");
+    await session.untilAsked(1, 5000);
+  } finally {
+    await session.close();
+  }
+});
+
+test("the launcher does not sit on a Feedback tab and a Customize button pinned on its side of the window", async () => {
+  const page = `<h1>Data</h1><p>Datasets from the federal government.</p>
+    <button id="feedback" type="button" style="position:fixed;right:0;bottom:120px;width:44px;height:110px">Feedback</button>
+    <button id="customize" type="button" aria-label="Customize" style="position:fixed;right:24px;bottom:24px;width:48px;height:48px;border-radius:24px">C</button>`;
+  const session = await start(page, () => words("Use Feedback."));
+  try {
+    await session.page.waitForTimeout(300);
+    const launcher = await launcherClearOf(session, ["#feedback", "#customize"]);
+    assert.ok(launcher.left > 683, `the launcher left its side: ${JSON.stringify(launcher)}`);
+  } finally {
+    await session.close();
+  }
+});
+
+test("at the foot of a page the launcher does not sit on the footer's last links", async () => {
+  // Material Dashboard's footer: its links end in the lower right corner, at the very end of the page.
+  const page = `<h1>Dashboard</h1>${Array.from({ length: 30 }, (_, n) => `<p>Row ${n + 1} of the report.</p>`).join("")}
+    <footer style="display:flex;justify-content:flex-end;gap:16px;padding:12px 0 0"><a id="team" href="#team">Team</a><a id="blog" href="#blog">Blog</a><a id="license" href="#license">License</a></footer>`;
+  const session = await start(page, () => words("The license is in the footer."));
+  try {
+    await session.page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await session.page.waitForTimeout(300);
+    await launcherClearOf(session, ["#license", "#blog", "#team"]);
+  } finally {
+    await session.close();
+  }
+});
+
+test("when the window is resized, the launcher moves off a control that came into its corner, and back once the corner is free", async () => {
+  const page = `<style>#help { position: fixed; left: 20px; bottom: 20px; width: 90px; height: 44px } @media (max-width: 900px) { #help { left: auto; right: 16px } }</style>
+    <h1>Board</h1><button id="help" type="button">Help</button>`;
+  const session = await start(page, () => words("Use Help."));
+  try {
+    await session.page.waitForTimeout(300);
+    const wide = await ours(session, ".launcher");
+    await session.page.setViewportSize({ width: 800, height: 700 });
+    await session.page.waitForTimeout(300);
+    await launcherClearOf(session, ["#help"]);
+    await session.page.setViewportSize({ width: 1366, height: 800 });
+    await session.page.waitForTimeout(300);
+    const back = await ours(session, ".launcher");
+    assert.deepEqual(back, wide, "the launcher did not go back to its corner once it was free");
+  } finally {
+    await session.close();
+  }
+});
+
+test("the site's own corner wins: a launcher set to the lower left stays on the left, beside the page's button there", async () => {
+  const page = `<h1>Account</h1><button id="cookies" type="button" style="position:fixed;left:16px;bottom:16px;width:120px;height:40px">Cookie settings</button>`;
+  const session = await start(page, () => words("Use Cookie settings."), "/", { appearance: { position: "bottom-left" } });
+  try {
+    await session.page.waitForTimeout(300);
+    const launcher = await launcherClearOf(session, ["#cookies"]);
+    assert.ok(launcher.right < 683, `the launcher left the site's side: ${JSON.stringify(launcher)}`);
+  } finally {
+    await session.close();
+  }
+});
