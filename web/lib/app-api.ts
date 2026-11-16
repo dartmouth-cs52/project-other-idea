@@ -82,6 +82,8 @@ export interface Site {
   connected: boolean;
   origins: SeenOrigin[];
   reading: Reading | null;
+  /** Screens mapped from a signed-in browser at the company. */
+  mapped: number;
   corrections: Correction[];
   blocked: ControlName[];
 }

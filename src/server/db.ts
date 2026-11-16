@@ -1,5 +1,7 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import { cleanText, normalizePath, questionKey, type GuideReport, type PageOutline, type SiteContext, type TurnRequest } from "../shared/types.ts";
+import { mappingAllowed } from "../shared/mapping.ts";
+import { cleanText, normalizePath, questionKey, type GuideReport, type PageNode, type PageOutline, type SiteContext, type TurnRequest } from "../shared/types.ts";
+import { mergeMapped } from "./mapped.ts";
 import { MAX_VISITORS, outlineRows, visitorHash, withLearned, type LearnedLabel } from "./learned.ts";
 import type { TurnMeasure } from "./model.ts";
 
@@ -119,6 +121,28 @@ export class Store {
           visitors = case when ${visitor} = any(outline_labels.visitors) or cardinality(outline_labels.visitors) >= ${MAX_VISITORS}
             then outline_labels.visitors else outline_labels.visitors || ${visitor}::text end`;
     });
+  }
+
+  /** Whether `pass` lets its holder map this site right now. Read from the database each time: the pass may be seconds old. */
+  async mappingAllowed(site: string, pass: string): Promise<boolean> {
+    const rows = (await this.sql`select context->'mapping' as mapping from sites where id = ${site}`) as { mapping: SiteContext["mapping"] | null }[];
+    return mappingAllowed(site, rows[0]?.mapping ?? undefined, pass);
+  }
+
+  /**
+   * Puts one mapped page into a site's pages. The widget sends one page at a
+   * time and waits for each, so reading the pages and writing them back is
+   * not raced by another page from the same tab.
+   */
+  async saveMappedPage(site: string, page: PageNode): Promise<void> {
+    const rows = (await this.sql`select context->'pages' as pages from sites where id = ${site}`) as { pages: PageNode[] | null }[];
+    if (!rows[0]) return;
+    const pages = rows[0].pages ?? [];
+    const merged = mergeMapped(pages, page);
+    if (merged === pages) return;
+    await this.sql`
+      update sites set context = jsonb_set(jsonb_set(context, '{pages}', ${JSON.stringify(merged)}::jsonb), '{updatedAt}', to_jsonb(now()::text)), updated_at = now()
+      where id = ${site}`;
   }
 
   /**

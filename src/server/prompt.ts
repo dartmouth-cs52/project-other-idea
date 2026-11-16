@@ -181,7 +181,7 @@ const MAX_PAGE_BUTTONS = 24;
  */
 export function renderSiteMap(pages: PageNode[]): string {
   const link = (l: { label: string; to: string }) => `${l.label} → ${l.to}`;
-  const opening = (o: PageOpening) => `behind "${o.control.replace(/"/g, "'")}": ${[...o.links.map(link), ...o.buttons].join("; ")}`;
+  const opening = (o: PageOpening) => `behind "${o.control.replace(/"/g, "'")}": ${[...o.links.map(link), ...o.buttons, ...(o.fields?.length ? [`fields: ${o.fields.join(", ")}`] : [])].join("; ")}`;
   const counts = new Map<string, number>();
   for (const page of pages) {
     for (const item of new Set([...page.links.map(link), ...page.buttons, ...(page.opens ?? []).map(opening)])) counts.set(item, (counts.get(item) ?? 0) + 1);

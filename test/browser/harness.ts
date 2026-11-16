@@ -30,6 +30,13 @@ export function widgetBundle(): Promise<string> {
   return bundle;
 }
 
+let mapper: Promise<string> | undefined;
+/** The mapper as the widget fetches it, at /map.js. */
+export function mapperBundle(): Promise<string> {
+  mapper ??= build({ entryPoints: [`${root}src/widget/map-entry.ts`], bundle: true, format: "iife", target: "es2020", write: false }).then((result) => result.outputFiles[0]!.text);
+  return mapper;
+}
+
 let snapshotCode: Promise<string> | undefined;
 /** takeSnapshot on its own, as window.hapticSnapshot(ignore), for testing what a page turns into. */
 export function snapshotBundle(): Promise<string> {
@@ -95,6 +102,7 @@ export async function startHarness(): Promise<Harness> {
   const server: Server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/widget.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(widget);
+    if (url.pathname === "/map.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(await mapperBundle());
     if (url.pathname.startsWith("/v1/sites/")) return res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(harness.config));
     if (req.method === "POST" && url.pathname === "/v1/turn") {
       const request = JSON.parse(await readBody(req)) as TurnRequest;

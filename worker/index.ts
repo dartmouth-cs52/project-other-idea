@@ -5,6 +5,7 @@ import { labelThreshold } from "../src/server/learned.ts";
 import { configure } from "../src/server/model.ts";
 import { createSiteCache } from "../src/server/site-cache.ts";
 import type { SiteContext } from "../src/shared/types.ts";
+import mapper from "../dist/map.txt";
 import widget from "../dist/widget.txt";
 
 export { BudgetMeter } from "./budget.ts";
@@ -196,6 +197,7 @@ export default {
     const app = createApp({
       loadSite: async (id, hurry) => (SITE_ID.test(id) ? sites(id, () => readSite(env, id), hurry ? (work) => ctx.waitUntil(work) : undefined) : undefined),
       widget: async () => widget,
+      mapper: async () => mapper,
       widgetMaxAge: 300,
       overLimit: async (key) => (env.TURN_LIMIT ? !(await env.TURN_LIMIT.limit({ key })).success : false),
       isOff: (site) => isOff(env, site.id),
@@ -208,6 +210,7 @@ export default {
       onReport: (site, guide, report) => later(db?.report(site, guide, report)),
       onCancel: (turn) => later(db?.cancelStep(turn)),
       onOutline: (site, visitor, outline) => later(db?.recordOutline(site, visitor, outline)),
+      ...(db ? { mapping: { allowed: (site, pass) => db.mappingAllowed(site.id, pass), save: (site, page) => db.saveMappedPage(site.id, page) } } : {}),
     });
     try {
       const response = await app(request, request.headers.get("CF-Connecting-IP") ?? "");

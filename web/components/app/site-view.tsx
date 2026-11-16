@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { AlertCircleIcon, Mail } from "lucide-react";
+import { AlertCircleIcon, Mail, Route } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,8 +87,11 @@ export function SiteView({ siteId, onDeleted }: { siteId: string; onDeleted: () 
         <SiteSettings site={site} onChange={setSite} onDeleted={onDeleted} />
       ) : site.connected ? (
         <>
+          {/* Asked for first until it has been done once: without it Haptic knows only the public pages. */}
+          {site.mapped === 0 && <MapApp site={site} reload={load} />}
           <InsightsView siteId={site.id} refreshKey={refreshKey} onCorrected={(corrections) => setSite({ ...site, corrections })} />
           <GuidingRules site={site} onChange={setSite} />
+          {site.mapped > 0 && <MapApp site={site} reload={load} />}
           <InstallHealth site={site} reading={pages.reading} onChange={setSite} />
         </>
       ) : (
@@ -170,8 +173,112 @@ function Setup({ site, pages, onChange }: { site: Site; pages: Pages; onChange: 
       </Card>
 
       <Connection site={site} onChange={onChange} />
+
+      <Card>
+        <div className="flex items-center gap-3">
+          <StepMark n={4} />
+          <h2 className="text-2xl font-medium tracking-[-0.02em]">Show Haptic the screens behind your login</h2>
+        </div>
+        <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
+          Once the script connects, one button here has Haptic go through your signed-in app by itself, in your own browser, so it knows where
+          everything is before your first user asks.
+        </p>
+      </Card>
+
       <GuidingRules site={site} onChange={onChange} />
     </div>
+  );
+}
+
+/**
+ * Starts a mapping run: the company's own app opens in a new tab with a pass
+ * in its address, and the widget there goes through the app by itself
+ * (src/widget/map.ts in the widget). The count here goes up as pages arrive,
+ * because the page asks for the site again every so often.
+ */
+function MapApp({ site, reload }: { site: Site; reload: () => void }) {
+  const [start, setStart] = useState(site.origin);
+  const [busy, setBusy] = useState(false);
+  const [opened, setOpened] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const done = site.mapped > 0;
+
+  // While a run is under way in the other tab, the count is asked for often enough to watch it climb.
+  useEffect(() => {
+    if (!opened) return;
+    const timer = setInterval(() => document.visibilityState === "visible" && reload(), WAITING_MS);
+    const stop = setTimeout(() => setOpened(false), 30 * 60_000);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(stop);
+    };
+  }, [opened, reload]);
+
+  async function begin(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setBusy(true);
+    // The tab is opened now, while the click still counts as theirs, and sent on once the link is ready.
+    // Opened after the wait, a browser would block it as a popup.
+    const tab = window.open("", "_blank");
+    try {
+      const { url } = await api<{ url: string }>(`/sites/${site.id}/map`, { method: "POST", body: { url: start.trim() } });
+      if (tab) {
+        // Their app gets no handle on this page.
+        tab.opener = null;
+        tab.location.replace(url);
+        setOpened(true);
+      } else {
+        setError("Your browser stopped the new tab. Allow popups for this page, then start again.");
+      }
+    } catch (failure) {
+      tab?.close();
+      setError((failure as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <div className="flex items-center gap-3">
+        {done ? <DoneMark /> : <Route className="size-5 text-muted-foreground" aria-hidden />}
+        <h2 className="text-2xl font-medium tracking-[-0.02em]">
+          {done ? `${site.mapped} signed-in ${site.mapped === 1 ? "screen" : "screens"} mapped` : "Show Haptic the screens behind your login"}
+        </h2>
+      </div>
+      <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
+        {done
+          ? "Haptic knows these screens: where their links and buttons lead, and what is behind each menu, tab and dialog. Map again after a big change to your product."
+          : "So far Haptic has only read your public pages. Sign in to your app in this browser, then start. Your app opens in a new tab and Haptic goes through it by itself: it visits each page and opens menus, tabs and dialogs to see what is there. It takes a few minutes, and you can pause or stop it at any time."}
+      </p>
+      <ul className="flex max-w-[65ch] list-disc flex-col gap-1 pl-5 text-sm leading-5 text-muted-foreground">
+        <li>It skips anything that looks like it saves, sends, deletes, pays or signs out, and it never types or submits a form.</li>
+        <li>While it presses a button, it stops the page from sending changes. No guard is perfect, so use a test or demo account if you have one.</li>
+        <li>It keeps the names of buttons, links and fields. Never what is in a field or a table.</li>
+        <li>Haptic will describe your app as this account sees it, so use an account that sees what your users see.</li>
+      </ul>
+      <form onSubmit={begin} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="flex flex-1 flex-col gap-2">
+          <Label htmlFor={`map-${site.id}`}>Where your app starts once you are signed in</Label>
+          <Input id={`map-${site.id}`} value={start} onChange={(event) => setStart(event.target.value)} placeholder={site.origin} className="h-11 bg-card px-3.5 md:text-base" />
+        </div>
+        <Button type="submit" size="xl" variant={done ? "secondary" : "default"} disabled={busy}>
+          {done ? "Map again" : "Start mapping"}
+        </Button>
+      </form>
+      {opened && !error && (
+        <p className="text-sm text-muted-foreground">
+          Your app is open in a new tab. Press Start in the panel at the top of it. If no panel shows, the script is not on that page yet.
+        </p>
+      )}
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircleIcon />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+    </Card>
   );
 }
 

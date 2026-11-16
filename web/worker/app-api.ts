@@ -5,6 +5,7 @@
 //   GET    /api/app/sites/:id                   a site, its install health and how far the reading has got
 //   PATCH  /api/app/sites/:id                   change its name or the origins it may run on
 //   POST   /api/app/sites/:id/read              read a few more public pages
+//   POST   /api/app/sites/:id/map               a link that lets this person map their signed-in app from their own browser
 //   GET    /api/app/sites/:id/insights          the dashboard: questions, outcomes, what to fix
 //   GET    /api/app/sites/:id/guides/:guide     one guide, step by step
 //   GET    /api/app/sites/:id/groups?key=…      the guides for one question, grouped by meaning
@@ -18,6 +19,7 @@
 // Every site is looked up together with the caller's organization, so a site
 // id, which is public, is never enough to read or change someone's data.
 
+import { MAPPING_FRAGMENT, MAPPING_PASS_MS, mappingHash, newMappingPass } from "../../src/shared/mapping";
 import { cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
 import { DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
@@ -90,7 +92,7 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
 
     if (path === "/sites" && request.method === "POST") return reply(await addSite(sql, org, await body(request)), 201);
 
-    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?)?$/.exec(path);
+    const match = /^\/sites\/([^/]+)(\/read|\/map|\/insights|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?)?$/.exec(path);
     if (match) {
       const id = match[1] ?? "";
       if (!SITE_ID.test(id)) throw new Refusal(404, "No such site.");
@@ -101,6 +103,7 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
       if (sub === "/docs" && request.method === "POST") return reply(await addDoc(sql, env, org, id, await body(request)), 201);
       if (sub === "/docs" && request.method === "DELETE") return reply(await removeDoc(sql, env, org, id, url.searchParams.get("source") ?? ""));
       if (sub === "/read" && request.method === "POST") return reply(await readSite(sql, env, org, id, (await body(request)).restart === true));
+      if (sub === "/map" && request.method === "POST") return reply(await startMapping(sql, org, id, await body(request)), 201);
       if (sub === "/insights" && request.method === "GET") {
         await ownedSite(sql, org, id);
         const days = Math.min(Math.max(Number(url.searchParams.get("days")) || 30, 1), 365);
@@ -295,6 +298,8 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string) 
     corrections: site.context.corrections ?? [],
     blocked: site.context.blocked ?? [],
     reading: readingSummary(site.reading, site.context.pages ?? []),
+    // Screens mapped from a signed-in browser at the company, which the reading of public pages cannot reach.
+    mapped: (site.context.pages ?? []).filter((page) => page.mapped).length,
     appearance: { ...DEFAULT_APPEARANCE, ...site.context.appearance },
     notes: site.context.notes ?? "",
     docs: docsSummary(site.context.docs ?? []),
@@ -422,7 +427,8 @@ async function readSite(sql: Sql, env: AppEnv, org: Organization, id: string, re
   if (!reading || reading.finishedAt) return readingSummary(reading, pages);
   const batch = await readMore(reading, env.BROWSER);
   const byPath = new Map(pages.map((page) => [page.path, page]));
-  for (const page of batch.pages) byPath.set(page.path, page);
+  // A page mapped from a signed-in browser is the fuller view of it, so the public reading does not replace it.
+  for (const page of batch.pages) if (!byPath.get(page.path)?.mapped) byPath.set(page.path, page);
   const merged = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
   // The address pasted may be the site's other name, acme.com for www.acme.com. The widget will run on the
   // one it redirects to, so that becomes the site's origin and is allowed too.
@@ -439,6 +445,26 @@ async function readSite(sql: Sql, env: AppEnv, org: Organization, id: string, re
       updated_at = now()
     where id = ${id} and company_id = ${org.id}`;
   return readingSummary(batch.reading, merged);
+}
+
+/**
+ * Makes a pass for mapping the signed-in app, and the link that carries it to
+ * the widget on the company's own site. The pass rides after the #, so their
+ * server never sees it, and only its hash is kept here. It works for two
+ * hours, from an address the site allows, and a new one replaces the last.
+ */
+async function startMapping(sql: Sql, org: Organization, id: string, input: Record<string, unknown>) {
+  const site = await ownedSite(sql, org, id);
+  const start = input.url === undefined || input.url === "" ? new URL(site.origin) : siteAddress(input.url);
+  if (!site.allowed_origins.includes(start.origin)) {
+    throw new Refusal(400, `Haptic isn't allowed to run on ${start.origin} yet. Add it under "Where Haptic may run", or start from ${site.origin}.`);
+  }
+  const pass = newMappingPass();
+  const expires = new Date(Date.now() + MAPPING_PASS_MS).toISOString();
+  const mapping = { hash: await mappingHash(id, pass), expires };
+  await sql`update sites set context = jsonb_set(context, '{mapping}', ${JSON.stringify(mapping)}::jsonb), updated_at = now() where id = ${id} and company_id = ${org.id}`;
+  start.hash = `${MAPPING_FRAGMENT}${pass}`;
+  return { url: start.href, expires };
 }
 
 // Approving access requests ---------------------------------------------------

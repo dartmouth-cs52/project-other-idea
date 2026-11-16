@@ -1,6 +1,7 @@
 import { DEFAULT_APPEARANCE, MODES, STREAM_TYPE, type Mode, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { Guide, type HandoffWay, type Reporter, type Watch } from "./guide.ts";
 import { startLearning, visitorId } from "./learn.ts";
+import { loadMapper, mappingAsked } from "./map-pass.ts";
 import { Ui } from "./ui.ts";
 
 // Entry point of the script customers paste into their site:
@@ -8,6 +9,8 @@ import { Ui } from "./ui.ts";
 // It runs on someone else's page, so nothing here may throw into it.
 
 const script = document.currentScript as HTMLScriptElement | null;
+// True in a tab where someone at the company is mapping their app (map.ts).
+const mapping = mappingAsked();
 
 async function boot() {
   const site = script?.dataset.site;
@@ -91,6 +94,8 @@ async function boot() {
         .catch(() => false),
   };
   const guide = new Guide(ui, sendTurn, report, handoff, config.blocked ?? []);
+  // A tab that is mapping the app does only that: no guide is picked up, and its presses are not learned from as a visitor's would be.
+  if (mapping) return loadMapper({ api, site, host: ui.host, blocked: config.blocked ?? [] });
   guide.resume();
 
   // Each page's outline, so the site map keeps up with the product. Sent as
