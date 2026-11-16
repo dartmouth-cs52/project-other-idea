@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HapticTag } from "@/components/haptic-tag";
 import { Pointer } from "@/components/pointer";
 import { site } from "@/lib/site";
 
@@ -24,6 +25,7 @@ export function SiteFooter() {
           </a>
         </nav>
       </div>
+      <HapticTag />
     </footer>
   );
 }

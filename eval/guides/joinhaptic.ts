@@ -24,7 +24,9 @@ const guides: Guide[] = [
     id: "pricing",
     start: "/",
     goal: "How much does it cost?",
-    steps: [{ expect: [any("How much does it cost?")], act: { click: 'button:has-text("How much does it cost?")' } }, DONE],
+    // The Pricing link in the top bar and the FAQ answer both get there, so a reply pointing at either is right.
+    // The recorder points at the first of them on the page, the Pricing link, so that is what it clicks.
+    steps: [{ expect: [any("Pricing"), any("How much does it cost?")], act: { click: 'header a[href="/#pricing"]' } }, DONE],
   },
   {
     id: "what-it-reads",
@@ -48,8 +50,17 @@ const guides: Guide[] = [
     goal: "terms of service",
     steps: [{ expect: [any("Terms")], act: { click: 'footer a[href="/terms/"]' } }, DONE],
   },
-  // The site has no sign-in, so the right answer points at nothing.
-  { id: "no-such-feature", start: "/", goal: "How do I log in to my account?", steps: [DONE] },
+  {
+    id: "sign-in",
+    start: "/",
+    goal: "How do I log in to my account?",
+    steps: [{ expect: [any("Sign in")], act: { click: 'header a[href="/sign-in/"]' } }, DONE],
+  },
+  // Sign in is by an emailed link or Google, so there is no password to change, and the right answer points at nothing.
+  { id: "no-such-feature", start: "/", goal: "How do I change my password?", steps: [DONE] },
 ];
 
-export default { siteId: "site_joinhaptic", origin: "https://joinhaptic.com", hasTag: false, guides } satisfies GuideSet;
+// The site has its own tag now (web/components/haptic-tag.tsx), so recording uses
+// the live widget script instead of adding a second. The recorder still answers
+// every step itself, so the model is never called.
+export default { siteId: "site_joinhaptic", origin: "https://joinhaptic.com", hasTag: true, guides } satisfies GuideSet;
