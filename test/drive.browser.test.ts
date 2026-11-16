@@ -21,6 +21,19 @@ const PAGES: Record<string, { html: string; delay?: number }> = {
   // A page that takes a moment to arrive, like a large article.
   "/disclaimers": { html: `<h1>Disclaimers</h1><p>The disclaimers of this site.</p><ul><li><a href="/medical">Medical disclaimer</a></li></ul>`, delay: 900 },
   "/medical": { html: `<h1>Medical disclaimer</h1><p>Nothing here is medical advice.</p>` },
+  // A page that loads itself again, once, the moment Haptic's pointer shows on it: the runner reads the pointer from the page that came back.
+  "/dashboard": {
+    html: `<h1>Dashboard</h1><nav><a href="/people">People</a></nav><script>
+      const watch = setInterval(() => {
+        const cursor = document.querySelector("haptic-root")?.shadowRoot?.querySelector(".cursor");
+        if (!cursor || !cursor.checkVisibility() || sessionStorage.getItem("reloaded")) return;
+        clearInterval(watch);
+        sessionStorage.setItem("reloaded", "yes");
+        location.reload();
+      }, 10);
+    </script>`,
+  },
+  "/people": { html: `<h1>People</h1><p>Everyone who works here.</p>` },
 };
 
 const server: Server = createServer((request, response) => {
@@ -41,13 +54,13 @@ after(async () => {
 const site: SiteContext = { id: "site_drive_test", name: "Drive test", pages: [] } as unknown as SiteContext;
 const set = (guides: Guide[]): GuideSet => ({ siteId: site.id, origin, hasTag: false, sandbox: true, guides });
 
-/** Answers each step from `script`, by the path of the page the widget asked from. */
-const scripted = (script: (request: Omit<TurnRequest, "site">) => TurnReply) => async (_site: SiteContext, request: Omit<TurnRequest, "site">) => ({
-  reply: script(request),
-  ms: 1,
-  msToTarget: 1,
-  servedBy: "the test",
-});
+/** Answers each step from `script`, by the page the widget asked from, after `wait` milliseconds for that step: a model takes a while. */
+const scripted =
+  (script: (request: Omit<TurnRequest, "site">) => TurnReply, wait: (request: Omit<TurnRequest, "site">) => number = () => 0) =>
+  async (_site: SiteContext, request: Omit<TurnRequest, "site">) => {
+    await new Promise((resolve) => setTimeout(resolve, wait(request)));
+    return { reply: script(request), ms: 1, msToTarget: 1, servedBy: "the test" };
+  };
 const idOf = (request: Omit<TurnRequest, "site">, label: string) => request.snapshot.elements.find((element) => element.label === label)?.id ?? null;
 
 test("a guide whose 'done' pointer loads a new page is followed onto it, not scored before the widget there has looked", { skip }, async () => {
@@ -75,5 +88,30 @@ test("a guide whose 'done' pointer loads a new page is followed onto it, not sco
   assert.deepEqual(
     run.trail.slice(0, 2).map((step) => `${step.path} ${step.pointed} ${step.status}`),
     ['/article link "Disclaimers" done', '/disclaimers link "Medical disclaimer" continue'],
+  );
+});
+
+test("a page that loads again under the runner as it reads the pointer is waited for, and the guide goes on from there", { skip }, async () => {
+  const guide: Guide = {
+    id: "people",
+    start: "/dashboard",
+    goal: "Where is the list of people?",
+    steps: [{ expect: [{ label: "People", role: "link" }], act: { click: "a[href='/people']" } }, DONE],
+    reached: { url: "/people$" },
+  };
+  const asker = scripted(
+    (request) =>
+      request.snapshot.path === "/dashboard"
+        ? { target: idOf(request, "People"), status: "continue", say: "Click People." }
+        : { target: null, status: "done", say: "This is the list of people." },
+    // The page that came back asks again, and that answer takes longer than the runner waits for the old
+    // pointer's sentence and for a pointer to show, eight seconds each, so the runner reads no pointer at all.
+    (request) => (/reloaded/.test(request.event ?? "") ? 20_000 : 0),
+  );
+  const { run } = await drive(browser, set([guide]), guide, site, asker, { visitor: "new", trace: false });
+  assert.equal(run.end, "reached", `${run.end}: ${run.why}`);
+  assert.deepEqual(
+    run.trail.slice(0, 2).map((step) => `${step.path} ${step.pointed}: ${step.did}`),
+    ['/dashboard link "People": nothing: a new page loaded before the pointer could be used', '/dashboard link "People": clicked it'],
   );
 });

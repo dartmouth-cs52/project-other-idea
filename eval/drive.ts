@@ -144,6 +144,13 @@ export interface Options {
   trace: boolean;
 }
 
+/** The page loaded again, or went to another address, while the runner was reading the pointer from it. */
+class PageMoved extends Error {
+  constructor() {
+    super("the page loaded again before the pointer could be read");
+  }
+}
+
 /** The key a sentence asks the visitor to press, if it names one the runner can press. */
 function keyAsked(say: string): string | undefined {
   const key = /\b(?:press|hit|tap)\s+(?:the\s+)?(enter|return|tab|escape|esc)\b/i.exec(say)?.[1]?.toLowerCase();
@@ -164,8 +171,13 @@ function selectorOf(step: Step): string {
 export async function drive(browser: Browser, set: GuideSet, guide: Guide, site: SiteContext, asker: Asker, options: Options): Promise<{ run: GuideRun; traced: Traced[] }> {
   const trail: StepLog[] = [];
   const traced: Traced[] = [];
-  /** Every answer given, in order. `stepNo` is how many steps the widget said it had been given when it asked. */
-  const replies: { reply: TurnReply; snapshot: Snapshot; stepNo: number; closing: boolean }[] = [];
+  /**
+   * Every answer given, in order. `stepNo` is how many steps the widget said it had been given when it asked.
+   * `moves` is how many times the page had gone to a new address or loaded again by then.
+   */
+  const replies: { reply: TurnReply; snapshot: Snapshot; stepNo: number; closing: boolean; moves: number }[] = [];
+  /** How many times the page has gone to a new address or loaded again since it was opened for this guide. */
+  let moves = 0;
   /** How many questions the widget has sent, answered yet or not. */
   let asked = 0;
   let failure = "";
@@ -236,7 +248,7 @@ export async function drive(browser: Browser, set: GuideSet, guide: Guide, site:
           if (options.trace) {
             traced.push({ at: new Date().toISOString(), request, message: buildUserMessage({ ...request, site: site.id }), reply: got.reply, pointed: pointed ? describeElement(pointed) : "nothing", ms: got.ms, did: "" });
           }
-          replies.push({ reply: got.reply, snapshot: request.snapshot, stepNo: request.step, closing });
+          replies.push({ reply: got.reply, snapshot: request.snapshot, stepNo: request.step, closing, moves });
           return got.reply;
         } catch (error) {
           failure = error instanceof Error ? error.message : String(error);
@@ -249,6 +261,9 @@ export async function drive(browser: Browser, set: GuideSet, guide: Guide, site:
     return result("error", `the site could not be opened: ${(error instanceof Error ? error.message : String(error)).split("\n")[0]}`);
   }
   const { page, close } = opened;
+  page.on("framenavigated", (frame: unknown) => {
+    if (frame === page.mainFrame()) moves++;
+  });
   net = opened.net;
   const reachedNow = async (wait: number) => (guide.reached ? (await reachedOrWhy(page, guide.reached, wait)) === "" : false);
   /** The answer to a question that asks for a fact, where it is read from the page the guide starts on. */
@@ -473,7 +488,11 @@ export async function drive(browser: Browser, set: GuideSet, guide: Guide, site:
         await page.waitForTimeout(250);
         const handle = await page.evaluateHandle(() => (document.querySelector("haptic-root") as (Element & { pointedAt?: Element }) | null)?.pointedAt ?? null);
         const element = handle.asElement();
-        if (!element) return await ended("stalled", `the pointer was not on anything, though the reply named ${describeElement(pointed)}`);
+        if (!element) {
+          // The page loaded again, or went elsewhere, after this answer came. The widget there has not pointed yet.
+          if (moves !== replies[at]!.moves) throw new PageMoved();
+          return await ended("stalled", `the pointer was not on anything, though the reply named ${describeElement(pointed)}`);
+        }
 
         // On a site other people use, nobody's password is typed, real or made up: a
         // sign-in form is where the run ends, unless the script itself fills it in.
@@ -511,8 +530,9 @@ export async function drive(browser: Browser, set: GuideSet, guide: Guide, site:
         used = options.visitor === "old" ? await useAsBefore(page, element, shown) : await use(page, element, shown);
       } catch (error) {
         const message = (error instanceof Error ? error.message : String(error)).split("\n")[0] ?? "";
-        // The page went away under the pointer. The widget asks again from the new page, and that answer is the one to follow.
-        if (/context was destroyed|navigat|detached|not attached|frame got detached/i.test(message)) {
+        // The page went away under the pointer, or had gone before it could be read. The widget asks again
+        // from the new page once it has loaded, and that answer is the one to follow.
+        if (error instanceof PageMoved || /context was destroyed|navigat|detached|not attached|frame got detached/i.test(message)) {
           did("nothing: a new page loaded before the pointer could be used");
           if (!replies[at]!.closing) step--;
           after = { kind: "used", done: undefined };
