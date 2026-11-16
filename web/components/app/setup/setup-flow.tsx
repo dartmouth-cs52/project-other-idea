@@ -203,9 +203,9 @@ export function SetupFlow() {
           <Alert variant="destructive" className="px-3.5 py-3">
             <AlertCircleIcon />
             <AlertTitle>Couldn&apos;t save where you are</AlertTitle>
-            <AlertDescription>
+            <AlertDescription className="flex flex-col items-start gap-2">
               <span>If you leave now, the setup may open on an earlier screen next time.</span>
-              <Button variant="secondary" size="sm" className="mt-2 w-fit" onClick={() => void save(unsaved.body, unsaved.id)}>
+              <Button variant="secondary" size="sm" onClick={() => void save(unsaved.body, unsaved.id)}>
                 Retry
               </Button>
             </AlertDescription>

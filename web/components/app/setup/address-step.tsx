@@ -74,9 +74,11 @@ export function AddressStep({
             required
             error={fields.errors.url}
             hint={
-              current
-                ? "A different address keeps everything you set up here, and Haptic reads your pages again from it."
-                : "The address people use your product at. You can add staging and others later."
+              fields.errors.url
+                ? undefined
+                : current
+                  ? "A different address keeps everything you set up here, and Haptic reads your pages again from it."
+                  : "The address people use your product at. You can add staging and others later."
             }
           >
             <Input
