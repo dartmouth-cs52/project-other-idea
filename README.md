@@ -34,7 +34,7 @@ npm run tag ──▶ data/sites/<id>.json ──▶ server ◀── widget.js 
 
 | Field | Where it comes from |
 |---|---|
-| `pages` | The crawl. For each page: title, headings, button and field labels, and which page each link leads to. Pages are nodes and links are edges, so this is already a graph of the site. |
+| `pages` | The crawl. For each page: title, headings, button and field labels, and which page each link leads to. Pages are nodes and links are edges, so this is already a graph of the site. The reader that runs at signup uses a real browser, so it also records what each menu, tab and accordion showed when it opened them (`opens`): the edges that take two clicks. |
 | `notes`, `docs` | The company: free-form notes and help docs (files, folders or URLs). |
 | `appearance`, `allowedOrigins` | The company: the widget's color, corner and label, and which origins it may run on. |
 | `source` | The inputs it was built from, so it can be rebuilt unattended. |
