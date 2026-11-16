@@ -1,9 +1,11 @@
-// Haptic's sign-in email, and sending it through Resend.
+// Haptic's sign-in email, the page every Haptic email sits on, and sending
+// them through Resend.
 //
 // It follows DESIGN.md: Paper page, one Muted card, Ink text, one Ink button,
 // sentence case, commas and periods only. The link sits behind the button and
 // nowhere else in the HTML. Email apps strip web fonts, so Geist is asked for
-// first and the system font stands in.
+// first and the system font stands in. worker/developer-email.ts is the other
+// email drawn on the same page.
 
 export type LinkType = "sign-in" | "email-verification" | "forget-password";
 
@@ -12,6 +14,10 @@ export interface Email {
   subject: string;
   html: string;
   text: string;
+  /** The sender. FROM when left out. Any address at joinhaptic.com works once the domain is verified in Resend. */
+  from?: string;
+  /** Where a reply goes. REPLY_TO when left out. */
+  replyTo?: string;
 }
 
 export interface SendEnv {
@@ -51,7 +57,8 @@ const COPY: Record<LinkType, { subject: string; heading: string; body: string; b
 const PREVIEW_PADDING = "&#8199;&#847;&#65279;&#8203;".repeat(90);
 
 const FONT = "Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
-const type = (size: number, line: number, weight: 400 | 500) => `font-family:${FONT};font-size:${size}px;line-height:${line}px;font-weight:${weight};`;
+/** Inline type styles, on the DESIGN.md scale. */
+export const type = (size: number, line: number, weight: 400 | 500) => `font-family:${FONT};font-size:${size}px;line-height:${line}px;font-weight:${weight};`;
 
 /**
  * `id` is Neon's event id. Gmail threads emails that share a subject, and folds an ending it has
@@ -60,8 +67,35 @@ const type = (size: number, line: number, weight: 400 | 500) => `font-family:${F
  */
 export function signInEmail({ to, link, type: linkType, id }: { to: string; link: string; type: LinkType; id?: string }): Email {
   const copy = COPY[linkType] ?? COPY["sign-in"];
-  const href = escape(link);
-  const html = `<!doctype html>
+  const html = emailPage({
+    title: copy.subject,
+    preview: copy.body,
+    id,
+    card: `<h1 class="ink" style="margin:0 0 8px;${type(24, 32, 500)}letter-spacing:-0.02em;color:#1C1917;">${escape(copy.heading)}</h1>
+<p class="muted" style="margin:0 0 24px;${type(16, 24, 400)}color:#78716C;">${escape(copy.body)}</p>
+${emailButton(copy.button, link)}`,
+  });
+  // Read only by email apps that cannot show HTML, where a link to open is the only way in.
+  const text = `${copy.heading}\n\n${copy.text}\n\n${link}\n\njoinhaptic.com\n`;
+  return { to, subject: copy.subject, html, text };
+}
+
+/** One Ink pill button. The only place the link goes in the HTML. */
+export function emailButton(label: string, link: string): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+<td class="button" style="background:#1C1917;border-radius:9999px;">
+<a href="${escape(link)}" style="display:inline-block;padding:10px 24px;${type(16, 24, 500)}color:#FAFAF9;text-decoration:none;border-radius:9999px;">${escape(label)}</a>
+</td>
+</tr></table>`;
+}
+
+/**
+ * The page every Haptic email sits on: Paper, the name, one Muted card holding
+ * `card` (HTML, already escaped), and joinhaptic.com under it. `preview` is the
+ * hidden line an inbox shows first.
+ */
+export function emailPage({ title, preview, card, id }: { title: string; preview: string; card: string; id?: string }): string {
+  return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -69,12 +103,13 @@ export function signInEmail({ to, link, type: linkType, id }: { to: string; link
 <meta name="color-scheme" content="light dark">
 <meta name="supported-color-schemes" content="light dark">
 <meta name="format-detection" content="telephone=no, date=no, address=no, email=no, url=no">
-<title>${escape(copy.subject)}</title>
+<title>${escape(title)}</title>
 <style>
 a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !important; }
 @media (prefers-color-scheme: dark) {
   .page { background: #1C1917 !important; }
   .card { background: #292524 !important; }
+  .inner { background: #1C1917 !important; border-color: #44403C !important; }
   .ink { color: #F5F5F4 !important; }
   .muted { color: #A8A29E !important; }
   .button { background: #F5F5F4 !important; }
@@ -83,19 +118,13 @@ a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !im
 </style>
 </head>
 <body class="page" style="margin:0;padding:0;background:#FAFAF9;">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escape(copy.body)}${PREVIEW_PADDING}</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escape(preview)}${PREVIEW_PADDING}</div>
 <table role="presentation" class="page" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FAFAF9;">
 <tr><td align="center" style="padding:48px 16px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
 <tr><td class="ink" style="padding:0 0 24px;${type(16, 24, 500)}color:#1C1917;">Haptic</td></tr>
 <tr><td class="card" style="background:#F5F5F4;border-radius:14px;padding:32px;">
-<h1 class="ink" style="margin:0 0 8px;${type(24, 32, 500)}letter-spacing:-0.02em;color:#1C1917;">${escape(copy.heading)}</h1>
-<p class="muted" style="margin:0 0 24px;${type(16, 24, 400)}color:#78716C;">${escape(copy.body)}</p>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-<td class="button" style="background:#1C1917;border-radius:9999px;">
-<a href="${href}" style="display:inline-block;padding:10px 24px;${type(16, 24, 500)}color:#FAFAF9;text-decoration:none;border-radius:9999px;">${escape(copy.button)}</a>
-</td>
-</tr></table>
+${card}
 </td></tr>
 <tr><td style="padding:24px 0 0;${type(14, 20, 400)}"><a class="muted" href="https://joinhaptic.com" style="color:#78716C;text-decoration:none;">joinhaptic.com</a>${id ? `<span style="display:none;font-size:0;line-height:0;max-height:0;overflow:hidden;opacity:0;">${escape(id)}</span>` : ""}</td></tr>
 </table>
@@ -104,12 +133,9 @@ a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !im
 </body>
 </html>
 `;
-  // Read only by email apps that cannot show HTML, where a link to open is the only way in.
-  const text = `${copy.heading}\n\n${copy.text}\n\n${link}\n\njoinhaptic.com\n`;
-  return { to, subject: copy.subject, html, text };
 }
 
-function escape(value: string): string {
+export function escape(value: string): string {
   return value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 }
 
@@ -132,8 +158,8 @@ export async function sendEmail(env: SendEnv, email: Email, idempotencyKey: stri
         "idempotency-key": idempotencyKey,
         "user-agent": "haptic-web",
       },
-      body: JSON.stringify({ from: FROM, to: [email.to], reply_to: REPLY_TO, subject: email.subject, html: email.html, text: email.text }),
-      // Neon waits 5 seconds for each try, so this gives up first and leaves time to say so.
+      body: JSON.stringify({ from: email.from ?? FROM, to: [email.to], reply_to: email.replyTo ?? REPLY_TO, subject: email.subject, html: email.html, text: email.text }),
+      // Neon waits 5 seconds for each try, so this gives up first and leaves time to say so. The dashboard waits as long.
       signal: AbortSignal.timeout(4000),
     });
   } catch (error) {
