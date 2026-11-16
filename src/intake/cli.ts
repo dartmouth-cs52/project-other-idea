@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
+import { actingProblems } from "../server/acting.ts";
 import { buildSystemPrompt, docsThatFit, renderSiteMap } from "../server/prompt.ts";
 import { listSiteIds, loadSite, saveSite } from "../server/sites.ts";
 import { DEFAULT_APPEARANCE, type SiteContext, type SiteSource } from "../shared/types.ts";
@@ -14,10 +15,14 @@ import { loadDocs } from "./docs.ts";
 //   npm run tag -- --url https://app.acme.com --name Acme --notes notes.md --docs help/
 //   npm run tag -- --url https://app.acme.com --session signed-in.json
 //   npm run tag -- refresh site_ab12cd34ef     (or: refresh --all, for a cron job)
+//   npm run tag -- acting site_ab12cd34ef on  (or off: "do it with me", without reading the site again)
 
 const HELP = `Usage:
   npm run tag -- --url <site url> [options]     Build a site's context and print its script tag
   npm run tag -- refresh <site id> | --all      Re-crawl and re-read docs for sites already built
+  npm run tag -- acting <site id> on|off        Let Haptic use the page's controls when a visitor presses
+                                                Do it, or stop it, without reading the site again.
+                                                Publish the site afterwards for it to take effect.
 
 Options:
   --url <url>          Where to start reading the site. Required.
@@ -41,6 +46,10 @@ Options:
   --accent <hex>       Color of the pointer and its highlight. Default ${DEFAULT_APPEARANCE.accent}.
   --position <side>    bottom-right or bottom-left. Default bottom-right.
   --label <text>       Text on the launcher button. Default "${DEFAULT_APPEARANCE.launcherLabel}".
+  --acting <on|off>    "Do it with me": Haptic uses the page's controls itself when a visitor presses Do it,
+                       and always leaves the click that saves, sends or pays to them. Default off. Where it
+                       may act (acting.paths) and the company's own commit words (acting.commitWords) are
+                       set in the site file and kept when the site is built again.
   --id <site id>       Use this id, or rebuild the site that has it, keeping what isn't given again.
   --host <url>         Where the Haptic server is reachable. Default $HAPTIC_PUBLIC_URL or http://localhost:4000.`;
 
@@ -64,6 +73,7 @@ const { values, positionals } = parseArgs({
     accent: { type: "string" },
     position: { type: "string" },
     label: { type: "string" },
+    acting: { type: "string" },
     id: { type: "string" },
     host: { type: "string" },
     all: { type: "boolean" },
@@ -80,6 +90,34 @@ function fail(message: string): never {
 
 function scriptTag(site: SiteContext): string {
   return `<script src="${host}/widget.js" data-site="${site.id}" async></script>`;
+}
+
+/** Whether "on" or "off" was given, or undefined when nothing was. */
+function onOrOff(given: string | undefined, what: string): boolean | undefined {
+  if (given === undefined) return undefined;
+  if (given !== "on" && given !== "off") fail(`${what} is on or off, not "${given}".`);
+  return given === "on";
+}
+
+/**
+ * The site's acting switched on or off. Its other settings stay, so switching
+ * it back on acts where it did before. Off is never refused: it is how a
+ * company stops acting at once, and the server reads nothing else of a site
+ * with acting off.
+ */
+function switchActing(site: SiteContext, on: boolean): SiteContext["acting"] {
+  const kept = site.acting && typeof site.acting === "object" && !Array.isArray(site.acting) ? site.acting : undefined;
+  const problems = actingProblems({ ...kept, enabled: on });
+  if (on && problems.length) fail(`Acting was left off for ${site.id}, because its settings in the site file can't be read: ${problems.join(" ")}`);
+  return { ...kept, enabled: on };
+}
+
+/** One line on whether and where Haptic may act on the site. */
+function actingLine(site: SiteContext): string {
+  if (site.acting?.enabled !== true) return "Acting is off: Haptic only points.";
+  const paths = site.acting.paths?.filter((path) => path.trim()) ?? [];
+  const where = paths.length ? `only on pages under ${paths.join(", ")}` : "anywhere on its allowed origins";
+  return `Acting is on: when a visitor presses Do it, Haptic uses the controls itself ${where}, and leaves the click that commits to them.`;
 }
 
 const pace = Number(values.pace ?? 1500);
@@ -171,6 +209,18 @@ async function main() {
     }
     process.exit(failures ? 1 : 0);
   }
+  if (positionals[0] === "acting") {
+    const [, id, state] = positionals;
+    if (!id || positionals.length !== 3) fail("Say which site, and on or off: npm run tag -- acting site_ab12cd34ef on");
+    const on = onOrOff(state, "Acting");
+    const site = await loadSite(id);
+    if (!site) fail(`No site with the id ${id}.`);
+    site.acting = switchActing(site, on === true);
+    site.updatedAt = new Date().toISOString();
+    await saveSite(site);
+    console.log(`${actingLine(site)}\nThe online server reads it once it is published: npm run site:publish -- ${site.id}`);
+    return;
+  }
   if (positionals.length) fail(`Unknown command "${positionals[0]}".\n\n${HELP}`);
 
   const existing = values.id ? await loadSite(values.id) : undefined;
@@ -179,6 +229,7 @@ async function main() {
   if (!URL.canParse(url)) fail(`"${url}" isn't a full URL. Include https://.`);
   if (values.accent && !/^#[0-9a-f]{6}$/i.test(values.accent)) fail(`--accent has to be a hex color like #5b5bd6, not "${values.accent}".`);
   if (values.position && values.position !== "bottom-right" && values.position !== "bottom-left") fail("--position is bottom-right or bottom-left.");
+  const actingOn = onOrOff(values.acting, "--acting");
   const maxPages = Number(values["max-pages"] ?? existing?.source.maxPages ?? 30);
   if (!Number.isInteger(maxPages) || maxPages < 1) fail("--max-pages has to be a whole number, 1 or more.");
   if (!Number.isInteger(pace) || pace < 0) fail("--pace has to be a whole number of milliseconds.");
@@ -223,11 +274,15 @@ async function main() {
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
+  // Kept from the site being rebuilt unless --acting says otherwise. A site that never had it gets no field at all.
+  const acting = actingOn === undefined ? existing?.acting : existing ? switchActing(existing, actingOn) : { enabled: actingOn };
+  if (acting) base.acting = acting;
 
   const site = await build(base);
   const file = await saveSite(site);
   console.log(`\nSaved ${site.name} to ${file}`);
   console.log(`The widget will run on: ${site.allowedOrigins.join(", ")}`);
+  if (site.acting) console.log(actingLine(site));
   console.log(`\nPaste this just before </body> on every page:\n\n${scriptTag(site)}\n`);
 }
 
