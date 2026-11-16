@@ -753,6 +753,8 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   const viewportHeight = window.innerHeight;
   let visited = 0;
   let hiddenChecked = 0;
+  /** The box the mouse shows each see-through box in, as read once for this reading: a table's rows share one rule. */
+  const shownOver = new Map<Element, DOMRect | undefined>();
   /** Elements whose words were read as part of a sentence around them. */
   const taken = new WeakSet<Element>();
   let order = 0;
@@ -930,8 +932,13 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
         if (state.includes("disabled")) giveReason(added, reasonOf(el));
         // Fully transparent controls have always been listed: row actions that fade in. One that a stylesheet shows on hover says so,
         // whether the control is see-through itself or a box around it is, as a row's cell of actions often is.
-        const clear = !hoverBox && hiddenChecked < MAX_HIDDEN_CHECKED && seeThroughNow(el) ? seeThroughBox(el) : undefined;
-        const fades = clear && ++hiddenChecked > 0 && shownWhenOver(clear, false, true);
+        // Each see-through box is looked up once: a long table's row actions share one cell each, and do not use up the budget.
+        const clear = !hoverBox && seeThroughNow(el) ? seeThroughBox(el) : undefined;
+        if (clear && !shownOver.has(clear) && hiddenChecked < MAX_HIDDEN_CHECKED) {
+          hiddenChecked++;
+          shownOver.set(clear, shownWhenOver(clear, false, true));
+        }
+        const fades = clear && shownOver.get(clear);
         if (hoverBox || (fades && liesInside(rect, fades))) state.push(SHOWS_ON_HOVER);
         if (state.length) added.state = state;
         const href = hrefOf(el);

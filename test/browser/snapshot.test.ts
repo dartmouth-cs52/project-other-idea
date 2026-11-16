@@ -371,6 +371,16 @@ test("a row's action that a see-through box around it hides until the mouse is o
   ]);
 });
 
+test("every row of a long table says its actions show on hover, not only the first rows", { skip }, async () => {
+  const styles = `.row { position: relative; display: flex; width: 600px; height: 28px } .actions { position: absolute; right: 0; top: 0; opacity: 0 }
+    :is(:where(.group):hover .group-hover\\:opacity-100) { opacity: 1 }`;
+  const rows = Array.from({ length: 150 }, (_, i) => `<div class="group"><div role="row" class="row"><span>Bill ${i + 1}</span><div class="actions group-hover:opacity-100"><button>Pay</button><button>Hold</button></div></div></div>`);
+  const snapshot = await read(`<style>${styles}</style><main><h1>Bills</h1>${rows.join("")}</main>`);
+  const actions = snapshot.elements.filter((element) => element.label === "Pay" || element.label === "Hold");
+  assert.ok(actions.length >= 250, `only ${actions.length} listed`);
+  assert.deepEqual(actions.filter((element) => !element.state?.includes("shows on hover")).map((element) => element.label), []);
+});
+
 // What is on top ---------------------------------------------------------------
 
 test("a list opened from a dialog is still listed when Haptic's own caption sits over it", { skip }, async () => {
