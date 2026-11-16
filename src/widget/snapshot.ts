@@ -478,9 +478,10 @@ interface Scope {
 /** Controls inside a heading, like a search box and its button in a dialog's title bar. Their words are theirs, not the heading's. */
 const NOT_HEADING_WORDS = "button, [role='button'], select, [role='combobox'], [role='checkbox'], [role='switch'], [role='slider']";
 
-/** A heading's own words, leaving out the words of controls set inside it. */
+/** A heading's own words, leaving out the words of controls set inside it. A heading that repeats what a field holds says nothing. */
 function headingWords(heading: Element): string {
-  return cleanText(wordsIn(heading, 160, NOT_HEADING_WORDS), 80);
+  const words = wordsIn(heading, 160, NOT_HEADING_WORDS);
+  return echoesTyping(words) ? "" : cleanText(words, 80);
 }
 
 /** A heading on the page, with what decides whether it is among the few that are sent. */
@@ -499,16 +500,17 @@ const SECTION_TAGS = new Set(["SECTION", "ARTICLE", "FIELDSET"]);
 const SECTION_ROLES = new Set(["region", "group", "radiogroup", "article", "tabpanel"]);
 const HEADINGS = "h1, h2, h3, h4, h5, h6, [role='heading']";
 
-/** The name a box is given by its page: the element it says names it, or its aria-label. */
+/** The name a box is given by its page: the element it says names it, or its aria-label. A name that repeats what a field holds is none. */
 function nameOfBox(el: Element): string {
   const ids = el.getAttribute("aria-labelledby");
   if (ids) {
     const root = el.getRootNode() as Document | ShadowRoot;
     const named = ids.split(/\s+/).map((id) => (id ? root.getElementById?.(id) : null)).find(Boolean);
-    const words = named ? cleanText(wordsIn(named, 160, "", undefined, true), 80) : "";
-    if (words) return words;
+    const words = named ? wordsIn(named, 160, "", undefined, true) : "";
+    if (words) return echoesTyping(words) ? "" : cleanText(words, 80);
   }
-  return cleanText(el.getAttribute("aria-label") ?? "", 80);
+  const label = el.getAttribute("aria-label") ?? "";
+  return echoesTyping(label) ? "" : cleanText(label, 80);
 }
 
 /** Whether a box is named only for screen readers: by its aria-label, with no element named as what names it. */
@@ -563,6 +565,44 @@ let own: ReadonlySet<string> = new Set();
 let untiedLabels = false;
 /** Boxes that show the choice made in a select built around a field, looked up once a reading. See `choiceBoxesOf`. */
 let choiceBoxes: WeakSet<Element> = new WeakSet();
+/**
+ * What the visitor's fields hold, in lower case, for as long as one page is
+ * being read. It is only compared with the page's words, here in the page,
+ * and is never sent or kept: see `echoesTyping`.
+ */
+let typed: string[] = [];
+
+/** Input types a visitor writes in. A tick box, a button, a file or a hidden field holds nothing typed. */
+const NOT_TYPED_IN = new Set(["checkbox", "radio", "button", "submit", "reset", "image", "file", "hidden", "color", "range"]);
+/** A value shorter than this is a word too common to tell that the page repeats it. */
+const MIN_ECHO = 3;
+const MAX_TYPED_FIELDS = 50;
+
+/** What the fields and editors on the page hold now, each as one lower-case line of words. */
+function typedValues(): string[] {
+  const values: string[] = [];
+  for (const field of Array.from(document.querySelectorAll("input, textarea, [contenteditable]")).slice(0, 400)) {
+    let value = "";
+    if (field instanceof HTMLInputElement) value = NOT_TYPED_IN.has(field.type) ? "" : field.value;
+    else if (field instanceof HTMLTextAreaElement) value = field.value;
+    else if ((field as HTMLElement).isContentEditable && !insideEditor(field.parentElement ?? document.body)) value = field.textContent ?? "";
+    value = value.replace(/\s+/g, " ").trim().toLowerCase();
+    if (value.length >= MIN_ECHO) values.push(value);
+    if (values.length >= MAX_TYPED_FIELDS) break;
+  }
+  return values;
+}
+
+/**
+ * Whether words of the page repeat what a field holds: a card's preview that
+ * shows the name being typed for it, or a total that shows the amount. They
+ * are what the visitor typed, so they are not sent.
+ */
+function echoesTyping(words: string): boolean {
+  if (!typed.length || words.length < MIN_ECHO) return false;
+  const line = words.replace(/\s+/g, " ").toLowerCase();
+  return typed.some((value) => line.includes(value));
+}
 
 /** Fields that open a list and show what was picked from it beside themselves, not in themselves. */
 const CHOICE_FIELDS = 'input[role="combobox"], input[aria-haspopup="listbox"], input[aria-haspopup="tree"], input[aria-haspopup="grid"]';
@@ -600,6 +640,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   own = namedIn(question);
   untiedLabels = Array.from(document.querySelectorAll("label")).some((label) => !label.hasAttribute("for") && !(label as HTMLLabelElement).control);
   choiceBoxes = choiceBoxesOf();
+  typed = typedValues();
   const candidates: Candidate[] = [];
   const headings: Heading[] = [];
   const texts: TextBlock[] = [];
@@ -739,7 +780,8 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
     } else if ((!insideControl || held) && !svg && !outside && !hoverBox && (TEXT_TAGS.has(el.tagName) || isRow) && !taken.has(el) && (held ?? texts).length < MAX_TEXT_BLOCKS) {
       const words = isRow ? rowTextOf(el) : sentenceOf(el, taken);
       rowRead = isRow && !!words;
-      if (words) {
+      // Words that repeat what the visitor typed in a field are theirs, wherever the page shows them.
+      if (words && !echoesTyping(words)) {
         const rect = el.getBoundingClientRect();
         (held ?? texts).push({ text: cleanText(words, isRow ? 200 : 160), visible: rect.bottom > 0 && rect.top < viewportHeight, order: order++ });
       }
@@ -877,7 +919,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
 
   const snapshot: Snapshot = {
     path: currentPath(),
-    title: cleanText(document.title, 80),
+    title: echoesTyping(document.title) ? "" : cleanText(document.title, 80),
     headings: chooseHeadings(headings),
     text: chooseText(texts, nearAt),
     elements: listed,
@@ -885,6 +927,8 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   };
   if (modal) snapshot.dialog = dialogLabel(modal);
   uncut.set(snapshot, { elements: everything.elements.map(strip), text: everything.text, headings: everything.headings });
+  // What the fields held is let go with the reading.
+  typed = [];
   return { snapshot, elements };
 }
 
@@ -2081,5 +2125,5 @@ function dialogLabel(el: Element): string {
   // A dialog with no name and no heading is named by its first words, which are its title drawn as text,
   // unless those are a field's caption or a link's.
   words ||= rowPieces(el).find((piece) => /\p{L}{3}/u.test(piece.text) && !piece.node.parentElement?.closest(`label, ${CONTROLS}`))?.text ?? "";
-  return cleanText(words, 60);
+  return echoesTyping(words) ? "" : cleanText(words, 60);
 }

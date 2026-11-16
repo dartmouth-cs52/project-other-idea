@@ -184,3 +184,33 @@ test("the words of separate boxes are kept apart, as the accessibility tree keep
     'button "Review all"',
   ]);
 });
+
+// Words the page repeats from a field ---------------------------------------------------
+
+test("the page's words that repeat what a field holds are not sent, as text or as a heading", { skip }, async () => {
+  const snapshot = await read(
+    `<main><h1>New card</h1><label for="nick">Card name</label><input id="nick"><label for="amount">Amount</label><input id="amount">
+      <aside><p>Preview</p><div><span>northpine</span> <span id="name">New card</span></div><p id="total">Total $0.00</p><h3 id="for">Card for nobody yet</h3></aside>
+      <p>Cards are issued at once.</p></main>`,
+    {
+      before: async (page) => {
+        // What a visitor types, and what the page then shows of it.
+        await page.locator("#nick").fill("Mergers offsite Zurich");
+        await page.locator("#amount").fill("7315");
+        await page.evaluate(`document.getElementById("name").textContent = "Mergers offsite Zurich";
+          document.getElementById("total").textContent = "Total $7315.00";
+          document.getElementById("for").textContent = "Card for Mergers offsite Zurich";`);
+      },
+    },
+  );
+  const sent = JSON.stringify(snapshot);
+  for (const typed of ["Mergers offsite", "Zurich", "7315"]) assert.ok(!sent.includes(typed), `"${typed}" was sent: ${sent}`);
+  // The page's own words around them still are.
+  assert.deepEqual(snapshot.text, ["Card name", "Amount", "Preview", "Cards are issued at once."]);
+  assert.deepEqual(snapshot.headings, ["New card"]);
+});
+
+test("a value of fewer than three characters is too common to leave out the words that hold it", { skip }, async () => {
+  const snapshot = await read(`<main><h1>Trip</h1><input id="n" value="12"><p>12 nights at the hotel</p></main>`);
+  assert.deepEqual(snapshot.text, ["12 nights at the hotel"]);
+});
