@@ -596,12 +596,18 @@ function typedValues(): string[] {
 /**
  * Whether words of the page repeat what a field holds: a card's preview that
  * shows the name being typed for it, or a total that shows the amount. They
- * are what the visitor typed, so they are not sent.
+ * are what the visitor typed, so they are not sent. The value has to stand
+ * whole, with no letter or digit run on to it: "Settings" does not repeat a
+ * search for "set".
  */
 function echoesTyping(words: string): boolean {
   if (!typed.length || words.length < MIN_ECHO) return false;
   const line = words.replace(/\s+/g, " ").toLowerCase();
-  return typed.some((value) => line.includes(value));
+  const runsOn = (at: number) => at >= 0 && at < line.length && /[\p{L}\p{N}]/u.test(line[at] ?? "");
+  return typed.some((value) => {
+    for (let at = line.indexOf(value); at >= 0; at = line.indexOf(value, at + 1)) if (!runsOn(at - 1) && !runsOn(at + value.length)) return true;
+    return false;
+  });
 }
 
 /** Fields that open a list and show what was picked from it beside themselves, not in themselves. */

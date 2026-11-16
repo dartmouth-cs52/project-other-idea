@@ -214,3 +214,9 @@ test("a value of fewer than three characters is too common to leave out the word
   const snapshot = await read(`<main><h1>Trip</h1><input id="n" value="12"><p>12 nights at the hotel</p></main>`);
   assert.deepEqual(snapshot.text, ["12 nights at the hotel"]);
 });
+
+test("a value repeated only as part of a longer word is not taken for what was typed", { skip }, async () => {
+  const snapshot = await read(`<main><h1>Settings</h1><input id="q" value="set"><p>Reset your settings here.</p><p>Picked set: blue</p></main>`);
+  assert.deepEqual(snapshot.headings, ["Settings"]);
+  assert.deepEqual(snapshot.text, ["Reset your settings here."]);
+});
