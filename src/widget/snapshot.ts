@@ -2,7 +2,8 @@ import { cleanText, describeElement, normalizePath, type SnapElement, type Snaps
 import { isCovered } from "./occlusion.ts";
 
 // Turns the live page into the list of elements the model sees. One read-only
-// pass over the DOM. Input values are never read: labels only.
+// pass over the DOM. Input values are never read: labels only, and what the
+// page itself marks on a field (required, optional, failed its check).
 
 const MAX_ELEMENTS = 300;
 const MAX_TEXT_CHARS = 2500;
@@ -22,6 +23,12 @@ const LANDMARKS: Record<string, string> = {
   banner: "header", navigation: "nav", main: "main", complementary: "aside", contentinfo: "footer",
   form: "form", search: "search", menu: "menu", menubar: "menu", listbox: "list", tablist: "tabs", toolbar: "toolbar",
 };
+/** What a visitor fills in or sets. A form's own marks for required, optional and invalid are read on these and nothing else. */
+const FIELD_ROLES = new Set(["textbox", "searchbox", "select", "combobox", "checkbox", "radio", "switch", "slider", "spinbutton", "file-upload"]);
+/** How a label says its field must be filled in: a star at either end, or the word in brackets. */
+const REQUIRED_MARK = /^\s*\*|\*\s*:?\s*$|\(\s*required\s*\)/i;
+/** How a label says its field may be left empty: the word in brackets, or on its own at the end. */
+const OPTIONAL_MARK = /\(\s*optional\s*\)|\boptional\s*:?\s*$/i;
 const TEXT_TAGS = new Set(["P", "LI", "DD", "DT", "SPAN", "DIV", "SMALL", "STRONG", "LABEL", "TD", "FIGCAPTION"]);
 const MAYBE_CLICKABLE = new Set(["DIV", "SPAN", "LI", "IMG", "TD", "TR", "P"]);
 /**
@@ -134,7 +141,7 @@ export function takeSnapshot(ignore: Element): PageSnapshot {
         added = { el, id: "", role, label: labelOf(el, role), nav: ["nav", "header", "aside", "menu", "tabs"].includes(scope.region) };
         const icon = iconOf(el);
         if (icon) added.icon = icon;
-        const state = stateOf(el);
+        const state = stateOf(el, role);
         if (state.length) added.state = state;
         const href = hrefOf(el);
         if (href) added.href = href;
@@ -364,15 +371,48 @@ export function isField(el: Element): boolean {
 /**
  * A label's own words. When the label wraps its field, the field's options or
  * contents are part of the label's text, and those must not end up in its name.
- * Neither must decoration hidden from screen readers, like the star on a required field.
+ * Neither must decoration hidden from screen readers, like the star on a required
+ * field, unless `decoration` asks for it, which formMarks does to find that star.
  */
-function labelWords(label: Element): string {
+function labelWords(label: Element, decoration = false): string {
   let text = "";
   for (const node of label.childNodes) {
     if (node.nodeType === Node.TEXT_NODE) text += node.textContent ?? "";
-    else if (node instanceof Element && !isWritingArea(node) && !node.matches('select, textarea, input, button, datalist, output, [aria-hidden="true"]')) text += labelWords(node);
+    else if (node instanceof Element && !isWritingArea(node) && !node.matches("select, textarea, input, button, datalist, output") && (decoration || node.getAttribute("aria-hidden") !== "true")) {
+      text += labelWords(node, decoration);
+    }
   }
   return text;
+}
+
+/**
+ * What the page itself says about a field: that it must be filled in, that it
+ * may be left empty, or that it failed the page's own check. It comes from the
+ * field's attributes and from its label, star included, whether the star is
+ * written in the label or drawn by the stylesheet. Never from what is in the
+ * field, so an empty required field and a filled one look the same here.
+ */
+function formMarks(el: Element, role: string): string[] {
+  const root = el.getRootNode() as Document | ShadowRoot;
+  const labels: Element[] = Array.from((el as HTMLInputElement).labels ?? []);
+  for (const id of (el.getAttribute("aria-labelledby") ?? "").split(/\s+/)) {
+    const named = id ? root.getElementById?.(id) : null;
+    if (named) labels.push(named);
+  }
+  const words = [...labels.map((label) => labelWords(label, true)), el.getAttribute("aria-label") ?? "", el.getAttribute("placeholder") ?? ""];
+  const says = (mark: RegExp) => words.some((text) => mark.test(text));
+  // Many stylesheets draw the star: label.required::after { content: "*" }.
+  const starDrawn = () => labels.some((label) => ["::before", "::after"].some((part) => getComputedStyle(label, part).content.includes("*")));
+  // One radio button is not required on its own: the group is.
+  const group = role === "radio" ? el.closest('[role="radiogroup"]') : null;
+
+  const marks: string[] = [];
+  const required = (el as HTMLInputElement).required === true || el.getAttribute("aria-required") === "true" || group?.getAttribute("aria-required") === "true";
+  if (required || says(REQUIRED_MARK) || starDrawn()) marks.push("required");
+  else if (says(OPTIONAL_MARK)) marks.push("optional");
+  const invalid = el.getAttribute("aria-invalid") ?? group?.getAttribute("aria-invalid");
+  if (invalid && invalid !== "false") marks.push("invalid");
+  return marks;
 }
 
 function labelOf(el: Element, role: string): string {
@@ -387,7 +427,7 @@ function labelOf(el: Element, role: string): string {
       .trim();
   let raw = el.getAttribute("data-haptic-label") || byIds(el.getAttribute("aria-labelledby") ?? "") || el.getAttribute("aria-label")?.trim() || "";
   if (!raw && (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
-    raw = Array.from(el.labels ?? []).map(labelWords).join(" ").trim();
+    raw = Array.from(el.labels ?? []).map((label) => labelWords(label)).join(" ").trim();
     // A button's value is its caption, not user data.
     if (!raw && el instanceof HTMLInputElement && role === "button") raw = el.value || el.type;
     raw ||= el.getAttribute("placeholder") || el.getAttribute("title") || el.getAttribute("name") || "";
@@ -426,7 +466,7 @@ function iconOf(el: Element): string | undefined {
   return undefined;
 }
 
-function stateOf(el: Element): string[] {
+function stateOf(el: Element, role: string): string[] {
   const state: string[] = [];
   if ((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true") state.push("disabled");
   const expanded = el.getAttribute("aria-expanded");
@@ -439,6 +479,7 @@ function stateOf(el: Element): string[] {
   const checkable = el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio");
   if ((checkable && el.checked) || el.getAttribute("aria-checked") === "true") state.push("checked");
   if (el instanceof HTMLDetailsElement ? el.open : el.tagName === "SUMMARY" && (el.parentElement as HTMLDetailsElement | null)?.open) state.push("expanded");
+  if (FIELD_ROLES.has(role)) state.push(...formMarks(el, role));
   return state;
 }
 

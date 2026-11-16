@@ -5,6 +5,7 @@ import { DEFAULT_APPEARANCE, STREAM_TYPE, type SiteContext } from "../src/shared
 // The stand-in model, so these run with no API key. See turn.test.ts.
 process.env.HAPTIC_MODEL = "mock";
 const { createApp, parseTurn, FIXED_SAY } = await import("../src/server/app.ts");
+const { renderSnapshot } = await import("../src/server/prompt.ts");
 type AppParts = import("../src/server/app.ts").AppParts;
 
 const site: SiteContext = {
@@ -118,6 +119,22 @@ test("each call from a page is noted, and a refused origin is noted as refused",
   await ask("https://elsewhere.test");
   await ask();
   assert.deepEqual(seen, ["https://app.test true", "https://elsewhere.test false"]);
+});
+
+test("what a page marks on its fields reaches the model beside each field", () => {
+  const elements = [
+    { id: "e1", role: "textbox", label: "Email address 1", state: ["invalid"] },
+    { id: "e2", role: "combobox", label: "Department", state: ["collapsed", "required"] },
+    { id: "e3", role: "textbox", label: "Personal note", state: ["optional"] },
+    { id: "e4", role: "button", label: "Send invite" },
+  ];
+  const request = parseTurn({ ...JSON.parse(turnBody), snapshot: { path: "/people", title: "People", headings: [], text: [], elements } });
+  assert.deepEqual(request?.snapshot.elements.map((element) => element.state), [["invalid"], ["collapsed", "required"], ["optional"], undefined]);
+  const page = renderSnapshot(request!.snapshot);
+  assert.match(page, /^e1 textbox "Email address 1" \(invalid\)$/m);
+  assert.match(page, /^e2 combobox "Department" \(collapsed, required\)$/m);
+  assert.match(page, /^e3 textbox "Personal note" \(optional\)$/m);
+  assert.match(page, /^e4 button "Send invite"$/m);
 });
 
 test("a step carries its guide and whether the visitor strayed, and a bad guide id is dropped", () => {

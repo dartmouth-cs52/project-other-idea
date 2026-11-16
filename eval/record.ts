@@ -54,7 +54,8 @@ async function record(browser: { newContext: () => Promise<Page> }, set: GuideSe
   let problem = "";
 
   await page.route("**/v1/turn", async (route: Page) => {
-    const { site: _site, ...request } = route.request().postDataJSON() as TurnRequest;
+    // The site is kept once, with the file. The guide and visitor ids are made up for each run and say nothing about the step.
+    const { site: _site, guide: _guide, visitor: _visitor, ...request } = route.request().postDataJSON() as TurnRequest;
     const step = guide.steps[answered];
     const found = step?.expect.length ? request.snapshot.elements.find((element: SnapElement) => step.expect.some((matcher) => matches(matcher, element))) : undefined;
     if (!step) problem = `the widget asked for a step ${answered + 1}, which the script does not have`;

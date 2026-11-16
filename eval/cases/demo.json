@@ -714,12 +714,18 @@
        "id": "e1",
        "role": "textbox",
        "label": "Name on card",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
        "id": "e2",
        "role": "textbox",
        "label": "Billing postcode",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -808,12 +814,18 @@
        "id": "e1",
        "role": "textbox",
        "label": "Name on card",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
        "id": "e2",
        "role": "textbox",
        "label": "Billing postcode",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -907,12 +919,18 @@
        "id": "e1",
        "role": "textbox",
        "label": "Name on card",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
        "id": "e2",
        "role": "textbox",
        "label": "Billing postcode",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -1257,6 +1275,9 @@
        "id": "e6",
        "role": "textbox",
        "label": "Email address",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -1359,6 +1380,9 @@
        "id": "e6",
        "role": "textbox",
        "label": "Email address",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -1472,6 +1496,9 @@
        "id": "e6",
        "role": "textbox",
        "label": "Email address",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -1554,6 +1581,9 @@
        "id": "e6",
        "role": "textbox",
        "label": "Email address",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -1647,6 +1677,9 @@
        "id": "e6",
        "role": "textbox",
        "label": "Email address",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -1752,6 +1785,9 @@
        "id": "e6",
        "role": "textbox",
        "label": "Email address",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -1923,7 +1959,8 @@
      ],
      "truncated": false
     },
-    "event": "The user clicked \"Projects\" instead of link \"Team\". A new page loaded: the user went from /demo to /demo/projects."
+    "event": "The user clicked \"Projects\" instead of link \"Team\". A new page loaded: the user went from /demo to /demo/projects.",
+    "offTrack": true
    },
    "expect": {
     "targets": [
@@ -2015,6 +2052,9 @@
        "id": "e6",
        "role": "textbox",
        "label": "Email address",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -2125,6 +2165,9 @@
        "id": "e6",
        "role": "textbox",
        "label": "Email address",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -2246,6 +2289,9 @@
        "id": "e6",
        "role": "textbox",
        "label": "Email address",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -2471,6 +2517,9 @@
        "id": "e1",
        "role": "textbox",
        "label": "Project name",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -2554,6 +2603,9 @@
        "id": "e1",
        "role": "textbox",
        "label": "Project name",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -2694,7 +2746,8 @@
      "truncated": false
     },
     "event": "The user clicked \"Create project\" instead of select \"Region\".",
-    "change": "Dialog \"New project\" closed.\nNew text: \"Projects\", \"storefront-api\", \"marketing-site\", \"internal-tools\", \"billing-service\"."
+    "change": "Dialog \"New project\" closed.\nNew text: \"Projects\", \"storefront-api\", \"marketing-site\", \"internal-tools\", \"billing-service\".",
+    "offTrack": true
    },
    "expect": {
     "targets": [],
@@ -3345,6 +3398,9 @@
        "id": "e6",
        "role": "textbox",
        "label": "Email address",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -3460,6 +3516,9 @@
        "id": "e9",
        "role": "textbox",
        "label": "Email address",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -5962,6 +6021,9 @@
        "id": "e6",
        "role": "textbox",
        "label": "Email address",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -6077,6 +6139,9 @@
        "id": "e9",
        "role": "textbox",
        "label": "Email address",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -6255,6 +6320,9 @@
        "id": "e6",
        "role": "textbox",
        "label": "Email address",
+       "state": [
+        "required"
+       ],
        "context": "form"
       },
       {
@@ -6356,7 +6424,8 @@
      ],
      "truncated": false
     },
-    "event": "The user clicked \"Overview\" instead of link \"Acme Console\". A new page loaded: the user went from /demo/team to /demo."
+    "event": "The user clicked \"Overview\" instead of link \"Acme Console\". A new page loaded: the user went from /demo/team to /demo.",
+    "offTrack": true
    },
    "expect": {
     "targets": [],

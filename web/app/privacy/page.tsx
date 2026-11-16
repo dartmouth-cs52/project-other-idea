@@ -39,13 +39,14 @@ export default function Privacy() {
       <p>
         When someone asks Haptic for help, it reads the page they are on. That means the names of buttons, links and
         fields, where each link leads, whether a box is ticked or a section is open, which option is chosen in lists
-        and menus the page draws itself, the page title and headings, the page&apos;s address within the product, and
-        short pieces of visible text. While it is guiding someone it also notes which control they used and what
-        changed on the page.
+        and menus the page draws itself, whether the page marks a field as required, optional or not accepted, the
+        page title and headings, the page&apos;s address within the product, and short pieces of visible text. While
+        it is guiding someone it also notes which control they used and what changed on the page.
       </p>
       <p>
         Haptic does not read what people type into fields, or anything inside an area the page marks as one they
-        write in, and it takes no pictures of the page. Two kinds of page can still show it typed words. A product may
+        write in, and it takes no pictures of the page. It does not check whether a field is empty or filled in
+        either: a field&apos;s marks come from the page, not from what is in the field. Two kinds of page can still show it typed words. A product may
         show what someone typed somewhere else, such as in a preview, a confirmation or the page title, and Haptic
         reads it there. And some code editors draw what is typed as ordinary text beside a hidden field, which Haptic
         cannot tell from the rest of the page.

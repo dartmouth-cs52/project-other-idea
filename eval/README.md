@@ -9,7 +9,7 @@ A fixed set of questions with known right answers, and a command that runs any m
 
 A case is one step of one guide, frozen: the page as the widget saw it, the question, what had happened so far, and which controls are a right answer. A guide of five steps is five cases. Cases live in `eval/cases/`, one JSON file per site, and each file carries the site's context, because that is part of what the model reads.
 
-`eval/cases/demo.json` holds 57 cases from 14 guides on the demo app, including a wrong click, a question with no answer in the app, and forms inside dialogs. `eval/cases/joinhaptic.json` holds 17 cases from 6 guides on the live joinhaptic.com: a real public site with an accordion, a footer and a two-step form. `eval/cases/corrections.json` holds 7 cases on the demo app for a site with corrections and controls ruled out (see below). The results under "Results" are from the 74 cases in the first two.
+`eval/cases/demo.json` holds 57 cases from 14 guides on the demo app, including a wrong click, a question with no answer in the app, and forms inside dialogs. `eval/cases/joinhaptic.json` holds 17 cases from 6 guides on the live joinhaptic.com: a real public site with an accordion, a footer and a two-step form. `eval/cases/corrections.json` holds 7 cases on the demo app for a site with corrections and controls ruled out (see below). `eval/cases/northpine.json` holds 17 cases from 3 guides on Northpine, the test app in `testbed/`, all about forms (see below). The results under "Results" are from the 74 cases in the first two.
 
 ## Running it
 
@@ -39,6 +39,20 @@ npm run eval -- --models claude-sonnet-5-5 --cases corrections --without-correct
 ```
 
 The second run takes the corrections and the list away, which shows what they change. **pointed at a ruled-out control** counts every pointer at one of the file's ruled-out controls, and must be 0 with the list in place: the server takes such a reply back whatever the model wrote. The Benchmark workflow takes the same choices, as `cases` and `corrections`.
+
+### Forms, and what they need before the submit button
+
+The widget lists what a page marks on each field: `required`, `optional` and `invalid`. It reads them from the field's attributes and its label, star included, and never from what is in the field (`formMarks` in `src/widget/snapshot.ts`). `eval/cases/northpine.json` checks what the model makes of them, on a product that, like most, marks only its optional fields:
+
+- **invite** asks how to invite someone and names no department. After the email, the right step is Department, which nothing marks as needed except that Personal note is optional. Pointing at Send invite there is the failure these cases were added for.
+- **invite-turned-back** has the visitor type half an address and press Send invite early. The form shows two messages and marks the email invalid, and the right step is one of those two fields, not "done".
+- **company-website** asks to change one field of a settings form that already holds saved values. The right steps are that field and Save changes. Walking through Legal name and the address there is the opposite failure.
+
+```bash
+npm run eval -- --models claude-sonnet-5-5 --cases northpine --yes
+```
+
+The demo app's cases carry the same marks: its invite, new project and payment forms use `required`.
 
 ### Before switching Answers on for a site
 
@@ -76,8 +90,11 @@ A recording holds a visitor's question and the labels on their page, so check a 
 
 ```bash
 npm run eval:record -- demo         # needs the local server: HAPTIC_MODEL=mock npm run dev
+npm run eval:record -- northpine    # needs that server, and Northpine: npm run dev --prefix testbed
 HAPTIC_PUBLIC_URL=https://widget.joinhaptic.com npm run eval:record -- joinhaptic
 ```
+
+Northpine's site is built first with the `npm run tag` command in `testbed/README.md`, left without `--docs`, so its cases are asked as plain guides. `joinhaptic.json` was last recorded before the widget listed what a page marks on its fields, so its form cases carry no marks yet.
 
 A guide can stop before a button that must not be pressed. The joinhaptic.com form guide ends at the button that sends the request, so recording never submits it. This works for any public site: add a file to `eval/guides/`, build the site with `npm run tag`, and record. Pages behind a login need the recording method above.
 

@@ -63,7 +63,7 @@ sequenceDiagram
     end
 ```
 
-1. **Snapshot.** The widget (about 45 KB, 16 KB gzipped, no dependencies, isolated in a shadow root) lists every interactive control on the page with a short id, its role, label, state and position (`nav`, `main › Billing`). When a dialog is open, only the dialog is listed.
+1. **Snapshot.** The widget (about 51 KB, 18 KB gzipped, no dependencies, isolated in a shadow root) lists every interactive control on the page with a short id, its role, label, state and position (`nav`, `main › Billing`). When a dialog is open, only the dialog is listed.
 2. **Decide.** The server sends the snapshot, the goal and the progress so far to Claude. The site's knowledge is a cached prompt, so each step pays full price only for what changed. The reply has a strict schema, and a target that isn't on the page is dropped, so Haptic can only point at what the user can actually see.
 3. **Point.** The pointer moves the moment the target id arrives, before the caption has finished streaming.
 4. **Observe.** Once the user acts, the widget waits for the page to settle and reports what changed. If they click something else, Haptic notices and gives them the step that gets them back.
@@ -158,7 +158,7 @@ npm run test:browser              # the widget in Chromium, Firefox and WebKit
 | Doc | Covers |
 |---|---|
 | [Operations](docs/operations.md) | Deploying, the database, what is recorded about visitors, billing outcomes, the kill switch, spend limits and step costs |
-| [The widget on a live page](docs/widget.md) | Modal dialogs, covered controls, route changes, learning the site from visits, putting the launcher away, and the browser tests |
+| [The widget on a live page](docs/widget.md) | Modal dialogs, covered controls, what a form marks on its fields, route changes, learning the site from visits, putting the launcher away, and the browser tests |
 | [Correcting Haptic](docs/corrections.md) | What people can't find, guide health and its emails, "Point here instead", and controls Haptic must never point at |
 | [Answers and hand-off](docs/answers.md) | Answering from help docs, the server-side rules, and hand-off to a person |
 | [Benchmark](eval/README.md) | How cases work, how to run them, and results |

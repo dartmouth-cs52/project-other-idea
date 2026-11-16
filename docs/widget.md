@@ -1,6 +1,6 @@
 # How the widget follows a page
 
-The widget runs on pages it doesn't control. This covers how it keeps up with them: dialogs, controls something else covers, single-page apps that change the address, what it learns about a site from visits, and how to test it in real browsers. For the project overview, see the [README](../README.md).
+The widget runs on pages it doesn't control. This covers how it keeps up with them: dialogs, controls something else covers, what a form marks on its fields, single-page apps that change the address, what it learns about a site from visits, and how to test it in real browsers. For the project overview, see the [README](../README.md).
 
 ## Modal dialogs
 
@@ -9,6 +9,18 @@ A page's modal `<dialog>` makes everything outside it inert, Haptic's own elemen
 ## Covered controls
 
 A control on screen that something else covers, like a button under a stack of cards or the page behind a full-screen overlay, is left out of the snapshot, because a visitor can't click it. The browser's own hit test decides (`src/widget/occlusion.ts`). A control only scrolled out of its scroll box stays in, and so does one under a sticky header, since pointing scrolls it to the middle of the screen.
+
+## What a form marks on its fields
+
+A field is listed with what the page itself marks on it: `required`, `optional` or `invalid` (`formMarks` in `src/widget/snapshot.ts`).
+
+- **Required** comes from the `required` attribute, from `aria-required`, from a required radio group, from a star at either end of the field's label, or from "(required)" in it. The star counts whether it is written in the label, hidden from screen readers or drawn by the stylesheet.
+- **Optional** comes from "(optional)" in the label or the placeholder, or from the word on its own at the end.
+- **Invalid** comes from `aria-invalid`, which a page sets once its own check has failed.
+
+A field's name stays as it was, and only fields get marks: a button with a star in its words does not.
+
+None of this looks inside a field. An empty required field and a filled one are listed the same, and the browser's own validity check, which would say whether a value is missing, is never asked. So the marks say what a form asks for, not how far along the visitor is.
 
 ## Route changes
 
