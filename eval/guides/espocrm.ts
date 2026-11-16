@@ -10,6 +10,13 @@ const unnamed = (role: string, context: string, nth: number): Matcher => ({ labe
 
 // The top bar's icon buttons, on every page.
 const QUICK_CREATE: Matcher = { label: "", role: "button", icon: "plus", context: "nav" };
+/**
+ * The same plus button, as the widget now names it. Without it a run that is pointed at the
+ * script's own first control is cut short there, since "Create" is a word a run on a live site never presses
+ * unless the script itself does. It opens a menu and creates nothing. Any other "Create" (the list's
+ * "Create Account", a panel's "Create" with no plus, a dialog's) is still not this one.
+ */
+const QUICK_CREATE_NAMED: Matcher = { label: "Create", role: "button", icon: "plus", context: "nav" };
 const USER_MENU: Matcher = { label: "", role: "button", icon: "ellipsis-v", context: "nav" };
 const MORE_TABS: Matcher = { label: "", role: "button", icon: "ellipsis-h", context: "nav" };
 const EMAILS_TAB: Matcher = { label: "Emails", role: "link", context: "nav" };
@@ -58,18 +65,19 @@ const guides: Guide[] = [
     ],
   },
 
-  // A record page's own action, then a page of tick boxes. Stops before the lead is converted.
+  // A record page's own action. Stops on it: the lead is never converted, and its conversion form is never opened.
+  // Opening that form makes the page send POST Lead/action/getConvertAttributes, which copies any attachments the
+  // lead has (EspoCRM's ConvertService::getValues), so it cannot be vouched for as a read. A run on this site stops
+  // it and ends "cut short" there, which made every run that followed the script end that way at its second step.
+  // The button is told apart by its page: the record's own headings name Nina Thomson, another lead's do not.
   {
     id: "convert-lead",
     start: "/#Lead",
     goal: "Nina Thomson has agreed to buy. How do I turn her from a lead into a contact?",
     steps: [
       { expect: [link("Nina Thomson")], act: { click: '.list a.link[title="Nina Thomson"]' } },
-      { expect: [button("Convert")], act: { click: 'button[data-action="convert"]' } },
-      // The tick box and the word beside it are listed apart, and either ticks it.
-      { expect: [{ label: "Contact", context: "convert" }], act: { check: 'input.check-scope[data-scope="Contact"]' }, say: "Tick Contact." },
-      // The record page's button has the same name, so this one is told apart by its page.
-      { expect: [{ label: "Convert", role: "button", context: "convert" }] },
+      // Not pressed: it opens the conversion form, whose request is stopped on a demo other people use.
+      { expect: [{ label: "Convert", role: "button", context: "Nina Thomson" }], given: { url: "#Lead/view/" } },
     ],
   },
 
@@ -117,7 +125,7 @@ const guides: Guide[] = [
     steps: [
       // The address itself, the envelope in the Activities panel, the quick-create menu and the Emails tab all lead to a new email.
       {
-        expect: [{ label: "[email]", role: "button", nth: 1 }, unnamed("button", "Bradley Wyatt", 9), QUICK_CREATE, EMAILS_TAB],
+        expect: [{ label: "[email]", role: "button", nth: 1 }, unnamed("button", "Bradley Wyatt", 9), QUICK_CREATE, QUICK_CREATE_NAMED, EMAILS_TAB],
         point: { label: "[email]", role: "button", nth: 1 },
         act: { click: '.field[data-name="emailAddress"] a[data-action="mailTo"]' },
         say: "Click the contact's email address.",
@@ -160,6 +168,13 @@ const guides: Guide[] = [
       // Not pressed: it would change the demo user's settings for everyone.
       { expect: [button("Save")] },
     ],
+    // The question asks whether there is one, so a sentence that says there is, a theme called Dark among the
+    // themes in Preferences, is the answer too. It cannot change: Dark is one of the themes EspoCRM ships. A
+    // sentence that says there is none, that sends the visitor anywhere but the themes, or that hedges, does not pass.
+    says: {
+      all: ["\\bdark\\b", "\\b(themes?|preferences|user interface)\\b"],
+      not: ["\\b(no|not|isn't|isn’t|doesn't|doesn’t|don't|don’t|can't|can’t|cannot|couldn't|couldn’t|unable|unavailable|lacks?|without)\\b"],
+    },
   },
 
   // A CRM has no payroll.
@@ -192,7 +207,7 @@ const guides: Guide[] = [
     start: "/#Account",
     goal: "What's the quickest way to jot down a to-do for myself without leaving this page? Just a title: Call Sam back.",
     steps: [
-      { expect: [QUICK_CREATE], act: { click: "#nav-quick-create-dropdown" }, say: "Click the plus at the top right." },
+      { expect: [QUICK_CREATE, QUICK_CREATE_NAMED], act: { click: "#nav-quick-create-dropdown" }, say: "Click the plus at the top right." },
       { expect: [{ label: "Task", role: "link", context: "menu" }], act: { click: '#navbar a[data-action="quickCreate"][data-name="Task"]' } },
       // The first unnamed textbox is the list's search, behind the dialog. The task's name is the next.
       { expect: [unnamed("textbox", "Accounts", 2)], act: { fill: ['.modal .field[data-name="name"] input', "Call Sam back"] }, say: "Type the title." },

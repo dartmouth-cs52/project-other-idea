@@ -47,7 +47,13 @@ const guides: Guide[] = [
       { expect: [button("Blame"), link("View blame for line 1")], point: button("Blame"), act: { click: '[data-testid="blame-button"]' } },
       DONE,
     ],
-    reached: { url: "blame=1", selector: '[data-testid="blame-button"][aria-pressed="true"]' },
+    // The blame shown in the file's own page, or the blame page a "View blame for line N" link opens, which the
+    // first step lists as right: the same lines with who changed each and when, at the same branch. Blame of
+    // another file or another branch, or the file without its blame, is neither.
+    reached: [
+      { url: "blame=1", selector: '[data-testid="blame-button"][aria-pressed="true"]' },
+      { url: "/gitlab-org/gitlab/-/blame/master/LICENSE(\\?|#|$)" },
+    ],
   },
   {
     id: "zip-wrong-click",
@@ -140,6 +146,10 @@ const guides: Guide[] = [
       // An old tag is not among the forty revisions the list opens with, so it has to be searched for. The script ends on the search box.
       { expect: [{ label: "Search by Git revision", role: "combobox" }] },
     ],
+    // The file itself at that tag is what was asked for, however the visitor got there: by the switcher, or by the
+    // tags list, the tag's files and LICENSE. The same file on master or at another tag (v17.0.1-ee, v17.0.0-rc42-ee),
+    // the tag's own page or its file list, or another file at the tag, is not it.
+    reached: { url: "/gitlab-org/gitlab/-/blob/v17\\.0\\.0-ee/LICENSE(\\?|#|$)" },
   },
   {
     id: "label-issues",
