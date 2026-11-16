@@ -26,6 +26,7 @@
   //   DATABASE_URL             Neon's connection string for the haptic project's main branch
   //   NEON_AUTH_COOKIE_SECRET  32 or more random characters, e.g. from `openssl rand -base64 32`
   //   APPROVE_SECRET           32 or more random characters; signs the Approve links in request emails
+  //   RESEND_API_KEY           sends the sign-in email, which Neon Auth hands over at /api/neon-auth-hook
   "vars": {
     // Neon Auth for the haptic project's main branch. Not a secret: browsers talk to it through /api/auth.
     "NEON_AUTH_URL": "https://ep-purple-dust-bcr2f524.neonauth.c-16.us-east-1.aws.neon.tech/neondb/auth",
