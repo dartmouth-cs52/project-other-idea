@@ -1080,6 +1080,16 @@ function actionOf(dialog: Element, session: GateSession): Element | undefined {
   return actionsIn(dialog, session)[0];
 }
 
+/** The action of a confirmation dialog, for the guide to point at when the engine stops at one (rule 5). */
+export function confirmationAction(dialog: Element, host: Element): Element | undefined {
+  try {
+    return actionOf(dialog, { words: "", host, actions: 0, typed: 0, failures: 0 });
+  } catch (error) {
+    console.warn("[Haptic]", error);
+    return undefined;
+  }
+}
+
 /**
  * The confirmation dialog open on the page, if one is (rule 5). An alert
  * dialog always is. Another open dialog is when it holds one action besides

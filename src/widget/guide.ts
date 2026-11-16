@@ -1,6 +1,6 @@
 import { ACTING_LIMITS, cleanText, describeElement, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { perform, type DidLine, type Heard as HeardStep, type Listening } from "./act.ts";
-import { planFor, SAYS, type ActPlan, type GateConfig, type GateSession, type Plan, type StopPlan, type VisitorPlan } from "./gate.ts";
+import { confirmationAction, planFor, SAYS, type ActPlan, type GateConfig, type GateSession, type Plan, type StopPlan, type VisitorPlan } from "./gate.ts";
 import { hear, isOwn, keyName, keysAsked, nothingHeard, OWN_TYPING_PAUSE_MS, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "./observe.ts";
 import { isDrawn, POPUP_ROLES, watchPopups } from "./popups.ts";
 import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
@@ -884,8 +884,11 @@ export class Guide {
     switch (outcome.kind) {
       case "stopped":
         return;
-      case "stop":
-        return this.stopActing(outcome.say, outcome.el);
+      case "stop": {
+        // A confirmation the page opened: the pointer goes to its action, for the visitor to read and choose.
+        const action = outcome.reason === "confirmation" && outcome.el?.matches("dialog, [role='dialog'], [role='alertdialog']") ? confirmationAction(outcome.el, ui.host) : undefined;
+        return this.stopActing(outcome.say, action ?? outcome.el);
+      }
       case "visitor":
         if (outcome.reason === "failed") session.gate.failures++;
         return this.visitorTurn(run, outcome.el, listing, outcome.say, outcome.event);

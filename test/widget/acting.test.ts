@@ -405,3 +405,77 @@ test("a page load from Haptic's own link carries on acting on the next page; a l
     await other.close();
   }
 });
+
+/** Counts, from before the widget loads, its timers and frames that run, the observers it leaves on, and its listeners on the document and the window. */
+const COUNTED = `<script>
+  const counts = (window.__counts = { calls: 0, observers: 0, kept: () => [] });
+  const ours = () => /widget\\.js/.test(new Error().stack || '');
+  for (const name of ['setTimeout', 'setInterval', 'requestAnimationFrame']) {
+    const original = window[name];
+    window[name] = function (callback, ...rest) {
+      const counted = typeof callback === 'function' && ours() ? function (...args) { counts.calls++; return callback.apply(this, args); } : callback;
+      return original.call(window, counted, ...rest);
+    };
+  }
+  for (const Observer of [MutationObserver, PerformanceObserver]) {
+    const observe = Observer.prototype.observe, disconnect = Observer.prototype.disconnect;
+    Observer.prototype.observe = function (...args) { if (!this.__on && ours()) { this.__on = true; counts.observers++; } return observe.apply(this, args); };
+    Observer.prototype.disconnect = function () { if (this.__on) { this.__on = false; counts.observers--; } return disconnect.apply(this); };
+  }
+  const kept = new Set();
+  for (const target of [window, document]) {
+    const add = target.addEventListener, remove = target.removeEventListener;
+    const key = (type, listener, options) => [target === window ? 'w' : 'd', type, typeof options === 'boolean' ? options : !!(options && options.capture), listener && (listener.__id ??= Math.random())].join(':');
+    target.addEventListener = function (type, listener, options) { const k = key(type, listener, options); if (!kept.has(k) && ours()) kept.add(k); return add.call(this, type, listener, options); };
+    target.removeEventListener = function (type, listener, options) { kept.delete(key(type, listener, options)); return remove.call(this, type, listener, options); };
+  }
+  counts.kept = () => [...kept].map((k) => k.split(':').slice(0, 3).join(':')).sort();
+</script>`;
+
+/** Our callbacks that run in two quiet seconds, the observers left on, and the listeners left, by where, type and phase. */
+async function quiet(session: Session): Promise<{ calls: number; observers: number; listeners: string[] }> {
+  await session.page.waitForTimeout(1500);
+  const before = await session.page.evaluate(() => (window as unknown as { __counts: { calls: number } }).__counts.calls);
+  await session.page.waitForTimeout(2000);
+  return session.page.evaluate((calls: number) => {
+    const counts = (window as unknown as { __counts: { calls: number; observers: number; kept: () => string[] } }).__counts;
+    return { calls: counts.calls - calls, observers: counts.observers, listeners: counts.kept() };
+  }, before);
+}
+
+test("once acting is over, by the visitor's click on the commit or by Stop, nothing of Haptic's is left running but the one top-layer listener", async () => {
+  const session = await start(
+    `${COUNTED}${CARD_FORM}`,
+    (request) => {
+      if (request.mode !== "act") return words("The card is issued.");
+      if (request.step === 0) return doing(request, "Card name", "type", "Typing the card's name.", request.goal.includes(LONG) ? LONG : "Ads");
+      return handOver(request, "Issue card", "Ready. Click Issue card.");
+    },
+    "/",
+    { acting: { ...ACTING_ON, confirmFirst: false } },
+  );
+  const idle = { calls: 0, observers: 0, listeners: ["d:toggle:true"] };
+  // The ask box is put away, as a visitor done with it does. While it is open the widget is in use.
+  const putAway = async () => {
+    if (await session.page.locator("haptic-root .panel").isVisible()) await session.page.locator("haptic-root .launcher").click();
+  };
+  try {
+    await session.ask("can you issue a card called Ads", { act: true });
+    await session.untilState("pointing", 15_000);
+    await session.page.locator("#issue").click();
+    await session.untilState("finished", 10_000);
+    await session.page.locator("haptic-root .caption .close").click();
+    await putAway();
+    assert.deepEqual(await quiet(session), idle, "after the hand-over and the visitor's click");
+    // Stopped part way through typing.
+    await session.ask(`can you make a card called ${LONG}`, { act: true });
+    await session.untilState("acting", 10_000);
+    await session.until(async () => (await session.page.inputValue("#name")).length >= 3, "some of the name to be typed");
+    await session.page.locator("haptic-root .status .stop").click();
+    await session.untilState("finished");
+    await putAway();
+    assert.deepEqual(await quiet(session), idle, "after Stop");
+  } finally {
+    await session.close();
+  }
+});

@@ -11,7 +11,7 @@ import type { ActPlan, GateSession, Reach, StopPlan, Tripwire, VisitorPlan } fro
 // that each element pressed was asked about first.
 
 // The guide plans with the real gate; these tests run the engine alone, never the guide's planning.
-export { planFor, SAYS } from "../../../src/widget/gate.ts";
+export { confirmationAction, planFor, SAYS } from "../../../src/widget/gate.ts";
 
 interface Stub {
   calls: { fn: string; el: Element; key?: string }[];
