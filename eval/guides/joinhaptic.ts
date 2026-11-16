@@ -24,7 +24,8 @@ const guides: Guide[] = [
     id: "pricing",
     start: "/",
     goal: "How much does it cost?",
-    steps: [{ expect: [any("How much does it cost?")], act: { click: 'button:has-text("How much does it cost?")' } }, DONE],
+    // The FAQ answer and the Pricing link in the top bar both get there.
+    steps: [{ expect: [any("How much does it cost?"), any("Pricing")], act: { click: 'button:has-text("How much does it cost?")' } }, DONE],
   },
   {
     id: "what-it-reads",
@@ -48,8 +49,14 @@ const guides: Guide[] = [
     goal: "terms of service",
     steps: [{ expect: [any("Terms")], act: { click: 'footer a[href="/terms/"]' } }, DONE],
   },
-  // The site has no sign-in, so the right answer points at nothing.
-  { id: "no-such-feature", start: "/", goal: "How do I log in to my account?", steps: [DONE] },
+  {
+    id: "sign-in",
+    start: "/",
+    goal: "How do I log in to my account?",
+    steps: [{ expect: [any("Sign in")], act: { click: 'header a[href="/sign-in/"]' } }, DONE],
+  },
+  // Sign in is by an emailed link or Google, so there is no password to change, and the right answer points at nothing.
+  { id: "no-such-feature", start: "/", goal: "How do I change my password?", steps: [DONE] },
 ];
 
 // The site has its own tag now (web/components/haptic-tag.tsx), so recording uses
