@@ -99,11 +99,17 @@ function onOrOff(given: string | undefined, what: string): boolean | undefined {
   return given === "on";
 }
 
-/** The site's acting switched on or off. Its other settings stay, so switching it back on acts where it did before. */
+/**
+ * The site's acting switched on or off. Its other settings stay, so switching
+ * it back on acts where it did before. Off is never refused: it is how a
+ * company stops acting at once, and the server reads nothing else of a site
+ * with acting off.
+ */
 function switchActing(site: SiteContext, on: boolean): SiteContext["acting"] {
-  const problems = actingProblems(site.acting);
-  if (problems.length) fail(`The acting settings in ${site.id}'s file can't be read, so they were left as they are: ${problems.join(" ")}`);
-  return { ...site.acting, enabled: on };
+  const kept = site.acting && typeof site.acting === "object" && !Array.isArray(site.acting) ? site.acting : undefined;
+  const problems = actingProblems({ ...kept, enabled: on });
+  if (on && problems.length) fail(`Acting was left off for ${site.id}, because its settings in the site file can't be read: ${problems.join(" ")}`);
+  return { ...kept, enabled: on };
 }
 
 /** One line on whether and where Haptic may act on the site. */

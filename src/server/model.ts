@@ -510,11 +510,10 @@ function mockAct(element: SnapElement, goal: string): TurnReply {
   switch (element.role) {
     case "textbox":
     case "searchbox":
-    case "textarea":
+    case "spinbutton":
       return given ? step("type", `Typing in ${label}.`, given) : { target, do: null, enter: null, commits: false, status: "continue", say: `Fill in ${label}.` };
     case "combobox":
     case "select":
-    case "listbox":
       return given ? step("choose", `Choosing in ${label}.`, given) : { target, do: null, enter: null, commits: false, status: "continue", say: `Choose in ${label}.` };
     case "checkbox":
     case "switch":
