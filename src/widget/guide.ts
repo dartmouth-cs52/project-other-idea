@@ -900,11 +900,24 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     if (point.x < box.left || point.x > box.right || point.y < box.top || point.y > box.bottom) return false;
     return controls.some((node) => node.contains(target));
   };
+  /**
+   * Whether a press went to the part of the control the pointer is on, when
+   * that is not the control itself: the box a field is drawn in as a speck.
+   * Another control inside that box, like a chip's cross, is not the field.
+   */
+  const onPart = (path: EventTarget[], first: Element | undefined): boolean => {
+    const part = (host as HTMLElement & { pointedAt?: Element }).pointedAt;
+    if (!part || part === target || !part.contains(target) || !path.includes(part)) return false;
+    return !first || first === part || first.contains(target) || !(listing.has(first) || first.matches(CLICKABLE));
+  };
   const whereOf = (path: EventTarget[], point?: { x: number; y: number }): Where => {
     const controls = path.filter((node): node is Element => node instanceof Element && isControl(node));
-    const onTarget =
-      path.includes(target) || path.some((node) => node instanceof HTMLLabelElement && (node.control === target || node.contains(target))) || inTargetBox(controls, point);
     const first = controls[0];
+    const onTarget =
+      path.includes(target) ||
+      path.some((node) => node instanceof HTMLLabelElement && (node.control === target || node.contains(target))) ||
+      inTargetBox(controls, point) ||
+      onPart(path, first);
     return {
       onTarget,
       controls: controls.map(numberOf),
@@ -1112,7 +1125,7 @@ const NAMED_BY_ITS_TEXT =
  * person may have written is read. A control the page was read with keeps the
  * name the list gave it. Otherwise an aria-label is used, and failing that
  * the control's own words, when it is a real control, cannot be written in
- * and holds no field. A field, an editor, anything inside an editor and a
+ * and holds no field other than a tick box. A field, an editor, anything inside an editor and a
  * region of the page all come back with no name.
  */
 export function nameOfClicked(clicked: Element, listing: Map<Element, SnapElement> = new Map()): string {
@@ -1122,7 +1135,8 @@ export function nameOfClicked(clicked: Element, listing: Map<Element, SnapElemen
   if (given) return cleanText(given, 60);
   if (!clicked.matches(NAMED_BY_ITS_TEXT)) return "";
   if ((clicked as HTMLElement).isContentEditable) return "";
-  if (clicked.querySelector("input, textarea, select, [contenteditable]")) return "";
+  // A tick box holds nothing anyone wrote. An option drawn with one beside its words is still named by them.
+  if (clicked.querySelector('input:not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable]')) return "";
   return cleanText(clicked.textContent || "", 60);
 }
 

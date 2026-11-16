@@ -472,9 +472,12 @@ const FRAMES = "iframe, frame, object, embed";
  */
 function partToClick(el: Element, canLook: boolean): Element {
   const rect = el.getBoundingClientRect();
-  if (rect.width < 4 || rect.height < 4) {
-    const label = shownLabelOf(el);
-    if (label) return label;
+  const typed = takesText(el);
+  if (rect.width < 4 || rect.height < 4 || (typed && rect.width < 8)) {
+    // Clicking the label of a field that is typed into only puts the cursor in
+    // it. Its list, if it has one, opens on a press on the box it is drawn in.
+    const part = (typed ? frameOf(el) : undefined) ?? shownLabelOf(el);
+    if (part) return part;
   }
   if (!canLook || rect.width < 120 || rect.height < 80 || el.matches(FRAMES)) return el;
   const x = rect.left + rect.width / 2;
@@ -492,6 +495,47 @@ function partToClick(el: Element, canLook: boolean): Element {
 function hasBox(el: Element): boolean {
   const rect = el.getBoundingClientRect();
   return rect.width >= 8 && rect.height >= 8;
+}
+
+/** A field text is typed into, or a combobox: clicking its label puts the cursor in it and does nothing more. */
+function takesText(el: Element): boolean {
+  if (el instanceof HTMLTextAreaElement) return true;
+  if (el instanceof HTMLInputElement) return !["checkbox", "radio", "button", "submit", "reset", "image", "file", "range", "color", "hidden"].includes(el.type);
+  return el.matches('[role="combobox"], [role="searchbox"], [role="textbox"], [contenteditable]:not([contenteditable="false"])');
+}
+
+/**
+ * The box a field is drawn in, when the field itself is a speck inside it: a
+ * search input between the chips of a multiple select is a few pixels wide,
+ * and the box round the chips is what a visitor sees and presses. It is the
+ * nearest box around the field with a border, a shadow or a background of its
+ * own, holding no other field and not the field's label.
+ */
+function frameOf(el: Element): Element | undefined {
+  const labels = [...Array.from((el as HTMLInputElement).labels ?? []), ...(el.getAttribute("aria-labelledby") ?? "").split(/\s+/).map((id) => (id ? document.getElementById(id) : null))].filter(
+    (label): label is HTMLElement => !!label,
+  );
+  let around = el.parentElement;
+  for (let depth = 0; around && around !== document.body && depth < 5; depth++, around = around.parentElement) {
+    const box = around;
+    if (labels.some((label) => box.contains(label))) return undefined;
+    if (Array.from(box.querySelectorAll('input:not([type="hidden"]), select, textarea')).some((field) => field !== el)) return undefined;
+    const rect = box.getBoundingClientRect();
+    if (rect.width * rect.height >= 60_000) return undefined;
+    if (hasBox(box) && drawsBox(box)) return box;
+  }
+  return undefined;
+}
+
+/** Whether an element draws a box of its own: a border, a shadow, or a background that can be seen. */
+function drawsBox(el: Element): boolean {
+  const style = getComputedStyle(el);
+  const seen = (color: string) => !/^(?:transparent|rgba\(.*,\s*0\))$/.test(color.trim());
+  const border = ["top", "right", "bottom", "left"].some((side) => {
+    const kind = style.getPropertyValue(`border-${side}-style`);
+    return (parseFloat(style.getPropertyValue(`border-${side}-width`)) || 0) > 0 && kind !== "none" && kind !== "hidden" && seen(style.getPropertyValue(`border-${side}-color`));
+  });
+  return border || style.boxShadow !== "none" || seen(style.backgroundColor);
 }
 
 /** The label a visitor sees for a field that is itself hidden or tiny: its own label, what names it, or a small box around it. */
