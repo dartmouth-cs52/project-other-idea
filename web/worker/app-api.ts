@@ -31,6 +31,7 @@ import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } f
 import { groupGuides } from "./health";
 import { finishedCsv, finishedGuides, guideSteps, insights, monthOf } from "./insights";
 import { MAX_PAGES, readMore, startReading, type BrowserBinding, type Reading } from "./reader";
+import { saveReadBatch } from "./read-batch";
 import { readingExtras, setupOf, setupRoutes } from "./setup-api";
 import type { SendEnv } from "./sign-in-email";
 
@@ -452,20 +453,7 @@ async function readSite(sql: Sql, env: AppEnv, org: Organization, id: string, re
   const byPath = new Map(pages.map((page) => [page.path, page]));
   for (const page of batch.pages) byPath.set(page.path, page);
   const merged = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
-  // The address pasted may be the site's other name, acme.com for www.acme.com. The widget will run on the
-  // one it redirects to, so that becomes the site's origin and is allowed too.
-  const moved = batch.movedTo ?? null;
-  // Only the pages, the reading and that origin change, so an edit to the name or origins made meanwhile is kept.
-  await sql`
-    update sites set
-      context = jsonb_set(jsonb_set(context, '{pages}', ${JSON.stringify(merged)}::jsonb), '{updatedAt}', to_jsonb(now()::text)),
-      reading = ${JSON.stringify(batch.reading)}::jsonb,
-      origin = coalesce(${moved}::text, origin),
-      allowed_origins = case
-        when ${moved}::text is null or ${moved}::text = any(allowed_origins) or cardinality(allowed_origins) >= ${MAX_ORIGINS} then allowed_origins
-        else array_append(allowed_origins, ${moved}::text) end,
-      updated_at = now()
-    where id = ${id} and company_id = ${org.id}`;
+  await saveReadBatch(sql, { id, companyId: org.id, maxOrigins: MAX_ORIGINS }, batch, merged);
   return readingSummary(batch.reading, merged);
 }
 
