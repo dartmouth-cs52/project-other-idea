@@ -190,6 +190,15 @@ function HelpDocs({ site, onChange }: { site: Site; onChange: (site: Site) => vo
     }
   }
 
+  async function setAnswers(on: boolean) {
+    setError(null);
+    try {
+      onChange(await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { answers: on } }));
+    } catch (failure) {
+      setError((failure as Error).message);
+    }
+  }
+
   async function remove(source: string) {
     setError(null);
     try {
@@ -206,6 +215,21 @@ function HelpDocs({ site, onChange }: { site: Site; onChange: (site: Site) => vo
         Your help articles, as written. Haptic uses them to find the right control and the words your product uses. Whole docs go in, in this order,
         until the room is full.
       </p>
+      <label className="flex max-w-[65ch] items-start gap-3 text-base leading-6">
+        <input
+          type="checkbox"
+          className="mt-1 size-4 shrink-0 accent-primary"
+          checked={site.answers.on}
+          onChange={(event) => void setAnswers(event.target.checked)}
+        />
+        <span>
+          Answer questions in words from these docs
+          <span className="block text-sm leading-5 text-muted-foreground">
+            For questions like &ldquo;what does this do?&rdquo;, Haptic replies in the panel and links the articles it used, and still points when
+            there is something to click. {site.answers.chosen === null ? "On by default once a site has docs." : ""}
+          </span>
+        </span>
+      </label>
       <div className="flex flex-col gap-2">
         <div className="h-2 rounded-full bg-secondary" role="meter" aria-label="Room used" aria-valuemin={0} aria-valuemax={docs.budget} aria-valuenow={docs.used}>
           <div className="h-2 rounded-full bg-primary" style={{ width: `${share}%` }} />
