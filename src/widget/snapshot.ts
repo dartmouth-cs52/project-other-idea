@@ -2656,7 +2656,7 @@ function iconOf(el: Element): string | undefined {
   // Nothing inside an editor is the page's own, its pictures included.
   if ((el as HTMLElement).isContentEditable) return undefined;
   // The pencil on a table row's edit button is that button's picture, and the tick in its tick box is the tick box's.
-  const pictures = Array.from(el.querySelectorAll("svg, i, [class*='icon']"));
+  const pictures = Array.from(el.querySelectorAll("svg, i, [class*='icon'], [class*='material-symbols']"));
   const owner = (picture: Element) => picture.parentElement?.closest(`${CONTROLS}, label, ${TICKS}`);
   const own = isRowOfTable(el) ? pictures.filter((picture) => !el.contains(owner(picture) ?? null)) : pictures;
   for (const candidate of [el, ...own.slice(0, 4)]) {
@@ -2664,9 +2664,18 @@ function iconOf(el: Element): string | undefined {
     if (dataIcon) return dataIcon;
     const match = ICON_CLASS.exec(candidate.getAttribute("class") ?? "");
     if (match?.[1]) return match[1];
+    // A font of icons that draws each icon from its name written out, as Google's Material Icons does: "account_circle".
+    if (LIGATURE_FONT.test(candidate.getAttribute("class") ?? "")) {
+      const name = (candidate.textContent ?? "").trim();
+      if (LIGATURE.test(name)) return name.replace(/_/g, "-");
+    }
   }
   return undefined;
 }
+
+/** The class of an element drawn by a font of icons from the icon's name, and what such a name looks like. */
+const LIGATURE_FONT = /(?:^|\s)material-(?:icons|symbols)(?:-[a-z]+)?(?:\s|$)/;
+const LIGATURE = /^[a-z][a-z0-9_]{1,40}$/;
 
 /**
  * What using a control opens, when the page says so: a menu, a list or a

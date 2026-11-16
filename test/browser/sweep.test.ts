@@ -46,6 +46,12 @@ test("an empty link is named by the words its stylesheet writes before it, and n
   assert.deepEqual(lines(snapshot), ['link "§" [main › Forms]', "link [main › Forms] → external:github.com"]);
 });
 
+test("a control drawn by a font of icons from the icon's name is known by that icon", { skip }, async () => {
+  const snapshot = await read(`<nav><a href="#/"><span class="material-icons-round" aria-hidden="true">home</span></a>
+    <button type="button"><span class="material-symbols-outlined" aria-hidden="true">account_circle</span></button></nav>`);
+  assert.deepEqual(lines(snapshot), ['link icon:home [nav] → /page', 'button icon:account-circle [nav]']);
+});
+
 // Boxes that are no control ---------------------------------------------------------
 
 test("a box only the pointer marks, that says nothing, is not listed when it is larger than an icon or holds controls, and is when it is the size of one", { skip }, async () => {
