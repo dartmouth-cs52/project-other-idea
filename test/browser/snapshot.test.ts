@@ -353,6 +353,46 @@ test("the rule that shows it can be in a linked stylesheet, and a stylesheet tha
   assert.deepEqual(lines(snapshot), HOVER_LINES);
 });
 
+test("a row's action that a see-through box around it hides until the mouse is over the row says so, in the way Tailwind 4 writes it", { skip }, async () => {
+  // Tailwind 4 writes `group-hover/row:opacity-100` as `:is(:where(.group\/row):hover .x)`, inside `@media (hover: hover)`
+  // and a layer. Dashboards fade in the cell that holds a row's actions, not each button in it.
+  const styles = `@layer utilities {
+    .opacity-0 { opacity: 0 }
+    .focus-within\\:opacity-100:focus-within { opacity: 1 }
+    @media (hover: hover) { :is(:where(.group\\/row):hover .group-hover\\/row\\:opacity-100) { opacity: 1 } }
+  }
+  .row { position: relative; display: flex; width: 600px; height: 36px; align-items: center }
+  .actions { position: absolute; right: 0; top: 0; bottom: 0; display: flex; gap: 4px }
+  .old .tools { opacity: 0 } .old:hover .tools { opacity: 1 }
+  .self { opacity: 0 } .self:hover { opacity: 1 }
+  .keys { opacity: 0 } .keys:focus-within { opacity: 1 }`;
+  const snapshot = await read(`<style>${styles}</style><main><h1>Bills</h1>
+    <div class="group/row"><div role="row" class="row"><span role="cell">Linden Logistics, due Friday</span>
+      <div role="cell" class="actions opacity-0 group-hover/row:opacity-100 focus-within:opacity-100"><button>Pay</button><button aria-label="More"></button></div></div></div>
+    <div class="old" style="width:400px"><span>Quarterly plan</span><span class="tools"><span><button>Pin</button></span></span></div>
+    <div class="self"><button>Zoom</button></div>
+    <div class="keys"><button>Shown only to the keyboard</button></div>
+  </main>`);
+  assert.deepEqual(lines(snapshot), [
+    'button "Pay" (shows on hover) [main › Bills]',
+    'button "More" (shows on hover) [main › Bills]',
+    'button "Pin" (shows on hover) [main › Bills]',
+    'button "Zoom" (shows on hover) [main › Bills]',
+    // The keyboard inside it shows it, and the mouse never does: it is listed as the page has it, with nothing said.
+    'button "Shown only to the keyboard" [main › Bills]',
+  ]);
+});
+
+test("every row of a long table says its actions show on hover, not only the first rows", { skip }, async () => {
+  const styles = `.row { position: relative; display: flex; width: 600px; height: 28px } .actions { position: absolute; right: 0; top: 0; opacity: 0 }
+    :is(:where(.group):hover .group-hover\\:opacity-100) { opacity: 1 }`;
+  const rows = Array.from({ length: 150 }, (_, i) => `<div class="group"><div role="row" class="row"><span>Bill ${i + 1}</span><div class="actions group-hover:opacity-100"><button>Pay</button><button>Hold</button></div></div></div>`);
+  const snapshot = await read(`<style>${styles}</style><main><h1>Bills</h1>${rows.join("")}</main>`);
+  const actions = snapshot.elements.filter((element) => element.label === "Pay" || element.label === "Hold");
+  assert.ok(actions.length >= 250, `only ${actions.length} listed`);
+  assert.deepEqual(actions.filter((element) => !element.state?.includes("shows on hover")).map((element) => element.label), []);
+});
+
 // What is on top ---------------------------------------------------------------
 
 test("a list opened from a dialog is still listed when Haptic's own caption sits over it", { skip }, async () => {

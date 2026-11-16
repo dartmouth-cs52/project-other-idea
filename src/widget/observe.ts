@@ -19,6 +19,8 @@ export const PICKS_QUIET_MS = 2500;
 export const LIST_STOPPED_MS = 1200;
 /** A change to the address after "?" or "#" this soon after the visitor used the control is the control's doing. */
 export const ADDRESS_BELONGS_MS = 1500;
+/** A dialog over the pointed control counts once it has stayed this long: a page that flickers one up and away has not covered it. */
+export const COVERED_MS = 250;
 
 /** What the pointer is on, as far as hearing goes. */
 export interface Pointed {
@@ -74,8 +76,10 @@ export interface Where {
 
 /** What has become of the pointed control and the page since the pointer went up. */
 export interface Fate {
-  /** The pointed control is no longer in the page, or is no longer drawn. */
+  /** The pointed control is no longer in the page, or is no longer drawn or usable when it was at first. */
   gone: boolean;
+  /** The pointed control is still drawn, but a modal dialog that does not hold it has opened over it, so it cannot be used. */
+  covered?: boolean;
   /** Its state or its name is not what it was. */
   changed: boolean;
   /** A dialog opened or closed. */
@@ -125,7 +129,9 @@ export type Verdict =
   /** The page changed after something they did that could not be told apart. Not a wrong click. */
   | { how: "unknown"; onTarget: false; strayed: false }
   /** The page drew the pointed control again and nothing was done: it only needs finding. */
-  | { how: "redrawn"; onTarget: false; strayed: false };
+  | { how: "redrawn"; onTarget: false; strayed: false }
+  /** A dialog that does not hold the pointed control opened over it, with nothing done, and stayed. */
+  | { how: "covered"; onTarget: false; strayed: false };
 
 export interface Heard {
   /** The press whose click has not come yet. */
@@ -141,6 +147,8 @@ export interface Heard {
   /** What was picked in the pointed control's popup so far. */
   picks: string[];
   pickedAt?: number;
+  /** Since when a dialog has been over the pointed control. */
+  coveredAt?: number;
   verdict?: Verdict;
 }
 
@@ -156,7 +164,9 @@ const ACT_IN_FIELD = new Set(["enter", "escape", "tab"]);
  */
 export function waiting(heard: Heard, now: number): boolean {
   const lately = (since: number | undefined, ms: number) => since !== undefined && now - since <= ms;
-  return !!heard.press || heard.typed !== undefined || heard.picks.length > 0 || lately(heard.opened, 5000) || lately(heard.gesture?.at, OUTCOME_WINDOW_MS);
+  return (
+    !!heard.press || heard.typed !== undefined || heard.picks.length > 0 || heard.coveredAt !== undefined || lately(heard.opened, 5000) || lately(heard.gesture?.at, OUTCOME_WINDOW_MS)
+  );
 }
 
 /** Takes one more fact. The verdict, once there is one, is on what comes back, and nothing after it is heard. */
@@ -266,7 +276,10 @@ export function hear(heard: Heard, seen: Seen, pointed: Pointed): Heard {
         // Clicking into a field opens its list and so changes its state. That alone is not the step.
         const changed = fate.changed && !(pointed.typed && gesture.onTarget);
         if (fate.gone || changed || fate.dialog || fate.path) {
-          if (!gesture.onTarget) return say({ how: "unknown", onTarget: false, strayed: false });
+          // Escape that takes the control away closed what held it, a dialog or a menu: that is dismissing it, not using it.
+          // Escape the sentence asked for was heard as the step when it was pressed.
+          const dismissed = gesture.key === "escape" && fate.gone;
+          if (!gesture.onTarget || dismissed) return say({ how: "unknown", onTarget: false, strayed: false });
           if (gesture.key && gesture.key !== "enter" && gesture.key !== " ") return say({ how: "key", key: gesture.key, onTarget: true, strayed: false });
           return say(pointed.typed || pointed.select ? filled : used);
         }
@@ -282,7 +295,14 @@ export function hear(heard: Heard, seen: Seen, pointed: Pointed): Heard {
         }
         // The page drew the control again. It is still the step, on a new node.
         if (fate.gone && next.typed === undefined && !next.picks.length) return say({ how: "redrawn", onTarget: false, strayed: false });
+        // A dialog the page opened over the control by itself shuts it out. Once it has stayed a moment, the step is no longer one the visitor can do.
+        if (fate.covered && next.typed === undefined && !next.picks.length) {
+          next.coveredAt ??= at;
+          if (at - next.coveredAt >= COVERED_MS) return say({ how: "covered", onTarget: false, strayed: false });
+          return next;
+        }
       }
+      if (!fate.covered) next.coveredAt = undefined;
       return next;
     }
   }
