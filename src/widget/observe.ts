@@ -7,6 +7,8 @@
 
 /** A field counts as filled in once typing pauses this long. */
 export const TYPING_PAUSE_MS = 1200;
+/** Haptic's own typing has ended once it pauses this long: it types at an even pace and stops when the text is in. */
+export const OWN_TYPING_PAUSE_MS = 300;
 /** How long after a press or a key the page is watched for what it did about it. */
 export const OUTCOME_WINDOW_MS = 2000;
 /** A click follows the mouse coming up at once. A press with none by this long after has had no click. */
@@ -30,6 +32,28 @@ export interface Pointed {
   keys: string[];
   /** Any click off the control ends the wait, blank space included: the pointer may be the last word. */
   anyClick: boolean;
+  /** How long typing must pause to count as done. `TYPING_PAUSE_MS` when not given. */
+  typingPauseMs?: number;
+}
+
+/**
+ * The events Haptic itself dispatches while it acts. A page's script can
+ * dispatch the same kinds of event, and those are not heard as anyone's step
+ * (see `waitForAction` in guide.ts); Haptic's own are, but only while Haptic
+ * is the one acting. Kept by the event object itself, so an event a page
+ * dispatches from inside its handler for one of ours is still the page's.
+ */
+const own = new WeakSet<Event>();
+
+/** Marks an event as Haptic's own, before it is dispatched. Returns it. */
+export function markOwn<E extends Event>(event: E): E {
+  own.add(event);
+  return event;
+}
+
+/** Whether Haptic dispatched this event itself. */
+export function isOwn(event: Event): boolean {
+  return own.has(event);
 }
 
 /** Where a press or a click landed. Controls are numbered by the caller so that two events can be compared. */
@@ -230,7 +254,7 @@ export function hear(heard: Heard, seen: Seen, pointed: Pointed): Heard {
         }
       }
       if (next.picks.length && (!fate.popupOpen || at - (next.pickedAt ?? at) >= PICKS_QUIET_MS)) return say({ how: "chose", names: next.picks, onTarget: true, strayed: false });
-      if (next.typed !== undefined && at - next.typed >= TYPING_PAUSE_MS) return say(filled);
+      if (next.typed !== undefined && at - next.typed >= (pointed.typingPauseMs ?? TYPING_PAUSE_MS)) return say(filled);
       // They clicked into the field, its choices opened, and they stopped: the next thing to show is the choice.
       if (pointed.typed && next.opened !== undefined && next.typed === undefined && !next.picks.length && fate.listOpen && at - next.opened >= LIST_STOPPED_MS) {
         return say({ how: "opened", onTarget: true, strayed: false });

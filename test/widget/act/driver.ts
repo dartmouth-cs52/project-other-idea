@@ -48,7 +48,7 @@ type Hearing = (
   listed: SnapElement | undefined,
   host: Element,
   listing: Map<Element, SnapElement>,
-  how: { anyClick: boolean; keys: string[] },
+  how: { anyClick: boolean; keys: string[]; actor?: "visitor" | "haptic" },
   done: (acted: { event: string; onTarget: boolean; strayed: boolean; how: Heard["how"] }) => void,
 ) => () => void;
 
@@ -71,7 +71,8 @@ function listen(target: Element, listing: Map<Element, SnapElement>): Listening 
   if (!waitForAction) return { next: (ms) => sleep(ms).then(() => undefined), stop: () => undefined };
   let heard: Heard | undefined;
   let wake: (() => void) | undefined;
-  const stop = waitForAction(target, listing.get(target), host, listing, { anyClick: false, keys: [] }, (acted) => {
+  // Heard as the guide hears Haptic's own steps: with Haptic as the actor.
+  const stop = waitForAction(target, listing.get(target), host, listing, { anyClick: false, keys: [], actor: "haptic" }, (acted) => {
     heard = { how: acted.how, onTarget: acted.onTarget, event: acted.event };
     wake?.();
   });

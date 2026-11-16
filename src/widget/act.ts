@@ -1,6 +1,6 @@
 import { cleanText, describeElement, type Refusal, type SnapElement } from "../shared/types.ts";
 import { keyAllowed, openConfirmation, planPick, reachable, SAYS, tripwire, type ActPlan, type GateConfig, type GateSession, type StopPlan, type Tripwire, type VisitorPlan } from "./gate.ts";
-import type { Verdict } from "./observe.ts";
+import { markOwn, type Verdict } from "./observe.ts";
 import { isDrawn, isLayer, POPUP_ROLES, watchPopups, type Popups } from "./popups.ts";
 import { findOpenModal } from "./snapshot.ts";
 
@@ -666,8 +666,8 @@ function setValue(field: HTMLInputElement | HTMLTextAreaElement, value: string, 
   if (setter) setter.call(field, value);
   else field.value = value;
   const init = { bubbles: true, cancelable: false, composed: true, inputType: whole ? "insertReplacementText" : "insertText", data };
-  field.dispatchEvent(typeof InputEvent === "function" ? new InputEvent("input", init) : new Event("input", init));
-  if (whole) field.dispatchEvent(new Event("change", { bubbles: true }));
+  field.dispatchEvent(markOwn(typeof InputEvent === "function" ? new InputEvent("input", init) : new Event("input", init)));
+  if (whole) field.dispatchEvent(markOwn(new Event("change", { bubbles: true })));
 }
 
 /** Whether the field holds what was typed: the same words, or for a field that masks what is typed, its letters and digits in order. Read here, never kept. */
@@ -1520,7 +1520,8 @@ function lessMotion(): boolean {
 /** Dispatches an event. One that activates something and is held up past `BLOCKED_MS` was held by a dialog of the browser's own, which the visitor answered. */
 function fire(run: Run, el: Element, event: Event, activation: boolean): boolean {
   const started = performance.now();
-  const allowed = el.dispatchEvent(event);
+  // Marked as Haptic's own, so the guide's hearing, which ignores what a page's script dispatches, hears it while Haptic acts.
+  const allowed = el.dispatchEvent(markOwn(event));
   if (activation && performance.now() - started > BLOCKED_MS) {
     throw new Halt("blocked", () => ({ kind: "stop", reason: "confirmation", say: SAYS.answered, el, event: `You used ${run.name}, and the page asked a question of its own, which the visitor answered.` }));
   }

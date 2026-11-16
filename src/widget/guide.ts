@@ -1,5 +1,6 @@
 import { cleanText, describeElement, type HistoryTurn, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
-import { hear, keyName, keysAsked, nothingHeard, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "./observe.ts";
+import { hear, isOwn, keyName, keysAsked, nothingHeard, OWN_TYPING_PAUSE_MS, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "./observe.ts";
+import { isDrawn, POPUP_ROLES, watchPopups } from "./popups.ts";
 import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
 import type { Ui } from "./ui.ts";
 
@@ -93,6 +94,14 @@ interface Hearing {
   anyClick: boolean;
   /** Keys the sentence asks the visitor to press. */
   keys: string[];
+  /**
+   * Who is expected to use the control. "haptic" while Haptic acts on it
+   * itself: the events it dispatches are heard then, as a visitor's are, and
+   * its own typing is done once it pauses briefly. Anyone else's are not.
+   */
+  actor?: "visitor" | "haptic";
+  /** How the visitor is named in the sentences for the model: "The user" in a guide, "The visitor" while Haptic acts with them. */
+  subject?: string;
 }
 
 /** A pointer shown before the rest of the reply was in, and what the visitor did with it, if anything yet. */
@@ -715,13 +724,6 @@ function pageState(snapshot: Snapshot): string {
   return [snapshot.path, snapshot.dialog ?? "", ...wholePage(snapshot).elements.map((element) => `${elementKey(element)}|${(element.state ?? []).join(",")}`)].join("\n");
 }
 
-/** Whether the element is in the page and drawn. */
-function isDrawn(el: Element): boolean {
-  if (!el.isConnected) return false;
-  if (typeof el.checkVisibility === "function") return el.checkVisibility({ visibilityProperty: true });
-  return el.getClientRects().length > 0;
-}
-
 /** Text is typed into it. A dropdown is picked from, a slider is dragged, and a field nobody can type in is used by clicking it. */
 function isTyped(el: Element): boolean {
   return isField(el) && !(el instanceof HTMLSelectElement) && !(el as HTMLInputElement).readOnly && !(el instanceof HTMLInputElement && el.type === "range");
@@ -814,44 +816,13 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   const select = target instanceof HTMLSelectElement;
   const typed = isTyped(target);
   const ticked = target instanceof HTMLInputElement && (target.type === "checkbox" || target.type === "radio");
-  const pointed = (): Pointed => ({ typed, select, ticked, keys: how.keys, anyClick: how.anyClick });
-  // What has come on show since the pointer went up: added to the page, or a
-  // box whose hiding was changed. A list or a calendar that the control opens
-  // is often in the page all along, hidden, so being in the page is not enough.
-  const added = new WeakSet<Node>();
-  const restyled = new WeakMap<Node, string>();
-  const shown = new MutationObserver((records) => {
-    for (const record of records) {
-      if (record.type === "childList") for (const node of record.addedNodes) added.add(node);
-      else restyled.set(record.target, record.attributeName ?? "");
-    }
-  });
-  shown.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden", "open", "aria-hidden", "style", "class"] });
-  /** A box drawn over the page, which is what a list or a menu that opens is. */
-  const isLayer = (el: Element) => {
-    if (el.matches('[role="listbox"], [role="menu"], [role="tree"], [role="grid"], [role="dialog"], [popover]')) return true;
-    const position = getComputedStyle(el).position;
-    return position === "absolute" || position === "fixed";
-  };
-  /**
-   * Whether `el` has come on show since the pointer went up. Anything the
-   * visitor clicks that has not was on the page to be clicked all along. A
-   * change of style or class counts only on a box drawn over the page, since
-   * pages restyle rows and cards as the mouse moves over them.
-   */
-  const isNew = (el: Element): boolean => {
-    for (const record of shown.takeRecords()) {
-      if (record.type === "childList") for (const node of record.addedNodes) added.add(node);
-      else restyled.set(record.target, record.attributeName ?? "");
-    }
-    for (let at: Element | null = el; at && at !== document.body && at !== document.documentElement; at = at.parentElement) {
-      if (at.contains(target)) return false;
-      if (added.has(at)) return true;
-      const how = restyled.get(at);
-      if (how !== undefined && (how === "hidden" || how === "open" || how === "aria-hidden" || isLayer(at))) return true;
-    }
-    return false;
-  };
+  const haptic = () => how.actor === "haptic";
+  const pointed = (): Pointed => ({ typed, select, ticked, keys: how.keys, anyClick: how.anyClick, ...(haptic() ? { typingPauseMs: OWN_TYPING_PAUSE_MS } : {}) });
+  // What has come on show since the pointer went up, and what the control
+  // opened (popups.ts). A list or a calendar that the control opens is often
+  // in the page all along, hidden, so being in the page is not enough.
+  const watch = watchPopups(target);
+  const { isNew, layerOf, says, isExpanded } = watch;
   const startPath = currentPath();
   const startAddress = location.href;
   const startDialog = findOpenModal(host);
@@ -866,8 +837,6 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   let heard: Heard = nothingHeard();
   /** What the mouse last went down on, and where. */
   let pressed: { el?: Element; x: number; y: number } | undefined;
-  /** What the pointed control opened, once it is known. */
-  let popup: Element | undefined;
   /** When the mouse last came over the pointed control. A menu can open on that alone. */
   let hovered: number | undefined;
   /** When a key that opens things (F4, the down arrow) was last pressed in the pointed control. */
@@ -880,27 +849,8 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     if (node.matches(CLICKABLE) || listing.has(node)) return true;
     return getComputedStyle(node).cursor === "pointer" && (!node.parentElement || getComputedStyle(node.parentElement).cursor !== "pointer");
   };
-  /** The nearest box drawn over the page that `el` sits in, not counting any that hold the pointed control. */
-  const layerOf = (el: Element): Element => {
-    let top = el;
-    for (let at: Element | null = el; at && at !== document.body && !at.contains(target); at = at.parentElement) {
-      top = at;
-      const position = getComputedStyle(at).position;
-      if (position === "absolute" || position === "fixed") return at;
-    }
-    return top;
-  };
-  const says = (attribute: string) => [target, target.closest(`[${attribute}]`), target.querySelector(`[${attribute}]`)].map((el) => el?.getAttribute(attribute) ?? "").find(Boolean) ?? "";
-  const isExpanded = () => [target, target.closest("[aria-expanded]"), target.querySelector("[aria-expanded]")].some((el) => el?.getAttribute("aria-expanded") === "true");
   /** What the pointed control says it opens, by id. */
-  const popupOf = (): Element | undefined => {
-    if (popup?.isConnected) return popup;
-    for (const id of `${says("aria-controls")} ${says("aria-owns")}`.split(/\s+/).filter(Boolean)) {
-      const el = document.getElementById(id);
-      if (el && !el.contains(target)) return (popup = layerOf(el));
-    }
-    return undefined;
-  };
+  const popupOf = () => watch.popupOf();
   const insidePopup = (path: EventTarget[], first: Element): boolean => {
     const root = popupOf();
     if (root && path.includes(root)) return true;
@@ -909,17 +859,17 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     // read with the page, inside a box drawn over it that does not hold the control, is in what the control opened.
     const over = !listing.has(first) && first.getRootNode() instanceof ShadowRoot ? overlayOf(first) : undefined;
     if (over && !isWithin(over, target)) {
-      popup ??= over;
+      watch.popup ??= over;
       return true;
     }
     // New since the pointer went up, and clicked after the visitor went into the control: it is what the control opened.
     if (isNew(first) && !listing.has(first)) {
-      popup ??= layerOf(first);
+      watch.popup ??= layerOf(first);
       return true;
     }
-    const box = first.closest('[role="listbox"], [role="menu"], [role="tree"], [role="grid"], [role="dialog"]');
+    const box = first.closest(POPUP_ROLES);
     if (!box || box.contains(target) || !isExpanded()) return false;
-    popup ??= box;
+    watch.popup ??= box;
     return true;
   };
   /**
@@ -948,7 +898,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     const first = controls[0];
     // A control inside the pointed one that has come on show since, like an entry of a submenu drawn inside its parent entry, is what it opened.
     const opened = !!first && first !== target && isWithin(target, first) && isNew(first);
-    if (opened) popup ??= layerOf(first);
+    if (opened) watch.popup ??= layerOf(first);
     const onTarget =
       !opened &&
       (path.includes(target) ||
@@ -974,33 +924,35 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
       path: currentPath() !== startPath,
       address: location.href !== startAddress,
       pressGone: !!press?.el && (!isDrawn(press.el) || !isWithin(press.el, hitAt(press.x, press.y))),
-      popupOpen: !!popup && isDrawn(popup) && (says("aria-expanded") === "" || isExpanded()),
+      popupOpen: !!watch.popup && isDrawn(watch.popup) && (says("aria-expanded") === "" || isExpanded()),
       listOpen: typed && isExpanded(),
       leaving: isLeaving(),
     };
   };
   const sentence = (verdict: Verdict): string => {
+    const who = how.subject ?? "The user";
+    const whom = who.toLowerCase();
     switch (verdict.how) {
       case "clicked":
-        return target.matches('[role="slider"], input[type="range"]') ? `The user moved ${name}.` : `The user clicked ${name}.`;
+        return target.matches('[role="slider"], input[type="range"]') ? `${who} moved ${name}.` : `${who} clicked ${name}.`;
       case "filled":
-        return `The user filled in ${name}. You can't see what they entered.`;
+        return `${who} filled in ${name}. You can't see what they entered.`;
       case "opened":
-        return `The user clicked into ${name}, and a list of choices opened.`;
+        return `${who} clicked into ${name}, and a list of choices opened.`;
       case "key":
-        return `The user pressed ${keyName(verdict.key)} in ${name}.`;
+        return `${who} pressed ${keyName(verdict.key)} in ${name}.`;
       case "chose": {
         const names = verdict.names.filter(Boolean).slice(0, 3).map((picked) => `"${picked}"`);
-        return `The user chose ${names.length ? names.join(" and ") : "an entry"} from the list that ${name} opened.`;
+        return `${who} chose ${names.length ? names.join(" and ") : "an entry"} from the list that ${name} opened.`;
       }
       case "other":
-        return `The user clicked ${verdict.name ? `"${verdict.name}"` : "something else"} instead of ${name}.`;
+        return `${who} clicked ${verdict.name ? `"${verdict.name}"` : "something else"} instead of ${name}.`;
       case "elsewhere":
-        return "The user clicked somewhere else on the page.";
+        return `${who} clicked somewhere else on the page.`;
       case "left":
-        return `The user went to ${currentPath()} without using ${name}.`;
+        return `${who} went to ${currentPath()} without using ${name}.`;
       case "unknown":
-        return "The page changed after something the user did that could not be identified.";
+        return `The page changed after something ${whom} did that could not be identified.`;
       case "redrawn":
         return "";
     }
@@ -1018,12 +970,15 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     return path.includes(host) ? undefined : path;
   };
   /**
-   * A press or a click the visitor made. A page's script can click too: Jira,
-   * as the mouse goes down in a box of its date filter, clicks the label of
-   * the row's radio button. That is the page at work, not the visitor, and
-   * was heard as a click on the radio button instead of the box.
+   * A press or a click made by whoever is using the control: the visitor's
+   * own, or, while Haptic acts on it, one Haptic dispatched itself. A page's
+   * script can click too: Jira, as the mouse goes down in a box of its date
+   * filter, clicks the label of the row's radio button. That is the page at
+   * work, not the visitor, and was heard as a click on the radio button
+   * instead of the box. It is not heard while Haptic acts either.
    */
-  const visitors = (event: Event) => (event.isTrusted ? outside(event) : undefined);
+  const byActor = (event: Event) => event.isTrusted || (haptic() && isOwn(event));
+  const visitors = (event: Event) => (byActor(event) ? outside(event) : undefined);
   const onPress = (event: Event) => {
     const path = visitors(event);
     if (!path || (event as PointerEvent).button !== 0) return;
@@ -1053,7 +1008,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   };
   const onInput = (event: Event) => {
     const path = outside(event);
-    if (path) feed({ type: "input", at: performance.now(), inTarget: path.includes(target), ...(event.isTrusted ? {} : { byPage: true }) });
+    if (path) feed({ type: "input", at: performance.now(), inTarget: path.includes(target), ...(byActor(event) ? {} : { byPage: true }) });
   };
   const onLeave = (event: Event) => {
     if (event.target === target) feed({ type: "left", at: performance.now() });
@@ -1086,7 +1041,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   ] as [EventTarget, string, (event: Event) => void][]).map(([on, type, listener]) => [on, type, safely(listener)] as const);
   const stop = () => {
     clearInterval(timer);
-    shown.disconnect();
+    watch.stop();
     for (const [on, type, listener] of listeners) on.removeEventListener(type, listener, true);
   };
   for (const [on, type, listener] of listeners) on.addEventListener(type, listener, true);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hear, keysAsked, nothingHeard, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "../src/widget/observe.ts";
+import { hear, isOwn, keysAsked, markOwn, nothingHeard, OWN_TYPING_PAUSE_MS, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "../src/widget/observe.ts";
 
 // "Was that the step?" decided from sequences of plain events, with no page.
 // The sequences are the ones real apps produced: a list that acts as the mouse
@@ -52,6 +52,20 @@ test("clicking into a field is not the step: typing is, once it pauses", () => {
   const { verdict, at } = run(FIELD, [...events, tick(2100)]);
   assert.equal(verdict?.how, "filled");
   assert.equal(at, 2100);
+});
+
+test("Haptic's own typing is done once it pauses briefly; a visitor's needs the longer pause", () => {
+  const typing: Seen[] = [{ type: "input", at: 0, inTarget: true }, { type: "input", at: 35, inTarget: true }, { type: "input", at: 70, inTarget: true }];
+  const own = run({ ...FIELD, typingPauseMs: OWN_TYPING_PAUSE_MS }, [...typing, tick(300), tick(400)]);
+  assert.equal(own.verdict?.how, "filled");
+  assert.equal(own.at, 400);
+  assert.equal(run(FIELD, [...typing, tick(300), tick(400), tick(1200)]).verdict, undefined, "a visitor who stops for half a second is still typing");
+});
+
+test("an event is Haptic's own only when Haptic marked it", () => {
+  const ours = markOwn(new Event("click"));
+  assert.equal(isOwn(ours), true);
+  assert.equal(isOwn(new Event("click")), false);
 });
 
 test("Enter in the pointed field ends the typing, and is its own step when the sentence asks for it", () => {
