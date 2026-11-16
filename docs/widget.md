@@ -6,6 +6,10 @@ The widget runs on pages it doesn't control. This covers how it keeps up with th
 
 A page's modal `<dialog>` makes everything outside it inert, Haptic's own element included. The widget moves its element into the open dialog the moment it opens, shows it again on top, and moves it back out when the dialog closes, so the pointer and the Stop button keep working through nested dialogs too. Escape in Haptic's ask box closes Haptic's panel and not the page's dialog.
 
+## Covered controls
+
+A control on screen that something else covers, like a button under a stack of cards or the page behind a full-screen overlay, is left out of the snapshot, because a visitor can't click it. The browser's own hit test decides (`src/widget/occlusion.ts`). A control only scrolled out of its scroll box stays in, and so does one under a sticky header, since pointing scrolls it to the middle of the screen.
+
 ## Testing in browsers
 
 `npm run test:browser` runs the widget in Chromium, Firefox and WebKit, on small pages made for each test, against a stand-in server that answers each step from a script (`test/browser/harness.ts`). It needs Playwright's browsers once: `npx playwright install chromium firefox webkit`. `BROWSERS=chromium npm run test:browser` runs one.

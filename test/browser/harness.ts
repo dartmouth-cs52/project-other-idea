@@ -30,6 +30,30 @@ export function widgetBundle(): Promise<string> {
   return bundle;
 }
 
+let snapshotCode: Promise<string> | undefined;
+/** takeSnapshot on its own, as window.hapticSnapshot(ignore), for testing what a page turns into. */
+export function snapshotBundle(): Promise<string> {
+  snapshotCode ??= build({
+    stdin: { contents: `import { takeSnapshot } from "./src/widget/snapshot.ts"; window.hapticSnapshot = (ignore) => takeSnapshot(ignore).snapshot;`, resolveDir: root, loader: "ts" },
+    bundle: true,
+    format: "iife",
+    target: "es2020",
+    write: false,
+  }).then((result) => result.outputFiles[0]!.text);
+  return snapshotCode;
+}
+
+/** Shows this markup in a fresh page and returns the labels of the controls the snapshot lists. `before` runs in the page first, like a scroll. */
+export async function labelsOf(tab: Page, body: string, before?: string): Promise<string[]> {
+  await tab.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}</style></head><body>${body}</body></html>`);
+  await tab.addScriptTag({ content: await snapshotBundle() });
+  if (before) await tab.evaluate(before);
+  return tab.evaluate(() => {
+    const ours = document.getElementById("ours") ?? document.createElement("div");
+    return (window as unknown as { hapticSnapshot(ignore: Element): import("../../src/shared/types.ts").Snapshot }).hapticSnapshot(ours).elements.map((element) => element.label);
+  });
+}
+
 /** How the scripted server answers one step. */
 export interface Answer {
   reply: TurnReply;

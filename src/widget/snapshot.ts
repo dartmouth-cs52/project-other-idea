@@ -1,4 +1,5 @@
 import { cleanText, describeElement, normalizePath, type SnapElement, type Snapshot } from "../shared/types.ts";
+import { isCovered } from "./occlusion.ts";
 
 // Turns the live page into the list of elements the model sees. One read-only
 // pass over the DOM. Input values are never read: labels only.
@@ -126,7 +127,10 @@ export function takeSnapshot(ignore: Element): PageSnapshot {
     let added: Candidate | undefined;
     if (role) {
       const rect = el.getBoundingClientRect();
-      if (rect.width > 0 || rect.height > 0) {
+      const onScreen = rect.bottom > 0 && rect.top < viewportHeight;
+      // A control buried under something else can't be clicked, so the model isn't shown it.
+      // On the pilot app it kept pointing at a Restart button that sat under a stack of cards.
+      if ((rect.width > 0 || rect.height > 0) && !(onScreen && isCovered(el, rect, ignore))) {
         added = { el, id: "", role, label: labelOf(el, role), nav: ["nav", "header", "aside", "menu", "tabs"].includes(scope.region) };
         const icon = iconOf(el);
         if (icon) added.icon = icon;
