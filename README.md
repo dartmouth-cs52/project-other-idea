@@ -13,6 +13,7 @@ We're rebuilding Haptic from scratch on `main`. What's here so far is the core l
 - **The server** (`src/server`): serves the widget and answers each step with one Claude call.
 - **Intake** (`src/intake`): a command that reads a customer's site and their help docs, saves what it learned, and prints the script tag.
 - **The website** (`web`): the landing page for joinhaptic.com, a static Next.js site. See [`web/README.md`](web/README.md).
+- **The test app** (`testbed`): Northpine, a made-up spend management dashboard with about 60 routes, 10,000 transactions and a test panel, built to break pointing guides. It has 179 benchmark tasks. See [`testbed/README.md`](testbed/README.md).
 
 The look of both the widget and the website is defined in [`DESIGN.md`](DESIGN.md).
 

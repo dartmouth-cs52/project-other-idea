@@ -56,6 +56,13 @@ export interface Site {
   origin: string;
   allowedOrigins: string[];
   scriptUrl: string;
+  appearance: { accent: string; position: "bottom-right" | "bottom-left"; launcherLabel: string };
+  notes: string;
+  docs: {
+    budget: number;
+    used: number;
+    list: { title: string; source: string; pasted: boolean; chars: number; inPrompt: boolean }[];
+  };
   connected: boolean;
   origins: SeenOrigin[];
   reading: Reading | null;
