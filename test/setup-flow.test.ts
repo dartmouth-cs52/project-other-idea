@@ -84,6 +84,30 @@ test("one mailbox is written one way however its address is: case, a +tag anywhe
   assert.equal(mailboxOf("ja.ne@example.org"), "ja.ne@example.org", "dots count everywhere but Gmail");
 });
 
+test("one address only, of letters, digits and the usual marks, is taken as a developer's email", () => {
+  for (const bad of [
+    "a@b.com,c.com",
+    "dev@example.com,evil@example.com",
+    "<svg/onload=1>@example.com",
+    "a\u0000b@example.com",
+    "dev@example.com\nBcc: evil@example.com",
+    "<dev@example.com>",
+    "Dev <dev@example.com>",
+    '"a b"@example.com',
+    "dev@exa_mple.com",
+    "dev@-example.com",
+    "dev@example..com",
+    ".dev@example.com",
+    "dev.@example.com",
+    "de..v@example.com",
+    "dev@[127.0.0.1]",
+    "dev;evil@example.com",
+  ]) {
+    assert.equal(checkEmail(bad).ok, false, JSON.stringify(bad));
+  }
+  for (const good of ["dev@example.com", "first.last+tag@mail.example.co.uk", "o'brien@example.ie", "dev-1@sub-domain.example.io"]) assert.equal(checkEmail(good).ok, true, good);
+});
+
 test("a developer's email is cleaned up, or the person is told what to type", () => {
   assert.deepEqual(checkEmail("  Dev@Example.COM "), { ok: true, email: "dev@example.com" });
   assert.deepEqual(checkEmail(""), { ok: false, message: "Enter your developer's email." });

@@ -96,13 +96,21 @@ export function checkAddress(input: string): { ok: true; origin: string; url: st
 
 // An email address -------------------------------------------------------------
 
-const EMAIL = /^[^\s@]{1,64}@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i;
+/**
+ * One address only: a local part of letters, digits and the marks an address
+ * may have, in dot-separated runs, then a domain of letters, digits and inner
+ * hyphens, ending in letters. No spaces, commas, angle brackets, quotes or
+ * control characters, so nothing can ride along with it.
+ */
+const ATOM = "[a-z0-9!#$%&'*+/=?^_`{|}~-]+";
+const LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const EMAIL = new RegExp(`^${ATOM}(?:\\.${ATOM})*@(?:${LABEL}\\.)+[a-z]{2,63}$`);
 
 /** The address cleaned up, or a sentence saying what to type. */
 export function checkEmail(input: unknown): { ok: true; email: string } | { ok: false; message: string } {
   const email = typeof input === "string" ? input.trim().toLowerCase() : "";
   if (!email) return { ok: false, message: "Enter your developer's email." };
-  if (email.length > 254 || !EMAIL.test(email)) return { ok: false, message: "Enter a full email address, like name@company.com." };
+  if (email.length > 254 || email.indexOf("@") > 64 || !EMAIL.test(email)) return { ok: false, message: "Enter a full email address, like name@company.com." };
   return { ok: true, email };
 }
 
