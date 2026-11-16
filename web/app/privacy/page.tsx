@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Privacy", alternates: { canonical: "
 
 export default function Privacy() {
   return (
-    <LegalPage title="Privacy" updated="November 15, 2026">
+    <LegalPage title="Privacy" updated="November 16, 2026">
       <p>
         {site.company} makes Haptic. This page says what we collect on this website, and what Haptic reads when it runs
         inside a product.
@@ -29,6 +29,10 @@ export default function Privacy() {
       <p>
         When you add a site, we read its public pages the way a visitor would, to learn what your product calls
         things. We do not sign in to anything and we do not send forms.
+      </p>
+      <p>
+        Haptic runs on this website too, so you can try it. If you ask it something here, it works as the next part
+        of this page describes, and we are the company that sees your questions.
       </p>
 
       <h2>Haptic inside a product</h2>
