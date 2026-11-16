@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { AlertCircleIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -302,6 +302,11 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState<TaughtRoute | null>(null);
   const sessionId = mine.sessionId;
+  // A failed save is brought into view, with its Retry, wherever the person had scrolled to.
+  const failure = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (saveError) failure.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [saveError]);
 
   const load = useCallback(async () => {
     if (!sessionId) return;
@@ -518,7 +523,9 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
               </Button>
             )}
             {lastStep && unnamedLeft >= 0 && <p className="text-sm text-destructive">Name step {unnamedLeft + 1} or delete it before saving.</p>}
-            <Failure message={saveError} onRetry={saveError?.startsWith("The route") ? () => void save() : undefined} />
+            <div ref={failure}>
+              <Failure message={saveError} onRetry={saveError?.startsWith("The route") ? () => void save() : undefined} />
+            </div>
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => void save()} disabled={saving || !kept!.length || unnamedLeft >= 0}>
                 {saving ? "Saving…" : "Save this route"}
