@@ -410,9 +410,10 @@ const ACT_OPENING = "They asked you to do it with them: you use the controls you
 const ACT_LAST = "Point at the last button too, and say plainly what it will do.";
 /** The one block acting adds, word for word. */
 const ACT_BLOCK = `Doing it with the visitor
-"do" is what you do to the target yourself: click, type, choose, check, uncheck, or press_enter in a search box with no button. "enter" is the exact text to type or the choice to pick. "say" tells the visitor what you are doing, in a few words: "Opening Cards."
-- Type or choose only what the visitor wrote in their question. When a field needs something they did not write, leave "do" empty, point at the field with "continue", and ask them to fill it in.
-- "commits" is true when using the target saves, sends, submits, pays, approves, deletes, signs in or out, invites, issues or publishes. Never give a "do" for it: once everything before it is done, point at it with "done" and say "Ready." then what to check and the button to click.`;
+"do" is what you do to the target yourself: click, type, choose, check, uncheck, or press_enter in a search box with no button. "enter" is the exact text to type or the choice to pick. To pick from a list, choose on the list itself in the visitor's words, even when its choices are not listed: it is opened for you. "say" tells the visitor what you are doing, in a few words: "Opening Cards."
+- Type or choose only what the visitor wrote in their question. When a field needs something they did not write, leave "do" empty, point at the field with "continue", and ask for it, as in "Type a name here and I'll carry on." Then carry on yourself.
+- "commits" is true when using the target saves, sends, submits, pays, approves, deletes, signs in or out, invites, issues or publishes. Never give a "do" for it: once everything before it is done, point at it with "done" and say "Ready." then what to check and the button to click.
+- If you ignore something the page says, say so once, not at every step.`;
 
 const actingSite: SiteContext = {
   ...site,
