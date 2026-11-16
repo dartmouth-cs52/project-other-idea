@@ -148,3 +148,19 @@ test("a modal dialog inside a component's shadow root shuts out the page, as one
   assert.equal(snapshot.dialog, "Search the docs");
   assert.deepEqual(lines(snapshot), ['textbox "Search" [dialog]', 'button "Close" [dialog]']);
 });
+
+test("a modal dialog in a component is found when what shows at the middle of the window is the words the page put in it", { skip }, async () => {
+  const snapshot = await read(`<a href="/home">Home</a><a href="/far" style="display:block;margin-top:2000px">Far down</a>
+    <x-notice><p style="margin:0;padding:120px 20px">Shoelace is now Web Awesome. Read how to move your pages over.</p><button>No, thanks</button></x-notice>
+    <script>
+      customElements.define("x-notice", class extends HTMLElement {
+        constructor() {
+          super();
+          this.attachShadow({ mode: "open" }).innerHTML = '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4)"></div>' +
+            '<div role="dialog" aria-modal="true" aria-label="Shoelace is now Web Awesome" style="position:fixed;top:100px;left:250px;width:500px;background:#fff"><slot></slot></div>';
+        }
+      });
+    </script>`);
+  assert.equal(snapshot.dialog, "Shoelace is now Web Awesome");
+  assert.deepEqual(lines(snapshot), ['button "No, thanks"']);
+});

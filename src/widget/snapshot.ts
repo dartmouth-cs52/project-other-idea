@@ -994,8 +994,9 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   deferring = false;
   let shifted = 0;
   let headingsShifted = 0;
+  // What is out of the window is read until there are twice as many controls as are listed: more would only be cut.
   for (const part of later) {
-    if (visited > MAX_VISITED) break;
+    if (visited > MAX_VISITED || candidates.length >= MAX_ELEMENTS * 2) break;
     const before = candidates.length;
     const headingsBefore = headings.length;
     order = part.orderAt;
@@ -1377,7 +1378,7 @@ function onTop(el: Element, ignore: Element, frame?: FrameView): boolean {
   if (frame) {
     // In a frame, the click has to land in the frame's window, and the frame has to be what the page draws there.
     if (x < 0 || y < 0 || x > frame.width || y > frame.height || x + frame.dx > window.innerWidth || y + frame.dy > window.innerHeight) return false;
-    const hit = hitAt(x, y, ignore, frame);
+    const hit = hitFor(el, x, y, ignore, frame);
     return !!hit && (drawnWithin(el, hit) || drawnWithin(hit, el));
   }
   if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return false;
@@ -1440,7 +1441,7 @@ function pressableThoughHidden(el: Element, ignore: Element): boolean {
  */
 function coverOf(ignore: Element, candidates: Candidate[]): { el: Element; layer?: Element } | undefined {
   for (const [x, y] of [[0.5, 0.5], [0.1, 0.1], [0.9, 0.1], [0.1, 0.9], [0.9, 0.9]] as const) {
-    const top = document.elementsFromPoint(window.innerWidth * x, window.innerHeight * y).find((el) => el !== ignore && !ignore.contains(el));
+    const top = hitFor(document.documentElement, window.innerWidth * x, window.innerHeight * y, ignore);
     if (!top || top === document.body || top === document.documentElement) continue;
     const box = top.getBoundingClientRect();
     if (box.width < window.innerWidth * 0.95 || box.height < window.innerHeight * 0.95) continue;
@@ -1485,6 +1486,8 @@ interface BoxFacts {
   /** Clipped to nothing, the way words meant only for screen readers are hidden. */
   clippedAway: boolean;
   rtl: boolean;
+  /** Its box, once it has been needed. */
+  box?: DOMRect;
 }
 
 function factsOf(el: Element, facts: Map<Element, BoxFacts>): BoxFacts {
@@ -1559,7 +1562,7 @@ function seenOf(el: Element, rect: DOMRect, facts: Map<Element, BoxFacts>): Seen
     if (box.position !== "static" || position === "fixed") position = box.position === "static" ? "relative" : box.position;
     if (box.clippedAway) return { hidden: true };
     if (box.overflowX === "visible" && box.overflowY === "visible") continue;
-    const clip = node.getBoundingClientRect();
+    const clip = (box.box ??= node.getBoundingClientRect());
     const [wasLeft, wasTop, wasRight] = [left, top, right];
     if (box.overflowX !== "visible") [left, right] = [Math.max(left, clip.left), Math.min(right, clip.right)];
     if (box.overflowY !== "visible") [top, bottom] = [Math.max(top, clip.top), Math.min(bottom, clip.bottom)];
@@ -1588,26 +1591,34 @@ function parkedOutside(rect: DOMRect, fixed: boolean, rtl: boolean, view: Window
 }
 
 /**
- * What a click at a point lands on, through open shadow roots, looking
- * through Haptic's own element. A point in a frame being read is in the
- * frame's window: the click lands in the frame only if the frame is what the
- * page draws there.
+ * What a click at a point lands on, as the tree `el` is in sees it: the page,
+ * or the shadow root `el` is in, which sees what is drawn in its own tree and
+ * around it, and a component inside it as that component. That is one hit
+ * test however deep `el` is, and enough to tell whether the click reaches it.
+ * Haptic's own element is looked through. A point in a frame being read is in
+ * the frame's window: the click lands in the frame only if the frame is what
+ * the page draws there.
  */
-function hitAt(x: number, y: number, ignore: Element, frame?: FrameView): Element | undefined {
+function hitFor(el: Element, x: number, y: number, ignore: Element, frame?: FrameView): Element | undefined {
   if (frame) {
-    const outer = hitAt(x + frame.dx, y + frame.dy, ignore);
+    const outer = hitFor(frame.el, x + frame.dx, y + frame.dy, ignore);
     if (outer !== frame.el) return outer;
   }
-  const doc = frame ? (frame.el as HTMLIFrameElement).contentDocument : document;
-  if (!doc) return undefined;
-  let hit: Element | null | undefined = doc.elementFromPoint(x, y);
-  if (hit && (hit === ignore || ignore.contains(hit))) hit = doc.elementsFromPoint(x, y).find((el) => el !== ignore && !ignore.contains(el));
-  for (let depth = 0; hit?.shadowRoot && depth < 30; depth++) {
+  const scope = el.getRootNode() as Document | ShadowRoot;
+  if (typeof scope.elementFromPoint !== "function") return undefined;
+  let hit: Element | null | undefined = scope.elementFromPoint(x, y);
+  if (hit && (hit === ignore || ignore.contains(hit))) hit = scope.elementsFromPoint(x, y).find((other) => other !== ignore && !ignore.contains(other));
+  return hit ?? undefined;
+}
+
+/** What is really drawn at a point inside an element: through the open shadow roots of the components there. */
+function deepest(hit: Element, x: number, y: number): Element {
+  for (let depth = 0; hit.shadowRoot && depth < 30; depth++) {
     const inner: Element | null = hit.shadowRoot.elementFromPoint(x, y);
     if (!inner || inner === hit) break;
     hit = inner;
   }
-  return hit ?? undefined;
+  return hit;
 }
 
 /**
@@ -1632,12 +1643,16 @@ function reaches(el: Element, area: number, hit: Element | undefined): boolean {
   return false;
 }
 
+/** Where a click is tried on a control: its middle, and then four points around it. */
+const MIDDLE: [number, number][] = [[0.5, 0.5]];
+const AROUND: [number, number][] = [[0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]];
+
 /**
  * What a click on a control in the window lands on, when that is not the
- * control: what is in front of it at its middle. Nothing when a click at its
- * middle, or at any of four points around it, reaches it.
+ * control: what is in front of it at its middle. Nothing when a click at any
+ * of the points tried reaches it.
  */
-function inFrontOf(el: Element, seen: DOMRect, ignore: Element, frame?: FrameView): Element | undefined {
+function inFrontOf(el: Element, seen: DOMRect, ignore: Element, frame: FrameView | undefined, points: [number, number][]): Element | undefined {
   // What can be clicked is in the window, and in a frame, in the frame's window too.
   const [dx, dy] = frame ? [frame.dx, frame.dy] : [0, 0];
   const left = Math.max(seen.left, -dx, frame ? 0 : -Infinity);
@@ -1647,12 +1662,13 @@ function inFrontOf(el: Element, seen: DOMRect, ignore: Element, frame?: FrameVie
   if (right - left < 1 || bottom - top < 1) return undefined;
   const area = (right - left) * (bottom - top);
   let first: Element | undefined;
-  for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]] as const) {
-    const hit = hitAt(left + (right - left) * fx, top + (bottom - top) * fy, ignore, frame);
+  for (const [fx, fy] of points) {
+    const hit = hitFor(el, left + (right - left) * fx, top + (bottom - top) * fy, ignore, frame);
     if (reaches(el, area, hit)) return undefined;
     first ??= hit;
   }
-  return first;
+  // What it is under, as drawn: a bar pinned to the window can be inside a component.
+  return first && first.ownerDocument === el.ownerDocument ? deepest(first, (left + right) / 2, (top + bottom) / 2) : first;
 }
 
 /** Whether a control has a <label> that can be seen, which is pressed for it. */
@@ -1700,6 +1716,8 @@ function fadingIn(box: Element): boolean {
   }
 }
 
+/** How long a reading may spend trying where a click on the controls in the window lands. */
+const MAX_TRYING_MS = 8;
 /** How many hidden controls are checked against the stylesheets' rules for focus while one page is read. */
 const MAX_FOCUS_CHECKED = 100;
 /** Properties a rule sets to bring a box into view, or to take it out of view until it has the keyboard. */
@@ -1799,7 +1817,7 @@ function shownOnFocus(el: Element): boolean {
  * The innermost such box comes first.
  */
 function layersOverPage(ignore: Element): Element[] {
-  const top = document.elementsFromPoint(window.innerWidth / 2, window.innerHeight / 2).find((el) => el !== ignore && !ignore.contains(el));
+  const top = hitFor(document.documentElement, window.innerWidth / 2, window.innerHeight / 2, ignore);
   const layers: Element[] = [];
   for (let node: Element | null = top ?? null; node && node !== document.body && node !== document.documentElement; node = node.parentElement) {
     const position = getComputedStyle(node).position;
@@ -1839,7 +1857,6 @@ function layerLabel(layer: Element): string {
 function keepReachable(candidates: Candidate[], ignore: Element, findLayer: boolean): { kept: Candidate[]; layer?: Element } {
   const facts = new Map<Element, BoxFacts>();
   const rtl = getComputedStyle(document.documentElement).direction === "rtl";
-  const kept: Candidate[] = [];
   const under: { c: Candidate; blocker: Element }[] = [];
   let checked = 0;
   const showsAnyway = (c: Candidate, box?: Element): boolean => {
@@ -1854,35 +1871,58 @@ function keepReachable(candidates: Candidate[], ignore: Element, findLayer: bool
     } else return false;
     return true;
   };
+  /** Controls in the window to try a click on, and the part of each that is drawn. */
+  const toTry: { c: Candidate; seen: DOMRect; clear: boolean }[] = [];
+  const left = new Set<Candidate>();
   for (const c of candidates) {
-    const seen = seenOf(c.el, c.rect, facts);
-    const hover = !!c.state?.includes(SHOWS_ON_HOVER);
+    // One wholly above or below the window is said to be so already. Only one level with it can be clipped out of view
+    // across it, or lie under something: the boxes around the others are not looked at, which on a long page is most.
+    // One that looks parked outside the page may be scrolled out of a box that is, and is looked at too.
     const view = c.el.ownerDocument.defaultView ?? window;
+    const pageRtl = c.frame ? getComputedStyle(c.el.ownerDocument.documentElement).direction === "rtl" : rtl;
+    const level = c.rect.bottom > 0 && c.rect.top < view.innerHeight;
+    const seen: Seen = level || parkedOutside(c.rect, false, pageRtl, view) ? seenOf(c.el, c.rect, facts) : { rect: c.rect };
+    const hover = !!c.state?.includes(SHOWS_ON_HOVER);
     if (seen.scroll) {
       c.offscreen ??= seen.scroll;
-      kept.push(c);
       continue;
     }
-    if (seen.hidden || parkedOutside(c.rect, !!seen.fixed, c.frame ? getComputedStyle(c.el.ownerDocument.documentElement).direction === "rtl" : rtl, view)) {
+    if (seen.hidden || parkedOutside(c.rect, !!seen.fixed, pageRtl, view)) {
       // A tick box or a switch hidden away and drawn by its label is pressed through the label.
-      if (shownLabel(c.el, facts) || (!hover && showsAnyway(c))) kept.push(c);
+      if (!shownLabel(c.el, facts) && (hover || !showsAnyway(c))) left.add(c);
       continue;
     }
     // The field that has the keyboard is typed in, whatever is drawn over it, like the list it opened.
     if (!hover && !c.offscreen && seen.rect && c.el !== document.activeElement) {
-      const blocker = inFrontOf(c.el, seen.rect, ignore, c.frame);
-      if (blocker) {
-        // See-through and under something else: nobody sees it, and a click there takes the other thing. One fading in is on its way.
-        const clear = seeThroughBox(c.el);
-        if (clear && !fadingIn(clear)) {
-          if (showsAnyway(c, clear)) kept.push(c);
-          continue;
-        }
-        under.push({ c, blocker });
-      }
+      const clear = typeof c.el.checkVisibility === "function" && !c.el.checkVisibility({ opacityProperty: true });
+      toTry.push({ c, seen: seen.rect, clear });
     }
-    kept.push(c);
   }
+  // A click is tried on each, while the time allowed lasts: a page can make every try slow. A see-through one first,
+  // since only a try tells whether it is drawn over its own picture, then the nearest to the top and the foot of the
+  // window, where bars are pinned.
+  const edge = (r: DOMRect) => Math.min(Math.max(r.top, 0), Math.max(window.innerHeight - r.bottom, 0));
+  toTry.sort((a, b) => Number(b.clear) - Number(a.clear) || edge(a.seen) - edge(b.seen));
+  // Each is tried at its middle first, and only one a click there misses is tried around it.
+  const started = performance.now();
+  const missed: { c: Candidate; seen: DOMRect; clear: boolean; blocker: Element }[] = [];
+  for (const one of toTry) {
+    if (performance.now() - started > MAX_TRYING_MS) break;
+    const blocker = inFrontOf(one.c.el, one.seen, ignore, one.c.frame, MIDDLE);
+    if (blocker) missed.push({ ...one, blocker });
+  }
+  for (const { c, seen, clear, blocker } of missed) {
+    if (performance.now() - started > MAX_TRYING_MS) break;
+    if (!inFrontOf(c.el, seen, ignore, c.frame, AROUND)) continue;
+    // See-through and under something else: nobody sees it, and a click there takes the other thing. One fading in is on its way.
+    const box = clear ? seeThroughBox(c.el) : undefined;
+    if (box && !fadingIn(box)) {
+      if (!showsAnyway(c, box)) left.add(c);
+      continue;
+    }
+    under.push({ c, blocker });
+  }
+  const kept = left.size ? candidates.filter((c) => !left.has(c)) : candidates.slice();
   if (!under.length) return { kept };
   if (findLayer) {
     const covered = new Set(under.map((u) => u.c));
@@ -2782,36 +2822,44 @@ export function findOpenModal(ignore: Element): Element | undefined {
 
 const DIALOGS = 'dialog, [role="dialog"], [role="alertdialog"]';
 
+/** Whether a dialog says it is modal, or the browser shows it as modal. */
+function isModalDialog(dialog: Element): boolean {
+  if (dialog.getAttribute("aria-modal") === "true") return true;
+  try {
+    return dialog.matches(":modal");
+  } catch {
+    // :modal unsupported. What the dialog says of itself stands.
+    return false;
+  }
+}
+
 /**
  * A modal dialog drawn inside a component's open shadow root, which a search
  * of the page does not see into. It is looked for where a dialog that shuts
- * out the page is seen, at the middle of the window: in the shadow roots of
- * what is drawn there, the innermost first. Only one that says it is modal,
- * or that the browser shows as modal, counts.
+ * out the page is seen, at the middle of the window: around what is drawn
+ * there, which may be the words the page put into the dialog's slot, and
+ * beside it in the shadow roots it is drawn in, where a backdrop lies beside
+ * its dialog. Only one that says it is modal, or that the browser shows as
+ * modal, counts.
  */
 function modalInShadow(ignore: Element): Element | undefined {
   const x = window.innerWidth / 2;
   const y = window.innerHeight / 2;
-  const roots: ShadowRoot[] = [];
-  let hit = document.elementsFromPoint(x, y).find((el) => el !== ignore && !ignore.contains(el));
+  let hit: Element | undefined = document.elementFromPoint(x, y) ?? undefined;
+  if (hit && (hit === ignore || ignore.contains(hit))) hit = document.elementsFromPoint(x, y).find((el) => el !== ignore && !ignore.contains(el));
   for (let depth = 0; hit?.shadowRoot && depth < 30; depth++) {
-    const root: ShadowRoot = hit.shadowRoot;
-    roots.unshift(root);
-    const inner: Element | undefined = root.elementsFromPoint(x, y).find((el) => el !== hit);
+    const outer: Element = hit;
+    const inner: Element | undefined = outer.shadowRoot!.elementsFromPoint(x, y).find((el) => el !== outer);
     if (!inner) break;
     hit = inner;
   }
+  const roots: ShadowRoot[] = [];
+  for (let node: Node | null = hit ?? null, depth = 0; node && depth < 200; node = drawnParent(node), depth++) {
+    if (isShadowRoot(node)) roots.push(node);
+    else if (isElement(node) && node.matches(DIALOGS) && isModalDialog(node) && isRendered(node)) return node;
+  }
   for (const root of roots) {
-    for (const dialog of Array.from(root.querySelectorAll(DIALOGS))) {
-      if (!isRendered(dialog)) continue;
-      let modal = dialog.getAttribute("aria-modal") === "true";
-      try {
-        modal ||= dialog.matches(":modal");
-      } catch {
-        // :modal unsupported. What the dialog says of itself stands.
-      }
-      if (modal) return dialog;
-    }
+    for (const dialog of Array.from(root.querySelectorAll(DIALOGS))) if (isRendered(dialog) && isModalDialog(dialog)) return dialog;
   }
   return undefined;
 }
