@@ -11,7 +11,7 @@ import type { PageReading, ReadControl } from "../src/intake/reader.ts";
 import { day, fromHtml, fromText } from "../src/intake/docs.ts";
 import { toPageNode } from "../web/worker/page-node.ts";
 import { buildSystemPrompt, buildUserMessage, renderSiteMap } from "../src/server/prompt.ts";
-import { DEFAULT_APPEARANCE, normalizePath, cleanText, namedIn, questionKey, type PageNode, type SiteContext } from "../src/shared/types.ts";
+import { DEFAULT_APPEARANCE, normalizePath, cleanText, namedIn, questionKey, standingAlone, type PageNode, type SiteContext } from "../src/shared/types.ts";
 
 test("paths collapse ids and drop the query string", () => {
   assert.equal(normalizePath("https://a.com/orders/8812?tab=1#x"), "/orders/:id");
@@ -51,6 +51,34 @@ test("a phone number is masked, and a date, a price or a model number is not", (
   assert.equal(cleanText("2026-11-01 - 2026-11-15"), "2026-11-01 - 2026-11-15");
   assert.equal(cleanText("15.11.2026 603 646 1110"), "15.11.2026 [number]");
   assert.equal(cleanText("Galaxy S II I9100 1.249,00 EUR"), "Galaxy S II I9100 1.249,00 EUR");
+});
+
+test("eight digits in groups are a phone number, unless they start on a word; a date in figures is left readable", () => {
+  // Phone numbers in Norway, Denmark and Singapore have eight digits.
+  assert.equal(cleanText("Mobile 912 34 567, home 22 33 44 55"), "Mobile [number], home [number]");
+  assert.equal(cleanText("Call 9123 4567"), "Call [number]");
+  assert.equal(cleanText("Ola +47 4123 4567"), "Ola [number]");
+  assert.equal(cleanText("Ref 12-34-56-78"), "Ref [number]");
+  // Seven digits in groups are a count, a price or a size.
+  assert.equal(cleanText("1 000 000 users"), "1 000 000 users");
+  // Digits that start right after a letter belong to the word. What follows them is looked at on its own.
+  assert.equal(cleanText("Galaxy S II I9100 1.249,00 EUR"), "Galaxy S II I9100 1.249,00 EUR");
+  assert.equal(cleanText("Room A1 912 34 567"), "Room A1 [number]");
+  assert.equal(cleanText("IBAN DE89 3704 0044 0532 0130 00"), "IBAN DE89 [number]");
+  assert.equal(cleanText("ID12345678"), "ID[number]");
+  // Dates stay, as "my latest invoice" needs them, birth dates among them.
+  assert.equal(cleanText("Born 1984-03-07"), "Born 1984-03-07");
+  assert.equal(cleanText("Born 07.03.1984, call 912 34 567"), "Born 07.03.1984, call [number]");
+});
+
+test("what the visitor named counts as on the page only where it stands on its own there", () => {
+  const own = namedIn("find order 13344 for sam@acme.com");
+  // As the page reading gives the page: with the visitor's values left readable only where they stand on their own.
+  const read = (text: string) => cleanText(text, 200, own);
+  assert.deepEqual(standingAlone(read("Order 913344, ref 13344-5566, for pat@acme.com"), own), []);
+  assert.deepEqual(standingAlone(read("Order 13344 for sam@acme.com"), own), ["sam@acme.com", "13344"]);
+  assert.deepEqual(standingAlone(read("Orders (13344), (99999)"), own), ["13344"]);
+  assert.deepEqual(standingAlone("SAM@ACME.COM", own), ["sam@acme.com"]);
 });
 
 test("what the visitor named in their own question stays readable, and only when the whole of it matches", () => {

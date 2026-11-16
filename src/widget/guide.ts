@@ -5,6 +5,7 @@ import {
   describeElement,
   MAX_ASKED,
   namedIn,
+  standingAlone,
   type GuideOutcome,
   type GuideReport,
   type HandoffRequest,
@@ -351,12 +352,17 @@ export class Guide {
   private shownOwn: ReadonlySet<string> = new Set();
   private noteShownOwn(snapshot: Snapshot) {
     const own = namedIn(this.goal);
-    if (!own.size) {
-      this.shownOwn = own;
-      return;
-    }
-    const sent = JSON.stringify(snapshot).toLowerCase();
-    this.shownOwn = new Set([...own].filter((value) => sent.includes(value.toLowerCase())));
+    const shown = new Set<string>();
+    // Only where it stands on its own on the page, by the page reading's own rule (`standingAlone`): every piece of
+    // text the reading sends, and nothing else in the request. A value that is only part of something on the page,
+    // or only in its address, is not shown.
+    const look = (value: unknown): void => {
+      if (typeof value === "string") for (const found of standingAlone(value, own)) shown.add(found);
+      else if (Array.isArray(value)) value.forEach(look);
+      else if (value && typeof value === "object") Object.values(value).forEach(look);
+    };
+    if (own.size) look(snapshot);
+    this.shownOwn = shown;
   }
 
   /** A question. `act` is set when the visitor pressed Do it, and Haptic then acts if the site and the page allow it. */

@@ -125,6 +125,18 @@ test("while Haptic acts, a reply that is stuck does nothing, even with something
   }
 });
 
+test("a value the visitor named stays readable in the question only where the page shows it standing on its own, not as part of something else", async () => {
+  const session = await start(`<h1>Accounts</h1><p>Account 1334455</p><p>Ref 13344-5566</p><button id="move" type="button">Move money</button>`, () => words("Use Move money."));
+  try {
+    await session.ask("move 13344 to 1334455");
+    await session.untilAsked(1);
+    // 13344 is inside 1334455 and in a reference with a dash, and the page shows it nowhere on its own: masked.
+    assert.equal(session.requests[0]?.goal, "move [number] to 1334455");
+  } finally {
+    await session.close();
+  }
+});
+
 // No guide that got there goes unreported. A visitor who has what they asked for on screen often just closes the
 // tab, so a guide is reported the moment its ending is known, and a page that goes with its ending still open
 // reports it as it goes. These were found in review: on each, nothing at all used to reach the server. The third,

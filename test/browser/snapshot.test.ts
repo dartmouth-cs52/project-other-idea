@@ -119,6 +119,18 @@ test("with no number in the question every long number is masked", { skip }, asy
   assert.ok(snapshot.text.includes("Account Number: [number]"));
 });
 
+test("phone numbers of eight digits are masked wherever the page shows them, and a birth date is left readable", { skip }, async () => {
+  // From the review: a Norwegian patient page, where every phone number has eight digits.
+  const snapshot = await read(`<h1>Patient Kari Nordmann</h1><p>Mobile 912 34 567, home 22 33 44 55</p><p>Born 1984-03-07</p>
+    <table><tr style="cursor:pointer"><td>Ola</td><td>+47 4123 4567</td></tr></table><button>Call 9123 4567</button>`);
+  const sent = JSON.stringify(snapshot);
+  for (const phone of ["912 34 567", "22 33 44 55", "4123 4567", "9123 4567"]) assert.ok(!sent.includes(phone), `${phone} was sent: ${sent}`);
+  assert.ok(snapshot.text.includes("Mobile [number], home [number]"), JSON.stringify(snapshot.text));
+  assert.ok(snapshot.elements.some((element) => element.label === "Call [number]"), sent);
+  // A date in figures is not masked: "my latest invoice" needs it. The privacy page says so.
+  assert.ok(snapshot.text.includes("Born 1984-03-07"), JSON.stringify(snapshot.text));
+});
+
 test("a date is not masked, and a row is named by it", { skip }, async () => {
   const snapshot = await read(`<table>
     <tr><th>Date</th><th>Transaction</th></tr>

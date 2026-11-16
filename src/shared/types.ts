@@ -632,8 +632,12 @@ const PHONE = /\+?\d[\d\s().-]{7,}\d/g;
 const LONG_DIGITS = /\d{5,}/g;
 /** A date in figures, standing on its own among such digits: 2026-11-15, 15.11.2026, 11-15-26. */
 const DATE = /(^|[\s(])(\d{4}[-.]\d{1,2}[-.]\d{1,2}|\d{1,2}[-.]\d{1,2}[-.](?:\d{4}|\d{2}))(?=$|[\s)])/g;
-/** Fewer digits than this is a price, a size or a model number, not a phone number. */
-const MIN_PHONE_DIGITS = 9;
+/**
+ * Digits written in groups, as a phone or card number is, are masked from this
+ * many on. Eight, because a phone number in Norway, Denmark and Singapore has
+ * eight ("912 34 567", "22 33 44 55"). Fewer is a price or a size.
+ */
+const MIN_PHONE_DIGITS = 8;
 /** A question names one or two things. More than this is not a question. */
 const MAX_OWN = 8;
 
@@ -654,6 +658,10 @@ export function namedIn(question: string): Set<string> {
 /**
  * Masks phone numbers and long runs of digits. A date is left alone, and so
  * is a run of digits that is one of `own`, the things the visitor named.
+ * Digits that start right after a letter belong to a word, like the model
+ * number in "Galaxy S II I9100 1.249,00 EUR": they are no phone number, and
+ * what follows them is looked at on its own. A run of five or more digits in
+ * a row is masked all the same.
  */
 function maskNumbers(text: string, own?: ReadonlySet<string>): string {
   const whole = (piece: string): string => piece.replace(/\+?\d(?:[\d\s().-]*\d)?/, "[number]");
@@ -666,18 +674,36 @@ function maskNumbers(text: string, own?: ReadonlySet<string>): string {
     if (piece.replace(/\D/g, "").length < MIN_PHONE_DIGITS) return piece;
     return own?.size ? around(piece) : whole(piece);
   };
+  const maskCandidate = (candidate: string): string => {
+    let out = "";
+    let from = 0;
+    for (const date of candidate.matchAll(DATE)) {
+      const start = date.index + (date[1] ?? "").length;
+      out += maskRun(candidate.slice(from, start)) + (date[2] ?? "");
+      from = start + (date[2] ?? "").length;
+    }
+    return out + maskRun(candidate.slice(from));
+  };
   return text
-    .replace(PHONE, (candidate) => {
-      let out = "";
-      let from = 0;
-      for (const date of candidate.matchAll(DATE)) {
-        const start = date.index + (date[1] ?? "").length;
-        out += maskRun(candidate.slice(from, start)) + (date[2] ?? "");
-        from = start + (date[2] ?? "").length;
-      }
-      return out + maskRun(candidate.slice(from));
+    .replace(PHONE, (candidate: string, at: number, whole: string) => {
+      if (at === 0 || !/\p{L}/u.test(whole[at - 1] ?? "")) return maskCandidate(candidate);
+      const glued = /^\+?\d+/.exec(candidate)?.[0] ?? "";
+      return glued + maskCandidate(candidate.slice(glued.length));
     })
     .replace(LONG_DIGITS, (digits) => (own?.has(digits) ? digits : "[number]"));
+}
+
+/**
+ * Which of `own`, the values the visitor named (`namedIn`), stand on their own
+ * in `text`, by the rule the page reading leaves them readable by: a whole
+ * email address, or a whole run of digits. Text read with `own` left readable
+ * holds one unmasked only where it stood on its own on the page.
+ */
+export function standingAlone(text: string, own: ReadonlySet<string>): string[] {
+  const found: string[] = [];
+  for (const email of text.match(EMAIL) ?? []) if (own.has(email.toLowerCase())) found.push(email.toLowerCase());
+  for (const digits of text.replace(EMAIL, " ").match(LONG_DIGITS) ?? []) if (own.has(digits)) found.push(digits);
+  return found;
 }
 
 /** Collapse whitespace, mask emails and long numbers, cap the length. `own` is what must stay readable: see `namedIn`. */
