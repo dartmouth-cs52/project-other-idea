@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import { emailText, INSTALL_FROM, UnsafeText } from "../web/worker/developer-email.ts";
 import {
   EMAILS_PER_ADDRESS,
+  EMAILS_PER_MAILBOX,
   EMAILS_PER_COMPANY,
   EMAILS_PER_PERSON,
   EMAILS_PER_SITE,
@@ -115,6 +116,9 @@ function call(
 }
 
 const site = (): Row => ({ id: SITE, company_id: ORG.id, origin: "https://app.example.com", context: {} });
+
+/** What every limit says, naming no cause, so a refusal never tells a company what another company did. */
+const LIMIT = { error: "You've reached today's limit for install emails. Copy the link instead." };
 
 describe("before anything is counted", () => {
   test("someone signed in to another company can't send for this site, and learns nothing about it", async () => {
@@ -430,13 +434,27 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     assert.equal((await call(sql(), { to: "ja.ne@example.org", key: press() }, { fetcher }))?.status, 200);
   });
 
+  test(`one company sends a mailbox ${EMAILS_PER_ADDRESS} a day, and everyone together ${EMAILS_PER_MAILBOX}, and a refusal names no cause`, async () => {
+    reset();
+    addSite("site_other0001", OTHER_ORG.id);
+    exec(DB, `insert into sites (id, company_id, name, origin, allowed_origins, context) values ('site_third0001', '00000000-0000-4000-8000-000000000003', 'C', 'https://c.example.com', '{https://c.example.com}', '{}')`);
+    const third = { org: { id: "00000000-0000-4000-8000-000000000003", name: "Third Co", role: "owner" }, site: "site_third0001", user: { ...COLLEAGUE, id: "00000000-0000-4000-8000-0000000000cc" } };
+    const other = { org: OTHER_ORG, site: "site_other0001", user: COLLEAGUE };
+    const { sent, fetcher } = resend();
+    for (let i = 0; i < EMAILS_PER_ADDRESS; i++) assert.equal((await call(sql(), { to: "dev@shared.example", key: press() }, { fetcher }))?.status, 200);
+    assert.deepEqual(await call(sql(), { to: "dev@shared.example", key: press() }, { fetcher }), { status: 429, body: LIMIT }, "this company has sent its three");
+    for (let i = 0; i < EMAILS_PER_ADDRESS; i++) assert.equal((await call(sql(), { to: "dev@shared.example", key: press() }, { fetcher, ...other }))?.status, 200, "another company still may");
+    assert.deepEqual(await call(sql(), { to: "dev@shared.example", key: press() }, { fetcher, ...third }), { status: 429, body: LIMIT }, "six in all, and the third is told no more than the others");
+    assert.equal(sent.length, EMAILS_PER_MAILBOX);
+  });
+
   test(`a site sends at most ${EMAILS_PER_SITE} a day, and deleting it and adding it again doesn't reset that`, async () => {
     reset();
     const { sent, fetcher } = resend();
     for (let i = 0; i < EMAILS_PER_SITE; i++) assert.equal((await call(sql(), { to: `dev${i}@example.com`, key: press() }, { fetcher }))?.status, 200, `email ${i + 1}`);
     const refused = await call(sql(), { to: "another@example.com", key: press() }, { fetcher });
     assert.equal(refused?.status, 429);
-    assert.match((refused?.body as { error: string }).error, /This site has sent 10 install emails today/);
+    assert.deepEqual(refused?.body, LIMIT);
     // What DELETE /api/app/sites/:id and then POST /api/app/sites do to the row.
     exec(DB, `delete from sites where id = '${SITE}'`);
     addSite(SITE);
@@ -453,12 +471,12 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     for (let i = 0; i < 12; i++) mine.push((await call(sql(), { to: `p${i}@example.com`, key: press() }, { fetcher, site: i % 3 === 0 ? SITE : `site_more000${i % 3}` }))?.status);
     assert.equal(mine.filter((status) => status === 200).length, EMAILS_PER_PERSON);
     const person = await call(sql(), { to: "late@example.com", key: press() }, { fetcher, site: "site_more0004" });
-    assert.match((person?.body as { error: string }).error, /You have sent 10 install emails today/);
+    assert.deepEqual(person?.body, LIMIT);
     // A colleague, on the other sites: the company stops at 20 in all.
     const theirs = [];
     for (let i = 0; i < 12; i++) theirs.push((await call(sql(), { to: `c${i}@example.com`, key: press() }, { fetcher, user: COLLEAGUE, site: i % 2 ? "site_more0003" : "site_more0004" }))?.status);
     assert.equal(theirs.filter((status) => status === 200).length, EMAILS_PER_COMPANY - EMAILS_PER_PERSON);
-    assert.match(((await call(sql(), { to: "z@example.com", key: press() }, { fetcher, user: COLLEAGUE, site: "site_more0004" }))?.body as { error: string }).error, /Your company has sent 20/);
+    assert.deepEqual((await call(sql(), { to: "z@example.com", key: press() }, { fetcher, user: COLLEAGUE, site: "site_more0004" }))?.body, LIMIT);
     assert.equal(sent.length, EMAILS_PER_COMPANY);
   });
 
@@ -490,15 +508,16 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     assert.equal(sent.length, EMAILS_PER_SITE);
   });
 
-  test("the mailbox's lock holds its limit when three companies' presses overlap", async () => {
+  test("the mailbox's lock holds the cap across companies when their presses overlap", async () => {
     reset();
     addSite("site_other0001", OTHER_ORG.id);
     addSite("site_third0001", THIRD_ORG.id);
     const { sent, fetcher } = resend();
     const who = [{}, { org: OTHER_ORG, site: "site_other0001", user: COLLEAGUE }, { org: THIRD_ORG, site: "site_third0001", user: THIRD }];
+    // Each company may send it three, so only the cap across everyone holds them to six.
     const answers = await Promise.all(Array.from({ length: 9 }, (_, i) => call(slowWrites(), { to: "shared@example.net", key: press() }, { fetcher, ...who[i % 3] })));
-    assert.equal(answers.filter((answer) => answer?.status === 200).length, EMAILS_PER_ADDRESS);
-    assert.equal(sent.length, EMAILS_PER_ADDRESS);
+    assert.equal(answers.filter((answer) => answer?.status === 200).length, EMAILS_PER_MAILBOX);
+    assert.equal(sent.length, EMAILS_PER_MAILBOX);
   });
 
   test("records older than a day are deleted with the next email, and by the daily run", async () => {

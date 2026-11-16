@@ -1,7 +1,7 @@
 -- Each install email a company sends its developer from the dashboard
 -- ("Email it to my developer", web/worker/setup-api.ts), kept only to hold the
--- limits: in any 24 hours, 3 to one mailbox, 10 from a site, 20 from a company
--- and 10 from one person.
+-- limits: in any 24 hours, 3 from one company to one mailbox and 6 to it from
+-- everyone, 10 from a site, 20 from a company and 10 from one person.
 --
 -- The address itself is never kept: `recipient` is a hash of the mailbox it
 -- reaches, written the same way however the address was (case, a +tag, dots

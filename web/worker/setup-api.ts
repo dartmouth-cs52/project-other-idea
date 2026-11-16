@@ -37,8 +37,10 @@ interface ReadingSoFar {
   failed: { url: string; reason: string }[];
 }
 
-/** The most install emails in any 24 hours: to one mailbox, however its address is written, */
+/** The most install emails in any 24 hours: from one company to one mailbox, however its address is written, */
 export const EMAILS_PER_ADDRESS = 3;
+/** to one mailbox from everyone together, */
+export const EMAILS_PER_MAILBOX = 6;
 /** from one site, */
 export const EMAILS_PER_SITE = 10;
 /** from one company, across its sites, */
@@ -217,23 +219,32 @@ export async function forgetOldEmails(sql: Sql): Promise<void> {
 
 interface Counts {
   mailbox: number;
+  everyone: number;
   site: number;
   company: number;
   person: number;
 }
 
-/** The limit an email would go past, if any, as the sentence to show. The mailbox's is said under the address field. */
-function overLimit(counts: Counts): { error: string; field?: string } | undefined {
-  if (counts.mailbox >= EMAILS_PER_ADDRESS) return { error: `That address can't be sent more install emails today. ${COPY_INSTEAD}`, field: "to" };
-  if (counts.site >= EMAILS_PER_SITE) return { error: `This site has sent ${EMAILS_PER_SITE} install emails today, which is the most for a day. ${COPY_INSTEAD}` };
-  if (counts.company >= EMAILS_PER_COMPANY) return { error: `Your company has sent ${EMAILS_PER_COMPANY} install emails today, which is the most for a day. ${COPY_INSTEAD}` };
-  if (counts.person >= EMAILS_PER_PERSON) return { error: `You have sent ${EMAILS_PER_PERSON} install emails today, which is the most for a day. ${COPY_INSTEAD}` };
-  return undefined;
+/**
+ * Every limit says the same, naming no cause. A company told "that address has had its emails" would learn
+ * that another company emailed it today.
+ */
+const LIMIT = "You've reached today's limit for install emails. Copy the link instead.";
+
+function overLimit(counts: Counts): boolean {
+  return (
+    counts.mailbox >= EMAILS_PER_ADDRESS ||
+    counts.everyone >= EMAILS_PER_MAILBOX ||
+    counts.site >= EMAILS_PER_SITE ||
+    counts.company >= EMAILS_PER_COMPANY ||
+    counts.person >= EMAILS_PER_PERSON
+  );
 }
 
 /** The day's counts for one email, worked out in the database. $1 mailbox, $2 site, $3 company, $4 person. */
 const COUNTS = `
-  count(*) filter (where e.recipient = $1)::int as mailbox,
+  count(*) filter (where e.recipient = $1 and e.company_id = $3)::int as mailbox,
+  count(*) filter (where e.recipient = $1)::int as everyone,
   count(*) filter (where e.site_id = $2)::int as site,
   count(*) filter (where e.company_id = $3)::int as company,
   count(*) filter (where e.sender = $4)::int as person
@@ -254,9 +265,10 @@ async function pressOf(sql: Sql, key: string): Promise<Press | undefined> {
 
 /**
  * Emails the install steps to a developer. Only someone signed in to the
- * company that owns the site gets here. In any 24 hours one mailbox gets at
- * most 3, a site sends 10, a company 20 and one person 10, counted in their
- * own table so deleting a site doesn't reset them.
+ * company that owns the site gets here. In any 24 hours a company sends one
+ * mailbox at most 3 and everyone together 6, a site sends 10, a company 20 and
+ * one person 10, counted in their own table so deleting a site doesn't reset
+ * them. A refusal names no cause.
  *
  * The browser makes a key for each press of Send, hashed here with the site
  * and the mailbox, so the same key with another address is another email, held
@@ -300,24 +312,23 @@ async function emailDeveloper(call: SetupRequest, id: string, input: Record<stri
       // Said plainly first. Then checked again as the row is written, after taking the locks for this
       // company and this mailbox, so presses at the same moment, here or at another company, take turns.
       const counts = ((await sql.query(`select ${COUNTS}`, [recipient, site.id, org.id, user.id]))[0] ?? {}) as Counts;
-      const over = overLimit(counts);
-      if (over) return refuse(429, over.error, over.field);
+      if (overLimit(counts)) return refuse(429, LIMIT);
       const [, , kept] = await sql.transaction([
         sql.query(`select pg_advisory_xact_lock(hashtext('developer-email company ' || $1)), pg_advisory_xact_lock(hashtext('developer-email mailbox ' || $2))`, [org.id, recipient]),
         sql.query(`delete from developer_emails where sent_at < now() - interval '1 day'`),
         sql.query(
           `insert into developer_emails (key, company_id, site_id, sender, recipient)
           select $5, $3, $2, $4, $1 from (select ${COUNTS}) counts
-          where counts.mailbox < $6 and counts.site < $7 and counts.company < $8 and counts.person < $9
+          where counts.mailbox < $6 and counts.everyone < $7 and counts.site < $8 and counts.company < $9 and counts.person < $10
           on conflict (key) do nothing
           returning key`,
-          [recipient, site.id, org.id, user.id, key, EMAILS_PER_ADDRESS, EMAILS_PER_SITE, EMAILS_PER_COMPANY, EMAILS_PER_PERSON],
+          [recipient, site.id, org.id, user.id, key, EMAILS_PER_ADDRESS, EMAILS_PER_MAILBOX, EMAILS_PER_SITE, EMAILS_PER_COMPANY, EMAILS_PER_PERSON],
         ),
       ]);
       counted = (kept as unknown[]).length > 0;
       // Not written: a limit was reached meanwhile, or the same press got there first.
       if (!counted) press = await pressOf(sql, key);
-      if (!counted && !press) return refuse(429, "Too many emails at once. Wait a moment and try again.");
+      if (!counted && !press) return refuse(429, LIMIT);
     }
     if (!counted) {
       if (press!.state === "sent") return sentAnswer;
