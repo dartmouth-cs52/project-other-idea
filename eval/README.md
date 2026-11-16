@@ -258,7 +258,12 @@ These are other people's documentation sites. The browser sends nothing but GET 
 
 A toolkit is one file in `eval/toolkits/kits/`: where its demos are, how to find a demo's container, and for each kind of control what a visitor does, by role and visible text. The checks are shared, in `eval/toolkits/checks.ts`. Where a toolkit's documentation shows its demos inside iframes (Storybook sites, UI5's samples), the file opens each demo on its own page, which is how an app built with it would show it, and the iframe is counted separately.
 
-To compare the widget before and after a change, run the suite on each checkout with `--widget` and print the later results with `--compare` set to the earlier file.
+To compare the widget before and after a change, run the suite on each checkout with `--widget` and print the later results with `--compare` set to the earlier file. `eval/toolkits/results/before.json` holds the run on the widget as it was before round 2 of fixes (MUI, Ant Design, Fluent UI, Carbon and UI5 Web Components; AG Grid's site could not be loaded without sending a bot-check token, so it is not tested):
+
+```bash
+npm run eval:toolkits -- --widget ../merged-checkout
+npm run eval:toolkits -- --table eval/toolkits/results/<new file>.json --compare eval/toolkits/results/before.json
+```
 
 ## What this does not measure yet
 
