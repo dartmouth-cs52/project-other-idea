@@ -60,3 +60,63 @@ test("a visitor who clicks from the ask box into the page is not followed there"
     await session.close();
   }
 });
+
+test("a menu that takes the keyboard a while after the visitor began typing a question does not take the question's keys", async () => {
+  // UI5's menu: an entry the mouse crossed on its way to Haptic's launcher opens its submenu a moment later, and that takes the keyboard.
+  const page = `<h1>Files</h1><button id="open" type="button">Open menu</button>
+    <ul id="menu" role="menu" hidden style="position:absolute;top:60px;left:24px;margin:0;padding:4px;list-style:none;background:#fff;border:1px solid #999">
+      <li role="menuitem" tabindex="-1">New file</li><li id="sub" role="menuitem" tabindex="-1">Open from the cloud</li>
+    </ul>
+    <script>
+      const menu = document.getElementById('menu');
+      document.getElementById('open').addEventListener('click', () => {
+        menu.hidden = false;
+        setTimeout(() => document.getElementById('sub').focus(), 1200);
+      });
+      menu.addEventListener('keydown', (event) => { if (event.key === ' ') menu.hidden = true; });
+    </script>`;
+  const session = await start(page, () => words("Choose New file."));
+  try {
+    await session.page.locator("#open").click();
+    await session.page.locator("haptic-root .launcher").click();
+    await session.page.keyboard.type("what can I do here", { delay: 90 });
+    const typed = await session.page.evaluate(() => (document.querySelector("haptic-root")!.shadowRoot!.querySelector(".panel input") as HTMLInputElement).value);
+    assert.equal(typed, "what can I do here");
+    assert.equal(await session.page.evaluate(() => (document.getElementById("menu") as HTMLElement).hidden), false, "a key meant for the question reached the menu");
+    await session.page.keyboard.press("Enter");
+    const first = await session.untilAsked(1, 5000);
+    assert.equal(first.goal, "what can I do here");
+  } finally {
+    await session.close();
+  }
+});
+
+test("an element of a toolkit that takes the keyboard, and shows nothing put inside it, does not swallow the widget", async () => {
+  // UI5's menu entries: custom elements whose shadow root has no slot, so a child put in them is never drawn.
+  const page = `<h1>Files</h1><button id="open" type="button">Open menu</button>
+    <div id="menu" role="menu" hidden style="position:absolute;top:60px;left:24px;padding:4px;background:#fff;border:1px solid #999"><x-item id="sub"></x-item></div>
+    <script>
+      customElements.define('x-item', class extends HTMLElement {
+        connectedCallback() { this.attachShadow({ mode: 'open' }).innerHTML = '<li role="menuitem" tabindex="-1">Open from the cloud</li>'; }
+        focus() { this.shadowRoot.querySelector('li').focus(); }
+      });
+      document.getElementById('open').addEventListener('click', () => {
+        document.getElementById('menu').hidden = false;
+        setTimeout(() => document.getElementById('sub').focus(), 1200);
+      });
+    </script>`;
+  const session = await start(page, () => words("Choose Open from the cloud."));
+  try {
+    await session.page.locator("#open").click();
+    await session.page.locator("haptic-root .launcher").click();
+    await session.page.keyboard.type("what can I do here", { delay: 90 });
+    const state = await session.page.evaluate(() => {
+      const host = document.querySelector("haptic-root") ?? document.querySelector("x-item haptic-root");
+      return { drawn: !!host && host.getClientRects().length > 0, typed: (host!.shadowRoot!.querySelector(".panel input") as HTMLInputElement).value };
+    });
+    assert.ok(state.drawn, "the widget is not drawn");
+    assert.equal(state.typed, "what can I do here");
+  } finally {
+    await session.close();
+  }
+});

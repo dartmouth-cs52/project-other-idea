@@ -222,13 +222,20 @@ export class Ui {
    */
   place = () => {
     if (this.captor && !shown(this.captor)) this.captor = undefined;
-    const home = (this.inUse() && (this.captor ?? blockingDialog(this.host))) || document.documentElement;
+    let home = (this.inUse() && (this.captor ?? blockingDialog(this.host))) || document.documentElement;
     if (this.host.parentNode === home) this.raise();
     else {
       // Moving takes the keyboard from whatever of ours had it, so it is given back. So does the page taking away what we were in.
       const focused = (this.host.shadowRoot?.activeElement as HTMLElement | null) ?? (performance.now() - this.lostAt < 100 ? this.input : null);
       home.appendChild(this.host);
       this.show();
+      if (home !== document.documentElement && !this.host.getClientRects().length) {
+        // Not drawn there: an element of a toolkit that shows only its own parts, not what is put inside it.
+        this.captor = undefined;
+        home = document.documentElement;
+        home.appendChild(this.host);
+        this.show();
+      }
       focused?.focus();
     }
     this.watchHome(home);
@@ -347,16 +354,20 @@ export class Ui {
   /**
    * Notices the page pulling the keyboard out of the ask box the moment the
    * visitor put it there, which is what a menu that keeps the keyboard to
-   * itself does, and moves the widget into whatever took it. A visitor who
+   * itself does, or while they are typing in it, which is what a submenu
+   * does that opens a moment after the mouse crossed its entry. The widget
+   * moves into whatever took the keyboard and takes it back. A visitor who
    * moves the keyboard themselves, by clicking what took it or with Tab, is
    * left alone. Nothing is listened to outside our own element.
    */
   private watchKeyboard() {
     let wanted = 0;
     let tabbed = 0;
+    let typed = -Infinity;
     this.host.addEventListener("pointerdown", () => (wanted = performance.now()));
     this.input.addEventListener("keydown", (event) => {
       if (event.key === "Tab") tabbed = performance.now();
+      else typed = performance.now();
     });
     this.input.addEventListener("blur", (event) => {
       if (!event.relatedTarget) this.lostAt = performance.now();
@@ -364,10 +375,11 @@ export class Ui {
     this.input.addEventListener("focusout", (event) => {
       const to = event.relatedTarget;
       const now = performance.now();
-      if (!(to instanceof Element) || to === this.captor || to.contains(this.host) || now - wanted > 500 || now - tabbed < 500) return;
+      if (!(to instanceof Element) || to === this.captor || to.contains(this.host) || (now - wanted > 500 && now - typed > 1500) || now - tabbed < 500) return;
       // What the visitor clicked has the mouse over it. A list that takes the keyboard back does not.
       if (to.matches(":hover")) return;
-      this.captor = to;
+      // A field or a button holds nothing drawn: the widget goes beside it.
+      this.captor = to.matches("input, textarea, select, button, img, iframe, object, embed, video, audio, canvas") ? (to.parentElement ?? to) : to;
       this.place();
       this.input.focus();
     });
