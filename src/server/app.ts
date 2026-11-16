@@ -1,4 +1,5 @@
-import { STREAM_TYPE, type PublicSiteConfig, type SiteContext, type SnapElement, type Snapshot, type TurnRequest } from "../shared/types.ts";
+import { ACT_VERSION, STREAM_TYPE, type PublicSiteConfig, type SiteContext, type SnapElement, type Snapshot, type TurnRequest } from "../shared/types.ts";
+import { publicActing } from "./acting.ts";
 import { measureTurn, TurnError, type TurnMeasure } from "./model.ts";
 
 // What the Haptic server answers: the widget file, each site's public
@@ -49,6 +50,9 @@ export function createApp(parts: AppParts) {
       if (!site) return json(404, { error: "No site with that id. Check the data-site attribute on the script tag." });
       if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
       const config: PublicSiteConfig = { name: site.name, appearance: site.appearance };
+      // Only a site with acting on says anything about it, so every other site's settings read as they always have.
+      const acting = publicActing(site);
+      if (acting) config.acting = acting;
       return json(200, config);
     }
 
@@ -101,6 +105,43 @@ function streamTurn(parts: AppParts, site: SiteContext, turn: TurnRequest, cors:
     },
   });
   return new Response(body, { headers: { ...cors, "Content-Type": STREAM_TYPE, "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
+}
+
+/** One step in the server's log. Every value is a number, a yes or no, or a name from Haptic's own code. */
+export type TurnCounts = Record<string, string | number | boolean>;
+
+/**
+ * One step as counts, for the server's log: nothing the visitor wrote and
+ * nothing from their page, not even its address. The fields on acting are
+ * there only when the widget asked to act: whether it was answered in act
+ * mode (or why not), what the model said to do, what the server's check left
+ * and why it removed the rest, and whether the step was the hand-over.
+ */
+export function turnCounts(request: TurnRequest, measure: TurnMeasure): TurnCounts {
+  const { reply } = measure;
+  const counts: TurnCounts = {
+    haptic: "turn",
+    site: request.site,
+    version: request.version ?? 1,
+    step: request.step,
+    closing: request.closing === true,
+    model: measure.model,
+    ms: measure.ms,
+    msToTarget: measure.msToTarget,
+    status: reply.status,
+    pointed: reply.target !== null,
+    recheck: measure.recheck ? (measure.recheck.asked ? "asked" : "logged") : "none",
+  };
+  if (!measure.acting) return counts;
+  counts.acting = reply.mode === "act" ? "on" : (measure.acting.refused ?? "off");
+  if (reply.mode !== "act") return counts;
+  counts.capped = measure.acting.capped === true;
+  counts.modelDo = measure.acting.modelDo ?? "none";
+  counts.do = reply.do ?? "none";
+  counts.withheld = reply.withheld ?? "none";
+  counts.commits = reply.commits === true;
+  counts.handover = reply.status === "done" && reply.target !== null && reply.commits === true && !reply.do;
+  return counts;
 }
 
 /** The widget only works on origins the site lists. Requests with no Origin header (same-origin GETs, curl) pass. */
@@ -196,6 +237,8 @@ export function parseTurn(body: unknown, now: Date = new Date()): TurnRequest | 
   if (raw.closing === true) request.closing = true;
   // A widget from before the version number sends none. That is version 1, and is left unset.
   if (Number.isInteger(raw.version) && (raw.version as number) >= 1 && (raw.version as number) <= 9999) request.version = raw.version as number;
+  // Acting is asked for only in these exact words, and only by a widget that understands act replies. Whether the site allows it is decided for each step (acting.ts).
+  if (raw.mode === "act" && (request.version ?? 1) >= ACT_VERSION) request.mode = "act";
   const today = plausibleToday(raw.today, now);
   if (today) request.today = today;
   return request;

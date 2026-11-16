@@ -1,4 +1,4 @@
-import { createApp } from "../src/server/app.ts";
+import { createApp, turnCounts } from "../src/server/app.ts";
 import { configure } from "../src/server/model.ts";
 import type { SiteContext } from "../src/shared/types.ts";
 import widget from "../dist/widget.txt";
@@ -56,6 +56,14 @@ export default {
       widget: async () => widget,
       widgetMaxAge: 300,
       overLimit: async (key) => (env.TURN_LIMIT ? !(await env.TURN_LIMIT.limit({ key })).success : false),
+      // One line of counts per step, with nothing from the visitor or their page, so that how guides and acting go on a site can be seen.
+      onTurn: (turn, measure) => {
+        try {
+          console.log(JSON.stringify(turnCounts(turn, measure)));
+        } catch {
+          // A line that cannot be written must not cost the visitor their step.
+        }
+      },
     });
     try {
       const response = await app(request, request.headers.get("CF-Connecting-IP") ?? "");
