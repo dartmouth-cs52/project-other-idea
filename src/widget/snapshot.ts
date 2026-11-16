@@ -624,7 +624,8 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
       }
       if (!hoverBox) {
         // display:contents has no box of its own, but its children do.
-        if (getComputedStyle(el).display === "contents" && !holdsTyping(el)) for (const child of el.children) visit(child, scope, parentPointer, insideControl);
+        // What is inside it is where it is: in the open dialog or not, and inside a box that may turn out to be a wrapper.
+        if (getComputedStyle(el).display === "contents" && !holdsTyping(el)) for (const child of el.children) visit(child, scope, parentPointer, insideControl, inSvg, outside, held);
         return;
       }
     }

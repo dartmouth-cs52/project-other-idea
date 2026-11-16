@@ -245,3 +245,12 @@ test("a dialog that never says whether it is modal, and sits under a layer anoth
         <li role="option" tabindex="-1">Ten</li></ul></div>`);
   assert.equal(snapshot.dialog, undefined);
 });
+
+test("a control inside a box with no box of its own, in an open dialog, is in the dialog", { skip }, async () => {
+  // Web components and some layouts wrap their parts in an element drawn as display:contents.
+  const snapshot = await read(`<main><h1>Page</h1><p>Words behind the dialog.</p></main>
+    <div role="dialog" aria-modal="true" aria-label="Settings" style="position:fixed;left:100px;top:100px;width:300px;height:200px;overflow:auto;background:#fff">
+      <div style="display:contents"><button>Near</button><div style="height:600px"></div><button>Far down</button></div></div>`);
+  assert.equal(snapshot.dialog, "Settings");
+  assert.deepEqual(lines(snapshot).map((line) => line.split(" [")[0]), ['button "Near"', 'button "Far down"']);
+});
