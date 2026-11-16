@@ -105,6 +105,15 @@ test("a field cut down to nothing inside the box that draws it, as a slider's in
   assert.deepEqual(lines(snapshot), ['slider "Volume" [Sound]']);
 });
 
+test("a see-through tick box over its own square, under a list that opened, is still listed", { skip }, async () => {
+  const tick = (name: string) =>
+    `<label style="display:block;height:30px"><span style="position:relative;display:inline-block;width:16px;height:16px;border:1px solid #999">
+      <input type="radio" name="strength" style="position:absolute;inset:0;opacity:0;margin:0;z-index:1"></span> ${name}</label>`;
+  const snapshot = await read(`<form><h2>Password</h2>${tick("Strong")}${tick("Weak")}</form>
+    <div role="listbox" aria-label="Template" style="position:absolute;left:0;top:40px;width:300px;height:200px;background:#fff;z-index:5"><div role="option">First</div><div role="option">Second</div></div>`);
+  assert.deepEqual(lines(snapshot), ['radio "Strong" [form › Password]', 'radio "Weak" [form › Password]', 'option "First" [list › Template]', 'option "Second" [list › Template]']);
+});
+
 // Under something pinned to the window ----------------------------------------------
 
 test("a control under a header pinned to the window is above the visible area, and one under a notice pinned to its foot is below", { skip }, async () => {

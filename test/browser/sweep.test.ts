@@ -28,8 +28,10 @@ test("a control that shows only a picture is named by the picture's aria-label, 
     <button><span role="img" aria-label="Filter cards" style="display:inline-block;width:16px;height:16px"></span></button>
     <a href="/home"><svg width="16" height="16"><title>Trello</title><path d="M0 0h16v16H0z"/></svg></a>
     <a href="/help"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="Help" width="16" height="16"></a>
-    <button><svg aria-hidden="true" aria-label="Never read" width="16" height="16"></svg></button></main>`);
-  assert.deepEqual(lines(snapshot), ['button "Copy" [main]', 'button "Filter cards" [main]', 'link "Trello" [main] → /home', 'link "Help" [main] → /help', 'button [main]']);
+    <button><svg aria-hidden="true" aria-label="Never read" width="16" height="16"></svg></button>
+    <button><span role="img" aria-label="setting" class="anticon anticon-setting" style="display:inline-block;width:16px;height:16px"></span></button></main>`);
+  // Ant Design names each icon by its own name, which is listed as the icon and not again as the name.
+  assert.deepEqual(lines(snapshot), ['button "Copy" [main]', 'button "Filter cards" [main]', 'link "Trello" [main] → /home', 'link "Help" [main] → /help', 'button [main]', "button icon:setting [main]"]);
 });
 
 test("a control is named by the words a component inside it draws in its shadow root, and by what the page put in its slot", { skip }, async () => {

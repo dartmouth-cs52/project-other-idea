@@ -1957,9 +1957,11 @@ function keepReachable(candidates: Candidate[], ignore: Element, findLayer: bool
       reached.add(c);
       continue;
     }
-    // See-through and under something else: nobody sees it, and a click there takes the other thing. One fading in is on its way.
+    // See-through and under something else: nobody sees it, and a click there takes the other thing. One fading in is on
+    // its way. A field that is see-through itself, over the box of about its size that draws it, as a styled tick box is,
+    // is seen as that box: if a list that opened lies over it, it is under the list like any other control.
     const box = clear ? seeThroughBox(c.el) : undefined;
-    if (box && !fadingIn(box)) {
+    if (box && !fadingIn(box) && !(box === c.el && drawnByItsBox(c.el, facts))) {
       if (!showsAnyway(c, box)) left.add(c);
       continue;
     }
@@ -2605,7 +2607,8 @@ function pictureName(el: Element): string {
       .trim();
     if (byIds) return byIds;
     const label = picture.getAttribute("aria-label")?.trim();
-    if (label) return label;
+    // A label that only says the icon's own name, as a library of icons gives each one, is the icon, which is listed as such.
+    if (label) return label.toLowerCase().replace(/\s+/g, "-") === iconOf(picture) ? "" : label;
     if (isTag(picture, "img")) return picture.alt.trim();
     const title = picture.tagName === "svg" ? Array.from(picture.children).find((child) => child.tagName === "title") : undefined;
     return title?.textContent?.trim() ?? "";
