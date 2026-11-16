@@ -1437,6 +1437,30 @@ function loadingMark(ignore: Element): Element | undefined {
   return undefined;
 }
 
+/** A transition or animation that ends later than this is part of the page, not something on its way in or out. */
+const LONGEST_MOVE_MS = 1000;
+
+/**
+ * How long until the page's transitions and animations now running have
+ * ended, counting only those that end within a second: a list or a dialog
+ * sliding in or fading out. Ours, and those that never end, like a spinner's,
+ * do not count.
+ */
+function stillMoving(ignore: Element): number {
+  if (typeof document.getAnimations !== "function") return 0;
+  let longest = 0;
+  for (const animation of document.getAnimations()) {
+    if (animation.playState !== "running") continue;
+    const effect = animation.effect as KeyframeEffect | null;
+    const target = effect?.target;
+    if (!effect || !target || isWithin(ignore, target)) continue;
+    const { endTime, localTime } = effect.getComputedTiming();
+    const left = Number(endTime) - Number(localTime ?? 0);
+    if (Number.isFinite(left) && left > 0 && left <= LONGEST_MOVE_MS) longest = Math.max(longest, left / Math.abs(animation.playbackRate || 1));
+  }
+  return longest;
+}
+
 interface Settling {
   quietMs?: number;
   maxMs?: number;
@@ -1478,6 +1502,9 @@ export function settle(ignore: Element, { quietMs = 300, maxMs = 3000, since, us
       if (mark) return restart();
       const more = requests.stillComing(since, performance.now(), fetches, answered);
       if (more > 0) return restart(more);
+      // A box that fades or slides away changes nothing more in the page until it is gone, and is not to be read on its way out.
+      const moving = stillMoving(ignore);
+      if (moving > 0) return restart(moving + 30);
       finish();
     };
     const restart = (ms = quietMs) => {

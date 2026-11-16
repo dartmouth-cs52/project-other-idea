@@ -180,3 +180,31 @@ test("a key that only scrolls a long page, pressed while a sentence is up, is no
     await session.close();
   }
 });
+
+test("a dialog that fades out after Close is not read while it fades: the page is read once it is gone", async () => {
+  // Ant Design's drawer and Material UI's pickers: the class that starts the fade is the last change to the page until the box is taken away.
+  const page = `<h1>Settings</h1><button type="button">Edit profile</button>
+    <style>#drawer { transition: opacity 600ms linear } #drawer.leaving { opacity: 0 }</style>
+    <div id="drawer" role="dialog" aria-modal="true" aria-label="Basic Drawer" style="position:fixed;right:0;top:0;bottom:0;width:320px;background:#fff;border-left:1px solid #999;padding:16px">
+      <button id="close" type="button">Close drawer</button><button type="button">Apply changes</button>
+    </div>
+    <script>
+      const drawer = document.getElementById('drawer');
+      document.getElementById('close').addEventListener('click', () => {
+        drawer.classList.add('leaving');
+        drawer.addEventListener('transitionend', () => drawer.remove(), { once: true });
+      });
+    </script>`;
+  const session = await start(page, (request, index) => (index === 0 ? point(request, "Close drawer", "Click Close drawer.") : words("Done.")));
+  try {
+    await session.ask("close this");
+    await session.untilState("pointing");
+    await session.page.locator("#close").click();
+    const second = await session.untilAsked(2, 8000);
+    const labels = second.snapshot.elements.map((element) => element.label);
+    assert.ok(!labels.includes("Apply changes"), `the closing drawer was read: ${labels.join(", ")}`);
+    assert.ok(labels.includes("Edit profile"));
+  } finally {
+    await session.close();
+  }
+});
