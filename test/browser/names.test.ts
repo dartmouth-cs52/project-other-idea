@@ -65,6 +65,14 @@ test("a day in a panel the keyboard moves through is a control of its own, and t
   assert.ok(snapshot.text.includes("Su | Mo | Tu | We | Th | Fr | Sa"), JSON.stringify(snapshot.text));
 });
 
+test("a step the keyboard moves to, around one drawing that shows the pointer, is still one entry", { skip }, async () => {
+  // OpenUI5's wizard: each step takes the keyboard and has no pointer, and the circle and title inside it show the pointer.
+  const step = (n: number, title: string) =>
+    `<li role="listitem" tabindex="${n === 1 ? 0 : -1}" aria-label="Step ${n} ${title} Active"><div style="cursor:pointer"><span>${n}</span><span>${title}</span></div></li>`;
+  const snapshot = await read(`<nav aria-label="Wizard Progress Bar"><ul role="list">${step(1, "Items")}${step(2, "Payment Type")}</ul></nav>`);
+  assert.deepEqual(lines(snapshot), ['clickable "Step 1 Items Active" [nav › Wizard Progress Bar]', 'clickable "Step 2 Payment Type Active" [nav › Wizard Progress Bar]']);
+});
+
 test("the cells of a table row that opens what it shows are still one entry", { skip }, async () => {
   const snapshot = await read(`<h1>Employees</h1><table><tbody>
     <tr><td style="cursor:pointer">Ada Lovelace</td><td style="cursor:pointer">Engineering</td><td style="cursor:pointer">London</td></tr>
@@ -136,6 +144,27 @@ test("a field is not named by a caption that belongs to another field beside it,
   ]);
 });
 
+test("a box the page names itself, around a button that shows only an arrow, is not taken for the button's frame", { skip }, async () => {
+  const snapshot = await read(`<nav aria-label="Pages"><ul><li title="Next Page" tabindex="0" style="cursor:pointer;display:inline-block">
+    <button type="button" tabindex="-1"><span role="img" aria-label="right" class="anticon anticon-right" style="display:inline-block;width:12px;height:12px"></span></button></li></ul></nav>`);
+  assert.ok(lines(snapshot).some((line) => line.startsWith('clickable "Next Page"')), lines(snapshot).join("\n"));
+});
+
+test("the same day shown in two months' panels is told apart from other days by its date, and from itself by its place", { skip }, async () => {
+  const cell = (date: string) => `<td title="${date}" style="cursor:pointer"><div>${Number(date.slice(-2))}</div></td>`;
+  const panel = (rows: string[][]) => `<table><tbody>${rows.map((row) => `<tr>${row.map(cell).join("")}</tr>`).join("")}</tbody></table>`;
+  const snapshot = await read(`<h1>Range</h1><div tabindex="0" class="panels">
+    ${panel([["2026-12-01", "2026-12-02", "2026-12-03"], ["2027-01-01", "2027-01-02", "2027-01-03"]])}
+    ${panel([["2027-01-01", "2027-01-02", "2027-01-03"], ["2027-02-01", "2027-02-02", "2027-02-03"]])}</div>`);
+  const ones = lines(snapshot).filter((line) => line.startsWith('clickable "1"'));
+  assert.deepEqual(ones, [
+    'clickable "1" [Range › row: 2026-12-01]',
+    'clickable "1" [Range › row: 2027-01-01 › 1 of 2]',
+    'clickable "1" [Range › row: 2027-01-01 › 2 of 2]',
+    'clickable "1" [Range › row: 2027-02-01]',
+  ]);
+});
+
 test("a custom select inside a box that shows the same words is listed once, by its caption, with the box's arrow", { skip }, async () => {
   // OrangeHRM: the box shows the pointer, the box inside it takes the keyboard, and the caption is a label tied to nothing.
   const group = (caption: string, shown: string) => `<div class="group"><div><label>${caption}</label></div>
@@ -175,6 +204,8 @@ test("a control inside an entry that cannot be used is listed as disabled, and a
     </ul>
     <fieldset disabled><legend>Address</legend><input placeholder="Street"></fieldset>`);
   assert.deepEqual(lines(snapshot), [
+    // An entry the keyboard moves to is listed beside its link, as it always was. Only the menu around them is not.
+    'menuitem "1st menu item" [menu]',
     'link "1st menu item" [menu] → external:example.com',
     'link "2nd menu item" (disabled) [menu] → external:example.com',
     'menuitem "a danger item" [menu]',

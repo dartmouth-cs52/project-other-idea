@@ -331,28 +331,27 @@ interface Candidate extends SnapElement {
   pointer?: boolean;
   /** One of the like things a box the keyboard moves through holds, each a control of its own: a calendar's day. */
   single?: boolean;
+  /** Found by its pointer inside a box the keyboard moves through, and kept only if that box is a grid of such things. */
+  loose?: boolean;
 }
 
 /** Controls with a role of their own, whose words are theirs and not the words of a box around them. */
 const HAS_A_ROLE = '[role]:not([role="presentation"]):not([role="none"]), input, select, textarea, button, a[href]';
 
-/** The control with a role of its own inside `outer`, when `outer` says nothing but what the controls inside it say. */
+/**
+ * The control with a role of its own inside `outer`, when `outer` says nothing
+ * but what the controls inside it say. A box the page names itself, like a
+ * pager's "Next Page" around a button that shows only an arrow, is not a frame.
+ */
 function framed(outer: Candidate, within: Candidate[]): Candidate | undefined {
+  if (["title", "aria-label", "aria-labelledby"].some((name) => outer.el.hasAttribute(name))) return undefined;
   const inner = within.find((c) => c.role !== "clickable");
   return inner && !wordsIn(outer.el, 160, HAS_A_ROLE) ? inner : undefined;
 }
 
-/** The one control inside `outer`, when it is a real button or link and the two show the same words. */
-function onlyLinkSayingTheSame(outer: Candidate, within: Candidate[]): Candidate | undefined {
-  const only = within.length === 1 ? within[0] : undefined;
-  if (!only || !isNative(only.el) || holdsTyping(only.el)) return undefined;
-  const shown = wordsOfLabel(wordsIn(only.el, 160)).join(" ");
-  return shown && shown === wordsOfLabel(wordsIn(outer.el, 160)).join(" ") ? only : undefined;
-}
-
-/** A clickable box inside `outer`, named otherwise, that shows the words `outer` is named by. */
+/** A clickable box inside `outer`, named otherwise, that shows the words `outer` is named by. Only a small box, like a select's, is looked into. */
 function showingTheSame(outer: Candidate, within: Candidate[]): Candidate | undefined {
-  if (!outer.label) return undefined;
+  if (!outer.label || within.length > 3) return undefined;
   return within.find((c) => c.role === "clickable" && !c.boxNamed && c.label !== outer.label && saysMostOf(visibleText(c.el), outer.label));
 }
 
@@ -583,6 +582,8 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   /** Elements whose words were read as part of a sentence around them. */
   const taken = new WeakSet<Element>();
   let order = 0;
+  /** How many boxes the keyboard moves through, with no pointer of their own, the element being read is inside. See `keysOnly`. */
+  let keysBoxes = 0;
   /** Where in the page's text the control last used sits, if it was given. */
   let nearAt = -1;
 
@@ -674,7 +675,11 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
       const rect = el.getBoundingClientRect();
       if (hasRealBox(el, rect) && (!hoverBox || liesInside(rect, hoverBox))) {
         added = { el, id: "", role, label: labelOf(el, role), nav: ["nav", "header", "aside", "menu", "tabs", "footer"].includes(scope.region), region: scope.region, heading: scope.heading, outside };
-        if (role === "clickable" && pointerStarts) added.pointer = true;
+        if (role === "clickable" && pointerStarts) {
+          added.pointer = true;
+          // Found only because the box around it is one the keyboard moves through. It stays if that box is a grid of such things.
+          if (keysBoxes > 0) added.loose = true;
+        }
         const options = optionsOf(el);
         if (options.length) added.options = options;
         const icon = iconOf(el);
@@ -715,24 +720,36 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
     const mayBeWrapper = !!added && (role === "clickable" || (!isNative(el) && !isFocusable(el)));
     // The words inside a row that was read as one line have been sent already, so what its cells give is set aside.
     const mine: TextBlock[] | undefined = mayBeWrapper || rowRead ? [] : role ? undefined : held;
+    if (keysOnly) keysBoxes++;
     for (const child of el.children) visit(child, childScope, pointerHere, inside, svg, outside, mine, hoverBox);
     if (el.shadowRoot) for (const child of el.shadowRoot.children) visit(child, childScope, pointerHere, inside, svg, outside, mine, hoverBox);
+    if (keysOnly) keysBoxes--;
 
     // A wrapper around real buttons or links is just a container, whether it
     // looked clickable or was given a role, like a menu entry around its link.
     // One that can be reached with the keyboard is a control in its own right:
     // a row that opens what it shows, with a button or two inside it.
-    const within = added ? candidates.slice(before).filter((c) => c !== added) : [];
+    let within = added ? candidates.slice(before).filter((c) => c !== added) : [];
     let wrapper = false;
     let inner: Candidate | undefined;
-    if (added && !isNative(el) && !isFocusable(el) && within.some((c) => c.role !== "clickable" && isNative(c.el))) {
+    // A box the keyboard moves through, holding rows of like things a pointer goes to, is not one control: a
+    // calendar's panel holds its days. Each of those is a control of its own, and its row is not one entry. In a box
+    // that holds no such rows, what the pointer alone marked inside it is part of it, as it always was: a wizard's
+    // step and the drawing of the step inside it.
+    const grid = keysOnly && !!added && keyedGrid(within);
+    if (grid) {
+      for (const c of within) if (c.pointer) c.single = true;
+    } else if (keysOnly && added) {
+      const loose = new Set(within.filter((c) => c.loose && !c.single));
+      if (loose.size) {
+        for (let index = candidates.length - 1; index >= before; index--) if (loose.has(candidates[index]!)) candidates.splice(index, 1);
+        within = within.filter((c) => !loose.has(c));
+      }
+    }
+    if (grid) {
       wrapper = true;
-    } else if (added && !isNative(el) && (inner = onlyLinkSayingTheSame(added, within))) {
-      // An entry the keyboard moves to, around one link that says what the entry says, like a menu's item around its
-      // link, is that link. What the entry says of itself, that it is chosen or cannot be used, is said of the link.
+    } else if (added && !isNative(el) && !isFocusable(el) && within.some((c) => c.role !== "clickable" && isNative(c.el))) {
       wrapper = true;
-      const state = [...new Set([...(inner.state ?? []), ...(added.state ?? [])])];
-      if (state.length) inner.state = state;
     } else if (added?.role === "clickable" && within.some((c) => c.role === "clickable" && saysMostOf(c.boxNamed ? "" : c.label, added!.label))) {
       // A clickable box around a clickable box that says the same thing: the inner one is the control.
       // A panel named "Simple graph" around its legend, "A-series B-series", says something else and stays.
@@ -749,11 +766,6 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
       // frame, an arrow that says it opens a list, goes with the control.
       wrapper = true;
       if (!inner.icon && added.icon) inner.icon = added.icon;
-    } else if (keysOnly && added && keyedGrid(within)) {
-      // A box the keyboard moves through, holding rows of like things a pointer goes to, is not one control: a
-      // calendar's panel holds its days. Each of those is a control of its own, and its row is not one entry.
-      wrapper = true;
-      for (const c of within) if (c.pointer) c.single = true;
     }
     if (added && wrapper) {
       candidates.splice(candidates.indexOf(added), 1);
@@ -807,7 +819,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   usable = [];
 
   const elements = new Map<string, Element>();
-  const strip = ({ el: _el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, pointer: _pointer, single: _single, ...element }: Candidate): SnapElement => element;
+  const strip = ({ el: _el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, pointer: _pointer, single: _single, loose: _loose, ...element }: Candidate): SnapElement => element;
   const listed = chosen.map((c, index) => {
     const element = strip(c);
     element.id = `e${index + 1}`;
@@ -1315,10 +1327,13 @@ function tellTwinsApart(candidates: Candidate[]) {
     // The page's own tooltip on each, when each has a different one, says best which is which: two days "8" are
     // "2026-11-08" and "2026-12-08". A field that shows a choice can carry that choice as its tooltip, so it is not read.
     const titles = group.map((c) => (showsAChoice(c.el, c.role) ? "" : cleanText(c.el.getAttribute("title") ?? "", BESIDE_CHARS)));
-    if (titles.every(Boolean) && new Set(titles).size === titles.length) {
+    if (titles.every(Boolean) && new Set(titles).size > 1) {
+      // The same day shown in two months' panels is the same day, and is told apart from itself by its place.
       group.forEach((c, index) => (c.row = titles[index]));
       continue;
     }
+    // The words beside a calendar's day are other days. Only its place tells it apart.
+    if (group.some((c) => c.single)) continue;
     const holds = new Map<Element, number>();
     for (const c of group) {
       for (let box = c.el.parentElement, depth = 0; box && depth < BESIDE_DEPTH; box = box.parentElement, depth++) holds.set(box, (holds.get(box) ?? 0) + 1);
