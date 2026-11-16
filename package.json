@@ -20,7 +20,8 @@
     "eval:look": "tsx eval/look.ts",
     "eval:guides": "tsx --env-file-if-exists=.env eval/drive.ts",
     "eval:import": "tsx eval/import.ts",
-    "test:widget": "tsx --test --test-concurrency=1 test/widget/*.test.ts"
+    "test:widget": "tsx --test --test-concurrency=1 test/widget/*.test.ts",
+    "eval:toolkits": "tsx eval/toolkits/run.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

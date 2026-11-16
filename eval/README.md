@@ -350,6 +350,37 @@ A recording holds visitors' questions and the names of the controls on their pag
 
 The live server does not record. For real sessions to become cases, it would have to keep, for the steps it samples, the list of controls it was sent along with the question and the reply. That list holds control names and short page text, never what anyone typed, but it is page content, so it needs the customer's agreement and belongs in the logging design.
 
+## Checking every kind of control in the toolkits customers use
+
+```bash
+npm run eval:toolkits                         # every toolkit, every kind of control
+npm run eval:toolkits -- antd select          # one toolkit, one kind (or one demo by name)
+npm run eval:toolkits -- --widget ../other    # the widget from another checkout
+npm run eval:toolkits -- --table eval/toolkits/results/<file>.json --compare eval/toolkits/results/<earlier>.json
+```
+
+Most customers' apps are built from a handful of UI toolkits, and most faults found so far belong to a kind of control, not to one app. This suite opens each toolkit's own public demo of each kind of control, puts the widget in the page the way the whole-guide runs do, and checks it with no model and no server: every step's answer is scripted. A run takes about half a minute a demo and costs nothing.
+
+For each demo it checks:
+
+- **Listed.** The controls a visitor could use in the demo, by the browser's accessibility tree (a second opinion that does not come from the widget's code), against the widget's list. Each entry in the list is tied to its element by running the widget's own reader beside it, and a missing control is checked again with the list's length limits lifted, to tell "cut by the limit" from "never read". It also reports controls listed with no name, and controls whose whole line is the same as another's.
+- **Heard.** The scripted answer points at a control. A real mouse or keyboard uses it, never a script's `click()` or `fill()`. The widget must ask its next question, and its sentence about what the visitor did must name that control. A control that opens something is used in two steps: opening it, then picking inside what opened.
+- **Read at the right time.** The list sent with that next question, against the page once it has stopped changing. Only the demo and what the steps opened count.
+- **Inside overlays.** For anything that opens over the page, the overlay is opened with no guide running, then a question is typed into Haptic's box as a visitor would. Did the keys arrive, did the overlay stay open, and are its controls in the list sent.
+
+The run prints what it cannot see first: the widget does not read controls inside an iframe, inside a closed shadow root or drawn on a canvas, and those demos are counted, never passed or failed. A demo that cannot be found on its page is "not tested", never a failure. Results are written to `eval/toolkits/results/` as JSON, with every sentence the widget sent, and printed as a table and a list of faults, most widespread first. `--shots <dir>` keeps a screenshot and the exact list the widget sent at each question, to look at a failure by hand.
+
+These are other people's documentation sites. The browser sends nothing but GET requests: anything else a demo tries is stopped. Pages load one at a time, two seconds apart, and their static files are kept for the length of a run.
+
+A toolkit is one file in `eval/toolkits/kits/`: where its demos are, how to find a demo's container, and for each kind of control what a visitor does, by role and visible text. The checks are shared, in `eval/toolkits/checks.ts`. Where a toolkit's documentation shows its demos inside iframes (Storybook sites, UI5's samples), the file opens each demo on its own page, which is how an app built with it would show it, and the iframe is counted separately.
+
+To compare the widget before and after a change, run the suite on each checkout with `--widget` and print the later results with `--compare` set to the earlier file. `eval/toolkits/results/before.json` holds the run on the widget as it was before round 2 of fixes (MUI, Ant Design, Fluent UI, Carbon and UI5 Web Components; AG Grid's site could not be loaded without sending a bot-check token, so it is not tested):
+
+```bash
+npm run eval:toolkits -- --widget ../merged-checkout
+npm run eval:toolkits -- --table eval/toolkits/results/<new file>.json --compare eval/toolkits/results/before.json
+```
+
 ## What this does not measure yet
 
 - **Customers' own apps.** The real apps here are public demos and public sites. They are far closer to enterprise software than the demo app was, and they are still not a customer's app, with its own data, its own conventions and whatever its developers did to the page.
