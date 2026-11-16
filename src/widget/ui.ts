@@ -11,6 +11,9 @@ import type { Appearance } from "../shared/types.ts";
 const POINTER_PATH =
   "M3.271 4.871A1.678 1.678 0 0 1 5.604 2.907L19.822 9.597A1.678 1.678 0 0 1 19.705 12.684L13.956 14.875A.622.622 0 0 0 13.643 15.139L10.506 20.431A1.678 1.678 0 0 1 7.444 20.021Z";
 const POINTER_TIP = { x: 3.81, y: 3.14 };
+/** The cross on the caption's close button, and the arrow on the send button. */
+const CROSS_PATH = "M18 6 6 18M6 6l12 12";
+const ARROW_PATH = "M12 19V5M5 12l7-7 7 7";
 
 const CSS = `
 :host { all: initial; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
@@ -232,20 +235,40 @@ export class Ui {
     this.host.style.setProperty("--accent", appearance.accent);
     const root = this.host.attachShadow({ mode: "open" });
     const side = appearance.position === "bottom-left" ? "left" : "right";
-    root.innerHTML = `<style>${CSS}</style>
-      <div class="ring" hidden></div>
-      <div class="caption" hidden><span></span><button class="close" aria-label="Stop guide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
-      <div class="cursor" hidden><svg viewBox="0 0 24 24" width="24" height="24"><path d="${POINTER_PATH}"/></svg></div>
-      <div class="dock ${side}">
-        <div class="panel" hidden>
-          <form><input type="text" placeholder="What do you want to do?" aria-label="Ask a question" maxlength="300"><div class="row"><button class="doit" type="button" title="Do it with me (Ctrl+Enter)">Do it</button><button class="send" type="button" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div></form>
-          <div class="first" hidden><span></span><button class="go" type="button">Go</button></div>
-          <div class="status" hidden><span></span><button class="resume" type="button">Carry on</button><button class="stop" type="button">Stop</button></div>
-          <div class="note" hidden></div>
-          <div class="did" hidden><h2></h2><ul></ul><p></p></div>
-        </div>
-        <button class="launcher" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${POINTER_PATH}"/></svg><span></span></button>
-      </div>`;
+    // Built from elements and a stylesheet object, never from text: a page whose
+    // policy forbids inline style, or requires Trusted Types, refuses a <style>
+    // element and markup set as a string, and would leave the widget unstyled or not there at all.
+    adoptStyles(root, CSS);
+    const hidden = { hidden: "" };
+    root.append(
+      make("div", { class: "ring", ...hidden }),
+      make("div", { class: "caption", ...hidden }, make("span"), make("button", { class: "close", "aria-label": "Stop guide" }, icon(CROSS_PATH, { "aria-hidden": "true" }))),
+      make("div", { class: "cursor", ...hidden }, icon(POINTER_PATH, { width: "24", height: "24" })),
+      make(
+        "div",
+        { class: `dock ${side}` },
+        make(
+          "div",
+          { class: "panel", ...hidden },
+          make(
+            "form",
+            {},
+            make("input", { type: "text", placeholder: "What do you want to do?", "aria-label": "Ask a question", maxlength: "300" }),
+            make(
+              "div",
+              { class: "row" },
+              make("button", { class: "doit", type: "button", title: "Do it with me (Ctrl+Enter)" }, "Do it"),
+              make("button", { class: "send", type: "button", "aria-label": "Send" }, icon(ARROW_PATH, { "aria-hidden": "true" })),
+            ),
+          ),
+          make("div", { class: "first", ...hidden }, make("span"), make("button", { class: "go", type: "button" }, "Go")),
+          make("div", { class: "status", ...hidden }, make("span"), make("button", { class: "resume", type: "button" }, "Carry on"), make("button", { class: "stop", type: "button" }, "Stop")),
+          make("div", { class: "note", ...hidden }),
+          make("div", { class: "did", ...hidden }, make("h2"), make("ul"), make("p")),
+        ),
+        make("button", { class: "launcher", type: "button" }, icon(POINTER_PATH, { "aria-hidden": "true" }), make("span")),
+      ),
+    );
     const pick = <T extends Element>(selector: string) => root.querySelector(selector) as T;
     this.panel = pick(".panel");
     this.form = pick("form");
@@ -937,6 +960,44 @@ function lessMotion(): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Gives our shadow root its styles as a stylesheet object, which a page's
+ * policy on inline style does not reach. A browser without stylesheet objects
+ * gets a <style> element instead, which works wherever the page allows inline style.
+ */
+function adoptStyles(root: ShadowRoot, css: string) {
+  try {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(css);
+    root.adoptedStyleSheets = [sheet];
+    return;
+  } catch {
+    // No stylesheet objects in this browser.
+  }
+  const style = document.createElement("style");
+  style.textContent = css;
+  root.append(style);
+}
+
+/** One of our elements, with its attributes and what goes in it. Text goes in as text, never as markup. */
+function make<K extends keyof HTMLElementTagNameMap>(tag: K, attributes: Record<string, string> = {}, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
+  const el = document.createElement(tag);
+  for (const [name, value] of Object.entries(attributes)) el.setAttribute(name, value);
+  el.append(...children);
+  return el;
+}
+
+/** One of our icons: a single path on a 24 by 24 grid. */
+function icon(path: string, attributes: Record<string, string> = {}): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  for (const [name, value] of Object.entries(attributes)) svg.setAttribute(name, value);
+  const shape = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  shape.setAttribute("d", path);
+  svg.append(shape);
+  return svg;
 }
 
 /** Where the visitor's "I've seen the first-use line" is kept: this browser only, for this site. */
