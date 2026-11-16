@@ -818,7 +818,8 @@ export async function actLive(browser: Browser, set: GuideSet, guide: Guide, liv
     }
     await readValues().catch(() => undefined);
     result.values = [...values.values()];
-    result.fields = { ok: result.values.filter((value) => !value.wrong).length, checked: result.values.length, wrong: result.values.filter((value) => value.wrong).map((value) => value.wrong) };
+    const judged = result.cut ? [] : result.values;
+    result.fields = { ok: judged.filter((value) => !value.wrong).length, checked: judged.length, wrong: judged.filter((value) => value.wrong).map((value) => value.wrong) };
     const matcher = finalItem?.commit ? ordered(finalItem.control)[0] : undefined;
     const pressed = await pressedCommit(page, matcher);
     result.commitPressed = pressed.length > 0;
@@ -847,7 +848,8 @@ function liveReport(result: LiveResult): string[] {
     lines.push(`  call ${index + 1} (step ${call.step}, ${(call.ms / 1000).toFixed(1)} s): ${target ?? "no target"}${call.named ? ` ${call.named}` : ""}, do ${doing ?? "none"}${enter ? ` "${enter}"` : ""}, commits ${commits ?? "-"}, ${status}${mode ? "" : ", NO ACT ECHO"}: "${say}"`);
   }
   for (const event of result.events) lines.push(`  event: ${event}`);
-  for (const value of result.values) lines.push(`  field ${value.label}: "${value.shown}"${value.wrong ? ` WRONG: ${value.wrong}` : " right"}`);
+  // A run the runner cut short is read where it stopped: a field it never reached is not wrong.
+  for (const value of result.values) lines.push(`  field ${value.label}: "${value.shown}"${result.cut ? " (where the run was cut)" : value.wrong ? ` WRONG: ${value.wrong}` : " right"}`);
   for (const turn of result.yourTurn) lines.push(`  your turn: ${turn}`);
   for (const line of result.did) lines.push(`  what I did: ${line}`);
   for (const press of result.pressed ?? []) lines.push(`  reached the commit: ${press}`);
