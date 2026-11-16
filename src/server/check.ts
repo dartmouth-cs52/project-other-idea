@@ -286,6 +286,53 @@ export function judgeNamed(request: Pick<TurnRequest, "goal" | "step" | "event" 
   return "ask";
 }
 
+// A guide can also end in words that name the goal's control with no word that says to use it. Asked "Where do I
+// get an API key?" on Haptic's demo app, which has help docs and so Answers on, the model led the visitor to the
+// Security tab and ended there: "You're on the Security tab, and the API keys section is in the main area.
+// Existing keys are listed there, and Create API key makes a new one.", "done" and no pointer (the tuned benchmark
+// of 16 November; the same guide reached its end 3 runs in 3 while the site had Answers off). It is the owner's
+// stop on Northpine's Budgets page again, and namedButNotPointed does not see it: nothing tells the visitor to use
+// the button. So a guide that ends this way, for a goal that wants the way, is asked about once more. It is never
+// pointed at in code: a sentence that only names a control is too often describing the page.
+
+/** Words that say there is nothing more to do: "is already marked Paid", "nothing left to pay". */
+const NOTHING_LEFT = /\b(?:already|nothing (?:left|more|else))\b/i;
+
+/**
+ * The control a guide's last words name as the way to what the visitor asked for, when the guide ends there with
+ * nothing pointed at: status "done", no target, a goal that wants the way (wantsTheWay), and a sentence that names,
+ * with its own capitals, one listed control that is pressed (a button, link, tab or menu entry) and shares a word
+ * with the goal. Undefined when the sentence says the thing is done or that nothing is left, when the name follows
+ * a word that turns it round ("don't use"), when it names two such controls, and for any reply that
+ * namedButNotPointed already finds.
+ */
+export function namedForTheGoal(request: Pick<TurnRequest, "goal" | "snapshot">, reply: TurnReply): SnapElement | undefined {
+  if (reply.target !== null || reply.status !== "done" || !wantsTheWay(request.goal)) return undefined;
+  const say = reply.say.replace(/[’‘]/g, "'");
+  if (REACHED.test(say) || NOTHING_LEFT.test(say)) return undefined;
+  const found: SnapElement[] = [];
+  // The longest name first, so that "Create API key" is found and "API key" inside it is not counted again.
+  const listed = request.snapshot.elements
+    .filter((element) => PRESSED.has(element.role) && element.label.trim().length >= 4 && namesTheGoal(element.label, request.goal))
+    .sort((a, b) => b.label.length - a.label.length);
+  for (const element of listed) {
+    const label = element.label.trim();
+    const at = say.search(new RegExp(String.raw`(?<![\p{L}\p{N}_])${escape(label).replace(/\s+/g, "\\s+")}${NAME_END}`, "u"));
+    if (at < 0 || NOT_AN_INSTRUCTION.test(say.slice(0, at))) continue;
+    if (!found.some((other) => other.label.includes(label))) found.push(element);
+  }
+  return found.length === 1 ? found[0] : undefined;
+}
+
+/** What the model is told when its guide ended in words that name the goal's control. Both ways out are open: point at it, or end as it did. */
+export function namedForTheGoalNote(element: SnapElement): string {
+  return (
+    `Your reply ends the guide and names ${element.role} "${element.label}" (${element.id}), but its target is null, so nothing is pointed at. ` +
+    `If the visitor still has to use it to do what they asked, reply again with ${element.id} as the target and status "continue". ` +
+    `If what they asked for is already done or showing, reply "done" with target null as before.`
+  );
+}
+
 // In act mode the same contradiction stops the run, at any step. A reply of
 // "continue" with nothing pointed at is the visitor's turn on nothing: Haptic
 // does nothing, and the visitor is left with nothing to use. Seen on

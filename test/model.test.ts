@@ -356,6 +356,74 @@ test("on a site with Answers on, an answer in words to a how-to question is not 
   assert.deepEqual(again.reply, { target: "e30", status: "continue", say: "Click Freeze card.", mode: "guide" });
 });
 
+// Haptic's demo app, which has help docs and so Answers on, in the tuned benchmark of 16 November: asked "Where do I
+// get an API key?", the guide ended on the Security tab in words that name the button and do not say to use it.
+const securityPage: Snapshot = {
+  path: "/demo/settings-security",
+  title: "Settings, Acme",
+  headings: ["Settings", "API keys"],
+  text: [],
+  truncated: false,
+  elements: [
+    { id: "e4", role: "link", label: "Security", href: "/demo/settings-security", context: "main › Settings", state: ["current"] },
+    { id: "e9", role: "checkbox", label: "Require two-factor authentication", context: "main › Security" },
+    { id: "e12", role: "button", label: "Create API key", context: "main › API keys" },
+    { id: "e13", role: "button", label: "Revoke", context: "main › API keys" },
+  ],
+};
+const demoStop = "You're on the Security tab, and the API keys section is in the main area. Existing keys are listed there, and Create API key makes a new one.";
+const atSecurity: TurnRequest = { site: site.id, goal: "Where do I get an API key?", step: 3, history: [], event: 'The user clicked link "Security". It is e4 in the list now, and is now current.', snapshot: securityPage };
+
+test("a guide that ends in words naming the goal's control, with no word that says to use it, is asked about once more, with Answers on or off", async () => {
+  const pointsAtCreate: TurnReply = { target: "e12", status: "continue", say: "Click Create API key." };
+  // On a site without Answers.
+  const plain = use([{ reply: { target: null, status: "done", say: demoStop } }, { reply: pointsAtCreate }], "ask");
+  const { result: measure, lines } = await logging(() => measureTurn(site, atSecurity));
+  assert.equal(plain.sent.length, 2);
+  assert.match(plain.sent[1]!.messages.at(-1)!.content as string, /ends the guide and names button "Create API key" \(e12\), but its target is null/);
+  assert.deepEqual(measure.reply, pointsAtCreate);
+  assert.deepEqual(measure.recheck, { named: "e12", asked: true, verdict: "ask" });
+  assert.deepEqual(
+    lines.filter((line) => line.startsWith("recheck ")),
+    ["recheck site_test step 3: the guide ends in words that name e12, a control of the goal, and nothing is pointed at, asking again"],
+  );
+  // On a site with Answers on, where it was seen.
+  const answersOn = use([{ reply: written({ say: demoStop }) }, { reply: written({ target: "e12", status: "continue", say: "Click Create API key." }) }], "ask");
+  const guided = await measureTurn(withDocs, { ...atSecurity, site: withDocs.id });
+  assert.equal(answersOn.sent.length, 2);
+  assert.deepEqual(guided.reply, { target: "e12", status: "continue", say: "Click Create API key.", mode: "guide" });
+  // The model may end as it did: its second reply stands, and nothing is pointed at in code.
+  use([{ reply: { target: null, status: "done", say: demoStop } }, { reply: { target: null, status: "done", say: "The API keys are listed on this tab." } }], "ask");
+  const stands = await measureTurn(site, atSecurity);
+  assert.deepEqual(stands.reply, { target: null, status: "done", say: "The API keys are listed on this tab." });
+  // With the check only logging, the reply goes as the model wrote it.
+  const logged = use([{ reply: { target: null, status: "done", say: demoStop } }], "log");
+  assert.equal((await measureTurn(site, atSecurity)).reply.target, null);
+  assert.equal(logged.sent.length, 1);
+});
+
+test("a guide that ends in words is left alone when the goal is a question of fact, the thing is done, or the control is not the goal's", async () => {
+  const left: [string, string][] = [
+    // A question of fact, answered.
+    ["which API keys do we have?", "Two keys are listed on this tab, and Create API key makes a new one."],
+    // The thing is done.
+    ["Where do I get an API key?", "Your key has been created and is shown once. Create API key makes another."],
+    ["Where do I get an API key?", "Done. The new key is listed here, and Create API key makes another."],
+    // It names a control that has nothing to do with the goal, or tells the visitor not to use the one that has.
+    ["Where do I get an API key?", "You're on the Security tab. Revoke is beside each one."],
+    ["Where do I get an API key?", "This tab lists your keys. There's no need to use Create API key for that."],
+    // It names nothing on the page by its own name.
+    ["Where do I get an API key?", "API keys are made on this tab, with the button above the list."],
+  ];
+  for (const [goal, say] of left) {
+    const { sent } = use([{ reply: { target: null, status: "done", say } }, { reply: pointsAtFaq }], "ask");
+    const measure = await measureTurn(site, { ...atSecurity, goal });
+    assert.equal(sent.length, 1, say);
+    assert.equal(measure.reply.target, null, say);
+    assert.equal(measure.recheck, undefined, say);
+  }
+});
+
 test('"Not that one." is said only to a visitor who used something other than the step shown', async () => {
   // Northpine's Bills, 16 November: the model pointed at the Vendor column's button, the visitor clicked it, and was told "Not that one."
   const blames: TurnReply = { target: "e17", status: "continue", say: "Not that one. Click People in the sidebar." };

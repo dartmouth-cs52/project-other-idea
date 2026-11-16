@@ -7,7 +7,7 @@ import { ACTING_LIMITS, ACTS, actionsAllowed, MODES, REASONS, type Act, type Mod
 import { actingFor, type NotActing } from "./acting.ts";
 import { declinedReply, finishAnswer, neverDecided, type Finished, type ModelReply, type Overruled } from "./answers.ts";
 import type { Ceiling } from "./budget.ts";
-import { judgeNamed, namedButNotDone, namedButNotDoneNote, namedButNotPointed, namedButNotPointedNote, pressLeftToVisitor, wantsTheWay, type NamedVerdict } from "./check.ts";
+import { judgeNamed, namedButNotDone, namedButNotDoneNote, namedButNotPointed, namedButNotPointedNote, namedForTheGoal, namedForTheGoalNote, pressLeftToVisitor, wantsTheWay, type NamedVerdict } from "./check.ts";
 import { costOf } from "./prices.ts";
 import { answersOn, articlesOf, buildSystemPrompt, buildUserMessage } from "./prompt.ts";
 import { checkSay, SAY_MAX_CHARS, SAY_MAX_SENTENCES, SAY_WITHOUT_WORDS, tidySay, withoutBlame, type Rule } from "./rules.ts";
@@ -405,10 +405,13 @@ export async function measureTurn(
   // In act mode at any step: a "continue" that points at nothing stops the run, so a control it names that Haptic could press is asked about.
   const stalled = checking && acting.act ? namedButNotDone(request, asStep(answer.reply), acting.settings.commitWords) : undefined;
   const named = checking && !stalled ? namedButNotPointed(request.snapshot, asStep(answer.reply)) : undefined;
-  const found = stalled ?? named;
+  // A guide that ends in words naming the goal's control, with no word that says to use it, is asked about too (check.ts).
+  const ended = checking && !acting.act && !named ? namedForTheGoal(request, asStep(answer.reply)) : undefined;
+  const found = stalled ?? named ?? ended;
   if (found) {
     // A reply that names a control is judged (check.ts), an act reply's too unless it stalls, which is always asked about.
-    const verdict = stalled ? undefined : judgeNamed(request, asStep(answer.reply), found);
+    // One that only names it at the end of a guide is never pointed at in code: the model is asked.
+    const verdict = stalled ? undefined : ended ? "ask" : judgeNamed(request, asStep(answer.reply), found);
     const acts = settings.recheck === "ask";
     // Only a guide's step is made in code. In act mode the step may be Haptic's own press, so the model is asked to make it.
     const point = acts && verdict === "point" && !acting.act;
@@ -418,7 +421,9 @@ export async function measureTurn(
     console.log(
       stalled
         ? `recheck ${site.id} step ${request.step}: an act reply of "continue" names ${found.id}, which Haptic could press, and nothing is pointed at${then}`
-        : `recheck ${site.id} step ${request.step}: the sentence tells the visitor to use ${found.id} and nothing is pointed at${then}`,
+        : ended
+          ? `recheck ${site.id} step ${request.step}: the guide ends in words that name ${found.id}, a control of the goal, and nothing is pointed at${then}`
+          : `recheck ${site.id} step ${request.step}: the sentence tells the visitor to use ${found.id} and nothing is pointed at${then}`,
     );
     answer.recheck = { named: found.id, asked: ask, ...(stalled ? { act: true as const } : {}), ...(verdict ? { verdict } : {}), ...(point ? { pointed: true as const } : {}) };
     if (point) {
@@ -428,7 +433,7 @@ export async function measureTurn(
     }
     if (ask) {
       try {
-        const note = stalled ? namedButNotDoneNote(stalled) : namedButNotPointedNote(found, answer.reply.status);
+        const note = stalled ? namedButNotDoneNote(stalled) : ended ? namedForTheGoalNote(ended) : namedButNotPointedNote(found, answer.reply.status);
         // The model is shown its own reply as it wrote it: on a site with Answers on, with its mode, sources and controls.
         const again = await claudeTurn(site, request, settings, answers, modeKnown, targetKnown, signal, { reply: answers ? answer.reply : asStep(answer.reply), note });
         if (!onPage(again.reply.target)) again.reply.target = null;

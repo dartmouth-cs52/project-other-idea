@@ -24,6 +24,7 @@ A how-to question is guided to the end, whether or not an article describes the 
 
 - A reply in guide mode that tells the visitor to use a control on the page and points at nothing is judged as on a site without Answers: the control is pointed at, or the model is asked once more, or it was an aside and stands. This holds for a step and for the sentence that ends a guide.
 - An answer in words that names a control on the page without pointing at it is judged the same way, and keeps its words and its articles.
+- A guide that ends in words naming the goal's control, with no word that says to use it ("Existing keys are listed there, and Create API key makes a new one."), is asked about once more. This holds on a site without Answers too.
 - An answer that points and calls that the end ("done") goes on from the pointer instead: it is the first step, and the widget asks again once the visitor has used it. For a question of fact, "done" with a pointer still only shows where the thing is.
 
 A step's sentence may repeat an amount of money the visitor wrote in their own question ("raise the budget to $75,000": "Click Edit budget, then set $75,000"). Any other amount still costs the step its words, and so does any amount when the question itself is about a price, a refund or the visitor's own account. An answer in words is held to the rule whoever wrote the figure.
