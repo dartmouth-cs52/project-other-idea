@@ -116,7 +116,11 @@ export type Outcome =
 
 export interface Insights {
   days: number;
-  summary: { guides: number; unanswered: number; helped_yes: number; helped_no: number; median_ms_to_pointer: number | null; median_steps_finished: number | null };
+  summary: { guides: number; finished: number; unanswered: number; helped_yes: number; helped_no: number; median_ms_to_pointer: number | null; median_steps_finished: number | null };
+  /** The same length of time just before, for the change shown under each number. */
+  previous: { guides: number; finished: number; unanswered: number };
+  /** One entry for each day that had a question, by the viewer's own clock, oldest first. */
+  daily: { day: string; guides: number; finished: number; unanswered: number }[];
   outcomes: { outcome: Outcome; count: number }[];
   recent: {
     id: string;
@@ -138,6 +142,41 @@ export interface Insights {
   health: HealthGroup[];
   /** Groups the company was told about in the last month. */
   alerts: { key: string; sent_at: string; emailed: boolean }[];
+}
+
+/** One of a site's newest questions, with the step it has reached. */
+export interface LiveGuide {
+  id: string;
+  question: string;
+  started_at: string;
+  started_path: string;
+  step_count: number;
+  helped: boolean | null;
+  outcome: Outcome;
+  /** When it last moved: its newest step, or its start. */
+  moved_at: string;
+  /** The step it is on, or ended on. Null before the first answer comes back. */
+  last: { n: number; path: string; target_label: string | null; said: string; status: "continue" | "done" | "stuck" } | null;
+}
+
+/** What is happening on a site right now. `stamp` changes whenever anything about the last day's questions does. */
+export interface Live {
+  stamp: string;
+  guides: LiveGuide[];
+}
+
+/** A site as its card on the list of sites shows it. */
+export interface SiteCard {
+  id: string;
+  name: string;
+  origin: string;
+  connected: boolean;
+  /** Questions and finished guides in the last seven days. */
+  guides: number;
+  finished: number;
+  last: { question: string; started_at: string; outcome: Outcome } | null;
+  /** The last fortnight, one entry for each day that had a question. */
+  daily: { day: string; guides: number }[];
 }
 
 export interface HealthGroup {
@@ -210,3 +249,8 @@ export const OUTCOME_LABEL: Record<Outcome, string> = {
   abandoned: "Abandoned",
   under_way: "Under way",
 };
+
+/** The viewer's clock against UTC in minutes, sent with anything counted by day, so a day starts at their midnight. */
+export function clock(): string {
+  return `tz=${new Date().getTimezoneOffset()}`;
+}

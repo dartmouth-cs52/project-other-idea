@@ -40,12 +40,19 @@ async function untilMigrated<T>(what: string, query: Promise<T[]>): Promise<T[]>
   }
 }
 
-export async function insights(sql: Sql, site: string, days: number) {
+/**
+ * `minutesWest` is the viewer's clock, as JavaScript's getTimezoneOffset gives it, so a day on the chart
+ * starts at their midnight and not at UTC's.
+ */
+export async function insights(sql: Sql, site: string, days: number, minutesWest = 0) {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  // The same length of time just before, for "against the 30 days before".
+  const before = new Date(Date.now() - 2 * days * 86_400_000).toISOString();
 
-  const [summary, outcomes, recent, abandonedAt, wrongClicks, cannotFind, health, alerts] = await Promise.all([
+  const [summary, previous, daily, outcomes, recent, abandonedAt, wrongClicks, cannotFind, health, alerts] = await Promise.all([
     sql.query(
       `select count(*)::int as guides,
+        count(*) filter (where g.outcome = 'finished')::int as finished,
         count(*) filter (where ${UNANSWERED})::int as unanswered,
         count(*) filter (where g.helped = true)::int as helped_yes,
         count(*) filter (where g.helped = false)::int as helped_no,
@@ -55,6 +62,22 @@ export async function insights(sql: Sql, site: string, days: number) {
           where g3.site_id = $1 and g3.started_at >= $2 and g3.outcome = 'finished') as median_steps_finished
       from guides g where g.site_id = $1 and g.started_at >= $2`,
       [site, since],
+    ),
+    sql.query(
+      `select count(*)::int as guides,
+        count(*) filter (where g.outcome = 'finished')::int as finished,
+        count(*) filter (where ${UNANSWERED})::int as unanswered
+      from guides g where g.site_id = $1 and g.started_at >= $2 and g.started_at < $3`,
+      [site, before, since],
+    ),
+    // One row for each day that had a question. The page fills in the days that had none.
+    sql.query(
+      `select to_char((g.started_at at time zone 'UTC') - make_interval(mins => $3), 'YYYY-MM-DD') as day,
+        count(*)::int as guides,
+        count(*) filter (where g.outcome = 'finished')::int as finished,
+        count(*) filter (where ${UNANSWERED})::int as unanswered
+      from guides g where g.site_id = $1 and g.started_at >= $2 group by 1 order by 1`,
+      [site, since, minutesWest],
     ),
     sql.query(`select ${OUTCOME} as outcome, count(*)::int as count from guides g where g.site_id = $1 and g.started_at >= $2 group by 1 order by 2 desc`, [site, since]),
     sql.query(
@@ -94,7 +117,90 @@ export async function insights(sql: Sql, site: string, days: number) {
     ),
   ]);
 
-  return { days, summary: summary[0], outcomes, recent, abandonedAt, wrongClicks, cantFind: cannotFind, health, alerts };
+  return { days, summary: summary[0], previous: previous[0], daily, outcomes, recent, abandonedAt, wrongClicks, cantFind: cannotFind, health, alerts };
+}
+
+/** How many of a site's newest questions the live list carries. */
+const LIVE_SHOWN = 20;
+
+/** A short mark that is the same for the same text, to tell the page when something changed. */
+function markOf(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let at = 0; at < text.length; at++) hash = Math.imul(hash ^ text.charCodeAt(at), 0x01000193);
+  return (hash >>> 0).toString(36);
+}
+
+/**
+ * What is happening on a site right now: its newest questions, each with the
+ * step it has reached. The dashboard asks for this every second or two while
+ * it is open, so it is one query. `stamp` changes whenever anything about the
+ * last day's questions does: a new one, a step, an ending, or an answer to
+ * "Did this help?". The page asks for the heavier numbers again only then.
+ */
+export async function live(sql: Sql, site: string) {
+  const rows = await sql.query(
+    `select g.id, g.question, g.started_at, g.started_path, g.step_count, g.helped, ${OUTCOME} as outcome,
+      coalesce(g.last_step_at, g.started_at) as moved_at,
+      last.n as step, last.path, last.target_label, last.said, last.status,
+      (select concat_ws(' ', count(*), count(a.outcome), count(a.helped), coalesce(sum(a.step_count), 0), coalesce(sum(a.cancelled_steps), 0), max(coalesce(a.last_step_at, a.started_at)))
+        from guides a where a.site_id = $1 and a.started_at >= now() - interval '1 day') as day
+    from guides g
+    left join lateral (select s.n, s.path, s.target_label, s.said, s.status from steps s where s.guide_id = g.id order by s.n desc limit 1) last on true
+    where g.site_id = $1 order by g.started_at desc limit ${LIVE_SHOWN}`,
+    [site],
+  );
+  const guides = rows.map((row) => ({
+    id: row.id as string,
+    question: row.question as string,
+    started_at: row.started_at as string,
+    started_path: row.started_path as string,
+    step_count: row.step_count as number,
+    helped: row.helped as boolean | null,
+    outcome: row.outcome as string,
+    moved_at: row.moved_at as string,
+    // The step it is on, or ended on. Null before the first answer comes back.
+    last: row.step === null ? null : { n: row.step as number, path: row.path as string, target_label: row.target_label as string | null, said: row.said as string, status: row.status as string },
+  }));
+  return { stamp: markOf(JSON.stringify([rows[0]?.day ?? "", guides])), guides };
+}
+
+/**
+ * Every site a company has, as its card on the list of sites shows it: whether
+ * the script is running, the last week's questions, the last fortnight day by
+ * day, and the newest question.
+ */
+export async function sitesOverview(sql: Sql, company: string, minutesWest = 0) {
+  const [sites, days] = await Promise.all([
+    sql.query(
+      `select s.id, s.name, s.origin,
+        exists (select 1 from site_origins o where o.site_id = s.id and o.origin = any(s.allowed_origins)) as connected,
+        (select count(*)::int from guides g where g.site_id = s.id and g.started_at >= now() - interval '7 days') as guides,
+        (select count(*)::int from guides g where g.site_id = s.id and g.started_at >= now() - interval '7 days' and g.outcome = 'finished') as finished,
+        last.question as last_question, last.started_at as last_at, last.outcome as last_outcome
+      from sites s
+      left join lateral (select g.question, g.started_at, ${OUTCOME} as outcome from guides g where g.site_id = s.id order by g.started_at desc limit 1) last on true
+      where s.company_id = $1 order by s.created_at`,
+      [company],
+    ),
+    sql.query(
+      `select g.site_id, to_char((g.started_at at time zone 'UTC') - make_interval(mins => $2), 'YYYY-MM-DD') as day, count(*)::int as guides
+      from guides g join sites s on s.id = g.site_id
+      where s.company_id = $1 and g.started_at >= now() - interval '14 days' group by 1, 2 order by 1, 2`,
+      [company, minutesWest],
+    ),
+  ]);
+  return {
+    sites: sites.map((site) => ({
+      id: site.id as string,
+      name: site.name as string,
+      origin: site.origin as string,
+      connected: site.connected as boolean,
+      guides: site.guides as number,
+      finished: site.finished as number,
+      last: site.last_question === null ? null : { question: site.last_question as string, started_at: site.last_at as string, outcome: site.last_outcome as string },
+      daily: days.filter((row) => row.site_id === site.id).map((row) => ({ day: row.day as string, guides: row.guides as number })),
+    })),
+  };
 }
 
 /** "2026-11" for the month a date falls in, in UTC. Bills are counted by UTC month. */

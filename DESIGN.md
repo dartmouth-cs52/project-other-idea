@@ -3,8 +3,9 @@ version: alpha
 name: Haptic
 description: >-
   Design system for Haptic, an AI guide embedded in web apps. Covers the
-  marketing site at joinhaptic.com (web/) and the embedded widget (src/widget).
-  Built on shadcn/ui and Tailwind's default scale.
+  marketing site at joinhaptic.com (web/), the dashboard behind its sign-in,
+  and the embedded widget (src/widget). Built on shadcn/ui and Tailwind's
+  default scale.
 colors:
   # Light mode. Tailwind "stone", a warm neutral.
   primary: "#1C1917"
@@ -123,6 +124,10 @@ spacing:
   gutter: 24px
   container: 1024px
   content: 976px
+  # The dashboard. See Dashboard below.
+  dashboard-bar: 56px
+  dashboard-sidebar: 224px
+  dashboard-content: 1152px
 components:
   button-primary:
     backgroundColor: "{colors.primary}"
@@ -205,6 +210,20 @@ components:
     rounded: "{rounded.full}"
     height: 40px
     padding: 16px
+  # The dashboard. Proposed, see Dashboard below.
+  dashboard-card:
+    backgroundColor: "{colors.card}"
+    textColor: "{colors.foreground}"
+    typography: "{typography.body-sm}"
+    rounded: "{rounded.xl}"
+    padding: 20px
+  dashboard-nav-row:
+    backgroundColor: "{colors.secondary}"
+    textColor: "{colors.foreground}"
+    typography: "{typography.label-md}"
+    rounded: "{rounded.md}"
+    height: 32px
+    padding: 10px
 ---
 
 # Haptic
@@ -297,7 +316,7 @@ loads a font on a customer's site.
 
 A single centred column. The container is 1024px (`max-w-5xl`) with 24px
 gutters, which leaves 976px of content. The hero demo and the FAQ both fill
-that width.
+that width. The dashboard has a frame of its own, set out under Dashboard.
 
 Spacing is a 4px grid, and most gaps are multiples of 8. The hero stacks with a
 fixed rhythm: 48px above the headline, 24px from headline to sub-copy, then
@@ -363,9 +382,10 @@ padding guesses.
 ## Elevation & Depth
 
 Flat. Hierarchy comes from the step between Paper and Card and from 1px borders,
-not from shadows. Three things are allowed a shadow, because they float above
-content: the demo window (`shadow-sm`), the widget's launcher and ask box, and
-the pointer with its caption. No gradients, no blur, no glass.
+not from shadows. Four things are allowed a shadow, because they float above
+content: the demo window (`shadow-sm`), the widget's launcher and ask box, the
+pointer with its caption, and a menu in the dashboard (`shadow-sm`). No
+gradients, no blur, no glass.
 
 The pointer's shadow is two layers, a tight one and a soft one:
 `drop-shadow(0 1px 1px rgb(0 0 0 / .3)) drop-shadow(0 5px 9px rgb(0 0 0 / .26))`.
@@ -463,6 +483,91 @@ to its target and each demo holds one still frame.
 Scrolling never changes what a demo shows. A demo waits on its first frame,
 starts once about a third of it is on screen, and keeps playing until it has
 left the screen completely. Nothing switches while any of it can be seen.
+
+## Dashboard
+
+Proposed. It is built, in `web/components/app`, and waits for sign off.
+
+The dashboard is where a company sees what its people asked and how each guide
+went. It is read at a glance and many times a day, so it is denser than the
+site. The colours, the pills, the icons and the voice are the same. What
+changes is the frame, the size of the type and one rule about surfaces.
+
+**Frame.** A 56px bar runs across the top and reads as a path. The pointer mark
+and Haptic come first and lead to the list of sites. The site comes next, and
+is a menu of the company's sites, with All sites and Add a site under them. Who
+is signed in is on the right, in a menu that names their company and holds Sign
+out. Inside a site its pages run down a 224px column on the left. Each is a
+32px row with a 16px icon. The page you are on is Border grey with Ink text,
+and the others are Muted text. Below 1024px the column becomes a row under the
+bar that scrolls sideways. Content is up to 1152px wide (`max-w-6xl`).
+
+**Pages.** A site has five, in this order, and no more are added without a
+reason a customer gave.
+
+- **Overview.** Is it working. Four numbers, the newest questions as they
+  happen, questions a day, how guides ended, and the three questions most
+  people could not find.
+- **Questions.** Every question, newest first, as a table to search and filter.
+  A row opens its guide.
+- **Gaps.** What the company can fix. What people can't find, guides that
+  stopped finishing, where people give up and the steps they click past.
+- **Knowledge.** What Haptic reads and what the company has corrected. Notes,
+  help docs, corrections, the controls never to point at, and the pages read.
+- **Settings.** Three tabs. General holds how the widget looks and deleting
+  the site. Install holds the script and where it runs. Usage holds the
+  finished guides, month by month, which are what billing counts.
+
+**Sites.** A company with one site lands inside it. With more than one, the
+first page is the list, one card a site. A card says whether the script is
+running, how many questions the last seven days had and how many finished, the
+last fortnight as fourteen small bars, and the newest question. The whole card
+is the way in. A card never holds a picture of the site.
+
+**Type.** One 24px Medium title a page, the headline size. Card titles are
+16px Medium. Text, rows and tables are 14px. Notes under a number, table
+headings and the foot of a card are 12px Muted. A number in a tile is 36px
+Medium. Forms keep their 44px inputs, as everywhere.
+
+**Surfaces.** In the dashboard a card is Card white on Paper, with the 1px
+border and 14px corners. This is the one place the nesting differs from the
+site, where a card is Muted. A list of records inside a Muted card needed a
+white panel of its own, which made three surfaces for one list. Here the rows
+run edge to edge inside the card with hairlines between them, and the row
+under the mouse is Muted. The pages around sign-in, and the install page a
+developer is sent, keep Muted cards.
+
+**Numbers.** A tile is a 14px Muted label, the number, and one 12px line of
+context. A change against the same length of time before is said in words,
+such as "38% more than the 30 days before", with a small arrow. The arrow and
+the words are the same grey whichever way the number went, because the system
+has no colour for good or bad, and whether more is good depends on the number.
+
+**Charts.** Ink and a quarter-strength Ink, and nothing else. Ink is the
+guides that finished. Bars are at most 24px wide, rounded at the top and square
+at the foot, with 2px between them, on three hairlines with their numbers.
+Pointing at a bar, or reaching it with the keyboard, shows an Ink caption with
+its numbers. A range longer than a month is shown a week at a time. Every chart
+has the same numbers as a table for a screen reader. There is no chart library.
+
+**Live.** A page that shows questions keeps itself current while it is open,
+asking every second and a half. The page says Live beside an Ink dot. The dot
+is still. It draws in once each time something new arrives, which is the only
+movement that says so. A question under way reads "Thinking", then "Showing
+step 2", with the shimmer, the same words the widget's status line uses. A new
+row fades in from 4px above in 200ms. A finished guide carries the green tick.
+Pointer blue stays with the pointer, so nothing on the dashboard is blue but
+the keyboard focus ring and the preview of the widget in Settings.
+
+**A guide.** It opens in a panel on the right, 576px wide, on Paper, with the
+page behind under a 20 percent Ink wash. Each step is a white card that says
+what was pointed at, and what Haptic said in the Ink caption bubble. The
+address holds the guide, so the link opens the same guide for someone else,
+and Back closes it.
+
+**Waiting.** While numbers load, Muted blocks hold the place of what is coming,
+at its size, so nothing jumps when it arrives. Once a page has numbers it keeps
+showing them while newer ones are on their way.
 
 ## Interaction
 

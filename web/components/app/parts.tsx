@@ -1,12 +1,21 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 import { cn } from "cn";
-import { Pointer } from "@/components/pointer";
 import { Button } from "@/components/ui/button";
-import { auth } from "@/lib/auth-client";
-import { site } from "@/lib/site";
+import { OUTCOME_LABEL, type Outcome } from "@/lib/app-api";
+
+/**
+ * Whether these parts are inside the dashboard. There a card is Card white on
+ * Paper with a 16px title, as DESIGN.md sets out under Dashboard. On the pages
+ * that stand alone, such as the install page, a card is Muted with a 24px title.
+ */
+const InDashboard = createContext(false);
+
+export function DashboardSurface({ children }: { children: ReactNode }) {
+  return <InDashboard.Provider value={true}>{children}</InDashboard.Provider>;
+}
 
 /**
  * Leaves a signed-in page with a full page load. The public pages load Haptic's
@@ -15,37 +24,6 @@ import { site } from "@/lib/site";
  */
 export function leaveFor(path: string) {
   window.location.assign(path);
-}
-
-/**
- * The navigation on signed-in pages. The name on the left, who is signed in and Sign out on the right.
- * `who` is the person's first name, or their email when there is no name. Pointing at it shows `email`.
- */
-export function AppNav({ who, email }: { who?: string; email?: string }) {
-  async function signOut() {
-    await auth().signOut();
-    leaveFor("/sign-in/");
-  }
-  return (
-    <header className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-6">
-      {/* A plain link, not next/link, for the reason given at leaveFor. */}
-      {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-      <a href="/" className="flex items-center gap-1.5 rounded-md text-lg font-medium tracking-tight outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-        <Pointer className="size-[22px]" />
-        {site.name}
-      </a>
-      {who && (
-        <nav className="flex min-w-0 items-center gap-4 text-sm font-medium">
-          <span title={email} className="hidden truncate text-muted-foreground sm:block">
-            {who}
-          </span>
-          <Button variant="ghost" size="lg" onClick={signOut}>
-            Sign out
-          </Button>
-        </nav>
-      )}
-    </header>
-  );
 }
 
 /** The small round tick that says a task is finished. Done green is for this and nothing else. */
@@ -99,9 +77,24 @@ export function CodeBlock({ code, label }: { code: string; label?: string }) {
   );
 }
 
-/** The surface every block on a page sits in: Muted, 1px border, 14px corners. */
+/** The surface every block on a page sits in: a 1px border and 14px corners. Muted on a page that stands alone, Card white in the dashboard. */
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <section className={cn("flex flex-col gap-4 rounded-xl border bg-muted p-6", className)}>{children}</section>;
+  const dashboard = useContext(InDashboard);
+  return <section className={cn("flex flex-col gap-4 rounded-xl border", dashboard ? "bg-card p-5" : "bg-muted p-6", className)}>{children}</section>;
+}
+
+const TITLE = "text-2xl font-medium tracking-[-0.02em]";
+const DASHBOARD_TITLE = "text-base font-medium";
+
+/** A step's title during setup, with its number or tick beside it. */
+export function StepTitle({ mark, children }: { mark: ReactNode; children: ReactNode }) {
+  const dashboard = useContext(InDashboard);
+  return (
+    <div className="flex items-center gap-3">
+      {mark}
+      <h2 className={dashboard ? DASHBOARD_TITLE : TITLE}>{children}</h2>
+    </div>
+  );
 }
 
 /**
@@ -111,10 +104,11 @@ export function Card({ children, className }: { children: ReactNode; className?:
  */
 export function FailedCard({ title, message, retry, level = 1, className }: { title: string; message: string; retry?: () => void; level?: 1 | 2; className?: string }) {
   const Heading = level === 1 ? "h1" : "h2";
+  const dashboard = useContext(InDashboard);
   return (
     <Card className={className}>
-      <Heading className="text-2xl font-medium tracking-[-0.02em]">{title}</Heading>
-      <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">{message}</p>
+      <Heading className={dashboard ? DASHBOARD_TITLE : TITLE}>{title}</Heading>
+      <p className={cn("max-w-[65ch] text-muted-foreground", dashboard ? "text-sm leading-5" : "text-base leading-6")}>{message}</p>
       {retry && (
         <Button variant="secondary" className="self-start" onClick={retry}>
           Try again
@@ -125,12 +119,115 @@ export function FailedCard({ title, message, retry, level = 1, className }: { ti
 }
 
 export function CardTitle({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
+  const dashboard = useContext(InDashboard);
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h2 className="text-2xl font-medium tracking-[-0.02em]">{children}</h2>
+      <h2 className={dashboard ? DASHBOARD_TITLE : TITLE}>{children}</h2>
       {aside}
     </div>
   );
+}
+
+/** The top of a dashboard page: its name, a line under it, and its controls on the right. */
+export function PageHeader({ title, note, children }: { title: string; note?: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+      <div className="flex min-w-0 flex-col gap-1">
+        <h1 className="text-2xl font-medium tracking-[-0.02em]">{title}</h1>
+        {note && <p className="text-sm text-muted-foreground">{note}</p>}
+      </div>
+      {children && <div className="flex flex-wrap items-center gap-3">{children}</div>}
+    </div>
+  );
+}
+
+/**
+ * A dashboard card that holds records: a title row, then rows that run edge to
+ * edge with hairlines between them. Text and forms go in Card.
+ */
+export function Panel({ title, aside, children, foot, className }: { title: ReactNode; aside?: ReactNode; children: ReactNode; foot?: ReactNode; className?: string }) {
+  return (
+    <section className={cn("flex min-w-0 flex-col rounded-xl border bg-card", className)}>
+      <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-5 py-3">
+        <h2 className={DASHBOARD_TITLE}>{title}</h2>
+        {aside}
+      </div>
+      {children}
+      {foot && <div className="border-t px-5 py-3 text-xs leading-5 text-muted-foreground">{foot}</div>}
+    </section>
+  );
+}
+
+/** What a panel says when it has nothing to list. */
+export function PanelEmpty({ children }: { children: ReactNode }) {
+  return <p className="max-w-[65ch] px-5 pb-5 text-sm leading-5 text-muted-foreground">{children}</p>;
+}
+
+/** A few choices side by side, one of them on: a time range, a filter, the tabs of a page. */
+export function Segmented<Value extends string | number>({
+  label,
+  value,
+  options,
+  onChange,
+  tabs = false,
+}: {
+  label: string;
+  value: Value;
+  options: readonly { value: Value; name: string; count?: number }[];
+  onChange: (value: Value) => void;
+  /** True when each choice shows a different part of the page. */
+  tabs?: boolean;
+}) {
+  return (
+    <div role={tabs ? "tablist" : "group"} aria-label={label} className="flex flex-wrap gap-1">
+      {options.map((option) => {
+        const on = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role={tabs ? "tab" : undefined}
+            aria-selected={tabs ? on : undefined}
+            aria-pressed={tabs ? undefined : on}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+              on ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+            )}
+          >
+            {option.name}
+            {option.count !== undefined && <span className={cn("tabular-nums", on ? "text-primary-foreground/70" : "text-muted-foreground")}>{option.count.toLocaleString()}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * How a guide stands, in a few words. One under way reads as the widget's own
+ * status line does, with the shimmer. A finished one carries the green tick.
+ */
+export function GuideStatus({ outcome, step, className }: { outcome: Outcome; step?: number | null; className?: string }) {
+  if (outcome === "under_way") {
+    return <span className={cn("shimmer", className)}>{step === null || step === undefined ? "Thinking" : `Showing step ${step + 1}`}</span>;
+  }
+  return (
+    <span className={cn("inline-flex items-center gap-1.5", className)}>
+      {outcome === "finished" && <DoneMark className="size-4" />}
+      {OUTCOME_LABEL[outcome]}
+    </span>
+  );
+}
+
+/** The current time, read again every few seconds, so "2 minutes ago" keeps up while the page stays open. */
+export function useNow(everyMs = 15_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(timer);
+  }, [everyMs]);
+  return now;
 }
 
 /** "3 minutes ago", "yesterday", "12 Nov". */
