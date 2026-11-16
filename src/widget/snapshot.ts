@@ -106,11 +106,26 @@ function wordsIn(el: Element, max = 200, skip = "", except?: Element, unseenToo 
     if (!(node instanceof Element) || node === except) return;
     if (NOT_WORDS.has(node.tagName) || holdsTyping(node) || choiceBoxes.has(node) || node.getAttribute("aria-hidden") === "true" || (skip && node.matches(skip))) return;
     if (!unseenToo && unseen(node)) return;
+    // Words in a box of their own are apart from the words before and after it, as the accessibility tree has them:
+    // a tab's "My cards" and the count in its badge are "My cards 3", not "My cards3". Words styled within a line are not.
+    let apart: boolean | undefined;
+    const ownBox = () => (apart ??= boxOfItsOwn(node));
+    if (text && !/\s$/.test(text) && ownBox()) text += " ";
     for (const child of shownChildren(node)) walk(child);
-    if (!WITHIN_A_SENTENCE.has(node.tagName)) text += " ";
+    if (!WITHIN_A_SENTENCE.has(node.tagName) || ownBox()) text += " ";
   };
   for (const child of shownChildren(el)) walk(child);
   return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Whether an element is laid out as a box of its own, apart from the line of
+ * words around it: a block, a flex or grid item, or an inline block like a
+ * badge. A box that only styles a few words, or has no box at all, is not.
+ */
+function boxOfItsOwn(el: Element): boolean {
+  const display = getComputedStyle(el).display;
+  return display !== "inline" && display !== "contents";
 }
 
 /**
@@ -333,6 +348,10 @@ interface Candidate extends SnapElement {
   single?: boolean;
   /** Found by its pointer inside a box the keyboard moves through, and kept only if that box is a grid of such things. */
   loose?: boolean;
+  /** Why it cannot be used, when it cannot and the page says why: "Only Admin can do this." */
+  why?: string;
+  /** Where in the window a control with no name and no picture sits: "top right". */
+  spot?: string;
 }
 
 /** Controls with a role of their own, whose words are theirs and not the words of a box around them. */
@@ -434,16 +453,19 @@ function rowTextOf(row: Element): string {
 const MAX_CONTEXT = 120;
 
 /**
- * A control's surroundings in one line: the region, the heading, the row and
- * its place among its like. When that is too long the heading gives way,
- * because the row and the place are what tell two controls apart.
+ * A control's surroundings in one line: the region, the heading, why it cannot
+ * be used, the row and its place among its like. When that is too long the
+ * heading gives way, because the rest is what tells two controls apart and
+ * what a visitor asks about one that is grey. Why it cannot be used goes here
+ * and not in its state: the server on main keeps 16 characters of a state,
+ * and 120 of the surroundings.
  */
 function contextOf(c: Candidate): string {
   const region = c.region === "page" ? "" : c.region;
-  const rest = [c.row ? `row: ${c.row}` : "", c.place ?? ""].filter(Boolean);
-  const room = MAX_CONTEXT - [region, ...rest].filter(Boolean).join(" › ").length - 3;
+  const rest = [c.why ? `disabled: ${c.why}` : "", c.row ? `row: ${c.row}` : "", c.place ?? ""].filter(Boolean);
+  const room = MAX_CONTEXT - [region, c.spot ?? "", ...rest].filter(Boolean).join(" › ").length - 3;
   const heading = c.heading.length > room ? (room > 12 ? `${c.heading.slice(0, room - 1).trimEnd()}…` : "") : c.heading;
-  return [region, heading, ...rest].filter(Boolean).join(" › ");
+  return [region, heading, c.spot ?? "", ...rest].filter(Boolean).join(" › ");
 }
 
 interface Scope {
@@ -487,6 +509,11 @@ function nameOfBox(el: Element): string {
     if (words) return words;
   }
   return cleanText(el.getAttribute("aria-label") ?? "", 80);
+}
+
+/** Whether a box is named only for screen readers: by its aria-label, with no element named as what names it. */
+function namedForScreenReaders(el: Element): boolean {
+  return !!el.getAttribute("aria-label")?.trim() && !el.getAttribute("aria-labelledby")?.trim();
 }
 
 /**
@@ -536,6 +563,52 @@ let own: ReadonlySet<string> = new Set();
 let untiedLabels = false;
 /** Boxes that show the choice made in a select built around a field, looked up once a reading. See `choiceBoxesOf`. */
 let choiceBoxes: WeakSet<Element> = new WeakSet();
+/**
+ * What the visitor's fields hold, in lower case, for as long as one page is
+ * being read. It is only compared with the page's words, here in the page,
+ * and is never sent or kept: see `echoesTyping`.
+ */
+let typed: string[] = [];
+
+/** Input types a visitor writes in. A tick box, a button, a file or a hidden field holds nothing typed. */
+const NOT_TYPED_IN = new Set(["checkbox", "radio", "button", "submit", "reset", "image", "file", "hidden", "color", "range"]);
+/** A value shorter than this is a word too common to tell that the page repeats it. */
+const MIN_ECHO = 3;
+const MAX_TYPED_FIELDS = 50;
+
+/** What the fields and editors on the page hold now, each as one lower-case line of words. */
+function typedValues(): string[] {
+  const values: string[] = [];
+  for (const field of Array.from(document.querySelectorAll("input, textarea, [contenteditable]")).slice(0, 400)) {
+    let value = "";
+    if (field instanceof HTMLInputElement) value = NOT_TYPED_IN.has(field.type) ? "" : field.value;
+    else if (field instanceof HTMLTextAreaElement) value = field.value;
+    else if ((field as HTMLElement).isContentEditable && !insideEditor(field.parentElement ?? document.body)) value = field.textContent ?? "";
+    value = value.replace(/\s+/g, " ").trim().toLowerCase();
+    if (value.length >= MIN_ECHO) values.push(value);
+    if (values.length >= MAX_TYPED_FIELDS) break;
+  }
+  return values;
+}
+
+/**
+ * Whether words of the page repeat what a field holds: a card's preview that
+ * shows the name being typed for it, or a total that shows the amount. They
+ * are what the visitor typed, so they are not sent as page text. Headings and
+ * titles are not held to this: a form that edits a record holds its name, and
+ * the page's heading and its dialogs' titles say it too. The value has to stand
+ * whole, with no letter or digit run on to it: "Settings" does not repeat a
+ * search for "set".
+ */
+function echoesTyping(words: string): boolean {
+  if (!typed.length || words.length < MIN_ECHO) return false;
+  const line = words.replace(/\s+/g, " ").toLowerCase();
+  const runsOn = (at: number) => at >= 0 && at < line.length && /[\p{L}\p{N}]/u.test(line[at] ?? "");
+  return typed.some((value) => {
+    for (let at = line.indexOf(value); at >= 0; at = line.indexOf(value, at + 1)) if (!runsOn(at - 1) && !runsOn(at + value.length)) return true;
+    return false;
+  });
+}
 
 /** Fields that open a list and show what was picked from it beside themselves, not in themselves. */
 const CHOICE_FIELDS = 'input[role="combobox"], input[aria-haspopup="listbox"], input[aria-haspopup="tree"], input[aria-haspopup="grid"]';
@@ -573,6 +646,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   own = namedIn(question);
   untiedLabels = Array.from(document.querySelectorAll("label")).some((label) => !label.hasAttribute("for") && !(label as HTMLLabelElement).control);
   choiceBoxes = choiceBoxesOf();
+  typed = typedValues();
   const candidates: Candidate[] = [];
   const headings: Heading[] = [];
   const texts: TextBlock[] = [];
@@ -685,13 +759,20 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
         if (options.length) added.options = options;
         const icon = iconOf(el);
         if (icon) added.icon = icon;
+        // A menu button with no name and no picture, like an account menu that shows only initials hidden from screen
+        // readers, is named by the menu it opens or by the box just around it, when the page names either.
+        const unnamedMenu = !added.label && !icon && opens(el, role) === OPENS_A_MENU;
+        if (unnamedMenu) added.label = cleanText(nameOfWhatItOpens(el) || nameAround(el), 80);
         // A chart or a tile with no name of its own is known by the box that names it, and says so:
         // "part of Simple graph". Otherwise an event reads "The user clicked clickable."
         if (!added.label && !icon && scope.box && !SHOWS_A_VALUE.has(role)) {
           added.label = cleanText(`part of ${scope.box}`, 80);
           added.boxNamed = true;
         }
+        // One that is still nameless is known by where it sits, as a visitor would point it out: "top right".
+        if (unnamedMenu && !added.label) added.spot = spotOf(rect, viewportHeight);
         const state = stateOf(el, role);
+        if (state.includes("disabled")) giveReason(added, reasonOf(el));
         // Fully transparent controls have always been listed: row actions that fade in. One that a stylesheet shows on hover says so.
         const fades = !hoverBox && hiddenChecked < MAX_HIDDEN_CHECKED && getComputedStyle(el).opacity === "0" && ++hiddenChecked > 0 && shownWhenOver(el, false, true);
         if (hoverBox || (fades && liesInside(rect, fades))) state.push(SHOWS_ON_HOVER);
@@ -705,7 +786,8 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
     } else if ((!insideControl || held) && !svg && !outside && !hoverBox && (TEXT_TAGS.has(el.tagName) || isRow) && !taken.has(el) && (held ?? texts).length < MAX_TEXT_BLOCKS) {
       const words = isRow ? rowTextOf(el) : sentenceOf(el, taken);
       rowRead = isRow && !!words;
-      if (words) {
+      // Words that repeat what the visitor typed in a field are theirs, wherever the page shows them.
+      if (words && !echoesTyping(words)) {
         const rect = el.getBoundingClientRect();
         (held ?? texts).push({ text: cleanText(words, isRow ? 200 : 160), visible: rect.bottom > 0 && rect.top < viewportHeight, order: order++ });
       }
@@ -747,8 +829,18 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
         within = within.filter((c) => !loose.has(c));
       }
     }
+    // A box the keyboard can reach, with no pointer or click of its own, around controls that cannot be used: the box a
+    // page puts around a disabled button so that a tooltip can say why, since the button itself takes no mouse or
+    // keyboard. It is those controls, not one more. What the page says about it, or prints in it beside them, is why.
+    const unusable = keysOnly && added && isFocusable(el) ? disabledWithin(within) : [];
     if (grid) {
       wrapper = true;
+    } else if (unusable.length) {
+      wrapper = true;
+      const why = reasonOf(el) || wordsIn(el, 200, `${CONTROLS}, label`);
+      for (const c of unusable) giveReason(c, why);
+    } else if (added && opensRecord(el, added)) {
+      // A table row that opens what it shows is a control of its own, whatever it holds, and is no frame of its tick box.
     } else if (added && !isNative(el) && !isFocusable(el) && within.some((c) => c.role !== "clickable" && isNative(c.el))) {
       wrapper = true;
     } else if (added?.role === "clickable" && within.some((c) => c.role === "clickable" && saysMostOf(c.boxNamed ? "" : c.label, added!.label))) {
@@ -773,8 +865,11 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
       // Its words were held back as a control's own. It is no control, so they are the page's.
       if (mine?.length) (held ?? texts).push(...mine);
     }
-    // A section that is only words, like a title and a line under it, introduces what comes after it.
-    if (section && !added && candidates.length === before) scope.heading = childScope.heading;
+    // A section that is only words, like a title and a line under it, introduces what comes after it. One that shows
+    // no words, or whose only title is a name heard by a screen reader alone, introduces nothing: a toaster's region,
+    // named "Notifications alt+T" and empty until a message comes, is not the surroundings of what the page puts after it.
+    const heardOnly = childScope.heading === boxName && namedForScreenReaders(el);
+    if (section && !added && candidates.length === before && !heardOnly && wordsIn(el, 40)) scope.heading = childScope.heading;
   };
 
   if (root) visit(root, { region: "page", heading: "" }, false, false);
@@ -820,7 +915,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   usable = [];
 
   const elements = new Map<string, Element>();
-  const strip = ({ el: _el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, pointer: _pointer, single: _single, loose: _loose, ...element }: Candidate): SnapElement => element;
+  const strip = ({ el: _el, nav: _nav, region: _region, heading: _heading, row: _row, place: _place, outside: _outside, boxNamed: _boxNamed, pointer: _pointer, single: _single, loose: _loose, why: _why, spot: _spot, ...element }: Candidate): SnapElement => element;
   const listed = chosen.map((c, index) => {
     const element = strip(c);
     element.id = `e${index + 1}`;
@@ -838,6 +933,8 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   };
   if (modal) snapshot.dialog = dialogLabel(modal);
   uncut.set(snapshot, { elements: everything.elements.map(strip), text: everything.text, headings: everything.headings });
+  // What the fields held is let go with the reading.
+  typed = [];
   return { snapshot, elements };
 }
 
@@ -1010,7 +1107,7 @@ function roleOf(el: Element, explicitRole: string, pointerStartsHere: boolean): 
   if (tag === "A" && (el.hasAttribute("onclick") || pointerStartsHere || isFocusable(el))) return "link";
   // A label that shows the pointer is pressed for its field, which is listed. Only when the field cannot be seen is the label what the visitor presses.
   if (tag === "LABEL") {
-    const field = (el as HTMLLabelElement).control;
+    const field = labelTarget(el as HTMLLabelElement);
     if (field && isRendered(field)) return "";
   }
   if (el.hasAttribute("onclick") || pointerStartsHere) return "clickable";
@@ -1018,6 +1115,67 @@ function roleOf(el: Element, explicitRole: string, pointerStartsHere: boolean): 
   // a menu or a grid that takes the keyboard does so to move it among its entries, which are what is used.
   if (isFocusable(el) && !FOCUSABLE_NOT_CLICKABLE.has(tag) && !ROVING.has(explicitRole) && !scrolls(el)) return "clickable";
   return "";
+}
+
+/** Elements HTML lets a <label> name: its fields, and its buttons. */
+function isLabelable(el: Element): el is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement {
+  return el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement || el instanceof HTMLButtonElement;
+}
+
+/** Whether an element says by its role that it is a control. */
+function hasControlRole(el: Element): boolean {
+  return (el.getAttribute("role") ?? "").split(/\s+/).some((role) => INTERACTIVE_ROLES.has(role));
+}
+
+/**
+ * The <label>s that name a control: those tied to it by `for` and the one
+ * around it. HTML ties them to its fields and buttons, a switch or a tick box
+ * drawn as a <button> among them. A box that is a control only by its role,
+ * like a switch drawn as a <div>, is named by a <label for> that points at it
+ * all the same, the way the page means it.
+ */
+function labelsOf(el: Element): HTMLLabelElement[] {
+  if (isLabelable(el)) return Array.from(el.labels ?? []);
+  if (!el.id || !hasControlRole(el)) return [];
+  const root = el.getRootNode() as Document | ShadowRoot;
+  try {
+    return Array.from(root.querySelectorAll<HTMLLabelElement>(`label[for="${CSS.escape(el.id)}"]`));
+  } catch {
+    // A root that cannot be searched. The control is named some other way.
+    return [];
+  }
+}
+
+/** The control a <label> names: the field or button HTML ties it to, or a control by role that its `for` points at. */
+function labelTarget(label: HTMLLabelElement): Element | null {
+  if (label.control) return label.control;
+  const id = label.getAttribute("for");
+  if (!id) return null;
+  const target = (label.getRootNode() as Document | ShadowRoot).getElementById?.(id) ?? null;
+  return target && hasControlRole(target) ? target : null;
+}
+
+/**
+ * Whether a box that takes clicks is a table row that opens the record it
+ * shows: a row the pointer starts on, or that says it takes clicks, with
+ * words of its own besides those of its controls. It holds a tick box to
+ * select it and buttons for its actions, and is a control all the same.
+ */
+function opensRecord(el: Element, c: Candidate): boolean {
+  if (!isRowOfTable(el)) return false;
+  if (!c.pointer && !el.hasAttribute("onclick")) return false;
+  return /[\p{L}\p{N}]/u.test(wordsIn(el, 40, `${CONTROLS}, label`));
+}
+
+/** Boxes that are ticked, whatever they are drawn with. */
+const TICKS = "[role='checkbox'], [role='switch'], [role='radio']";
+
+/** What a table row holds for its actions. */
+const ROW_ACTIONS = "button, [role='button']";
+
+/** Whether an element is a row of a table, by its tag or its role. */
+function isRowOfTable(el: Element): boolean {
+  return el.tagName === "TR" || el.getAttribute("role") === "row";
 }
 
 /** A tag the browser itself treats as a control. */
@@ -1102,7 +1260,8 @@ function hasRealBox(el: Element, rect: DOMRect): boolean {
  * is listed, so its pointer does not make it a control of its own.
  */
 function pressedForAField(el: Element): boolean {
-  const field = (el.parentElement?.closest("label") as HTMLLabelElement | null)?.control;
+  const label = el.parentElement?.closest("label");
+  const field = label ? labelTarget(label) : null;
   return !!field && isRendered(field);
 }
 
@@ -1238,7 +1397,10 @@ function nameRows(candidates: Candidate[]) {
       // The outermost such box is the one that speaks for the row, in the words a person sees on it.
       let around: Candidate | undefined;
       for (let box: Element | null = c.el.parentElement; box; box = box === row ? null : box.parentElement) around = named.get(box) ?? around;
-      const name = around ? cleanText(wordsIn(around.el, 80) || around.label, 40) : rowName(row, c.el, piecesOf);
+      // A table row that is listed is told by the words it shows outside its controls, the same for each of them: an
+      // invoice's link is not told apart by its own number.
+      const words = around && isRowOfTable(around.el) ? wordsIn(around.el, 80, CONTROLS) : around ? wordsIn(around.el, 80) : "";
+      const name = around ? cleanText(words || around.label, 40) : rowName(row, c.el, piecesOf);
       if (name) c.row = entryNumber(row) + name;
     }
   }
@@ -1251,9 +1413,18 @@ function nameRows(candidates: Candidate[]) {
  */
 function rowOf(control: Element): Element | null {
   for (let row = control.parentElement?.closest(ROW) ?? null, tries = 0; row && tries < 4; row = row.parentElement?.closest(ROW) ?? null, tries++) {
-    if (sameKind(row, row.previousElementSibling) || sameKind(row, row.nextElementSibling)) return row;
+    if (sameKind(row, row.previousElementSibling) || sameKind(row, row.nextElementSibling) || isTableRow(row)) return row;
   }
   return null;
+}
+
+/**
+ * A row of a table, which is a row by what it is, whatever stands beside it.
+ * A table drawn with a box around each row, so that it can be measured or
+ * shown on hover, leaves each row with nothing of its kind beside it.
+ */
+function isTableRow(row: Element): boolean {
+  return isRowOfTable(row) && !!row.parentElement?.closest('table, [role="table"], [role="grid"], [role="treegrid"]');
 }
 
 function sameKind(row: Element, other: Element | null): other is Element {
@@ -1582,6 +1753,35 @@ function nameOfField(field: Element): string {
   return byIds || field.getAttribute("aria-label")?.trim() || labels || field.getAttribute("placeholder") || field.getAttribute("aria-placeholder") || field.getAttribute("title") || "";
 }
 
+/**
+ * The name of what a control opens, when it says what that is and the page
+ * names it: a menu labelled "Account". A menu named by the button that opens
+ * it says nothing more.
+ */
+function nameOfWhatItOpens(el: Element): string {
+  const root = el.getRootNode() as Document | ShadowRoot;
+  for (const id of (el.getAttribute("aria-controls") ?? "").split(/\s+/).slice(0, 3)) {
+    const opened = id ? root.getElementById?.(id) : null;
+    if (!opened || opened.contains(el)) continue;
+    const byIds = (opened.getAttribute("aria-labelledby") ?? "").split(/\s+/).filter(Boolean);
+    const name = byIds.includes(el.id) ? opened.getAttribute("aria-label")?.trim() ?? "" : nameOfBox(opened);
+    if (name) return name;
+  }
+  return "";
+}
+
+/**
+ * Where a box sits in the window, by thirds: "top right", "bottom left", or
+ * "middle". A box above or below the window is placed only from side to side.
+ */
+function spotOf(rect: DOMRect, viewportHeight: number): string {
+  const third = (at: number, size: number, ends: [string, string]) => (at < size / 3 ? ends[0] : at > (size * 2) / 3 ? ends[1] : "middle");
+  const across = third(rect.left + rect.width / 2, window.innerWidth, ["left", "right"]);
+  if (rect.bottom <= 0 || rect.top >= viewportHeight) return across === "middle" ? "" : across;
+  const down = third(rect.top + rect.height / 2, viewportHeight, ["top", "bottom"]);
+  return down === "middle" && across === "middle" ? "middle" : `${down} ${across}`;
+}
+
 /** The aria-label or aria-labelledby of the box just around a control, which some pages put there rather than on the control. */
 function nameAround(el: Element): string {
   for (let box = el.parentElement, depth = 0; box && box !== document.body && depth < 2; box = box.parentElement, depth++) {
@@ -1620,6 +1820,15 @@ function labelOf(el: Element, role: string): string {
   const given = byIds(el.getAttribute("aria-labelledby") ?? "") || el.getAttribute("aria-label")?.trim() || "";
   let raw = el.getAttribute("data-haptic-label") || (given && !typedIn && !namedByOwnWords && !choice && !SHOWS_A_VALUE.has(role) ? withShownWords(given, el) : given);
   const ticks = role === "checkbox" || role === "radio" || role === "switch";
+  // A button, or a control by its role, that a <label> names: a switch or a tick box drawn as a button, or the button
+  // of a date picker. The label is its name, as the accessibility tree has it, even when only a screen reader can
+  // see it. The words the button shows are not added: a picker's are the date the visitor chose.
+  if (!raw && !(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
+    raw = labelsOf(el)
+      .map((label) => labelWords(label) || label.getAttribute("aria-label") || "")
+      .join(" ")
+      .trim();
+  }
   if (!raw && (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) {
     // A label can carry its words as an aria-label of its own.
     raw = Array.from(el.labels ?? []).map((label) => labelWords(label) || label.getAttribute("aria-label") || "").join(" ").trim();
@@ -1648,7 +1857,8 @@ function labelOf(el: Element, role: string): string {
     if (untiedLabel(caption.from)) raw = caption.text;
   }
   // Never use a field's contents as its label, nor the choice a select shows.
-  if (!raw && role !== "textbox" && !choice && !typedIn) raw = visibleText(el, NESTED_ENTRIES);
+  // A table row is named by what it shows, and not by the words of the buttons for its actions.
+  if (!raw && role !== "textbox" && !choice && !typedIn) raw = visibleText(el, isRowOfTable(el) ? `${NESTED_ENTRIES}, ${ROW_ACTIONS}` : NESTED_ENTRIES);
   // What the page shows in an empty field is the page's own words for it.
   if (!raw && typedIn) raw = el.getAttribute("placeholder") || el.getAttribute("aria-placeholder") || el.getAttribute("data-placeholder") || "";
   raw ||= el.getAttribute("title") || "";
@@ -1675,7 +1885,11 @@ const NESTED_ENTRIES = '[role="group"], [role="tree"], [role="menu"], [role="lis
 function iconOf(el: Element): string | undefined {
   // Nothing inside an editor is the page's own, its pictures included.
   if ((el as HTMLElement).isContentEditable) return undefined;
-  for (const candidate of [el, ...Array.from(el.querySelectorAll("svg, i, [class*='icon']")).slice(0, 4)]) {
+  // The pencil on a table row's edit button is that button's picture, and the tick in its tick box is the tick box's.
+  const pictures = Array.from(el.querySelectorAll("svg, i, [class*='icon']"));
+  const owner = (picture: Element) => picture.parentElement?.closest(`${CONTROLS}, label, ${TICKS}`);
+  const own = isRowOfTable(el) ? pictures.filter((picture) => !el.contains(owner(picture) ?? null)) : pictures;
+  for (const candidate of [el, ...own.slice(0, 4)]) {
     const dataIcon = candidate.getAttribute("data-icon");
     if (dataIcon) return dataIcon;
     const match = ICON_CLASS.exec(candidate.getAttribute("class") ?? "");
@@ -1693,8 +1907,10 @@ function opens(el: Element, role: string): string {
   const popup = (el.getAttribute("aria-haspopup") ?? "").toLowerCase();
   if (!popup || popup === "false" || role === "combobox" || role === "textbox" || role === "searchbox" || role === "select") return "";
   if (popup === "dialog") return "opens a dialog";
-  return popup === "listbox" || popup === "tree" || popup === "grid" ? "opens a list" : "opens a menu";
+  return popup === "listbox" || popup === "tree" || popup === "grid" ? "opens a list" : OPENS_A_MENU;
 }
+
+const OPENS_A_MENU = "opens a menu";
 
 /** Roles a visitor fills in, picks from or ticks, which a form can require. */
 const CAN_BE_REQUIRED = new Set(["textbox", "searchbox", "combobox", "select", "spinbutton", "slider", "checkbox", "radio", "switch", "file-upload"]);
@@ -1723,8 +1939,7 @@ function markedRequired(name: Element): boolean {
 
 /** The elements whose words name an element: its labels and what aria-labelledby points to. */
 function namesOf(el: Element): Element[] {
-  const names: Element[] = [];
-  if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) names.push(...Array.from(el.labels ?? []));
+  const names: Element[] = [...labelsOf(el)];
   const root = el.getRootNode() as Document | ShadowRoot;
   for (const id of (el.getAttribute("aria-labelledby") ?? "").split(/\s+/)) {
     const named = id ? root.getElementById?.(id) : null;
@@ -1771,6 +1986,38 @@ function isDisabled(el: Element): boolean {
     // :disabled unsupported. What the control says of itself stands.
   }
   return !!el.parentElement?.closest('[aria-disabled="true"]');
+}
+
+/** The controls with a role of their own among these, when there are some and none of them can be used. */
+function disabledWithin(within: Candidate[]): Candidate[] {
+  const controls = within.filter((c) => c.role !== "clickable");
+  return controls.length && controls.every((c) => c.state?.includes("disabled")) ? controls : [];
+}
+
+/** The longest reason given for a control that cannot be used. A longer text is a paragraph, not a reason. */
+const MAX_REASON = 72;
+
+/**
+ * What the page says about a control, read as why it cannot be used when it
+ * cannot: what aria-describedby points to, such as a tooltip that is open,
+ * its aria-description, or its tooltip. Nothing inside a field is read.
+ */
+function reasonOf(el: Element): string {
+  const root = el.getRootNode() as Document | ShadowRoot;
+  const described = (el.getAttribute("aria-describedby") ?? "")
+    .split(/\s+/)
+    .map((id) => (id ? root.getElementById?.(id) : null))
+    .map((node) => (node && !holdsTyping(node) && !insideEditor(node) ? wordsIn(node, 200, "", undefined, true) : ""))
+    .join(" ")
+    .trim();
+  return described || el.getAttribute("aria-description")?.trim() || el.getAttribute("title")?.trim() || "";
+}
+
+/** Gives a control that cannot be used the reason the page gives, unless it has one, or the reason only says its name again. */
+function giveReason(c: Candidate, reason: string) {
+  const why = cleanText(reason, MAX_REASON);
+  if (c.why || !why || (saysMostOf(why, c.label) && saysMostOf(c.label, why))) return;
+  c.why = why;
 }
 
 /** A state is at most 16 characters: the server cuts anything longer. */

@@ -48,3 +48,35 @@ for (const [what, id, event] of CASES) {
     }
   });
 }
+
+// A page that shows back what is typed into it: a card's preview with the name
+// being typed, and a total with the amount. What it shows is the visitor's.
+const ECHO = `
+  <h1>New card</h1>
+  <p><label for="nick">Card name</label> <input id="nick" type="text"></p>
+  <p><label for="amount">Amount</label> <input id="amount" type="text"></p>
+  <aside><p>Preview</p><div><span>northpine</span> <span id="name">New card</span></div><p id="total">Total $0.00</p></aside>
+  <button id="issue">Issue card</button>
+  <script>
+    document.getElementById("nick").addEventListener("input", (e) => { document.getElementById("name").textContent = e.target.value || "New card"; });
+    document.getElementById("amount").addEventListener("input", (e) => { document.getElementById("total").textContent = "Total $" + (e.target.value || "0") + ".00"; });
+  </script>`;
+
+test("what the page shows back of what was typed is not sent with the next question", async () => {
+  const session = await start(ECHO, (request, index) => (index === 0 ? point(request, "Card name", "Type a name for the card.") : words("Now click Issue card.", "done")));
+  try {
+    await session.ask("issue a card");
+    await session.untilState("pointing");
+    await session.page.locator("#nick").click();
+    await session.page.keyboard.type("Mergers offsite Zurich");
+    await session.page.locator("#amount").click();
+    await session.page.keyboard.type("7315");
+    await session.page.locator("#issue").focus();
+    await session.untilAsked(2);
+    const sent = JSON.stringify(session.requests);
+    for (const typed of ["Mergers offsite", "Zurich", "7315"]) assert.ok(!sent.includes(typed), `"${typed}" was sent: ${JSON.stringify(session.requests[1]?.snapshot.text)}`);
+    assert.ok(session.requests[1]!.snapshot.text.includes("Preview"), "the page's own words around it are still sent");
+  } finally {
+    await session.close();
+  }
+});

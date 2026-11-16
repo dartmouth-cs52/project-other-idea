@@ -1,0 +1,163 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Northpine's own look. It is a customer's app, not Haptic, so it has a brand
+   colour and does not follow Haptic's DESIGN.md. */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --color-bg: var(--np-bg);
+  --color-panel: var(--np-panel);
+  --color-sunken: var(--np-sunken);
+  --color-line: var(--np-line);
+  --color-line-strong: var(--np-line-strong);
+  --color-ink: var(--np-ink);
+  --color-ink-2: var(--np-ink-2);
+  --color-ink-3: var(--np-ink-3);
+  --color-brand: var(--np-brand);
+  --color-brand-ink: var(--np-brand-ink);
+  --color-brand-soft: var(--np-brand-soft);
+  --color-danger: var(--np-danger);
+  --color-danger-soft: var(--np-danger-soft);
+  --color-warn: var(--np-warn);
+  --color-warn-soft: var(--np-warn-soft);
+  --color-ok: var(--np-ok);
+  --color-ok-soft: var(--np-ok-soft);
+  --color-info: var(--np-info);
+  --color-info-soft: var(--np-info-soft);
+  --color-sidebar: var(--np-sidebar);
+  --color-sidebar-ink: var(--np-sidebar-ink);
+  --color-sidebar-ink-2: var(--np-sidebar-ink-2);
+  --color-sidebar-hover: var(--np-sidebar-hover);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  --animate-in: np-in 140ms ease-out;
+}
+
+@keyframes np-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
+:root {
+  --np-bg: #f6f7f6;
+  --np-panel: #ffffff;
+  --np-sunken: #f1f3f2;
+  --np-line: #e3e6e4;
+  --np-line-strong: #cdd2cf;
+  --np-ink: #18201c;
+  --np-ink-2: #4b5650;
+  --np-ink-3: #7d8781;
+  --np-brand: #17633a;
+  --np-brand-ink: #ffffff;
+  --np-brand-soft: #e5f2ea;
+  --np-danger: #c42b2b;
+  --np-danger-soft: #fdecec;
+  --np-warn: #a15c00;
+  --np-warn-soft: #fff4e0;
+  --np-ok: #1d7a46;
+  --np-ok-soft: #e4f5ea;
+  --np-info: #2456b8;
+  --np-info-soft: #e8effc;
+  --np-sidebar: #10251a;
+  --np-sidebar-ink: #e6efe9;
+  --np-sidebar-ink-2: #9db3a6;
+  --np-sidebar-hover: #1b3a29;
+  color-scheme: light;
+}
+
+.dark {
+  --np-bg: #0e1311;
+  --np-panel: #151b18;
+  --np-sunken: #111714;
+  --np-line: #26302b;
+  --np-line-strong: #36423c;
+  --np-ink: #e8eeea;
+  --np-ink-2: #b2bdb6;
+  --np-ink-3: #7f8b84;
+  --np-brand: #3fae6c;
+  --np-brand-ink: #06140c;
+  --np-brand-soft: #173524;
+  --np-danger: #f06161;
+  --np-danger-soft: #3a1717;
+  --np-warn: #f0a637;
+  --np-warn-soft: #3a2a10;
+  --np-ok: #4cc27b;
+  --np-ok-soft: #133523;
+  --np-info: #7aa5f5;
+  --np-info-soft: #172744;
+  --np-sidebar: #0a1510;
+  --np-sidebar-ink: #e6efe9;
+  --np-sidebar-ink-2: #8aa094;
+  --np-sidebar-hover: #16291f;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--np-bg);
+  color: var(--np-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  border-color: var(--np-line);
+}
+
+:focus-visible {
+  outline: 2px solid var(--np-brand);
+  outline-offset: 2px;
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.4);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The rich text editor. */
+.ProseMirror {
+  min-height: 160px;
+  outline: none;
+}
+.ProseMirror p {
+  margin: 0.4em 0;
+}
+.ProseMirror h2 {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin: 0.8em 0 0.3em;
+}
+.ProseMirror ul {
+  list-style: disc;
+  padding-left: 1.4em;
+}
+.ProseMirror ol {
+  list-style: decimal;
+  padding-left: 1.4em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
