@@ -659,9 +659,9 @@ function typedValues(): string[] {
 /**
  * Whether words of the page repeat what a field holds: a card's preview that
  * shows the name being typed for it, or a total that shows the amount. They
- * are what the visitor typed, so they are not sent as page text. Headings and
- * titles are not held to this: a form that edits a record holds its name, and
- * the page's heading and its dialogs' titles say it too. The value has to stand
+ * are what the visitor typed, so they are not sent as page text. Everything
+ * else a reading sends, every heading, title, name, option and button's
+ * words, has them taken out instead (`withoutTyping`). The value has to stand
  * whole, with no letter or digit run on to it: "Settings" does not repeat a
  * search for "set".
  */
@@ -695,7 +695,27 @@ function choiceBoxesOf(): WeakSet<Element> {
   }
   return boxes;
 }
-const cleanText = (text: string, max = 80): string => maskAndTrim(text, max, own);
+
+/** What stands where a heading, a title, a name, an option or a button's words repeat what a field holds. */
+const TYPED = "[typed]";
+let typedPattern: { of: string[]; pattern?: RegExp } = { of: [] };
+/**
+ * Words with every place that repeats what a field holds put as `TYPED`, by
+ * `echoesTyping`'s rule: "Hello, Zebulon Quackenbush" while a field holds
+ * that name is "Hello, [typed]", and a list's "Search for “divorce lawyer”"
+ * while the search box holds it is "Search for “[typed]”". Every piece of text
+ * a reading sends passes through it (`cleanText` below), so what the visitor
+ * typed is never sent, wherever the page shows it again.
+ */
+function withoutTyping(text: string): string {
+  if (!typed.length || text.length < MIN_ECHO) return text;
+  if (typedPattern.of !== typed) {
+    const escaped = [...typed].sort((a, b) => b.length - a.length).map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+"));
+    typedPattern = { of: typed, pattern: new RegExp(`(?<![\\p{L}\\p{N}])(?:${escaped.join("|")})(?![\\p{L}\\p{N}])`, "giu") };
+  }
+  return text.replace(typedPattern.pattern!, TYPED);
+}
+const cleanText = (text: string, max = 80): string => maskAndTrim(withoutTyping(text), max, own);
 
 /**
  * Reads the page. `ignore` is Haptic's own element. `question` is what the
@@ -2934,7 +2954,7 @@ function whichPage(params: URLSearchParams): string {
   const kept: string[] = [];
   for (const [key, value] of params) {
     if (kept.length === 2) break;
-    if (!/^[A-Za-z][\w-]{0,15}$/.test(key) || !/^[A-Za-z][A-Za-z_:.-]{0,29}$/.test(value)) continue;
+    if (!/^[A-Za-z][\w-]{0,15}$/.test(key) || !/^[A-Za-z][A-Za-z_:.-]{0,29}$/.test(value) || echoesTyping(value)) continue;
     kept.push(`${key}=${value}`);
   }
   return kept.length ? `?${kept.join("&")}` : "";

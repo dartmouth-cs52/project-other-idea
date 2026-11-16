@@ -80,3 +80,52 @@ test("what the page shows back of what was typed is not sent with the next quest
     await session.close();
   }
 });
+
+// From the second review: a page that repeats what is typed in places other than its text. A heading greets the
+// name being typed, the button to save says it, the title says it, and the search box's list offers a search for
+// what is typed in it. Each reached the model.
+const REPEATS = `
+  <h1>Profile</h1>
+  <p><label for="name">Full name</label> <input id="name" type="text"></p>
+  <h2 id="hello">Hello</h2>
+  <p><label for="q">Search</label> <input id="q" type="text" role="combobox" aria-expanded="true" aria-controls="suggestions"></p>
+  <ul id="suggestions" role="listbox"><li role="option" id="option">Search</li><li role="option">Recent searches</li></ul>
+  <p><label for="filter">Filter</label> <input id="filter" type="text"> <a id="results" href="/results">Results</a></p>
+  <button id="save">Save</button>
+  <script>
+    document.getElementById("filter").addEventListener("input", (e) => { document.getElementById("results").href = "/results?filter=" + e.target.value; });
+    document.getElementById("name").addEventListener("input", (e) => {
+      document.getElementById("hello").textContent = "Hello, " + e.target.value;
+      document.getElementById("save").textContent = "Save " + e.target.value;
+      document.title = "Profile of " + e.target.value;
+    });
+    document.getElementById("q").addEventListener("input", (e) => { document.getElementById("option").textContent = "Search for \u201c" + e.target.value + "\u201d"; });
+  </script>`;
+
+test("what was typed is not sent where the page repeats it in a heading, a button's words, an option, the title or a link's query: [typed] stands in its place", async () => {
+  const session = await start(REPEATS, (request, index) => (index === 0 ? point(request, "Full name", "Type your name.") : words("Now click Save.", "done")));
+  try {
+    await session.ask("how do I save my profile");
+    await session.untilState("pointing");
+    await session.page.locator("#name").click();
+    await session.page.keyboard.type("Zebulon Quackenbush");
+    await session.page.locator("#q").click();
+    await session.page.keyboard.type("divorce lawyer near me");
+    await session.page.locator("#filter").click();
+    await session.page.keyboard.type("oncology");
+    await session.page.locator("#save").focus();
+    const second = await session.untilAsked(2);
+    const sent = JSON.stringify(session.requests);
+    for (const typed of ["Zebulon", "Quackenbush", "divorce", "lawyer near me", "oncology"]) assert.ok(!sent.includes(typed), `"${typed}" was sent: ${JSON.stringify(second.snapshot)}`);
+    // The page's own words around it are still sent, so the model can tell what each one is.
+    assert.ok(second.snapshot.headings.includes("Hello, [typed]"), JSON.stringify(second.snapshot.headings));
+    assert.ok(second.snapshot.elements.some((element) => element.role === "button" && element.label === "Save [typed]"), JSON.stringify(second.snapshot.elements));
+    assert.ok(second.snapshot.elements.some((element) => element.role === "option" && element.label === "Search for \u201c[typed]\u201d"), JSON.stringify(second.snapshot.elements));
+    assert.equal(second.snapshot.title, "Profile of [typed]");
+    // A link's address keeps a word of its query only when it is not what a field holds.
+    assert.equal(second.snapshot.elements.find((element) => element.label === "Results")?.href, "/results");
+    assert.ok(second.snapshot.elements.some((element) => element.role === "option" && element.label === "Recent searches"));
+  } finally {
+    await session.close();
+  }
+});

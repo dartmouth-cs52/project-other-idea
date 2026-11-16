@@ -864,7 +864,8 @@ function stillListed(el: Element, listed: SnapElement): boolean {
   if (!listed.label || !["button", "link", "tab", "menuitem"].includes(listed.role) || el.hasAttribute("aria-label") || el.hasAttribute("aria-labelledby")) return true;
   const own = wordsIn(el, 200);
   if (!own) return true;
-  const was = new Set((fold(listed.label).match(/[\p{L}\p{N}]+/gu) ?? []).filter((word) => word.length > 1));
+  // What the reading masked, or took out as typed, says nothing of the words it stood for.
+  const was = new Set((fold(listed.label.replace(/\[(?:typed|number|email)\]/g, " ")).match(/[\p{L}\p{N}]+/gu) ?? []).filter((word) => word.length > 1));
   const now = fold(own).match(/[\p{L}\p{N}]+/gu) ?? [];
   if (!was.size || !now.length) return true;
   return now.some((word) => was.has(word));

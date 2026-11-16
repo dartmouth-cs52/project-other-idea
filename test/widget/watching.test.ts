@@ -35,7 +35,8 @@ test("a reply that asks for a key press, with nothing to point at, waits for the
     await session.page.locator("#q").press("Enter");
     const third = await session.untilAsked(3);
     assert.match(third.event ?? "", /^The user pressed Enter\./);
-    assert.match(third.change ?? "", /New: button "Order 7 for Priya"/);
+    // The page repeats the name the visitor typed in the search box: what they typed is not sent, wherever the page shows it.
+    assert.match(third.change ?? "", /New: button "Order 7 for \[typed\]"/);
     await session.untilState("finished");
   } finally {
     await session.close();
