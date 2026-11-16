@@ -6,6 +6,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { api, OUTCOME_LABEL, type Correction, type FinishedList, type GroupGuide, type GuideDetail, type HealthGroup, type Insights } from "@/lib/app-api";
 import { PointHereInstead } from "./guiding-rules";
 import { Card, CardTitle, DoneMark, seconds, when } from "./parts";
+import { teachable, TeachButton } from "./teach";
 
 const RANGES = [7, 30, 90];
 
@@ -279,9 +280,12 @@ function CantFind({ siteId, days, rows, ranges, onOpen }: { siteId: string; days
                     : "Those who gave up got no first step."}{" "}
                   Asked {row.asked.toLocaleString()} {row.asked === 1 ? "time" : "times"} in all.
                 </p>
-                <Button variant="ghost" size="sm" className="self-start" onClick={() => setShown(shown === row.key ? null : row.key)} aria-expanded={shown === row.key}>
-                  {shown === row.key ? "Hide the guides" : "See the guides"}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setShown(shown === row.key ? null : row.key)} aria-expanded={shown === row.key}>
+                    {shown === row.key ? "Hide the guides" : "See the guides"}
+                  </Button>
+                  <TeachButton siteId={siteId} question={row.question} />
+                </div>
                 {shown === row.key && <GroupGuides siteId={siteId} days={days} groupKey={row.key} onOpen={onOpen} />}
               </li>
             );
@@ -441,6 +445,7 @@ function GuideDrawer({ siteId, guideId, onClose, onCorrected }: { siteId: string
               {guide.helped !== null ? `, ${guide.helped ? "said it helped" : "said it did not help"}` : ""}, started on {guide.started_path}
               {guide.origin ? ` at ${guide.origin}` : ""}, {when(guide.started_at)}
             </p>
+            {teachable(guide.outcome) && <TeachButton siteId={siteId} question={guide.question} guide={guide.id} onStarted={onClose} />}
             {guide.cancelled_steps > 0 && (
               <p className="text-sm text-muted-foreground">
                 {guide.cancelled_steps === 1 ? "One step was" : `${guide.cancelled_steps} steps were`} asked again because the page changed while Haptic was answering. Pages that load slowly after a click cause this.

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, type ControlName, type Correction, type Site } from "@/lib/app-api";
 import { Card, CardTitle, when } from "./parts";
+import { TaughtRoutes } from "./teach";
 
 // What a company changes about how Haptic guides on its site. Corrections are
 // made from a guide's steps ("Point here instead"). The list of controls Haptic
@@ -163,6 +164,7 @@ export function GuidingRules({ site, onChange }: { site: Site; onChange: (site: 
     <Card>
       <CardTitle>How Haptic guides here</CardTitle>
       <Corrections site={site} onChange={onChange} />
+      <TaughtRoutes site={site} onChange={onChange} />
       <NeverPointAt site={site} onChange={onChange} />
     </Card>
   );
