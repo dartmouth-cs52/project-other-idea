@@ -103,6 +103,8 @@ export class Ui {
    */
   private captor?: Element;
   private frame = 0;
+  /** The timer that keeps our element placed, while it is in use. */
+  private placing?: ReturnType<typeof setInterval>;
   /** Where the pointer last was, so each move starts from there. */
   private at: { x: number; y: number };
 
@@ -139,7 +141,10 @@ export class Ui {
     this.at = { x: side === "left" ? 60 : window.innerWidth - 60, y: window.innerHeight - 40 };
 
     launcher.addEventListener("click", () => {
+      // Nothing kept our element in place while it was not in use. A dialog may have opened since.
+      this.place();
       this.panel.hidden = !this.panel.hidden;
+      this.keepPlaced();
       if (!this.panel.hidden) this.input.focus();
     });
     this.form.addEventListener("submit", (event) => {
@@ -158,16 +163,33 @@ export class Ui {
         if ((event as KeyboardEvent).key === "Escape") {
           const fromPanel = this.panel.contains(event.composedPath()[0] as Node);
           if (!fromPanel || (type === "keydown" && this.panel.hidden)) return;
-          if (type === "keydown") this.panel.hidden = true;
+          if (type === "keydown") {
+            this.panel.hidden = true;
+            this.keepPlaced();
+          }
         }
         event.stopPropagation();
       });
     }
+    this.keepPressesOurs();
     this.watchKeyboard();
     this.host.setAttribute("popover", "manual");
     this.setState("idle");
     this.place();
-    setInterval(this.place, 500);
+  }
+
+  /**
+   * Keeps our element placed while the visitor is using it: while the ask box
+   * is open, and while a guide runs. Nothing of ours runs on a page where
+   * neither is the case, so the timer stops then.
+   */
+  private keepPlaced() {
+    const inUse = !this.panel.hidden || this.state === "asking" || this.state === "pointing" || this.state === "watching";
+    if (inUse && this.placing === undefined) this.placing = setInterval(this.place, 500);
+    else if (!inUse && this.placing !== undefined) {
+      clearInterval(this.placing);
+      this.placing = undefined;
+    }
   }
 
   /**
@@ -193,6 +215,30 @@ export class Ui {
     }
     focused?.focus();
   };
+
+  /**
+   * A press on anything of ours is not a press outside the page's open list,
+   * menu or calendar, and must not close it. Pages hear such a press on the
+   * document or the window, for the most part as the mouse goes down, and
+   * often in the capture phase, which runs before anything here can stop it.
+   * So the press is cancelled: the browser then fires none of the mouse
+   * events that follow it, though the click still comes. A cancelled press
+   * also puts the keyboard nowhere, so a press into the ask box gives the box
+   * the keyboard here. Once the box has it, a press in it is left alone, for
+   * placing the cursor and selecting. Everything else a press sends is
+   * stopped at our element, out of reach of the page's listeners.
+   */
+  private keepPressesOurs() {
+    this.host.addEventListener("pointerdown", (event) => {
+      const into = event.composedPath()[0];
+      if (into === this.input && this.host.shadowRoot?.activeElement === this.input) return;
+      event.preventDefault();
+      if (into === this.input) this.input.focus();
+    });
+    for (const type of ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "dblclick", "auxclick", "contextmenu", "touchstart", "touchend", "focusout"]) {
+      this.host.addEventListener(type, (event) => event.stopPropagation());
+    }
+  }
 
   /**
    * Notices the page pulling the keyboard out of the ask box the moment the
@@ -227,10 +273,12 @@ export class Ui {
     this.statusText.textContent = text;
     if (text) this.panel.hidden = false;
     else this.input.value = "";
+    this.keepPlaced();
   }
 
   closePanel() {
     this.panel.hidden = true;
+    this.keepPlaced();
   }
 
   /** Move the pointer to an element and show the caption beside it. With no text yet, the pointer goes alone. */
@@ -287,6 +335,7 @@ export class Ui {
 
   setState(state: GuideState) {
     (this.host as HTMLElement & { guideState?: GuideState }).guideState = state;
+    this.keepPlaced();
   }
 
   /**
