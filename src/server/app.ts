@@ -400,7 +400,8 @@ export function turnCounts(request: TurnRequest, measure: TurnMeasure): TurnCoun
     msToTarget: measure.msToTarget,
     status: reply.status,
     pointed: reply.target !== null,
-    recheck: measure.recheck ? (measure.recheck.asked ? "asked" : "logged") : "none",
+    // "pointed": the server pointed at the control the sentence named. "asked": the model was asked again. "logged": neither.
+    recheck: measure.recheck ? (measure.recheck.pointed ? "pointed" : measure.recheck.asked ? "asked" : "logged") : "none",
   };
   if (!measure.acting) return counts;
   counts.acting = reply.mode === "act" ? "on" : (measure.acting.refused ?? "off");

@@ -477,3 +477,22 @@ test("each step is counted for the server's log with nothing from the visitor or
   assert.deepEqual([handover?.do, handover?.commits, handover?.handover], ["none", true, true]);
   assert.deepEqual([capped?.capped, capped?.model, capped?.withheld], [true, "none", "cap"]);
 });
+
+test("a step the server pointed at itself, because the sentence named the control, is counted as that in the log", () => {
+  const request = parseTurn(JSON.parse(stepBody({ step: 2, event: 'The user clicked link "Team".' })))!;
+  const measure = (recheck?: { named: string; asked: boolean; verdict?: "point" | "aside" | "ask"; pointed?: true }) => ({
+    reply: { target: "e1", status: "continue" as const, say: "Click Team." },
+    model: "claude-test",
+    ms: 1,
+    msToTarget: 1,
+    cited: [],
+    wrote: "",
+    broke: [],
+    usd: 0,
+    ...(recheck ? { recheck } : {}),
+  });
+  assert.equal(turnCounts(request, measure()).recheck, "none");
+  assert.equal(turnCounts(request, measure({ named: "e1", asked: false, verdict: "point", pointed: true })).recheck, "pointed");
+  assert.equal(turnCounts(request, measure({ named: "e1", asked: true, verdict: "ask" })).recheck, "asked");
+  assert.equal(turnCounts(request, measure({ named: "e1", asked: false, verdict: "aside" })).recheck, "logged");
+});
