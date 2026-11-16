@@ -1,8 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { DEFAULT_CACHE, measureTurn, tidySay, TurnError, type TurnSettings } from "../src/server/model.ts";
+import { measureTurn, tidySay, TurnError, type TurnSettings } from "../src/server/model.ts";
 import { loadCaseFiles, plausibleRange, score, type Case } from "./cases.ts";
+import { middle, parseModel, percent } from "./models.ts";
 
 // Runs every benchmark case against one or more models and prints how often
 // each pointed at a right control, and how long a step took.
@@ -46,21 +47,6 @@ interface Run {
   tokens?: { input: number; cacheRead: number; cacheWrite: number; output: number };
   error?: string;
 }
-
-function parseModel(spec: string): { name: string; settings: TurnSettings } {
-  const [model = "", ...flags] = spec.trim().split("@");
-  const settings: TurnSettings = { model, effort: "low", thinking: "default", cache: DEFAULT_CACHE };
-  for (const flag of flags) {
-    if (flag === "low" || flag === "medium" || flag === "high") settings.effort = flag;
-    else if (flag === "off") settings.thinking = "off";
-    else throw new Error(`"${flag}" in "${spec}" isn't a setting. Use low, medium, high or off.`);
-  }
-  if (!model) throw new Error("A model is missing from --models.");
-  return { name: spec.trim(), settings };
-}
-
-const percent = (part: number, whole: number) => (whole ? `${Math.round((100 * part) / whole)}%` : "n/a");
-const middle = (sorted: number[], share: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * share))] ?? 0;
 
 async function main() {
   const { values } = parseArgs({
