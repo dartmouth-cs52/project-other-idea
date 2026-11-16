@@ -23,12 +23,18 @@ npm run dev              # http://localhost:4200
 The app adds Haptic the way a customer would, with one script tag pointing at `http://localhost:4000/widget.js` with site `site_testbed`. From the repo root:
 
 ```bash
-npm run dev    # the Haptic server on :4000
+npm run help:export --prefix testbed   # Northpine's help center as Markdown, in testbed/help-docs
+npm run dev                            # the Haptic server on :4000
 npm run tag -- --url http://localhost:4200 --id site_testbed --name Northpine \
-  --notes testbed/haptic-notes.md --allow http://localhost:4200
+  --notes testbed/haptic-notes.md --docs testbed/help-docs --allow http://localhost:4200 \
+  --handoff-url http://localhost:4200/help/contact
 ```
 
-Then reload the app and press Ask. The crawl only sees the empty HTML shell, because Northpine is a single-page app, like most dashboards. Haptic still reads each page live. `haptic-notes.md` is the company's own map of the app, written the way a customer would describe it.
+Then reload the app and press Ask. The crawl only sees the empty HTML shell, because Northpine is a single-page app, like most dashboards. Haptic still reads each page live, and it gets the rest from three places, the way it would at a real customer:
+
+- `haptic-notes.md` is the company's own map of the app, written the way a customer would describe it: every page, and what the top bar's menus hold.
+- The help center's articles are in the app's code, where the crawl can't read them, so `help:export` writes them out as files to pass with `--docs`. With help docs, Answers is on, so a question like "what does freezing a card do" gets an answer in the panel with the article it came from.
+- Real visits. The widget sends the labels of each page it loads on and what each menu, tab and accordion shows when opened, and on your machine one visitor is enough for them to count. They are kept in `data/learned.json` at the repo root, so they last across restarts. The quickest way to teach it the whole app is to replay the tasks with the widget on and the server running, `WITH_HAPTIC=1 npm run tasks:replay --prefix testbed`, which visits most pages and opens most menus. Delete `data/learned.json` to start again.
 
 To load the app without Haptic, add `?lab.widget=0`.
 
