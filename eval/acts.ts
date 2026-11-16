@@ -42,7 +42,7 @@ import type { Act, Guide, GuideSet, Step } from "./guide.ts";
 // request the page makes that would leave this machine is stopped. Without
 // --server, no model and no Haptic server is called.
 //
-//   npm run eval:acts -- [area or task id prefix ...] [--parallel 2] [--out results.json] [--naive]
+//   npm run eval:acts -- [area, task id prefix or whole task id ...] [--parallel 2] [--out results.json] [--naive]
 //
 // With --server, the answers come from a running Haptic server and its model
 // instead, the way eval:guides --server asks: the site must be published
@@ -952,7 +952,9 @@ async function main() {
     process.exit(1);
   }
   const prefixes = wanted.length ? wanted : AREAS;
-  const guides = set.guides.filter((guide) => prefixes.some((prefix) => guide.id === prefix || guide.id.startsWith(`${prefix}-`) || guide.id.startsWith(prefix)));
+  // A task's whole id runs that task alone: "cards-raise-limit" is not also "cards-raise-limit-employee", which in a live run would spend a call.
+  const named = (prefix: string, id: string) => (set.guides.some((guide) => guide.id === prefix) ? id === prefix : id.startsWith(prefix));
+  const guides = set.guides.filter((guide) => prefixes.some((prefix) => named(prefix, guide.id)));
   if (!guides.length) {
     console.error(`No Northpine task starts with ${prefixes.join(", ")}.`);
     process.exit(1);
