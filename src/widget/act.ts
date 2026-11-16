@@ -632,8 +632,8 @@ async function typeInto(run: Run, field: HTMLInputElement | HTMLTextAreaElement,
   for (const piece of pieces) {
     run.check();
     const first = piece[0] ?? "";
-    // A new line goes in without an Enter key, which a page may take as "send".
-    const allowed = piece === "\n" || fire(run, field, keyEvent("keydown", first), false);
+    // A new line goes in without an Enter key, which a page may take as "send". A key the page answers with a dialog of the browser's own stops acting, as a press does.
+    const allowed = piece === "\n" || fire(run, field, keyEvent("keydown", first), true);
     if (allowed) {
       let inserted = false;
       if (holdsFocus(field)) {
