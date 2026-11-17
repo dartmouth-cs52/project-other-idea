@@ -159,3 +159,143 @@ test("in presentation mode the question keeps off the ask box while the answer i
     await session.close();
   }
 });
+
+/**
+ * How the question is drawn: its box, how many lines of it are on show, and whether its last letter is among them.
+ * Read from where the browser lays the words out, so a question cut short at the end of a line, or below the
+ * second, is told apart from one shown whole.
+ */
+const QUESTION_DRAWN = `(() => {
+  const asked = document.querySelector('haptic-root').shadowRoot.querySelector('.asked');
+  const box = asked.getBoundingClientRect();
+  const walker = document.createTreeWalker(asked, NodeFilter.SHOW_TEXT);
+  const texts = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) texts.push(node);
+  const text = texts[texts.length - 1];
+  const inside = (rect) => rect.width > 0 && rect.left >= box.left - 1 && rect.right <= box.right + 1 && rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1;
+  const range = document.createRange();
+  range.setStart(text, text.length - 2);
+  range.setEnd(text, text.length - 1);
+  const last = range.getBoundingClientRect();
+  range.selectNodeContents(text);
+  const tops = new Set(Array.from(range.getClientRects()).filter(inside).map((rect) => Math.round(rect.top)));
+  return { box: { left: box.left, top: box.top, right: box.right, bottom: box.bottom }, lines: tops.size, whole: inside(last), text: asked.textContent };
+})()`;
+
+test("in presentation mode a long question wraps to a second line before it is cut, and is cut only past two", async () => {
+  const session = await start(ORDERS, (request) => point(request, "Export", "Click Export."), "/", { present: true });
+  const question = "Issue Malika Cummerata a virtual card called Ads with a $500 monthly limit, for the spring campaign";
+  try {
+    await session.page.setViewportSize({ width: 1280, height: 720 });
+    await session.ask(question);
+    await session.untilState("pointing");
+    await session.page.waitForTimeout(400);
+    const two = (await session.page.evaluate(QUESTION_DRAWN)) as { lines: number; whole: boolean; text: string };
+    assert.equal(two.text, `“${question}”`);
+    assert.deepEqual([two.lines, two.whole], [2, true], `the question is not shown whole on two lines: ${JSON.stringify(two)}`);
+    // Longer than two lines will hold: two are shown, and it is cut at the end of the second.
+    await session.page.locator("haptic-root .caption .close").click();
+    await session.untilState("finished");
+    await session.ask(`${question}, ${question}, ${question}`);
+    await session.untilState("pointing");
+    await session.page.waitForTimeout(400);
+    const cut = (await session.page.evaluate(QUESTION_DRAWN)) as { lines: number; whole: boolean };
+    assert.deepEqual([cut.lines, cut.whole], [2, false], JSON.stringify(cut));
+  } finally {
+    await session.close();
+  }
+});
+
+/**
+ * A page that shows messages where pages most often do, as toolkits draw them: pinned to the window at the top right
+ * and at the bottom centre, a little while after something happens. `window.toast(where)` brings one up.
+ */
+const TOASTING = `${ORDERS}
+  <style>
+    .toast { position: fixed; width: 356px; padding: 16px; border-radius: 8px; background: #ecfdf3; color: #008a2e; font: 13px system-ui; }
+    .toast.top-right { top: 24px; right: 32px; }
+    .toast.bottom { bottom: 24px; left: calc(50% - 178px); }
+    .toast.top { top: 24px; left: calc(50% - 178px); }
+  </style>
+  <script>
+    window.toast = (where) => {
+      const toast = document.createElement('li');
+      toast.className = 'toast ' + where;
+      toast.setAttribute('data-sonner-toast', '');
+      toast.setAttribute('role', 'status');
+      toast.textContent = 'Your export is on its way.';
+      document.body.append(toast);
+    };
+  </script>`;
+
+/** Starts keeping, for every frame the browser draws, the boxes of the question, the caption, the launcher's dock and each message. */
+const KEEP_FRAMES = `(() => {
+  window.kept = [];
+  const root = document.querySelector('haptic-root').shadowRoot;
+  const box = (el) => {
+    if (!el || el.hidden || !el.getClientRects().length) return null;
+    const r = el.getBoundingClientRect();
+    return [r.left, r.top, r.right, r.bottom];
+  };
+  const tick = () => {
+    window.kept.push({ asked: box(root.querySelector('.asked')), caption: box(root.querySelector('.caption')), dock: box(root.querySelector('.dock')),
+      toasts: Array.from(document.querySelectorAll('.toast')).map(box) });
+    if (window.kept.length < 600) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+})()`;
+
+type Kept = { asked: number[] | null; caption: number[] | null; dock: number[] | null; toasts: (number[] | null)[] };
+const covers = (a: number[] | null, b: number[] | null) => !!a && !!b && a[0]! < b[2]! && a[2]! > b[0]! && a[1]! < b[3]! && a[3]! > b[1]!;
+
+for (const size of [
+  { width: 1280, height: 720 },
+  { width: 1536, height: 864 },
+]) {
+  test(`in presentation mode the question never covers a message at the top right or the bottom centre, nor Haptic's own panel (${size.width} by ${size.height})`, async () => {
+    const session = await start(TOASTING, (request, index) => (index === 0 ? point(request, "Export", "Click Export.") : words("Done.")), "/", { present: true });
+    try {
+      await session.page.setViewportSize(size);
+      await session.ask("Issue Malika Cummerata a virtual card called Ads with a $500 monthly limit");
+      await session.untilState("pointing");
+      // The visitor opens the panel while the pointer is up, and the page brings up its messages.
+      await session.page.locator("haptic-root .launcher").click();
+      await session.page.evaluate(KEEP_FRAMES);
+      await session.page.evaluate(() => (window as unknown as { toast: (where: string) => void }).toast("top-right"));
+      await session.page.waitForTimeout(300);
+      await session.page.evaluate(() => (window as unknown as { toast: (where: string) => void }).toast("bottom"));
+      await session.page.waitForTimeout(1500);
+      const kept = (await session.page.evaluate(() => (window as unknown as { kept: Kept[] }).kept)) as Kept[];
+      assert.ok(kept.length > 30 && kept.every((frame) => frame.asked), "the question was not on show");
+      for (const [at, frame] of kept.entries()) {
+        for (const toast of frame.toasts) assert.ok(!covers(frame.asked, toast), `frame ${at}: the question covers a message: ${JSON.stringify(frame)}`);
+        assert.ok(!covers(frame.asked, frame.dock) && !covers(frame.asked, frame.caption), `frame ${at}: the question covers Haptic's panel or caption: ${JSON.stringify(frame)}`);
+      }
+    } finally {
+      await session.close();
+    }
+  });
+}
+
+test("in presentation mode a message that comes up under the question moves it, and it does not go back there", async () => {
+  const session = await start(TOASTING, (request, index) => (index === 0 ? point(request, "Export", "Click Export.") : words("Done.")), "/", { present: true });
+  try {
+    await session.page.setViewportSize({ width: 1536, height: 864 });
+    await session.ask("how do I export my orders");
+    await session.untilState("pointing");
+    await session.page.waitForTimeout(600);
+    const before = (await session.page.evaluate(QUESTION_DRAWN)) as { box: Box };
+    // A message at the top centre, where some toolkits put theirs: under the question.
+    await session.page.evaluate(() => (window as unknown as { toast: (where: string) => void }).toast("top"));
+    const toast = (await session.page.locator(".toast.top").boundingBox())!;
+    const message = { left: toast.x, top: toast.y, right: toast.x + toast.width, bottom: toast.y + toast.height };
+    assert.ok(overlap(before.box, message), "the message did not come up under the question");
+    await session.until(async () => !overlap(((await session.page.evaluate(QUESTION_DRAWN)) as { box: Box }).box, message), "the question to move off the message", 1500);
+    // The message goes, and the question stays where it went.
+    await session.page.evaluate(() => document.querySelector(".toast.top")!.remove());
+    await session.page.waitForTimeout(1200);
+    assert.ok(!overlap(((await session.page.evaluate(QUESTION_DRAWN)) as { box: Box }).box, message), "the question went back where the message was");
+  } finally {
+    await session.close();
+  }
+});

@@ -151,10 +151,10 @@ button { font: inherit; cursor: pointer; }
 .about { margin: 0; padding: 8px 12px 4px; font-size: 12px; line-height: 16px; color: #78716c; }
 .about a { color: inherit; text-decoration: none; }
 .about a:hover, .about a:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
-.asked { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); max-width: min(760px, calc(100vw - 300px)); min-width: 0;
-  background: #fff; color: #1c1917; border: 2px solid #1c1917; border-radius: 999px; padding: 8px 22px; font-size: 22px; line-height: 30px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 24px rgba(0,0,0,.22); pointer-events: none; }
-.asked.top { bottom: auto; top: 16px; }
+/* The question, in presentation mode. As wide as its words up to a limit, wherever it is put, and two lines before it is cut. Where it goes is set in showAsked. */
+.asked { position: fixed; left: 0; top: 0; width: max-content; max-width: min(760px, calc(100vw - 48px)); background: #fff; color: #1c1917; border: 2px solid #1c1917;
+  border-radius: 24px; padding: 8px 22px; font-size: 22px; line-height: 30px; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,.22); pointer-events: none; }
+.asked span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .cursor, .launcher, .launcher svg, .launcher span, .hide { transition: none; } .ring.turn { animation: none; } .ripple { display: none; } }
 `;
 
@@ -405,6 +405,12 @@ export class Ui {
   /** The visitor's question, kept on show in presentation mode while its guide runs. */
   private readonly asked: HTMLElement;
   private question = "";
+  /** What of Haptic's the question keeps off besides the ask box and the caption: the ring and the pointer, while there is one. */
+  private askedAvoid: Box[] = [];
+  /** Where the question is now, what of the page lay under it when it was put there, and the places something of the page has since come up in. */
+  private askedAt?: { spot: AskedSpot; under?: (Element | null)[] };
+  private askedTaken = new Set<AskedSpot>();
+  private askedLooked = 0;
   /** In presentation mode, places the caption has been moved off because something opened there. */
   private captionAvoid: Box[] = [];
   /** Where the pointed control was last seen, to know it again when the page draws it anew. */
@@ -434,7 +440,7 @@ export class Ui {
       make("div", { class: "ring", ...hidden }),
       make("div", { class: "caption", ...hidden }, make("span"), make("button", { class: "close", "aria-label": "Stop guide" }, icon(CROSS_PATH, { "aria-hidden": "true" }))),
       make("div", { class: "cursor", ...hidden }, icon(POINTER_PATH, { width: "24", height: "24" })),
-      make("div", { class: "asked", ...hidden }),
+      make("div", { class: "asked", ...hidden }, make("span")),
       make(
         "div",
         { class: `dock ${side}` },
@@ -716,7 +722,7 @@ export class Ui {
     // The panel has opened, closed or changed size: what is pointed at, its caption and the panel are put in their places again, now.
     this.arrange();
     const inUse = this.inUse();
-    if (inUse && this.placing === undefined) this.placing = setInterval(this.place, 500);
+    if (inUse && this.placing === undefined) this.placing = setInterval(this.keep, 500);
     else if (!inUse && this.placing !== undefined) {
       clearInterval(this.placing);
       this.placing = undefined;
@@ -726,6 +732,12 @@ export class Ui {
       this.findHome();
     }
   }
+
+  /** What is looked at twice a second while the widget is in use: that our element is on top, and that nothing of the page has come up under the question. */
+  private keep = () => {
+    this.place();
+    if (this.present && !this.asked.hidden) this.showAsked(this.askedAvoid);
+  };
 
   /** The visitor is using the widget: the ask box is open, or a guide runs. */
   private inUse(): boolean {
@@ -1387,22 +1399,63 @@ export class Ui {
    */
   showQuestion(question: string) {
     this.question = question;
-    this.asked.textContent = question ? `\u201c${question}\u201d` : "";
+    (this.asked.firstElementChild as HTMLElement).textContent = question ? `\u201c${question}\u201d` : "";
+    // A new question starts with every place open to it again.
+    this.askedAt = undefined;
+    this.askedTaken.clear();
     this.showAsked();
   }
 
-  /** Shows the question, or hides it, as the guide stands, and keeps it off what is pointed at and its caption. */
-  private showAsked(avoid: Box[] = []) {
+  /**
+   * Shows the question, or hides it, as the guide stands, and puts it where it covers nothing of Haptic's (the ask
+   * box, the caption, what is pointed at and the pointer) and none of the page's messages. Pages put their messages
+   * at the bottom centre and the top right more than anywhere (`TOASTS`), so the question keeps out of both: its first
+   * place is the top, centred if that is clear of the top right and as far left as it needs to be otherwise, then the
+   * bottom left, the top left and, last, the bottom centre. It stays where it is while that place is free. When
+   * something of the page comes up under it anyway, a message or a menu, it moves on and does not come back there
+   * for this question.
+   */
+  private showAsked(avoid: Box[] = this.target && !this.ring.hidden ? [this.ring.getBoundingClientRect(), this.pointerBox()] : []) {
+    this.askedAvoid = avoid;
     const state = this.state;
     const running = state === "asking" || state === "pointing" || state === "watching" || state === "acting" || state === "paused";
     const show = this.present && this.question !== "" && (running || (state === "finished" && !this.caption.hidden));
     if (this.asked.hidden === show) this.asked.hidden = !show;
     if (!show) return;
-    // At the foot of the window unless that covers what the visitor is shown, the launcher or the ask box. Then at the top.
-    this.asked.classList.remove("top");
-    const box = this.asked.getBoundingClientRect();
-    const covered = [...avoid, this.dock.getBoundingClientRect(), ...(this.caption.hidden ? [] : [this.caption.getBoundingClientRect()])];
-    if (covered.some((other) => overlaps(box, other, 8))) this.asked.classList.add("top");
+    const size = this.asked.getBoundingClientRect();
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const toasts = TOASTS(width, height);
+    const middle = Math.max(EDGE, (width - size.width) / 2);
+    const places: Record<AskedSpot, { left: number; top: number }> = {
+      top: { left: Math.max(EDGE, Math.min(middle, toasts[0].left - 8 - size.width)), top: 16 },
+      "bottom-left": { left: EDGE, top: height - size.height - EDGE },
+      "top-left": { left: EDGE, top: 16 },
+      bottom: { left: middle, top: height - size.height - EDGE },
+    };
+    const boxOf = (spot: AskedSpot): Box => ({ left: places[spot].left, top: places[spot].top, right: places[spot].left + size.width, bottom: places[spot].top + size.height });
+    const ours = [...avoid, this.dock.getBoundingClientRect(), ...(this.caption.hidden ? [] : [this.caption.getBoundingClientRect()])];
+    const clear = (spot: AskedSpot) => !ours.some((other) => overlaps(boxOf(spot), other, 8));
+    const clearOfToasts = (spot: AskedSpot) => !toasts.some((other) => overlaps(boxOf(spot), other, 0));
+    // Something of the page under it: looked for a few times a second, at three points across it.
+    const now = performance.now();
+    if (this.askedAt && clear(this.askedAt.spot) && now - this.askedLooked >= 300) {
+      this.askedLooked = now;
+      const box = boxOf(this.askedAt.spot);
+      const under = [0.15, 0.5, 0.85].map((across) => pageAt(box.left + (box.right - box.left) * across, (box.top + box.bottom) / 2, this.host));
+      const was = this.askedAt.under;
+      // The first look: what is there is what the question sits on, unless it is a message already up. The page has
+      // drawn that part of itself again: what is there now is what it sits on.
+      if (!was && under.some((el) => !!el?.closest(BROUGHT_UP))) this.askedTaken.add(this.askedAt.spot);
+      else if (!was || was.some((el) => el && !el.isConnected)) this.askedAt.under = under;
+      else if (under.some((el, index) => broughtUp(el, was[index] ?? null))) this.askedTaken.add(this.askedAt.spot);
+    }
+    const order: AskedSpot[] = [...(this.askedAt ? [this.askedAt.spot] : []), "top", "bottom-left", "top-left", "bottom"];
+    const open = (one: AskedSpot) => clear(one) && !this.askedTaken.has(one);
+    const spot = order.find((one) => open(one) && clearOfToasts(one)) ?? order.find(open) ?? order.find(clear) ?? "top";
+    if (spot !== this.askedAt?.spot) this.askedAt = { spot };
+    this.asked.style.left = `${places[spot].left}px`;
+    this.asked.style.top = `${places[spot].top}px`;
   }
 
   /** Where the guide is. Kept as a property of our own element, beside `pointedAt`, and nowhere on the customer's page. */
@@ -1801,6 +1854,44 @@ interface Box {
   top: number;
   right: number;
   bottom: number;
+}
+
+/** The places the question is put, in presentation mode (`showAsked`). */
+type AskedSpot = "top" | "bottom-left" | "top-left" | "bottom";
+
+/**
+ * Where pages show their messages most often, in a window of this size: a column down from the top right, as wide as
+ * the messages of the common toolkits (about 360 px) and the space they keep from the edge, and one up from the bottom
+ * centre. The question keeps out of both when it can (`showAsked`), so a message that comes up there is not covered.
+ */
+const TOASTS = (width: number, height: number): [Box, Box] => [
+  { left: width - 420, top: 0, right: width, bottom: Math.round(height * 0.4) },
+  { left: width / 2 - 210, top: Math.round(height * 0.6), right: width / 2 + 210, bottom: height },
+];
+
+/** What of the page lies at a point of the window, looking past our own element. Null outside the window. */
+function pageAt(x: number, y: number, host: Element): Element | null {
+  if (!(x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight)) return null;
+  return document.elementsFromPoint(x, y).find((el) => el !== host) ?? null;
+}
+
+/** What marks something a page shows for a moment over itself: a message, an alert, a tooltip, a menu, a dialog. */
+const BROUGHT_UP = '[role="status"], [role="alert"], [role="alertdialog"], [role="dialog"], [role="tooltip"], [role="menu"], [role="listbox"], [aria-live="polite"], [aria-live="assertive"], [popover], dialog, [data-sonner-toast]';
+
+/**
+ * Whether `now`, at a point where `was` lay before, is something the page has brought up there since: it sits in a
+ * box drawn over the page (a message, a menu, anything pinned to the window or placed on its own) that `was` is not
+ * in. The page scrolling under the point is not: what scrolls in is in no such box, or in the same one.
+ */
+function broughtUp(now: Element | null, was: Element | null): boolean {
+  if (!now || now === was) return false;
+  for (let at: Element | null = now; at && at !== document.body && at !== document.documentElement; at = at.parentElement) {
+    if (was && at.contains(was)) return false;
+    if (at.matches(BROUGHT_UP)) return true;
+    const position = getComputedStyle(at).position;
+    if (position === "fixed" || position === "absolute") return true;
+  }
+  return false;
 }
 
 /**
