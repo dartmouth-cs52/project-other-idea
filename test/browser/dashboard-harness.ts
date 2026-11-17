@@ -232,29 +232,39 @@ export async function startDashboard(): Promise<Dashboard> {
   }
 
   const server = createServer(async (request, response) => {
-    const url = new URL(request.url ?? "/", "http://localhost");
-    const json = (status: number, body: unknown) => (response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }), response.end(JSON.stringify(body)));
-    if (url.pathname.startsWith("/api/auth")) {
-      // Kept, and answered as signed in: no email goes out, and Google is never asked.
-      auth.push({ method: request.method ?? "GET", path: url.pathname, body: await bodyOf(request) });
-      return json(200, { session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 86_400_000).toISOString() }, user: { id: "u", email: "ada@northpine.example", name: "Ada Lovelace", emailVerified: true } });
-    }
-    if (url.pathname.startsWith("/api/")) {
-      calls.push({ method: request.method ?? "GET", path: url.pathname.replace(/\/$/, "") });
-      // The company the tab was opened as, which `open` keeps in a cookie.
-      const company = /(?:^|;\s*)company=([^;]+)/.exec(request.headers.cookie ?? "")?.[1] ?? COMPANY;
-      try {
-        return json(...(await api(request.method ?? "GET", url, request, company)));
-      } catch (error) {
-        return json(500, { error: (error as Error).message });
+    try {
+      const url = new URL(request.url ?? "/", "http://localhost");
+      const json = (status: number, body: unknown) => (response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }), response.end(JSON.stringify(body)));
+      if (url.pathname.startsWith("/api/auth")) {
+        // Kept, and answered as signed in: no email goes out, and Google is never asked.
+        auth.push({ method: request.method ?? "GET", path: url.pathname, body: await bodyOf(request) });
+        return json(200, { session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 86_400_000).toISOString() }, user: { id: "u", email: "ada@northpine.example", name: "Ada Lovelace", emailVerified: true } });
       }
+      if (url.pathname.startsWith("/api/")) {
+        calls.push({ method: request.method ?? "GET", path: url.pathname.replace(/\/$/, "") });
+        // The company the tab was opened as, which `open` keeps in a cookie.
+        const company = /(?:^|;\s*)company=([^;]+)/.exec(request.headers.cookie ?? "")?.[1] ?? COMPANY;
+        try {
+          return json(...(await api(request.method ?? "GET", url, request, company)));
+        } catch (error) {
+          return json(500, { error: (error as Error).message });
+        }
+      }
+      // The built pages, as the Worker serves them: a folder's index.html for an address that ends in a slash.
+      const wanted = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, "");
+      const file = join(OUT, wanted.endsWith("/") ? `${wanted}index.html` : wanted);
+      if (!file.startsWith(OUT) || !existsSync(file)) return (response.writeHead(404), response.end("Not found"));
+      response.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream" });
+      response.end(readFileSync(file));
+    } catch (error) {
+      // The browser hung up part way through a request, as closing a tab or the browser at the end of a test can,
+      // and reading the rest of it failed with "aborted". Nobody is left to answer, and what never arrived in full
+      // is not recorded. Anything else still fails the test.
+      if (response.destroyed) return;
+      if (response.headersSent) response.destroy();
+      else (response.writeHead(500, { "content-type": "text/plain" }), response.end(String(error)));
+      throw error;
     }
-    // The built pages, as the Worker serves them: a folder's index.html for an address that ends in a slash.
-    const wanted = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, "");
-    const file = join(OUT, wanted.endsWith("/") ? `${wanted}index.html` : wanted);
-    if (!file.startsWith(OUT) || !existsSync(file)) return (response.writeHead(404), response.end("Not found"));
-    response.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream" });
-    response.end(readFileSync(file));
   });
   const url = await listen(server);
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import { closeBrowser, point, start, words, type GuideState, type Session } from "./harness.ts";
+import { closeBrowser, point, start, words } from "./harness.ts";
 
 after(closeBrowser);
 
@@ -21,28 +21,17 @@ const EXPORT = `
   <button id="still" type="button">Still</button>
   <script>window.n = 0</script>`;
 
-/** Every state the guide passes through, in order, read 25 times a second. */
-function watchStates(session: Session): { seen: GuideState[]; stop: () => void } {
-  const seen: GuideState[] = [];
-  let going = true;
-  void (async () => {
-    while (going) {
-      const state = await session.state().catch(() => undefined);
-      if (state && seen[seen.length - 1] !== state) seen.push(state);
-      await new Promise((resolve) => setTimeout(resolve, 40));
-    }
-  })();
-  return { seen, stop: () => (going = false) };
-}
-
 test("a guide does not end on a pointer: after the last step is used the page is read and the model asked again", async () => {
   const session = await start(EXPORT, (request, index) => {
     if (index === 0) return point(request, "Export", "Click Export to download your orders.", "done");
     if (index === 1) return point(request, "CSV", "Choose CSV.");
     return words("Your orders were exported as CSV.");
   });
-  const states = watchStates(session);
   try {
+    // Noted by the page as the widget sets each one. #csv is clicked as soon as its pointer shows, so that pointer can
+    // last less time than a look at the state every so often takes, and one that missed it would see the questions on
+    // either side of it as one.
+    const states = await session.recordStates();
     assert.equal(await session.state(), "idle");
     await session.ask("how do I export my orders");
     await session.untilState("pointing");
@@ -63,11 +52,10 @@ test("a guide does not end on a pointer: after the last step is used the page is
     await session.untilState("finished");
     assert.equal(await session.caption(), "Your orders were exported as CSV.");
     assert.equal(await session.pointed(), null);
+    // Nothing comes after "finished".
     await session.page.waitForTimeout(150);
-    states.stop();
-    assert.deepEqual(states.seen, ["idle", "asking", "pointing", "asking", "pointing", "asking", "finished"]);
+    assert.deepEqual(await states(), ["idle", "asking", "pointing", "asking", "pointing", "asking", "finished"]);
   } finally {
-    states.stop();
     await session.close();
   }
 });
