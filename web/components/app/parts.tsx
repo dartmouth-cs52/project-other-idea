@@ -5,7 +5,7 @@ import { Check, Copy } from "lucide-react";
 import { cn } from "cn";
 import { Pointer } from "@/components/pointer";
 import { Button } from "@/components/ui/button";
-import { OUTCOME_LABEL, type Outcome } from "@/lib/app-api";
+import { api, OUTCOME_LABEL, type Brand, type Outcome } from "@/lib/app-api";
 
 /**
  * Whether these parts are inside the dashboard. There a card is Card white on
@@ -126,6 +126,92 @@ export function CardTitle({ children, aside }: { children: ReactNode; aside?: Re
       <h2 className={dashboard ? DASHBOARD_TITLE : TITLE}>{children}</h2>
       {aside}
     </div>
+  );
+}
+
+/** Where a site's icon was found, kept in this browser so it is looked for once. An empty answer means the site has none. */
+const iconKey = (id: string) => `haptic.icon.${id}`;
+
+function remembered(id: string): string | null {
+  try {
+    return window.localStorage.getItem(iconKey(id));
+  } catch {
+    return null;
+  }
+}
+
+function remember(id: string, address: string) {
+  try {
+    window.localStorage.setItem(iconKey(id), address);
+  } catch {
+    // Storage is off. The icon is looked for again next time.
+  }
+}
+
+/**
+ * A site's own icon, in a small tile. It is tried at /favicon.ico first, where
+ * most sites keep one. If nothing is there, the Worker is asked once what the
+ * site's first page declares. A site with no icon gets the first letter of its
+ * name, as every site does while its icon loads.
+ */
+export function SiteIcon({ site, small = false, className }: { site: { id: string; name: string; origin: string }; small?: boolean; className?: string }) {
+  const usual = `${site.origin.replace(/\/+$/, "")}/favicon.ico`;
+  const [address, setAddress] = useState<string | null>(() => {
+    const kept = typeof window === "undefined" ? null : remembered(site.id);
+    return kept === "" ? null : (kept ?? usual);
+  });
+  const [shown, setShown] = useState(false);
+  const [asked, setAsked] = useState(false);
+
+  function failed() {
+    setShown(false);
+    if (asked || address !== usual) {
+      // The declared one failed too, or a remembered one has gone: fall back to the letter, and look again another day.
+      setAddress(null);
+      remember(site.id, "");
+      return;
+    }
+    setAsked(true);
+    api<Brand>(`/sites/${site.id}/brand`).then(
+      (brand) => {
+        if (brand.icon && brand.icon !== usual) return setAddress(brand.icon);
+        setAddress(null);
+        remember(site.id, "");
+      },
+      () => setAddress(null),
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        "relative inline-flex shrink-0 items-center justify-center overflow-hidden font-medium uppercase",
+        small ? "size-5 rounded-sm text-[11px]" : "size-9 rounded-lg text-sm",
+        shown ? "border bg-card" : "bg-secondary",
+        className,
+      )}
+      aria-hidden
+    >
+      {!shown && site.name.slice(0, 1)}
+      {address && (
+        // A plain img: the icon is on the customer's own site, at whatever size it has.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={address}
+          src={address}
+          alt=""
+          referrerPolicy="no-referrer"
+          className={cn("absolute object-contain", small ? "size-3.5" : "size-5", !shown && "opacity-0")}
+          onLoad={(event) => {
+            // Some servers answer a missing icon with a 1px image.
+            if (event.currentTarget.naturalWidth < 8) return failed();
+            setShown(true);
+            remember(site.id, address);
+          }}
+          onError={failed}
+        />
+      )}
+    </span>
   );
 }
 

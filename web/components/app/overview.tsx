@@ -80,7 +80,7 @@ function Latest({ siteId, live, onOpen, className }: { siteId: string; live: Liv
       title="Latest questions"
       className={className}
       aside={
-        <Link href={siteHref(siteId, "questions")} className={buttonVariants({ variant: "ghost", size: "sm" })}>
+        <Link href={siteHref(siteId, "questions")} className={buttonVariants({ variant: "ghost", size: "sm", className: "-mr-3" })}>
           All questions
         </Link>
       }
@@ -125,9 +125,9 @@ function Endings({ data }: { data: Insights | null }) {
   const said = summary ? summary.helped_yes + summary.helped_no : 0;
   const foot = summary
     ? [
-        said ? `${summary.helped_yes} of ${said} who answered said it helped.` : null,
-        summary.median_ms_to_pointer !== null ? `The pointer moved ${seconds(summary.median_ms_to_pointer)} after the question, at the median.` : null,
-        summary.median_steps_finished !== null ? `A finished guide took ${Number(summary.median_steps_finished).toLocaleString()} steps, at the median.` : null,
+        said ? `${summary.helped_yes} of ${said} said it helped.` : null,
+        summary.median_ms_to_pointer !== null ? `Pointer moved after ${seconds(summary.median_ms_to_pointer)}.` : null,
+        summary.median_steps_finished !== null ? `${Number(summary.median_steps_finished).toLocaleString()} steps to finish.` : null,
       ]
         .filter(Boolean)
         .join(" ")
@@ -169,7 +169,7 @@ function CantFindSummary({ siteId, data }: { siteId: string; data: Insights | nu
     <Panel
       title="What people can't find"
       aside={
-        <Link href={siteHref(siteId, "gaps")} className={buttonVariants({ variant: "ghost", size: "sm" })}>
+        <Link href={siteHref(siteId, "gaps")} className={buttonVariants({ variant: "ghost", size: "sm", className: "-mr-3" })}>
           All gaps
         </Link>
       }

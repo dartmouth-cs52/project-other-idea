@@ -171,6 +171,14 @@ export interface Live {
   guides: LiveGuide[];
 }
 
+/** A site's icon and its own colour, as its first page declares them. Either may be missing. */
+export interface Brand {
+  icon: string | null;
+  /** #RRGGBB, and only a colour that would do for the pointer. */
+  colour: string | null;
+  from: "stylesheet" | "theme-color" | "manifest" | "icon" | null;
+}
+
 /** A site as its card on the list of sites shows it. */
 export interface SiteCard {
   id: string;
