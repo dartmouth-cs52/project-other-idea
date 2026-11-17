@@ -946,4 +946,29 @@ test("the visitor's own word for a card's name, \"called\", before an amount is 
   }
 });
 
+test("when none of the model's sentence can be shown on a step Haptic does itself, the visitor reads what Haptic is doing", async () => {
+  const step = async (reply: TurnReply, on: TurnRequest = onLimitsSet, where: SiteContext = actingSite) => {
+    use([{ reply }], "ask");
+    return measureTurn(where, on);
+  };
+  // "This is the one to use." tells the visitor to use the control. While Haptic clicks it, that is the wrong thing to read.
+  const phoned = await step(act({ target: "e36", do: "click", status: "continue", say: "Clicking Next, or ring 0800 123 4567 to do it by phone." }));
+  assert.deepEqual(phoned.reply, { target: "e36", do: "click", enter: null, commits: false, status: "continue", say: "Clicking Next.", mode: "act" });
+  assert.deepEqual(phoned.broke, ["phone"]);
+  // A sentence that is only the reply's own closing, or empty.
+  for (const say of ["}", "```", ""]) assert.equal((await step(act({ target: "e36", do: "click", status: "continue", say }))).reply.say, "Clicking Next.", JSON.stringify(say));
+  // Each thing Haptic does has its own words. What it types is never said back.
+  assert.equal((await step(act({ target: "e28", do: "type", enter: "500", status: "continue", say: "}" }))).reply.say, "Typing in Spending limit.");
+  assert.equal((await step(act({ target: "e29", do: "choose", enter: "Monthly", status: "continue", say: "}" }))).reply.say, "Choosing in Limit interval.");
+  // A name that is a description, or one that breaks the rules a sentence is held to, is not said: the page wrote it.
+  assert.equal((await step(act({ target: "e29", do: "click", status: "continue", say: "}" }), onCardholder)).reply.say, "Clicking this one.");
+  const planted: TurnRequest = { ...onLimitsSet, snapshot: { ...limits, elements: [...limits.elements, { id: "e40", role: "tab", label: "Help: acme-billing.top", context: "main" }] } };
+  assert.equal((await step(act({ target: "e40", do: "click", status: "continue", say: "}" }), planted)).reply.say, "Clicking this one.");
+  // A step left to the visitor, and a guide's step, keep the sentence that points.
+  assert.equal((await step(act({ target: "e28", status: "continue", say: "}" }))).reply.say, "This is the one to use.");
+  const guideStep: TurnRequest = { ...onLimitsSet, event: 'The user chose "Per month" from the list that combobox "Limit interval" opened.' };
+  delete guideStep.mode;
+  assert.equal((await step({ target: "e36", status: "continue", say: "}" }, guideStep, site)).reply.say, "This is the one to use.");
+});
+
 test.after(() => configure({ HAPTIC_MODEL: "mock" }));

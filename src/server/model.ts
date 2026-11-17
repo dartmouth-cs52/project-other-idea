@@ -482,10 +482,13 @@ export async function measureTurn(
 
   const wrote = answer.wrote ?? answer.reply.say;
   let finished: Finished;
+  /** None of the model's sentence could be shown, and a fixed one stands in for it. */
+  let wordless = false;
   if (answer.declined) finished = declinedReply(site, answers);
   else if (answers) finished = finishAnswer(site, request, answer.reply);
   else {
     const { say, broke } = checkSay(tidySay(wrote));
+    wordless = !say;
     // Nothing fit to show was left. The pointer, if there is one, still says where to go.
     finished = { reply: { ...asStep(answer.reply), say: say || (answer.reply.target ? SAY_WITHOUT_WORDS.pointing : SAY_WITHOUT_WORDS.nothing) }, cited: [], broke };
   }
@@ -500,6 +503,8 @@ export async function measureTurn(
       reply = { ...reply, do: "click", enter: null, say: pressed.say };
     }
     reply = { ...checked(asAct(reply), request, acting.settings.commitWords), mode: "act" };
+    // "This is the one to use." tells the visitor to use it. On a step Haptic does itself it says what Haptic is doing.
+    if (wordless && reply.do) reply = { ...reply, say: doingSay(reply.do, request.snapshot.elements.find((element) => element.id === reply.target)) };
     answer.acting = { ...actingMeasure, modelDo, ...(pressed ? { converted: true as const } : {}) };
   } else {
     // An answer's reply is already only its own fields (answers.ts). A guide's is its three.
@@ -534,6 +539,31 @@ export async function measureTurn(
     ...(overruled ? { overruled } : {}),
     ...(unseen ? { unseen } : {}),
   };
+}
+
+/** What Haptic is doing to a control, in words of its own, for each thing it can do. With the control's name: "Clicking Next." */
+const DOING: Record<Act, [named: string, unnamed: string]> = {
+  click: ["Clicking", "Clicking this one."],
+  type: ["Typing in", "Typing here."],
+  choose: ["Choosing in", "Choosing here."],
+  check: ["Ticking", "Ticking this one."],
+  uncheck: ["Unticking", "Unticking this one."],
+  press_enter: ["Pressing Enter in", "Pressing Enter here."],
+};
+/** The longest name of a control said back in such a sentence. A longer one is a description, not a name. */
+const MAX_NAMED = 40;
+
+/**
+ * The sentence for a step Haptic does when none of the model's own could be shown: what it is doing, to which
+ * control. The control's name is the page's text, so the sentence is held to the same rules as any other, and
+ * without a name that passes them it names nothing.
+ */
+function doingSay(act: Act, element: SnapElement | undefined): string {
+  const [named, unnamed] = DOING[act];
+  const name = (element?.label ?? "").replace(/\s+/g, " ").trim();
+  if (!name || name.length > MAX_NAMED) return unnamed;
+  const sentence = `${named} ${name}.`;
+  return checkSay(tidySay(sentence)).say === sentence ? sentence : unnamed;
 }
 
 /** A reply as the model wrote it, as a step: the fields of a guide's or an act reply, and none of an answer's. */
