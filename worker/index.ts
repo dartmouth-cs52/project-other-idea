@@ -1,7 +1,7 @@
 import { createApp, turnCounts, type AppParts } from "../src/server/app.ts";
 import { describeAlert, meterFor, type Admission, type Ceiling, type Gate, type Limits, type Report } from "../src/server/budget.ts";
 import { Store } from "../src/server/db.ts";
-import { labelThreshold } from "../src/server/learned.ts";
+import { labelThreshold, networkThreshold } from "../src/server/learned.ts";
 import { configure } from "../src/server/model.ts";
 import { createSiteCache } from "../src/server/site-cache.ts";
 import { NeonTeachStore } from "../src/server/teach.ts";
@@ -62,6 +62,8 @@ export interface Env {
   HAPTIC_OFF?: string;
   /** How many different visitors must have seen a learned label before the prompt gets it. 3 unless set. */
   HAPTIC_LABEL_THRESHOLD?: string;
+  /** How many different networks those visitors must have called from. 3 unless set, and never more than the visitors needed. */
+  HAPTIC_NETWORK_THRESHOLD?: string;
   /** A secret, set with `wrangler secret put`. Not needed while HAPTIC_MODEL is "mock". */
   ANTHROPIC_API_KEY?: string;
 }
@@ -78,7 +80,7 @@ const sites = createSiteCache({ keepMs: 60_000, maxStaleMs: 10 * 60_000 });
 /** One per isolate, so its note of which origins were seen lately is shared by every request. */
 let store: { url: string; store: Store } | undefined;
 let teachStore: { url: string; store: NeonTeachStore } | undefined;
-/** Teach sessions are in Neon, beside the sites (db/migrations/0014). Without the database there is no teach mode. */
+/** Teach sessions are in Neon, beside the sites (db/migrations/0014_teach_sessions.sql). Without the database there is no teach mode. */
 function teachFor(env: Env): NeonTeachStore | undefined {
   if (!env.DATABASE_URL) return undefined;
   if (teachStore?.url !== env.DATABASE_URL) teachStore = { url: env.DATABASE_URL, store: new NeonTeachStore(env.DATABASE_URL) };
@@ -87,7 +89,10 @@ function teachFor(env: Env): NeonTeachStore | undefined {
 
 function storeFor(env: Env): Store | undefined {
   if (!env.DATABASE_URL) return undefined;
-  if (store?.url !== env.DATABASE_URL) store = { url: env.DATABASE_URL, store: new Store(env.DATABASE_URL, labelThreshold({ HAPTIC_LABEL_THRESHOLD: env.HAPTIC_LABEL_THRESHOLD, HAPTIC_PRODUCTION: "1" })) };
+  if (store?.url !== env.DATABASE_URL) {
+    const online = { HAPTIC_LABEL_THRESHOLD: env.HAPTIC_LABEL_THRESHOLD, HAPTIC_NETWORK_THRESHOLD: env.HAPTIC_NETWORK_THRESHOLD, HAPTIC_PRODUCTION: "1" };
+    store = { url: env.DATABASE_URL, store: new Store(env.DATABASE_URL, labelThreshold(online), { labelNetworks: networkThreshold(online) }) };
+  }
   return store.store;
 }
 
@@ -241,7 +246,7 @@ export default {
       },
       onReport: (site, guide, report) => later(db?.report(site, guide, report)),
       onCancel: (turn) => later(db?.cancelStep(turn)),
-      onOutline: (site, visitor, outline) => later(db?.recordOutline(site, visitor, outline)),
+      onOutline: (site, visitor, outline, network) => later(db?.recordOutline(site, visitor, outline, network)),
     });
     try {
       const response = await app(request, request.headers.get("CF-Connecting-IP") ?? "");

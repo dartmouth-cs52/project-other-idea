@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Privacy", alternates: { canonical: "
 
 export default function Privacy() {
   return (
-    <LegalPage title="Privacy" updated="November 16, 2026">
+    <LegalPage title="Privacy" updated="November 17, 2026">
       <p>
         {site.company} makes Haptic. This page says what we collect on this website, and what Haptic reads when it runs
         inside a product.
@@ -135,10 +135,13 @@ export default function Privacy() {
       <p>
         To count how many different people have seen a name, or asked a question, the browser keeps a random id for
         that product, made by Haptic and tied to nothing else. Our server keeps only a scrambled form of it, made differently for each
-        product, and at most ten of those for each name. A name is used to guide anyone only once several different
-        people have seen it, so a name that only one person sees, like the title of their own document, is never
-        used. The names, with when each was first and last seen and how often, are kept until the company asks us to
-        delete them. The company can switch this off.
+        product, and at most ten of those for each name. Because any program could make up such ids, a name is also
+        counted by the network it was sent from: for each name we keep at most ten very short scrambled forms of the
+        sender&apos;s network address, made differently for each product. Each of these is shared by tens of thousands
+        of addresses, so it cannot be turned back into an address. A name is used to guide anyone only once several
+        different people on different networks have seen it, so a name that only one person sees, like the title of
+        their own document, is never used. The names, with when each was first and last seen and how often, are kept
+        until the company asks us to delete them. The company can switch this off.
       </p>
       <p>
         A company can teach Haptic a task by doing it in its own product. Someone at the company starts it from the

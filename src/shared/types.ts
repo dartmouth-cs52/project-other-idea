@@ -446,14 +446,49 @@ export interface OutlineReport {
 }
 
 /**
- * True for a label worth learning: short, with a letter in it, and with
- * nothing masked. A label that held an email address or a long number was
- * about one person, so it is dropped whole rather than kept with a hole in it.
+ * What a learned label may never hold, because it ends up in the prompt of
+ * everyone on the site (`<site_map>` in src/server/prompt.ts):
+ * - An angle bracket, which could close that block or open another. The four
+ *   other characters Unicode treats as the same two (small and full-width
+ *   forms) count as well.
+ * - A control character. Some break a line, and `cleanText` only collapses the
+ *   ones JavaScript calls white space.
+ * - A character that is not shown and is not white space, such as the "tag"
+ *   characters that spell ASCII out of sight, and those that override the
+ *   direction text runs in. Let through, because real labels have them: the
+ *   soft hyphen (U+00AD), the zero-width space and joiners (U+200B to U+200D)
+ *   that Persian, Indic scripts and emoji are written with, the marks that
+ *   set the direction of one character (U+200E, U+200F, U+061C), and the word
+ *   joiner (U+2060).
+ * - Half of a character (a lone surrogate), which the database would refuse.
+ */
+const NEVER_LEARNED = /[<>\uFE64\uFE65\uFF1C\uFF1E]|\p{Cc}|(?![\u00AD\u061C\u200B-\u200F\u2060])\p{Cf}|\p{Cs}/u;
+
+/**
+ * True for a label worth learning: short, with a letter in it, with nothing
+ * masked, and with nothing that could act on the prompt it ends up in. A
+ * label that held an email address or a long number was about one person, so
+ * it is dropped whole rather than kept with a hole in it. So is "Next >":
+ * what is left of a label after taking characters out is not what the page says.
+ *
+ * The widget asks this before it sends a label, and the server asks it again
+ * of what arrives and of what it has stored, so the two cannot drift apart.
  */
 export function isLearnableLabel(label: string): boolean {
   if (!label || label.length > 60) return false;
   if (/\[(?:email|number)\]/.test(label)) return false;
+  if (NEVER_LEARNED.test(label)) return false;
   return /\p{L}/u.test(label);
+}
+
+/**
+ * True for a page's path, or where a link leads, as a browser gives it: a
+ * slash, then printable ASCII with no space, quote or angle bracket. A browser
+ * writes every other character as a percent sign and two digits, so a path
+ * that holds one did not come from a page.
+ */
+export function isLearnableRoute(path: string): boolean {
+  return path.length <= 300 && /^\/[\x21\x23-\x3B\x3D\x3F-\x5F\x61-\x7E]*$/.test(path);
 }
 
 /** What the widget sends when a guide ends, again if the visitor says whether it helped, and again if they ask for a person. */

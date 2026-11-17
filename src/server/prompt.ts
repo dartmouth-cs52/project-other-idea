@@ -355,6 +355,23 @@ export function taughtRoutePrompt(route: TaughtRoute, options: { answers?: boole
   ].join("\n");
 }
 
+/** A page with every piece of text in it made `inert`. */
+function inertPage(page: PageNode): PageNode {
+  const links = (list: PageNode["links"]) => list.map((item) => ({ label: inert(item.label), to: inert(item.to) }));
+  const safe: PageNode = {
+    ...page,
+    path: inert(page.path),
+    title: inert(page.title),
+    headings: page.headings.map(inert),
+    links: links(page.links),
+    buttons: page.buttons.map(inert),
+    fields: page.fields.map(inert),
+  };
+  if (page.description !== undefined) safe.description = inert(page.description);
+  if (page.opens) safe.opens = page.opens.map((opening) => ({ control: inert(opening.control), links: links(opening.links), buttons: opening.buttons.map(inert) }));
+  return safe;
+}
+
 /**
  * One line per page. Links and buttons that repeat on most pages (the main
  * navigation) are listed once at the top, which leaves each page's line for
@@ -365,8 +382,12 @@ export function taughtRoutePrompt(route: TaughtRoute, options: { answers?: boole
  * What a menu, tab or accordion shows once it is opened reads
  * `behind "Account": Billing → /billing`, so the model knows which control to
  * point at first.
+ *
+ * Every piece of text is made `inert` first: the map is written inside
+ * <site_map>, and part of it comes from whoever called the server.
  */
-export function renderSiteMap(pages: PageNode[]): string {
+export function renderSiteMap(given: PageNode[]): string {
+  const pages = given.map(inertPage);
   const link = (l: { label: string; to: string }) => `${l.label} → ${l.to}`;
   const opening = (o: PageOpening) => `behind "${o.control.replace(/"/g, "'")}": ${[...o.links.map(link), ...o.buttons].join("; ")}`;
   const counts = new Map<string, number>();

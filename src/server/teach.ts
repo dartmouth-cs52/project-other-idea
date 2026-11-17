@@ -141,7 +141,7 @@ interface SessionRow {
 
 const info = (row: SessionRow): TeachSessionInfo => ({ question: row.question, expiresAt: new Date(row.expires_at).toISOString() });
 
-/** Teach sessions in the teach_sessions table (db/migrations/0014), which the dashboard writes. */
+/** Teach sessions in the teach_sessions table (db/migrations/0014_teach_sessions.sql), which the dashboard writes. */
 export class NeonTeachStore implements TeachStore {
   private readonly sql: NeonQueryFunction<false, false>;
 
