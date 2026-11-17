@@ -5,7 +5,10 @@
 //   GET    /api/app/sites/:id                   a site, its install health and how far the reading has got
 //   PATCH  /api/app/sites/:id                   change its name or the origins it may run on
 //   POST   /api/app/sites/:id/read              read a few more public pages
+//   GET    /api/app/sites                       every site the company has, as the list of sites shows them
 //   GET    /api/app/sites/:id/insights          the dashboard: questions, outcomes, what to fix
+//   GET    /api/app/sites/:id/live              the newest questions and the step each is on, asked for every second or two
+//   GET    /api/app/sites/:id/brand             the site's icon and its own colour, read from its first page
 //   GET    /api/app/sites/:id/guides/:guide     one guide, step by step
 //   GET    /api/app/sites/:id/groups?key=…      the guides for one question, grouped by meaning
 //   GET    /api/app/sites/:id/controls?route=…  the controls known on a page, for "Point here instead"
@@ -27,9 +30,10 @@ import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-
 import { pageControls } from "../lib/setup";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
+import { siteBrand } from "./brand";
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
 import { groupGuides } from "./health";
-import { finishedCsv, finishedGuides, guideSteps, insights, monthOf } from "./insights";
+import { finishedCsv, finishedGuides, guideSteps, insights, live, monthOf, sitesOverview } from "./insights";
 import { MAX_PAGES, readMore, startReading, type BrowserBinding, type Reading } from "./reader";
 import { saveReadBatch } from "./read-batch";
 import { readingExtras, setupOf, setupRoutes } from "./setup-api";
@@ -98,10 +102,11 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
     if (!org) throw new Refusal(403, "Your account isn't approved yet.");
 
     if (path === "/sites" && request.method === "POST") return reply(await addSite(sql, org, await body(request)), 201);
+    if (path === "/sites" && request.method === "GET") return reply(await sitesOverview(sql, org.id, minutesWest(url)));
     const more = await setupRoutes({ request, env, sql, org, user, path, url });
     if (more) return reply(more.body, more.status);
 
-    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?)?$/.exec(path);
+    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/live|\/brand|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?)?$/.exec(path);
     if (match) {
       const id = match[1] ?? "";
       if (!SITE_ID.test(id)) throw new Refusal(404, "No such site.");
@@ -116,6 +121,14 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
         await ownedSite(sql, org, id);
         const days = Math.min(Math.max(Number(url.searchParams.get("days")) || 30, 1), 365);
         return reply(await insights(sql, id, days));
+      }
+      if (sub === "/live" && request.method === "GET") {
+        await ownedSite(sql, org, id);
+        return reply(await live(sql, id));
+      }
+      if (sub === "/brand" && request.method === "GET") {
+        const site = await ownedSite(sql, org, id);
+        return reply(await siteBrand(site.origin));
       }
       if (sub === "/finished" && request.method === "GET") {
         const site = await ownedSite(sql, org, id);
@@ -161,6 +174,12 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
     console.error("app api:", error);
     return reply({ error: "Something went wrong on our side." }, 500);
   }
+}
+
+/** The viewer's clock against UTC, in minutes, as the page sends it. No part of the world is more than 14 hours off. */
+function minutesWest(url: URL): number {
+  const asked = Number(url.searchParams.get("tz"));
+  return Number.isFinite(asked) ? Math.min(Math.max(Math.round(asked), -840), 840) : 0;
 }
 
 async function body(request: Request): Promise<Record<string, unknown>> {

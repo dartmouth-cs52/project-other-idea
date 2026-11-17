@@ -113,7 +113,9 @@ export type Outcome =
   // Haptic was asked for a control the company said never to point at.
   | "blocked"
   | "abandoned"
-  | "under_way";
+  | "under_way"
+  // Only in the count of how guides ended: under way, with no new step for two minutes. A single guide says so with `paused`.
+  | "paused";
 
 export interface Insights {
   days: number;
@@ -128,6 +130,8 @@ export interface Insights {
     step_count: number;
     helped: boolean | null;
     outcome: Outcome;
+    /** Under way, with nothing new for two minutes. See `paused` on LiveGuide. */
+    paused?: boolean;
     wrong_clicks: number;
     ms_to_pointer: number | null;
   }[];
@@ -139,6 +143,54 @@ export interface Insights {
   health: HealthGroup[];
   /** Groups the company was told about in the last month. */
   alerts: { key: string; sent_at: string; emailed: boolean }[];
+}
+
+/** One of a site's newest questions, with the step it has reached. */
+export interface LiveGuide {
+  id: string;
+  question: string;
+  started_at: string;
+  started_path: string;
+  step_count: number;
+  helped: boolean | null;
+  outcome: Outcome;
+  /**
+   * Still open, with no new step for two minutes, by the database's clock. The person has most likely
+   * walked away, so the dashboard says paused and not that Haptic is showing a step. A new step ends it.
+   */
+  paused?: boolean;
+  /** When it last moved: its newest step, or its start. */
+  moved_at: string;
+  /** The step it is on, or ended on. Null before the first answer comes back. */
+  last: { n: number; path: string; target_label: string | null; said: string; status: "continue" | "done" | "stuck" } | null;
+}
+
+/** What is happening on a site right now. `stamp` changes whenever anything about the last day's questions does. */
+export interface Live {
+  stamp: string;
+  guides: LiveGuide[];
+}
+
+/** A site's icon and its own colour, as its first page declares them. Either may be missing. */
+export interface Brand {
+  icon: string | null;
+  /** #RRGGBB, and only a colour that would do for the pointer. */
+  colour: string | null;
+  from: "stylesheet" | "theme-color" | "manifest" | "icon" | null;
+}
+
+/** A site as its card on the list of sites shows it. */
+export interface SiteCard {
+  id: string;
+  name: string;
+  origin: string;
+  connected: boolean;
+  /** Questions and finished guides in the last seven days. */
+  guides: number;
+  finished: number;
+  last: { question: string; started_at: string; outcome: Outcome; paused?: boolean } | null;
+  /** The last fortnight, one entry for each day that had a question. */
+  daily: { day: string; guides: number }[];
 }
 
 export interface HealthGroup {
@@ -160,6 +212,7 @@ export interface GroupGuide {
   started_at: string;
   helped: boolean | null;
   outcome: Outcome;
+  paused?: boolean;
   step_count: number;
 }
 
@@ -178,6 +231,7 @@ export interface GuideDetail {
   origin: string | null;
   helped: boolean | null;
   outcome: Outcome;
+  paused?: boolean;
   /** Steps asked again because the page changed while the model was answering. */
   cancelled_steps: number;
   steps: {
@@ -210,4 +264,10 @@ export const OUTCOME_LABEL: Record<Outcome, string> = {
   blocked: "A control you ruled out",
   abandoned: "Abandoned",
   under_way: "Under way",
+  paused: "Paused",
 };
+
+/** The viewer's clock against UTC in minutes, sent with anything counted by day, so a day starts at their midnight. */
+export function clock(): string {
+  return `tz=${new Date().getTimezoneOffset()}`;
+}

@@ -1,22 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ApiError, api, type Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
 import { accessHref } from "@/lib/site";
-import { AppNav, Card, FailedCard, leaveFor } from "./parts";
+import { viewFrom } from "./nav";
+import { Card, FailedCard, leaveFor } from "./parts";
+import { Plain } from "./shell";
 import { SiteView } from "./site-view";
-
-/** The first word of the person's name, from Google. Someone who signed in by an emailed link has none. */
-function firstName(name: string | undefined): string | undefined {
-  return name?.trim().split(/\s+/)[0] || undefined;
-}
+import { SitesIndex } from "./sites-index";
 
 type State = { kind: "loading" } | { kind: "failed"; message: string } | { kind: "ready"; me: Me };
 
+/**
+ * Everything behind sign-in, on one page. The address chooses what it shows:
+ * a site and one of its pages, or the list of sites. A company with a single
+ * site lands straight in it, and one with none is sent to the setup screens.
+ */
 export function Dashboard() {
   const [state, setState] = useState<State>({ kind: "loading" });
   const params = useSearchParams();
@@ -45,40 +47,50 @@ export function Dashboard() {
     };
   }, []);
 
-  const me = state.kind === "ready" ? state.me : undefined;
-  return (
-    <>
-      <AppNav who={me ? (firstName(me.user.name) ?? me.user.email) : undefined} email={me?.user.email} />
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-12">
-        {state.kind === "loading" && <p className="text-base text-muted-foreground">Signing you in</p>}
-        {state.kind === "failed" && (
-          <FailedCard className="max-w-2xl" title="Something went wrong" message={state.message} retry={() => window.location.reload()} />
-        )}
-        {me && !me.approved && <NotApproved me={me} />}
-        {me?.approved && !me.sites?.length && <ToSetup />}
-        {me?.approved && me.sites?.length ? <SiteSwitch me={me} chosen={params.get("site")} /> : null}
-      </main>
-    </>
-  );
-}
+  if (state.kind === "loading") {
+    return (
+      <Plain>
+        <p className="text-base text-muted-foreground">Signing you in</p>
+      </Plain>
+    );
+  }
+  if (state.kind === "failed") {
+    return (
+      <Plain>
+        <FailedCard className="max-w-2xl" title="Something went wrong" message={state.message} retry={() => window.location.reload()} />
+      </Plain>
+    );
+  }
 
-function SiteSwitch({ me, chosen }: { me: Me; chosen: string | null }) {
+  const { me } = state;
+  if (!me.approved) {
+    return (
+      <Plain me={me}>
+        <NotApproved me={me} />
+      </Plain>
+    );
+  }
+
   const sites = me.sites ?? [];
-  const current = sites.find((site) => site.id === chosen) ?? sites[0]!;
-  return (
-    <>
-      {sites.length > 1 && (
-        <nav className="flex flex-wrap gap-2" aria-label="Sites">
-          {sites.map((site) => (
-            <Link key={site.id} href={`/dashboard/?site=${site.id}`} className={buttonVariants({ variant: site.id === current.id ? "default" : "secondary" })}>
-              {site.name}, {new URL(site.origin).host}
-            </Link>
-          ))}
-        </nav>
-      )}
-      <SiteView key={current.id} siteId={current.id} onDeleted={() => window.location.replace("/dashboard/")} />
-    </>
-  );
+  const view = params.get("view");
+  if (!sites.length) {
+    return (
+      <Plain me={me}>
+        <ToSetup />
+      </Plain>
+    );
+  }
+
+  // One site is where a company with one site wants to be. The list is for choosing between several, and is always a click away.
+  const current = view === "sites" ? undefined : (sites.find((site) => site.id === params.get("site")) ?? (sites.length === 1 ? sites[0] : undefined));
+  if (!current) {
+    return (
+      <Plain me={me} wide>
+        <SitesIndex me={me} />
+      </Plain>
+    );
+  }
+  return <SiteView key={current.id} me={me} row={current} view={viewFrom(view)} onDeleted={() => window.location.replace("/dashboard/")} />;
 }
 
 function NotApproved({ me }: { me: Me }) {
