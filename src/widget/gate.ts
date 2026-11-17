@@ -349,10 +349,13 @@ const visitedAddress = (url: URL) => url.pathname + url.search + routeOf(url.has
 /**
  * Whether a press on `el` is a visit to a page that plainly holds a form to
  * fill in: a real visit (`visitsAnotherPage`) whose address ends in "new",
- * "edit" or the like and carries no commit word (act-rules.ts,
+ * "edit" or "compose" and carries no commit word (act-rules.ts,
  * opensAFormPage). Such a link is named for what its form will do, "Issue
- * card" to "/cards/new", so its words stop it only as a choice's would. A
- * link a script answers, "#", "javascript:" and `role="link"` are never one.
+ * card" to "/cards/new", so its words stop it only as a choice's would. "#",
+ * "javascript:", `role="link"` and a link with a handler written on it are
+ * never one. A handler the gate cannot see, one added with addEventListener,
+ * by a parent or by React, does not stop the press: if it sends something in
+ * place of the visit, the tripwire ends acting after that one request.
  */
 function visitsAFormPage(el: Element, config: GateConfig): boolean {
   if (!visitsAnotherPage(el)) return false;

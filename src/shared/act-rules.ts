@@ -407,25 +407,25 @@ export function readAddress(address: string, extra?: readonly string[]): NameVer
  * The last word of an address that names the page holding a form, which a
  * visit only shows: "/cards/new" and "/people/7/edit" (Rails, Phoenix,
  * Laravel's edit), "/mail/compose".
+ *
+ * Not "create" or "add". "/photos/create" is Laravel's form page and
+ * "/users/add" Django's and CakePHP's, but "/cart/42/add" and
+ * "/wishlist/42/add" are as often the act itself, done by the visit: a plain
+ * GET that loads a page, which no tripwire here can tell from any other. A
+ * link to one keeps to its words, and is the visitor's.
  */
 const FORM_PAGES = new Set(["new", "edit", "compose"]);
-/**
- * The same, when the address carries nothing after it: "/photos/create" is
- * Laravel's form page and "/users/add" Django's and CakePHP's. With a query,
- * as in "/cart/add?item=5", a visit can be the act itself, so it does not count.
- */
-const BARE_FORM_PAGES = new Set(["create", "add"]);
 
 /**
  * Whether an address plainly opens a form to fill in: its path, or its route
- * after "#/", ends in a word of `FORM_PAGES`, or of `BARE_FORM_PAGES` with no
- * query, and nothing else in it carries a commit word ("/checkout/new" pays,
- * "/posts/new?publish=1" publishes). A link to such a page, when it is a real
- * visit (gate.ts, visitsAnotherPage), is stopped by its words only as a
- * choice in a list is (`CHOICE_STOPS`): "Issue card" to "/cards/new" opens
- * the card form, while "Delete project" or "Pay now" stay the visitor's
- * wherever they lead. An address that does not end so says nothing either
- * way: "/invites/send", "/cards/new/start", "/expenses/7/approve".
+ * after "#/", ends in a word of `FORM_PAGES`, and nothing else in it carries
+ * a commit word ("/checkout/new" pays, "/posts/new?publish=1" publishes). A
+ * link to such a page, when it is a real visit (gate.ts, visitsAnotherPage),
+ * is stopped by its words only as a choice in a list is (`CHOICE_STOPS`):
+ * "Issue card" to "/cards/new" opens the card form, while "Delete project" or
+ * "Pay now" stay the visitor's wherever they lead. An address that does not
+ * end so says nothing either way: "/invites/send", "/cards/new/start",
+ * "/expenses/7/approve", "/wishlist/42/add".
  */
 export function opensAFormPage(address: string, extra?: readonly string[]): boolean {
   const text = address.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, "");
@@ -437,7 +437,7 @@ export function opensAFormPage(address: string, extra?: readonly string[]): bool
   const query = at < 0 ? "" : page.slice(at + 1);
   const segments = path.split("/").filter(Boolean);
   const last = (segments.pop() ?? "").toLowerCase();
-  if (!(FORM_PAGES.has(last) || (BARE_FORM_PAGES.has(last) && !query))) return false;
+  if (!FORM_PAGES.has(last)) return false;
   // Everything but that last word is read as any address is, the path before a route included.
   const before = route === undefined ? "" : (text.split("#")[0] ?? "");
   return !readAddress(`${before} /${segments.join("/")} ${query}`, extra).commit;
