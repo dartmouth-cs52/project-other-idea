@@ -9,16 +9,18 @@ import { hostOf } from "@/lib/setup";
 import { Spark } from "./chart";
 import { usePolled } from "./live";
 import { NEW_SITE_HREF, siteHref } from "./nav";
-import { DoneMark, GuideStatus, PageHeader, SiteIcon, useNow, when } from "./parts";
+import { GuideStatus, PageHeader, SiteIcon, useNow, when } from "./parts";
 
 /** How often the list of sites asks what is new. Each card is a few counts, so this is slower than a site's own page. */
 const SITES_MS = 3_000;
 
 
 /**
- * Every site a company has, one card each, kept current. A card says whether
- * the script is running, how many questions the last week had, the shape of
- * the last fortnight, and the newest question. The whole card is the way in.
+ * Every site a company has, one card each, kept current. A card says how many
+ * questions the last week had, the shape of the last fortnight, and the newest
+ * question. A site still waiting for its script says so in place of numbers:
+ * numbers on a card are what say a site is running, so no badge repeats it.
+ * The whole card is the way in.
  */
 export function SitesIndex({ me }: { me: Me }) {
   const { data } = usePolled<{ sites: SiteCard[] }>(`/sites?${clock()}`, SITES_MS);
@@ -39,7 +41,8 @@ export function SitesIndex({ me }: { me: Me }) {
         {sites
           ? sites.map((site) => (
               <li key={site.id}>
-                <Card site={site} />
+                {/* A new site is named after its company, so two can share a name. Only then does a card carry its address. */}
+                <Card site={site} address={sites.filter((other) => other.name === site.name).length > 1} />
               </li>
             ))
           : names.map((site) => (
@@ -63,25 +66,19 @@ function byActivity(a: SiteCard, b: SiteCard): number {
   return asked(b) - asked(a) || a.name.localeCompare(b.name);
 }
 
-function Card({ site }: { site: SiteCard }) {
+function Card({ site, address }: { site: SiteCard; address: boolean }) {
   const share = site.guides ? Math.round((site.finished / site.guides) * 100) : null;
   return (
     <Link
       href={siteHref(site.id)}
       className="group flex h-full flex-col rounded-xl border bg-card outline-none transition-colors hover:border-foreground/25 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
     >
-      <div className="flex items-start gap-3 p-5">
+      <div className="flex items-center gap-3 p-5">
         <SiteIcon site={site} />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-base font-medium">{site.name}</span>
-          <span className="truncate text-sm text-muted-foreground">{hostOf(site.origin)}</span>
+          {address && <span className="truncate text-sm text-muted-foreground">{hostOf(site.origin)}</span>}
         </span>
-        {site.connected && (
-          <span className="inline-flex h-6 shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <DoneMark className="size-4" />
-            Running
-          </span>
-        )}
       </div>
       {site.connected ? (
         <div className="flex flex-1 items-end justify-between gap-6 px-5 pb-5">

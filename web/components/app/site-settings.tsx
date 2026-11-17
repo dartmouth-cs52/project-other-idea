@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { api, type Brand, type Site } from "@/lib/app-api";
-import { hostOf } from "@/lib/setup";
 import { Card, CardTitle } from "./parts";
 
 const FIELD = "h-11 bg-card px-3.5 md:text-base";
@@ -30,7 +29,6 @@ export function WidgetLook({ site, onChange }: { site: Site; onChange: (site: Si
   const [matched, setMatched] = useState<string | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const fields = useFieldErrors({ accent: "accent" });
-  const host = hostOf(site.origin);
   const changed = accent.toUpperCase() !== site.appearance.accent.toUpperCase();
   const busy = status === "saving" || status === "matching";
 
@@ -62,16 +60,16 @@ export function WidgetLook({ site, onChange }: { site: Site; onChange: (site: Si
     try {
       const brand = await api<Brand>(`/sites/${site.id}/brand`);
       if (!brand.colour) {
-        setMatched(`Haptic couldn't find a colour on ${host}. Pick one here.`);
+        setMatched("Haptic couldn't find a colour on your website. Pick one here.");
         setStatus("idle");
         return;
       }
       setAccent(brand.colour);
       await keep(brand.colour);
-      setMatched(`Matched to ${brand.colour}, from ${host}. The widget picks it up within a minute.`);
+      setMatched(`Matched to ${brand.colour}, your website's colour. The widget picks it up within a minute.`);
       setStatus("idle");
     } catch (failure) {
-      setFailure(failureFrom(`Couldn't match ${host}`, failure));
+      setFailure(failureFrom("Couldn't match your website", failure));
       setStatus("idle");
     }
   }
@@ -108,7 +106,7 @@ export function WidgetLook({ site, onChange }: { site: Site; onChange: (site: Si
                 />
                 <Button type="button" variant="secondary" size="xl" onClick={match} disabled={busy}>
                   <Pipette />
-                  {status === "matching" ? "Looking" : `Match ${host}`}
+                  {status === "matching" ? "Looking" : "Match website"}
                 </Button>
               </div>
             </Field>

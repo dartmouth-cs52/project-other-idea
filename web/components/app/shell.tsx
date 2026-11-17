@@ -53,6 +53,8 @@ export function TopBar({ me, current }: { me?: Me; current?: SiteRow }) {
   // The sites whose script is running come first, here and on the list of sites, since those are the ones with something to see.
   const sites = [...(me?.sites ?? [])].sort((a, b) => Number(b.connected) - Number(a.connected));
   const inside = Boolean(me?.approved && sites.length);
+  // A new site is named after its company, so two of a company's sites can share a name. Only then is the address needed to tell them apart.
+  const shared = (site: SiteRow) => sites.filter((other) => other.name === site.name).length > 1;
 
   async function signOut() {
     await auth().signOut();
@@ -80,7 +82,7 @@ export function TopBar({ me, current }: { me?: Me; current?: SiteRow }) {
           <DropdownMenu>
             <DropdownMenuTrigger className={cn(CRUMB, "data-popup-open:bg-muted")} aria-label={`Site, ${current.name}. Choose another`}>
               <span className="truncate">{current.name}</span>
-              <span className="hidden truncate font-normal text-muted-foreground sm:inline">{hostOf(current.origin)}</span>
+              {shared(current) && <span className="hidden truncate font-normal text-muted-foreground sm:inline">{hostOf(current.origin)}</span>}
               <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-72">
@@ -91,7 +93,7 @@ export function TopBar({ me, current }: { me?: Me; current?: SiteRow }) {
                     <SiteIcon site={item} small />
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate font-medium">{item.name}</span>
-                      <span className="truncate text-xs text-muted-foreground">{hostOf(item.origin)}</span>
+                      {shared(item) && <span className="truncate text-xs text-muted-foreground">{hostOf(item.origin)}</span>}
                     </span>
                     {item.id === current.id && <Check className="text-muted-foreground" />}
                   </DropdownMenuItem>

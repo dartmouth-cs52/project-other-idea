@@ -526,9 +526,8 @@ reason a customer gave.
   finished guides, month by month, which are what billing counts.
 
 The pointer's colour is the one thing a company chooses about the widget. It
-can be typed, picked, or matched: a secondary button, "Match" and the site's
-address, reads the site's own colour from its first page and saves it in one
-press. A grey, a near white or a near black is never taken, because the
+can be typed, picked, or matched: a secondary button, "Match website", reads
+the site's own colour from its first page and saves it in one press. A grey, a near white or a near black is never taken, because the
 pointer has to be seen on any page. The launcher sits bottom right on every
 site, where support chat usually lives, and that is not a setting.
 
@@ -536,15 +535,22 @@ site, where support chat usually lives, and that is not a setting.
 first page is the list, one card a site. Sites whose script is running come
 first, the one asked most recently at their head, and those still waiting for
 the script come last, so the first card is the one with something happening.
-A card says whether the script is running, how many questions the last seven
-days had and how many finished, the last fortnight as fourteen small bars, and
-the newest question. The whole card is the way in. Add a site leads to the
+A card says how many questions the last seven days had and how many finished,
+the last fortnight as fourteen small bars, and the newest question. A site
+still waiting for its script says so in place of the numbers. A running site
+carries no badge to say it is running: the numbers say that, and the green
+tick is kept for a guide that finished, so a card never has two ticks that
+mean different things. The whole card is the way in. Add a site leads to the
 setup screens, which have a frame of their own.
 
 A site is shown with its own icon, the one its browser tab has, 20px in a 36px
 white tile with a 1px border, on its card and in the menu of sites. The first
 letter of its name, on Border grey, stands in while the icon loads and for a
 site that has none. This is the one place a customer's own mark appears.
+
+A site goes by its name alone, in the bar, in the menu and on its card. Its
+address is added in Muted text only when two of a company's sites share a
+name, which is the one time it is needed to tell them apart.
 
 **Type.** One 24px Medium title a page, the headline size, with no line under
 it: the bar above already says which site this is. Card titles are
