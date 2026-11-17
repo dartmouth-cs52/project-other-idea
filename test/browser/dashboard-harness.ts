@@ -163,7 +163,7 @@ export async function startDashboard(): Promise<Dashboard> {
 
   /** A site as worker/app-api.ts answers for one, from its row. */
   async function siteStatus(id: string, company = COMPANY): Promise<Record<string, any> | null> {
-    const [row] = (await sql`select id, name, origin, allowed_origins, context from sites where id = ${id} and company_id = ${company}`) as Record<string, any>[];
+    const [row] = (await sql`select id, name, origin, allowed_origins, context, routes_mode from sites where id = ${id} and company_id = ${company}`) as Record<string, any>[];
     if (!row) return null;
     const origins = (await sql`select origin, first_seen_at, last_seen_at, requests from site_origins where site_id = ${id}`) as Record<string, any>[];
     const seen = origins.map((origin) => ({ ...origin, allowed: row.allowed_origins.includes(origin.origin) }));
@@ -172,6 +172,7 @@ export async function startDashboard(): Promise<Dashboard> {
       name: row.name,
       origin: row.origin,
       allowedOrigins: row.allowed_origins,
+      routesMode: row.routes_mode,
       scriptUrl: "https://widget.joinhaptic.com/widget.js",
       connected: seen.some((origin) => origin.allowed),
       origins: seen,
@@ -205,6 +206,7 @@ export async function startDashboard(): Promise<Dashboard> {
     if (!sub && method === "PATCH") {
       const input = await bodyOf(request);
       if (typeof input.name === "string" && input.name.trim()) await sql`update sites set name = ${input.name.trim()} where id = ${id}`;
+      if (["off", "shadow", "serve"].includes(input.routesMode)) await sql`update sites set routes_mode = ${input.routesMode} where id = ${id}`;
       if (input.appearance) {
         const next = { ...site.appearance, ...input.appearance };
         if (input.appearance.launcher === null) delete next.launcher;
