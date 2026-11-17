@@ -1,11 +1,14 @@
 <div align="center">
 
-<img src="assets/pointer.svg" width="52" height="52" alt="Haptic pointer">
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo-light.svg" width="300" alt="Haptic">
+  </picture>
+</h1>
 
-# Haptic
-
-**The AI guide that lives inside your product.**<br>
-Users say what they want to do. Haptic points to the exact control on the live page, step by step.
+**The AI guide that lives in your product.**<br>
+People say what they want to do, and Haptic points to exactly where to click, step by step, on the live page.
 
 [Live site](https://joinhaptic.com) · [How it works](#how-it-works) · [Engineering](#engineering) · [Benchmark](#benchmark) · [Docs](#documentation)
 
