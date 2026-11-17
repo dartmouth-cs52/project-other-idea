@@ -21,6 +21,7 @@ import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
 import { networkHash, parseOutlineReport, visitorHash } from "./learned.ts";
 import { ceilingFor, measureTurn, TurnCancelled, TurnError } from "./model.ts";
 import type { TurnMeasure } from "./model.ts";
+import { compareRoute, ownerSteers, ROUTE_MODEL, routeLookup, servedReply, type RouteLookup, type RouteResult, type StoredRoute } from "./routes.ts";
 import { teachCall, type TeachStore } from "./teach.ts";
 import { taughtFor } from "../shared/teach.ts";
 
@@ -49,7 +50,8 @@ export interface AppParts {
   /** True when this caller has asked for too many steps lately. */
   overLimit(key: string): boolean | Promise<boolean>;
   /**
-   * Told when a guide's first question is about to be put to the model.
+   * Told when a guide's first question is about to be put to the model, or
+   * has been answered from a verified route (routes.ts).
    * Recording it here means a guide whose first step fails, or whose visitor
    * leaves before the answer, is still on record. It is not told of a
    * question the off switch or the budget refused: the model is never asked
@@ -65,8 +67,10 @@ export interface AppParts {
   onAlert?(site: SiteContext, alert: Alert): void;
   /** Work to finish after the reply has gone, like adding a step's cost to the budget. A Worker has to be told about it, or it is cut short. */
   background?(work: Promise<unknown>): void;
-  /** Told about each finished step, for logging. Must not throw. */
-  onTurn?(request: TurnRequest, measure: TurnMeasure, site: SiteContext, origin: string | undefined): void;
+  /** Told about each finished step, for logging, with what the route lookup found if one was made. Must not throw. */
+  onTurn?(request: TurnRequest, measure: TurnMeasure, site: SiteContext, origin: string | undefined, route?: RouteResult): void;
+  /** The verified route stored for a question on a screen. Without it, every step goes to the model. See routes.ts. */
+  findRoute?(site: SiteContext, lookup: RouteLookup): Promise<StoredRoute | undefined>;
   /**
    * Told when the widget hung up before a step was ready, because the page
    * changed while the model was answering. The widget asks for the step again
@@ -191,6 +195,23 @@ export function createApp(parts: AppParts) {
         return streamed ? lines(cors, undefined, async (line) => line(reply)) : json(200, reply);
       }
 
+      // The step's verified route (routes.ts) is looked up from here on, beside the budget and the model call. On a
+      // site that serves routes, a trusted one that matches this page answers the step without the model. That step
+      // makes no model call, so nothing is set aside from the budget for it and nothing is charged.
+      const routing = startRouting(parts, site, turn);
+      const served = await servedStep(routing, site, turn);
+      if (served) {
+        if (turn.step === 0 && turn.guide) parts.onAsk?.(turn, site, origin);
+        parts.onTurn?.(turn, served.measure, site, origin, served.route);
+        const { reply } = served.measure;
+        return streamed
+          ? lines(cors, undefined, async (line) => {
+              if (reply.target) line({ target: reply.target });
+              line(reply);
+            })
+          : json(200, reply);
+      }
+
       const admitted = await askBudget(parts, site, caller, turn);
       if (!admitted.gate.open) {
         const reply = fixedReply(admitted.gate.why === "caller" ? FIXED_SAY.visitorLimit : FIXED_SAY.resting);
@@ -201,12 +222,12 @@ export function createApp(parts: AppParts) {
       if (turn.step === 0 && turn.guide) parts.onAsk?.(turn, site, origin);
 
       // A widget that asks for it gets the step as it forms: the control to point at first, then the whole reply.
-      if (streamed) return streamTurn(parts, site, turn, caller, admitted, cors, origin, request.signal);
+      if (streamed) return streamTurn(parts, site, turn, caller, admitted, cors, origin, request.signal, routing);
 
       try {
         const measure = await measureTurn(site, turn);
         charge(parts, site, caller, admitted, measure.usd, 1);
-        parts.onTurn?.(turn, measure, site, origin);
+        parts.onTurn?.(turn, measure, site, origin, await comparedRoute(routing, measure, turn));
         return json(200, measure.reply);
       } catch (error) {
         charge(parts, site, caller, admitted, paidFor(error), 0);
@@ -319,12 +340,14 @@ function streamTurn(
   origin: string | undefined,
   /** The request's own signal. A Worker aborts it when the caller goes away. */
   gone?: AbortSignal,
+  /** The step's route lookup, to compare with the model's answer. */
+  routing?: Routing,
 ): Response {
   return lines(cors, gone, async (line, signal) => {
     try {
       const measure = await measureTurn(site, turn, undefined, { onMode: (mode) => line({ mode }), onTarget: (id) => line({ target: id }) }, signal);
       charge(parts, site, caller, admitted, measure.usd, 1);
-      parts.onTurn?.(turn, measure, site, origin);
+      parts.onTurn?.(turn, measure, site, origin, await comparedRoute(routing, measure, turn));
       line(measure.reply);
     } catch (error) {
       charge(parts, site, caller, admitted, paidFor(error), 0);
@@ -361,6 +384,74 @@ function lines(cors: Record<string, string>, gone: AbortSignal | undefined, writ
     },
   });
   return new Response(body, { headers: { ...cors, "Content-Type": STREAM_TYPE, "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
+}
+
+/**
+ * How long a route lookup may take. Serving waits for it before the budget is
+ * asked and the model is called, so it is kept short: a slow database means
+ * asking the model, as if nothing were stored. In shadow mode the lookup runs
+ * beside the model call and is only read once the model has answered.
+ */
+const ROUTE_WAIT_MS = { serve: 250, shadow: 3000 };
+
+/** A step's verified route being looked up (routes.ts), and how the site uses routes. */
+export interface Routing {
+  lookup: RouteLookup;
+  serve: boolean;
+  started: number;
+  found: Promise<StoredRoute | undefined | typeof TIMED_OUT>;
+}
+
+/**
+ * Starts looking the step's route up. Undefined when no lookup is made: the
+ * host keeps no routes, the site has them off, or the step goes to the model
+ * whatever is stored (`routeLookup`).
+ */
+export function startRouting(parts: Pick<AppParts, "findRoute">, site: SiteContext, turn: TurnRequest): Routing | undefined {
+  const mode = site.routes ?? "shadow";
+  if (!parts.findRoute || mode === "off") return undefined;
+  const lookup = routeLookup(turn);
+  if (!lookup) return undefined;
+  const serve = mode === "serve";
+  const started = Date.now();
+  const findRoute = parts.findRoute;
+  const found = within(Promise.resolve().then(() => findRoute(site, lookup)), ROUTE_WAIT_MS[serve ? "serve" : "shadow"]);
+  return { lookup, serve, started, found };
+}
+
+/**
+ * The step answered from its route, on a site that serves them, when a trusted
+ * route matches exactly one control on this page that the site's owner has
+ * not ruled out, and nothing the owner said since applies to this step
+ * (`ownerSteers`). Undefined otherwise, and the model answers.
+ */
+export async function servedStep(routing: Routing | undefined, site: SiteContext, turn: TurnRequest): Promise<{ measure: TurnMeasure; route: RouteResult } | undefined> {
+  if (!routing?.serve || ownerSteers(site, turn)) return undefined;
+  const route = await routing.found;
+  const reply = route === TIMED_OUT ? undefined : servedReply(route, turn.snapshot, routing.lookup, site.blocked);
+  if (!reply) return undefined;
+  const ms = Date.now() - routing.started;
+  // A stored sentence was tidied when the model first wrote it, so it is its own original.
+  const measure: TurnMeasure = { reply, model: ROUTE_MODEL, ms, msToTarget: ms, cited: [], wrote: reply.say, broke: [], usd: 0 };
+  return { measure, route: { lookup: routing.lookup, outcome: "served" } };
+}
+
+/** What the lookup found, given the model's answer. Undefined when no lookup was made, or it did not answer in time, which says nothing about the route. */
+export async function comparedRoute(routing: Routing | undefined, measure: TurnMeasure, turn: TurnRequest): Promise<RouteResult | undefined> {
+  if (!routing) return undefined;
+  const route = await routing.found;
+  if (route === TIMED_OUT) return undefined;
+  return { lookup: routing.lookup, outcome: compareRoute(route, measure.reply, turn.snapshot) };
+}
+
+const TIMED_OUT = Symbol("timed out");
+
+/** The promise's value, or TIMED_OUT if it takes longer than `ms` or fails. Never rejects. */
+function within<T>(promise: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<typeof TIMED_OUT>((resolve) => (timer = setTimeout(() => resolve(TIMED_OUT), ms)));
+  const settled = promise.catch((): typeof TIMED_OUT => TIMED_OUT);
+  return Promise.race<T | typeof TIMED_OUT>([settled, late]).finally(() => clearTimeout(timer));
 }
 
 /** How long a step waits to hear whether it may go ahead. A budget that is slow is treated like one that cannot be reached. */
@@ -597,6 +688,7 @@ export function parseTurn(body: unknown, now: Date = new Date()): TurnRequest | 
   if (raw.event) request.event = text(raw.event, 600);
   if (raw.change) request.change = text(raw.change, 2000);
   if (raw.offTrack === true) request.offTrack = true;
+  if (typeof raw.after === "string" && raw.after) request.after = text(raw.after, 300);
   if (raw.closing === true) request.closing = true;
   // A widget from before the version number sends none. That is version 1, and is left unset.
   if (Number.isInteger(raw.version) && (raw.version as number) >= 1 && (raw.version as number) <= 9999) request.version = raw.version as number;

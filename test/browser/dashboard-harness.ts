@@ -172,7 +172,7 @@ export async function startDashboard(): Promise<Dashboard> {
    * colour for its launcher, as the Worker does after its answer has gone, when that is still to do.
    */
   async function siteStatus(id: string, company = COMPANY, asked = false): Promise<Record<string, any> | null> {
-    const [row] = (await sql`select id, name, origin, allowed_origins, context from sites where id = ${id} and company_id = ${company}`) as Record<string, any>[];
+    const [row] = (await sql`select id, name, origin, allowed_origins, context, routes_mode from sites where id = ${id} and company_id = ${company}`) as Record<string, any>[];
     if (!row) return null;
     const launcher = launcherState(row.context, row.origin);
     if (asked && launcher.start) void matchLauncher(sql as unknown as Parameters<typeof matchLauncher>[0], id, row.origin).catch(() => undefined);
@@ -183,6 +183,7 @@ export async function startDashboard(): Promise<Dashboard> {
       name: row.name,
       origin: row.origin,
       allowedOrigins: row.allowed_origins,
+      routesMode: row.routes_mode,
       scriptUrl: "https://widget.joinhaptic.com/widget.js",
       connected: seen.some((origin) => origin.allowed),
       origins: seen,
@@ -221,6 +222,7 @@ export async function startDashboard(): Promise<Dashboard> {
     if (!sub && method === "PATCH") {
       const input = await bodyOf(request);
       if (typeof input.name === "string" && input.name.trim()) await sql`update sites set name = ${input.name.trim()} where id = ${id}`;
+      if (["off", "shadow", "serve"].includes(input.routesMode)) await sql`update sites set routes_mode = ${input.routesMode} where id = ${id}`;
       if (input.appearance) {
         // As worker/app-api.ts keeps it: the pointer is always blue, and a launcher colour is kept as it is drawn,
         // with Ink kept as none, and marked as the person's own choice.
