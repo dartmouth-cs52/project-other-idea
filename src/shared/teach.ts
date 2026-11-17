@@ -141,9 +141,11 @@ export function cleanTaughtSteps(input: unknown, { withNotes = false } = {}): Ta
     if (!TEACH_KINDS.includes(raw.kind as TeachKind)) continue;
     const kind = raw.kind as TeachKind;
     const role = typeof raw.role === "string" && ROLES.has(raw.role) ? raw.role : "clickable";
-    const step: TaughtStep = { kind, path: normalizePath(typeof raw.path === "string" ? raw.path.slice(0, 300) : "/"), role, label: text(raw.label, 80) };
+    // An address has no spaces or line breaks of its own, so a path that has some was made up: they are taken out.
+    const path = typeof raw.path === "string" ? raw.path.replace(/[\s\p{Cc}]+/gu, "") : "";
+    const step: TaughtStep = { kind, path: normalizePath(path ? path.slice(0, 300) : "/"), role, label: text(raw.label, 80) };
     // A hash route is part of the path, as the widget reads it: /#/budgets/:id.
-    if (typeof raw.path === "string" && /#\/./.test(raw.path)) step.path += `#${normalizePath(raw.path.slice(raw.path.indexOf("#") + 1))}`;
+    if (/#\/./.test(path)) step.path += `#${normalizePath(path.slice(path.indexOf("#") + 1))}`;
     const context = sectionOf(text(raw.context, 120));
     if (context) step.context = context;
     const dialog = text(raw.dialog, 60);
@@ -202,7 +204,7 @@ function action(step: TaughtStep): string {
   }
 }
 
-const capital = (words: string) => words.charAt(0).toUpperCase() + words.slice(1);
+export const capital = (words: string) => words.charAt(0).toUpperCase() + words.slice(1);
 
 /**
  * One step as the dashboard shows it, written plainly: "On /budgets, press New
@@ -258,62 +260,6 @@ export function taughtFor(routes: TaughtRoute[] | undefined, goal: string): Taug
   const like = routes.filter((route) => route.steps.length && sameTask(route.question, goal));
   like.sort((a, b) => overlap(b.question, goal) - overlap(a.question, goal) || b.createdAt.localeCompare(a.createdAt));
   return like[0];
-}
-
-/** Labels in the prompt are quoted, so a quote inside one becomes an apostrophe. */
-const quoted = (words: string) => `"${words.replace(/"/g, "'")}"`;
-
-/** One step as the model reads it: the page, the control by its kind and name, and what to do with it. */
-function promptStep(step: TaughtStep, before: TaughtStep | undefined): string {
-  const lead: string[] = [];
-  if (!before || before.path !== step.path) lead.push(`On ${step.path}`);
-  if (step.dialog && step.dialog !== before?.dialog) lead.push(`in dialog ${quoted(step.dialog)}`);
-  const control = step.label ? `${step.role} ${quoted(step.label)}` : `a ${step.role}${step.row ? " in a row of the list" : ""}`;
-  let what: string;
-  switch (step.kind) {
-    case "choose":
-      what = step.choice ? `choose ${quoted(step.choice)}${step.label ? ` in ${control}` : ""}` : `choose an option in ${control}`;
-      break;
-    case "type":
-      what = `type in ${control}`;
-      break;
-    case "check":
-      what = `turn on ${control}`;
-      break;
-    case "uncheck":
-      what = `turn off ${control}`;
-      break;
-    case "enter":
-      what = `press Enter in ${control}`;
-      break;
-    default:
-      what = `use ${control}${step.row && step.label ? " in a row of the list" : ""}`;
-  }
-  let line = lead.length ? `${capital(lead.join(", "))}: ${what}` : capital(what);
-  if (step.context) line += ` (${step.context})`;
-  line += ".";
-  if (step.leave) line += " The visitor makes this click.";
-  if (step.note) line += ` Note: ${step.note}`;
-  return line;
-}
-
-/**
- * The route as it goes in the prompt, as the company's own instructions. The
- * model still checks each step against the page it sees, so a control that
- * moved or reads a little differently does not break it, and a visitor who
- * is already past a step is not sent back.
- */
-export function taughtRoutePrompt(route: TaughtRoute, options: { answers?: boolean } = {}): string {
-  const lines = route.steps.map((step, index) => `${index + 1}. ${promptStep(step, route.steps[index - 1])}`);
-  // On a site with Answers on, an article on the same task could pull the question into a reply in words. The company
-  // showed the way by doing it, so the visitor is guided along it, and the articles are for explaining a step.
-  const answers = options.answers ? ` Guide it step by step with mode "guide", even where a help article describes the same task.` : "";
-  return [
-    "<taught_route>",
-    `The site's owner showed Haptic the way to do this, for the question ${quoted(route.question)}. If the visitor wants the same task, follow these steps in order: match each step's control to the one in this page's list by its kind and name, even if it has moved or reads a little differently, skip steps already done, and if a step's control is not here, find the way to it. Fields are for the visitor's own values.${answers}`,
-    ...lines,
-    "</taught_route>",
-  ].join("\n");
 }
 
 /**
