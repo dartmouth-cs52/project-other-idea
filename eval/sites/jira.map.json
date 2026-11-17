@@ -1,0 +1,951 @@
+{
+  "version": 1,
+  "id": "site_bench_jira",
+  "name": "ASF Jira",
+  "origin": "https://issues.apache.org",
+  "allowedOrigins": [
+    "https://issues.apache.org"
+  ],
+  "appearance": {
+    "accent": "#1E6EF4",
+    "position": "bottom-right",
+    "launcherLabel": "Ask"
+  },
+  "notes": "",
+  "docs": [],
+  "pages": [
+    {
+      "path": "/jira/browse/:id",
+      "title": "[KAFKA-[number]] KRaft migration rollback causes offline partitions when KRaft…",
+      "headings": [],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "New search",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Find filters",
+          "to": "/jira/secure/ManageFilters.jspa?filterView=search"
+        },
+        {
+          "label": "My open issues",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Reported by me",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "All issues",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Open issues",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Done issues",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Viewed recently",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Created recently",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Resolved recently",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Updated recently",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "logged in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Page 2: issues 51 - 100",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Page 3: issues [number]",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Page 4: issues [number]",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Page 5: issues [number]",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Go to the next page (2 of 20)",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "3.9.3",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "kraft",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "migration",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Michael Westerby",
+          "to": "/jira/secure/ViewProfile.jspa?name=mwesterby"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Undock",
+        "Save as",
+        "Tools",
+        "Project: Kafka",
+        "Type: All",
+        "Status: All",
+        "Assignee: All",
+        "More",
+        "Search",
+        "Resolution: Unresolved",
+        "Remove filter for Resolution",
+        "Advanced",
+        "Switch search results view"
+      ],
+      "fields": [
+        "Search",
+        "Contains text"
+      ]
+    },
+    {
+      "path": "/jira/browse/:id?page=com.atlassian.jira.plugin.system.issuetabpanels:all-tabpanel",
+      "title": "[KAFKA-[number]] KRaft migration rollback causes offline partitions when KRaft…",
+      "headings": [],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "KAFKA-[number]",
+          "to": "/jira/browse/:id"
+        },
+        {
+          "label": "3.9.3",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "kraft",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "migration",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Michael Westerby",
+          "to": "/jira/secure/ViewProfile.jspa?name=mwesterby"
+        },
+        {
+          "label": "20/Apr/26 14:17",
+          "to": "/jira/browse/:id"
+        },
+        {
+          "label": "Luke Chen",
+          "to": "/jira/secure/ViewProfile.jspa?name=showuon"
+        },
+        {
+          "label": "mwesterby",
+          "to": "/jira/secure/ViewProfile.jspa?name=mwesterby"
+        },
+        {
+          "label": "mumrah",
+          "to": "/jira/secure/ViewProfile.jspa?name=mumrah"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Patch Available",
+        "Details",
+        "Description",
+        "Issue Links",
+        "Activity",
+        "All",
+        "Comments",
+        "Work Log",
+        "History",
+        "Transitions",
+        "Oldest first"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/login.jsp",
+      "title": "Log into Atlassian - ASF Jira",
+      "headings": [
+        "Log in"
+      ],
+      "links": [
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Can't log in?",
+          "to": "/jira/secure/ForgotLoginDetails.jspa"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Log in",
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Show password"
+      ],
+      "fields": [
+        "Search",
+        "Username*",
+        "Password*",
+        "Remember me"
+      ]
+    },
+    {
+      "path": "/jira/plugins/servlet/Wallboard",
+      "title": "",
+      "headings": [],
+      "links": [],
+      "buttons": [],
+      "fields": []
+    },
+    {
+      "path": "/jira/projects/KAFKA?selectedItem=com.atlassian.jira.jira-projects-plugin:components-page",
+      "title": "Kafka",
+      "headings": [
+        "Components"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Components of Kafka",
+        "Active",
+        "Archived"
+      ],
+      "fields": [
+        "Search",
+        "Filter component list"
+      ]
+    },
+    {
+      "path": "/jira/projects/KAFKA?selectedItem=com.atlassian.jira.jira-projects-plugin:report-page",
+      "title": "Kafka",
+      "headings": [
+        "All reports",
+        "Issue analysis",
+        "Forecast & management"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Average Age Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa"
+        },
+        {
+          "label": "Created vs Resolved Issues Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa"
+        },
+        {
+          "label": "Pie Chart Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa?reportKey=com.atlassian.jira.jira-core-reports-plugin:pie-report"
+        },
+        {
+          "label": "Recently Created Issues Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa"
+        },
+        {
+          "label": "Resolution Time Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa"
+        },
+        {
+          "label": "Single Level Group By Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa"
+        },
+        {
+          "label": "Time Since Issues Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa?reportKey=com.atlassian.jira.jira-core-reports-plugin:timesince-report"
+        },
+        {
+          "label": "Time Tracking Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa?reportKey=com.atlassian.jira.jira-core-reports-plugin:time-tracking"
+        },
+        {
+          "label": "User Workload Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Reports of Kafka"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/projects/KAFKA/issues/:id?filter=allopenissues",
+      "title": "[KAFKA-[number]] KRaft migration rollback causes offline partitions when KRaft…",
+      "headings": [],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Kafka",
+          "to": "/jira/projects/KAFKA/summary"
+        },
+        {
+          "label": "Issues of Kafka",
+          "to": "/jira/projects/KAFKA/issues"
+        },
+        {
+          "label": "Reports of Kafka",
+          "to": "/jira/projects/KAFKA?selectedItem=com.atlassian.jira.jira-projects-plugin:report-page"
+        },
+        {
+          "label": "Components of Kafka",
+          "to": "/jira/projects/KAFKA?selectedItem=com.atlassian.jira.jira-projects-plugin:components-page"
+        },
+        {
+          "label": "View all issues and filters",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "KAFKA-[number] KRaft migration rollback causes of…",
+          "to": "/jira/browse/:id"
+        },
+        {
+          "label": "KAFKA-[number] Potential data loss during KRaft m…",
+          "to": "/jira/browse/:id"
+        },
+        {
+          "label": "Page 2: issues 51 - 100",
+          "to": "/jira/projects/KAFKA/issues"
+        },
+        {
+          "label": "Page 3: issues [number]",
+          "to": "/jira/projects/KAFKA/issues"
+        },
+        {
+          "label": "Page 4: issues [number]",
+          "to": "/jira/projects/KAFKA/issues"
+        },
+        {
+          "label": "Page 5: issues [number]",
+          "to": "/jira/projects/KAFKA/issues"
+        },
+        {
+          "label": "Go to the next page (2 of 20)",
+          "to": "/jira/projects/KAFKA/issues"
+        },
+        {
+          "label": "Kafka",
+          "to": "/jira/browse/KAFKA"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Skip to sidebar",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Collapse sidebar ( [ )",
+        "Switch filter",
+        "Order by Priority",
+        "Order by Priority: descending sort applied, activ…",
+        "Refresh results",
+        "Not available - this is the first issue",
+        "Next Issue'KAFKA-[number]'",
+        "Expand issue ( z )",
+        "Patch Available",
+        "Export",
+        "Details",
+        "Description",
+        "Issue Links"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/projects/KAFKA/summary",
+      "title": "Kafka",
+      "headings": [
+        "ActivitySwitch view"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Mickael Maison",
+          "to": "/jira/secure/ViewProfile.jspa?name=mimaison"
+        },
+        {
+          "label": "Kafka",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Kafka",
+        "Switch view"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/secure/BrowseProjects.jspa",
+      "title": "Browse projects",
+      "headings": [
+        "All project types - All categories"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "All categories",
+          "to": "/jira/secure/BrowseProjects.jspa?selectedCategory=all"
+        },
+        {
+          "label": "Previous",
+          "to": "/jira/secure/undefined&page=0"
+        },
+        {
+          "label": "2",
+          "to": "/jira/secure/undefined&page=2"
+        },
+        {
+          "label": "3",
+          "to": "/jira/secure/undefined&page=3"
+        },
+        {
+          "label": "4",
+          "to": "/jira/secure/undefined&page=4"
+        },
+        {
+          "label": "5",
+          "to": "/jira/secure/undefined&page=5"
+        },
+        {
+          "label": "6",
+          "to": "/jira/secure/undefined&page=6"
+        },
+        {
+          "label": "Next",
+          "to": "/jira/secure/undefined&page=2"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "All project types",
+        "Software",
+        "Business",
+        "Abdera",
+        "Accumulo",
+        "Ace",
+        "ActiveMQ",
+        "Airavata",
+        "Ambari",
+        "Ant",
+        "Apache Software Foundation",
+        "Apex",
+        "Aries",
+        "Artemis"
+      ],
+      "fields": [
+        "Search",
+        "Search for projects"
+      ]
+    },
+    {
+      "path": "/jira/secure/BrowseProjects.jspa?selectedCategory=all",
+      "title": "Browse projects",
+      "headings": [
+        "All project types - All categories"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "All project types",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Software",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Business",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Abdera",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Accumulo",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Ace",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "ActiveMQ",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Airavata",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Ambari",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Ant",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Apache Software Foundation",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Apex",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Aries",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Artemis",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "AsterixDB",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Aurora",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Avro",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Axis",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Batik",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Beam",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "BigTop",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "BookKeeper",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "All categories"
+      ],
+      "fields": [
+        "Search",
+        "Search for projects"
+      ]
+    },
+    {
+      "path": "/jira/secure/CreateIssue!default.jspa",
+      "title": "Error - ASF Jira",
+      "headings": [
+        "Error"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Report a problem"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/secure/credits/AroundTheWorld!default.jspa",
+      "title": "About Jira - ASF Jira",
+      "headings": [
+        "Jira Credits 🌍",
+        "Sydney",
+        "Amsterdam",
+        "Gdansk",
+        "San Francisco",
+        "Kuala Lumpur",
+        "Remote",
+        "Elsewhere"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/secure/Dashboard.jspa",
+      "title": "System Dashboard - ASF Jira",
+      "headings": [
+        "System Dashboard",
+        "Introduction"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "find",
+          "to": "/jira/secure/IssueNavigator.jspa"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Tools",
+        "Maximise",
+        "Expand"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/secure/ViewKeyboardShortcuts!default.jspa",
+      "title": "Keyboard Shortcuts - ASF Jira",
+      "headings": [
+        "Keyboard Shortcuts",
+        "Global Shortcuts",
+        "Navigating Issues",
+        "Issue Actions"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/si/jira.issueviews:issue-html/:id/:id",
+      "title": "",
+      "headings": [],
+      "links": [
+        {
+          "label": "Back to previous view",
+          "to": "/jira/browse/:id"
+        }
+      ],
+      "buttons": [],
+      "fields": []
+    }
+  ],
+  "source": {
+    "url": "https://issues.apache.org/jira/projects/KAFKA/issues",
+    "maxPages": 30,
+    "docs": [],
+    "maxDepth": 2,
+    "reader": "browser"
+  },
+  "createdAt": "2026-11-15T06:57:14.009Z",
+  "updatedAt": "2026-11-15T23:01:29.879Z"
+}

@@ -384,8 +384,8 @@ padding guesses.
 Flat. Hierarchy comes from the step between Paper and Card and from 1px borders,
 not from shadows. Four things are allowed a shadow, because they float above
 content: the demo window (`shadow-sm`), the widget's launcher and ask box, the
-pointer with its caption, and a menu in the dashboard (`shadow-sm`). No
-gradients, no blur, no glass.
+pointer with its caption, and in the dashboard a menu and the card a chart
+shows under the mouse (`shadow-sm`). No gradients, no blur, no glass.
 
 The pointer's shadow is two layers, a tight one and a soft one:
 `drop-shadow(0 1px 1px rgb(0 0 0 / .3)) drop-shadow(0 5px 9px rgb(0 0 0 / .26))`.
@@ -506,8 +506,9 @@ bar that scrolls sideways. Content is up to 1152px wide (`max-w-6xl`).
 reason a customer gave.
 
 - **Overview.** Is it working. Four numbers, the newest questions as they
-  happen, questions a day, how guides ended, and the three questions most
-  people could not find.
+  happen, guides each day, how guides ended, and the three questions most
+  people could not find. A site nobody has asked anything yet says what will
+  show here, with a button to go and ask the first question.
 - **Questions.** Every question, newest first, as a table to search and filter.
   A row opens its guide.
 - **Gaps.** What the company can fix. What people can't find, guides that
@@ -522,7 +523,8 @@ reason a customer gave.
 first page is the list, one card a site. A card says whether the script is
 running, how many questions the last seven days had and how many finished, the
 last fortnight as fourteen small bars, and the newest question. The whole card
-is the way in. A card never holds a picture of the site.
+is the way in. A card never holds a picture of the site. Add a site leads to
+the setup screens, which have a frame of their own.
 
 **Type.** One 24px Medium title a page, the headline size. Card titles are
 16px Medium. Text, rows and tables are 14px. Notes under a number, table
@@ -537,18 +539,23 @@ run edge to edge inside the card with hairlines between them, and the row
 under the mouse is Muted. The pages around sign-in, and the install page a
 developer is sent, keep Muted cards.
 
-**Numbers.** A tile is a 14px Muted label, the number, and one 12px line of
-context. A change against the same length of time before is said in words,
-such as "38% more than the 30 days before", with a small arrow. The arrow and
-the words are the same grey whichever way the number went, because the system
-has no colour for good or bad, and whether more is good depends on the number.
+**Numbers.** The four are guides finished, finish rate, questions Haptic
+couldn't guide, and median time to finish. A tile is a 14px Medium label in
+Muted text, the number at 36px, the change, and one 12px line that says what
+the number counts. A change against the same number of days before is said in
+words, such as "Up 12% on the previous 30 days", with a small arrow. The arrow
+and the words are Ink whichever way the number went, because the system has no
+colour for good or bad, and whether more is good depends on the number.
 
-**Charts.** Ink and a quarter-strength Ink, and nothing else. Ink is the
-guides that finished. Bars are at most 24px wide, rounded at the top and square
-at the foot, with 2px between them, on three hairlines with their numbers.
-Pointing at a bar, or reaching it with the keyboard, shows an Ink caption with
-its numbers. A range longer than a month is shown a week at a time. Every chart
-has the same numbers as a table for a screen reader. There is no chart library.
+**Charts.** The two neutrals, and nothing else. Guides each day is a bar for
+each day of the range, in UTC, the same days the numbers above it count. Muted
+text grey is guides started, and Ink over it, from the same foot, is guides
+finished. Bars are at most 24px wide, rounded at the top and square at the
+foot, on hairlines with their numbers. Pointing at a day, or reaching it with
+the arrow keys, shows a small white card with that day's two numbers. A share
+of a whole is a thin Ink bar on a Border grey track. A site's card has the last
+fortnight as fourteen small bars, today's in Ink. Every chart has the same
+numbers as a table for a screen reader. There is no chart library.
 
 **Live.** A page that shows questions keeps itself current while it is open,
 asking every second and a half. The page says Live beside an Ink dot. The dot

@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
-import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { cn } from "cn";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { OUTCOME_LABEL, type Insights, type Live, type LiveGuide } from "@/lib/app-api";
-import { QuestionsOverTime, ShareBar, bucketsOf } from "./chart";
+import { ShareBar } from "./chart";
+import { HeadlineChart, HeadlineTiles, HeadlineWaiting, useHeadline } from "./headline";
 import { siteHref } from "./nav";
 import { GuideStatus, Panel, PanelEmpty, seconds, useNow, when } from "./parts";
 
@@ -18,79 +18,48 @@ const percent = (share: number) => `${Math.round(share * 100)}%`;
 
 /**
  * A site at a glance: four numbers, the newest questions as they happen, the
- * questions of the time range day by day, how guides ended, and what people
- * could not find.
+ * guides of the time range day by day, how guides ended, and what people could
+ * not find. A site nobody has asked anything yet says what will show here.
  */
-export function Overview({ siteId, data, live, onOpen }: { siteId: string; data: Insights | null; live: Live | null; onOpen: (guide: string) => void }) {
+export function Overview({
+  siteId,
+  origin,
+  days,
+  stamp,
+  data,
+  live,
+  onOpen,
+}: {
+  siteId: string;
+  origin: string;
+  days: number;
+  /** Changes whenever anything about the site's questions does, so the numbers are asked for again. */
+  stamp: string | undefined;
+  data: Insights | null;
+  live: Live | null;
+  onOpen: (guide: string) => void;
+}) {
+  const headline = useHeadline(siteId, days, stamp);
+  if (headline.data && !headline.data.asked) {
+    return (
+      <>
+        <HeadlineWaiting origin={origin} />
+        <Latest siteId={siteId} live={live} onOpen={onOpen} />
+      </>
+    );
+  }
   return (
     <>
-      <Numbers data={data} />
+      <HeadlineTiles data={headline.data} days={days} error={headline.error} />
       <div className="grid gap-6 lg:grid-cols-5">
         <Latest siteId={siteId} live={live} onOpen={onOpen} className="lg:col-span-3" />
         <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
-          <OverTime data={data} />
+          <HeadlineChart data={headline.data} />
           <Endings data={data} />
         </div>
       </div>
       <CantFindSummary siteId={siteId} data={data} />
     </>
-  );
-}
-
-/** How a count compares with the same length of time just before. */
-function against(now: number, before: number, days: number): { words: string; up?: boolean } {
-  if (!before) return { words: now ? `None in the ${days} days before` : `None in the ${days} days before either` };
-  const change = (now - before) / before;
-  if (Math.abs(change) < 0.005) return { words: `The same as the ${days} days before` };
-  return { words: `${percent(Math.abs(change))} ${change > 0 ? "more" : "fewer"} than the ${days} days before`, up: change > 0 };
-}
-
-function Numbers({ data }: { data: Insights | null }) {
-  if (!data) {
-    return (
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[0, 1, 2, 3].map((tile) => (
-          <Skeleton key={tile} className="h-[7.25rem] rounded-xl" />
-        ))}
-      </div>
-    );
-  }
-  const { summary, previous, days } = data;
-  const asked = against(summary.guides, previous?.guides ?? 0, days);
-  const missed = against(summary.unanswered, previous?.unanswered ?? 0, days);
-  const answers = summary.helped_yes + summary.helped_no;
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <Tile label="Questions" value={summary.guides.toLocaleString()} note={asked.words} up={asked.up} />
-      <Tile
-        label="Finished"
-        value={summary.guides ? percent(summary.finished / summary.guides) : "No data yet"}
-        note={summary.guides ? `${summary.finished.toLocaleString()} of ${summary.guides.toLocaleString()} questions` : undefined}
-      />
-      <Tile label="Unanswered" value={summary.unanswered.toLocaleString()} note={missed.words} up={missed.up} />
-      <Tile
-        label="Time until the pointer moved"
-        value={seconds(summary.median_ms_to_pointer)}
-        note={answers ? `Median. ${summary.helped_yes} of ${answers} said it helped` : "Median, first step"}
-      />
-    </div>
-  );
-}
-
-/** One number with its name above and a line of context under it. The arrow says which way it moved, in the same grey whichever way that is. */
-function Tile({ label, value, note, up }: { label: string; value: string; note?: string; up?: boolean }) {
-  const Arrow = up === undefined ? null : up ? ArrowUpRight : ArrowDownRight;
-  return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-xl border bg-card p-5">
-      <span className="truncate text-sm text-muted-foreground">{label}</span>
-      <span className="text-4xl font-medium tracking-[-0.03em]">{value}</span>
-      {note && (
-        <span className="flex items-center gap-1 text-xs leading-5 text-muted-foreground">
-          {Arrow && <Arrow className="size-3.5 shrink-0" aria-hidden />}
-          <span className="truncate">{note}</span>
-        </span>
-      )}
-    </div>
   );
 }
 
@@ -150,22 +119,21 @@ function Latest({ siteId, live, onOpen, className }: { siteId: string; live: Liv
   );
 }
 
-function OverTime({ data }: { data: Insights | null }) {
-  const chart = useMemo(() => (data ? bucketsOf(data.daily ?? [], data.days) : null), [data]);
-  return (
-    <Panel title={chart?.weekly ? "Questions a week" : "Questions a day"}>
-      <div className="px-5 pb-5">{chart ? <QuestionsOverTime buckets={chart.buckets} /> : <Skeleton className="h-52" />}</div>
-    </Panel>
-  );
-}
-
+/** How the range's guides ended, most common first, with what people said and how fast the pointer moved under them. */
 function Endings({ data }: { data: Insights | null }) {
-  const steps = data?.summary.median_steps_finished;
+  const summary = data?.summary;
+  const said = summary ? summary.helped_yes + summary.helped_no : 0;
+  const foot = summary
+    ? [
+        said ? `${summary.helped_yes} of ${said} who answered said it helped.` : null,
+        summary.median_ms_to_pointer !== null ? `The pointer moved ${seconds(summary.median_ms_to_pointer)} after the question, at the median.` : null,
+        summary.median_steps_finished !== null ? `A finished guide took ${Number(summary.median_steps_finished).toLocaleString()} steps, at the median.` : null,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : "";
   return (
-    <Panel
-      title="How guides ended"
-      foot={steps !== null && steps !== undefined ? `A finished guide took ${Number(steps).toLocaleString()} steps, at the median.` : undefined}
-    >
+    <Panel title="How guides ended" foot={foot || undefined}>
       {!data ? (
         <div className="px-5 pb-5">
           <Skeleton className="h-32" />

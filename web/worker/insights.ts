@@ -12,7 +12,7 @@
 // product or its help docs would have answered them.
 
 import type { Sql } from "./db";
-import { cantFind, guideHealth } from "./health";
+import { cantFind, COUNTED, guideHealth } from "./health";
 
 /** A guide with no ending reported, and nothing new for this long, was abandoned. */
 const ABANDONED_AFTER = "30 minutes";
@@ -40,19 +40,12 @@ async function untilMigrated<T>(what: string, query: Promise<T[]>): Promise<T[]>
   }
 }
 
-/**
- * `minutesWest` is the viewer's clock, as JavaScript's getTimezoneOffset gives it, so a day on the chart
- * starts at their midnight and not at UTC's.
- */
-export async function insights(sql: Sql, site: string, days: number, minutesWest = 0) {
+export async function insights(sql: Sql, site: string, days: number) {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
-  // The same length of time just before, for "against the 30 days before".
-  const before = new Date(Date.now() - 2 * days * 86_400_000).toISOString();
 
-  const [summary, previous, daily, outcomes, recent, abandonedAt, wrongClicks, cannotFind, health, alerts] = await Promise.all([
+  const [summary, outcomes, recent, abandonedAt, wrongClicks, cannotFind, health, alerts] = await Promise.all([
     sql.query(
       `select count(*)::int as guides,
-        count(*) filter (where g.outcome = 'finished')::int as finished,
         count(*) filter (where ${UNANSWERED})::int as unanswered,
         count(*) filter (where g.helped = true)::int as helped_yes,
         count(*) filter (where g.helped = false)::int as helped_no,
@@ -62,22 +55,6 @@ export async function insights(sql: Sql, site: string, days: number, minutesWest
           where g3.site_id = $1 and g3.started_at >= $2 and g3.outcome = 'finished') as median_steps_finished
       from guides g where g.site_id = $1 and g.started_at >= $2`,
       [site, since],
-    ),
-    sql.query(
-      `select count(*)::int as guides,
-        count(*) filter (where g.outcome = 'finished')::int as finished,
-        count(*) filter (where ${UNANSWERED})::int as unanswered
-      from guides g where g.site_id = $1 and g.started_at >= $2 and g.started_at < $3`,
-      [site, before, since],
-    ),
-    // One row for each day that had a question. The page fills in the days that had none.
-    sql.query(
-      `select to_char((g.started_at at time zone 'UTC') - make_interval(mins => $3), 'YYYY-MM-DD') as day,
-        count(*)::int as guides,
-        count(*) filter (where g.outcome = 'finished')::int as finished,
-        count(*) filter (where ${UNANSWERED})::int as unanswered
-      from guides g where g.site_id = $1 and g.started_at >= $2 group by 1 order by 1`,
-      [site, since, minutesWest],
     ),
     sql.query(`select ${OUTCOME} as outcome, count(*)::int as count from guides g where g.site_id = $1 and g.started_at >= $2 group by 1 order by 2 desc`, [site, since]),
     sql.query(
@@ -117,7 +94,7 @@ export async function insights(sql: Sql, site: string, days: number, minutesWest
     ),
   ]);
 
-  return { days, summary: summary[0], previous: previous[0], daily, outcomes, recent, abandonedAt, wrongClicks, cantFind: cannotFind, health, alerts };
+  return { days, summary: summary[0], outcomes, recent, abandonedAt, wrongClicks, cantFind: cannotFind, health, alerts };
 }
 
 /** How many of a site's newest questions the live list carries. */
@@ -252,4 +229,110 @@ export async function guideSteps(sql: Sql, site: string, guide: string) {
     select n, path, target_role, target_label, target_context, said, status, event, strayed, ms, ms_to_target, created_at
     from steps where guide_id = ${guide} order by n`;
   return { ...rows[0], steps };
+}
+
+// The top of the dashboard --------------------------------------------------
+
+const DAY_MS = 86_400_000;
+
+/** One range's numbers. Guides finished are counted by when they finished, as billing counts them. The rest by when they started. */
+export interface HeadlinePeriod {
+  /** Guides that finished in the range: the number billing counts. */
+  finished: number;
+  /** Questions asked in the range. */
+  started: number;
+  /** Of those, the ones that could have finished: not still under way, not left for a person, not off topic, not ruled out. */
+  counted: number;
+  /** Of those, the ones that finished. Finish rate is this over `counted`. */
+  countedFinished: number;
+  /** Questions Haptic couldn't guide, as "unanswered" is defined at the top of this file. */
+  unguided: number;
+  /** From the question to the last step, at the median, for guides that finished in the range. */
+  medianMsToFinish: number | null;
+}
+
+export interface Headline {
+  days: number;
+  /** Whether anyone has ever asked anything on this site. False shows what will appear, not zeros. */
+  asked: boolean;
+  now: HeadlinePeriod;
+  /** The same number of days just before. */
+  before: HeadlinePeriod;
+  /** Each day of the range, oldest first, in UTC: guides started, and guides finished that day. */
+  daily: { day: string; started: number; finished: number }[];
+}
+
+/** One range's columns, for `from` <= time < `to`. A guide that finished in range may have started up to a day before it. */
+function periodColumns(suffix: string, from: string, to: string | null): string {
+  const startedIn = `g.started_at >= ${from}${to ? ` and g.started_at < ${to}` : ""}`;
+  const endedIn = `g.ended_at >= ${from}${to ? ` and g.ended_at < ${to}` : ""}`;
+  return `count(*) filter (where g.outcome = 'finished' and ${endedIn})::int as finished${suffix},
+    count(*) filter (where ${startedIn})::int as started${suffix},
+    count(*) filter (where ${startedIn} and ${COUNTED})::int as counted${suffix},
+    count(*) filter (where ${startedIn} and ${COUNTED} and g.outcome = 'finished')::int as counted_finished${suffix},
+    count(*) filter (where ${startedIn} and ${UNANSWERED})::int as unguided${suffix},
+    percentile_cont(0.5) within group (order by extract(epoch from (g.ended_at - g.started_at)) * 1000)
+      filter (where g.outcome = 'finished' and ${endedIn}) as median_ms${suffix}`;
+}
+
+/**
+ * The four numbers at the top of a site's dashboard for the last `days` days,
+ * the same four for the days before, and a count of guides started and finished
+ * for each day. Two queries, both limited to one site and the two ranges.
+ *
+ * A range is whole UTC days, today being the last and so far, the same days
+ * the chart has a bar for, so the bars add up to the numbers above them.
+ */
+export async function headline(sql: Sql, site: string, days: number): Promise<Headline> {
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const since = new Date(today - (days - 1) * DAY_MS).toISOString();
+  const before = new Date(today - (2 * days - 1) * DAY_MS).toISOString();
+  const [totals, daily] = await Promise.all([
+    sql.query(
+      `select ${periodColumns("", "$2::timestamptz", null)},
+        ${periodColumns("_before", "$3::timestamptz", "$2::timestamptz")},
+        exists (select 1 from guides a where a.site_id = $1) as asked
+      from guides g where g.site_id = $1 and g.started_at >= $3::timestamptz - interval '1 day'`,
+      [site, since, before],
+    ),
+    sql.query(
+      `with days as (
+        select generate_series(date_trunc('day', now() at time zone 'utc') - make_interval(days => $2::int - 1), date_trunc('day', now() at time zone 'utc'), interval '1 day') as day
+      ),
+      started as (
+        select date_trunc('day', g.started_at at time zone 'utc') as day, count(*)::int as n
+        from guides g where g.site_id = $1 and g.started_at >= $3::timestamptz group by 1
+      ),
+      finished as (
+        -- The same guides the tiles count as finished: started no earlier than theirs, a day before the range before.
+        select date_trunc('day', g.ended_at at time zone 'utc') as day, count(*)::int as n
+        from guides g where g.site_id = $1 and g.outcome = 'finished' and g.ended_at >= $3::timestamptz
+          and g.started_at >= $4::timestamptz - interval '1 day' group by 1
+      )
+      select to_char(days.day, 'YYYY-MM-DD') as day, coalesce(started.n, 0) as started, coalesce(finished.n, 0) as finished
+      from days left join started on started.day = days.day left join finished on finished.day = days.day
+      order by days.day`,
+      [site, days, since, before],
+    ),
+  ]);
+  const row = (totals[0] ?? {}) as Record<string, number | boolean | null>;
+  const period = (suffix: string): HeadlinePeriod => {
+    const median = row[`median_ms${suffix}`];
+    return {
+      finished: Number(row[`finished${suffix}`] ?? 0),
+      started: Number(row[`started${suffix}`] ?? 0),
+      counted: Number(row[`counted${suffix}`] ?? 0),
+      countedFinished: Number(row[`counted_finished${suffix}`] ?? 0),
+      unguided: Number(row[`unguided${suffix}`] ?? 0),
+      medianMsToFinish: median === null || median === undefined ? null : Math.round(Number(median)),
+    };
+  };
+  return {
+    days,
+    asked: row.asked === true,
+    now: period(""),
+    before: period("_before"),
+    daily: (daily as { day: string; started: number; finished: number }[]).map((item) => ({ day: item.day, started: Number(item.started), finished: Number(item.finished) })),
+  };
 }

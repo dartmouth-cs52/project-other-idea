@@ -67,7 +67,7 @@ export function CopyButton({ text, label = "Copy", variant = "secondary" }: { te
 export function CodeBlock({ code, label }: { code: string; label?: string }) {
   return (
     <div className="relative rounded-lg border bg-card">
-      <pre className="overflow-x-auto p-4 pr-28 text-sm leading-6">
+      <pre className="overflow-x-auto p-4 pr-28 text-sm leading-6 break-all whitespace-pre-wrap">
         <code>{code}</code>
       </pre>
       <div className="absolute top-2 right-2">

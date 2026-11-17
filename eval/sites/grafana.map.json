@@ -1,0 +1,2386 @@
+{
+  "version": 1,
+  "id": "site_bench_grafana",
+  "name": "Grafana Play",
+  "origin": "https://play.grafana.org",
+  "allowedOrigins": [
+    "https://play.grafana.org"
+  ],
+  "appearance": {
+    "accent": "#1E6EF4",
+    "position": "bottom-right",
+    "launcherLabel": "Ask"
+  },
+  "notes": "",
+  "docs": [],
+  "pages": [
+    {
+      "path": "/a/grafana-assistant-app",
+      "title": "AI - Grafana",
+      "headings": [
+        "Good night",
+        "Jump back in"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "What's new See the latest features and improvemen…",
+          "to": "/a/grafana-assistant-app/whats-new"
+        },
+        {
+          "label": "recent conversations",
+          "to": "/"
+        },
+        {
+          "label": "Workspace",
+          "to": "/a/grafana-assistant-app/workspace"
+        },
+        {
+          "label": "Jump back in0",
+          "to": "/"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "AI",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/a/grafana-assistant-app/pages",
+      "title": "Pages",
+      "headings": [
+        "Pages from your organization",
+        "Trending",
+        "Browse by topic",
+        "New and updated"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "View all pages",
+          "to": "/a/grafana-assistant-app/pages?tab=all"
+        },
+        {
+          "label": "View recent pages",
+          "to": "/a/grafana-assistant-app/pages?sort=recent&tab=all"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Pages New!",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": [
+        "Search pages"
+      ]
+    },
+    {
+      "path": "/a/grafana-assistant-app/pages?sort=recent&tab=all",
+      "title": "Pages",
+      "headings": [
+        "Filters",
+        "Category",
+        "Tags",
+        "All pages"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace",
+        "Discover"
+      ],
+      "fields": [
+        "Search pages",
+        "Find tags",
+        "Grid",
+        "Folders",
+        "List"
+      ]
+    },
+    {
+      "path": "/a/grafana-assistant-app/pages?tab=all",
+      "title": "Pages",
+      "headings": [
+        "Filters",
+        "Category",
+        "Tags",
+        "All pages"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace",
+        "Discover"
+      ],
+      "fields": [
+        "Search pages",
+        "Find tags",
+        "Grid",
+        "Folders",
+        "List"
+      ]
+    },
+    {
+      "path": "/a/grafana-assistant-app/pages/:id",
+      "title": "",
+      "headings": [],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Pages",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Assistant Dashboards ✨",
+          "to": "/a/grafana-assistant-app/pages?tab=all&folder=assistant-dashboards"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Main menu",
+        "Dashboard Quest: A Grafana Dashboard Adventure Ga…",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace",
+        "Show canvas summary",
+        "Share page",
+        "Fullscreen",
+        "Page actions"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/a/grafana-assistant-app/whats-new",
+      "title": "What's New - Assistant - Grafana",
+      "headings": [
+        "What's New",
+        "Circle Check BigNow generally available",
+        "RocketPublic Preview"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Assistant",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "View",
+          "to": "/a/grafana-assistant-app?mode=learn"
+        },
+        {
+          "label": "View",
+          "to": "/a/grafana-assistant-app/workspace"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/a/grafana-metricsdrilldown-app/drilldown?to=now&timezone=utc",
+      "title": "All metrics - Metrics - Drilldown - Grafana",
+      "headings": [
+        "Something Went Weird. Let's Find It.",
+        "Prefix filters",
+        "forecasting",
+        "outliers"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown M…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Collapse section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": [
+        "Data source",
+        "Filters",
+        "Quick search metrics",
+        "Sort by",
+        "Grid",
+        "Rows",
+        "Search filter options",
+        "forecasting",
+        "outliers"
+      ]
+    },
+    {
+      "path": "/a/grafana-ml-app/home",
+      "title": "Machine learning - Grafana",
+      "headings": [
+        "Machine learning"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Manage forecasts",
+          "to": "/a/grafana-ml-app/metric-forecast"
+        },
+        {
+          "label": "Manage outliers",
+          "to": "/a/grafana-ml-app/outlier-detector"
+        },
+        {
+          "label": "Manage Sift investigations",
+          "to": "/a/grafana-ml-app/investigations"
+        },
+        {
+          "label": "Open Assistant",
+          "to": "/a/grafana-assistant-app"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Machine learning",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/a/grafana-pyroscope-app/explore?panelType=time-series&layout=grid",
+      "title": "Profiles - Drilldown - Grafana",
+      "headings": [
+        "Your Cloud Bill Called. It's Your Code.",
+        "account",
+        "accountingservice",
+        "adservice",
+        "audit",
+        "auth",
+        "balance",
+        "balance-verification"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": [
+        "grafanacloud-play-profiles",
+        "Profile type",
+        "Filter by label values...",
+        "Quick filter",
+        "Grid",
+        "Rows"
+      ]
+    },
+    {
+      "path": "/admin",
+      "title": "Administration - Grafana",
+      "headings": [
+        "Administration"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Plugins and data",
+          "to": "/admin/plugins"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Administration",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/alerts-and-incidents",
+      "title": "Alerts & IRM - Grafana",
+      "headings": [
+        "Alerts & IRM"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Service Center",
+          "to": "/a/grafana-servicecenter-app/home"
+        },
+        {
+          "label": "Alerting",
+          "to": "/alerting"
+        },
+        {
+          "label": "SLO",
+          "to": "/a/grafana-slo-app/home/insights"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Alerts & IRM",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/apps",
+      "title": "More apps - Grafana",
+      "headings": [
+        "More apps"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Session Replay",
+          "to": "/a/grafana-sessionreplay-app"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "More apps",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/connections",
+      "title": "- Connections - Grafana",
+      "headings": [
+        "Welcome to Connections"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Fleet Management",
+          "to": "/a/grafana-collector-app/fleet-management"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Connections",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/d/community-contributors/top-community-contributors?to=now&timezone=utc",
+      "title": "Top Community contributors - Grafana Stats - Dashboards - Grafana",
+      "headings": [
+        "🚀 How to contribute to grafana/grafana",
+        "Merged PRs (last 30 days)",
+        "Open issues",
+        "Open feature requests",
+        "🔥 Popular open issues",
+        "💡 Popular feature requests",
+        "🏆 Top Community contributors (last 30 days)",
+        "🏅 Top contributor"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Grafana Stats",
+          "to": "/dashboards/f/grafana-stats/grafana-stats"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace",
+        "Move 15d backward"
+      ],
+      "fields": [
+        "repo"
+      ]
+    },
+    {
+      "path": "/d/to6j8mh/grafana-play-home?to=now&timezone=utc",
+      "title": "Grafana Play Home - Examples - Dashboards - Grafana",
+      "headings": [
+        "Welcome to Grafana Play",
+        "🌟 Featured Grafana Contributor",
+        "🏆 Visualization of the Month",
+        "Dashboard Quest: A Grafana Dashboard Adventure Game",
+        "🏆 Top Community contributors (last 30 days)"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Examples",
+          "to": "/dashboards/f/examples/examples"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Dashboard Quest: A Grafana Dashboard Adventure Ga…",
+          "to": "/a/grafana-assistant-app/pages/:id"
+        },
+        {
+          "label": "Top Community Contributors",
+          "to": "/d/community-contributors/top-community-contributors"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace",
+        "Copy link"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/dashboard/recently-deleted",
+      "title": "Page not found - Grafana",
+      "headings": [
+        "Page not found"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": [
+        "Search for dashboards",
+        "Tag filter",
+        "Include panels",
+        "Sort"
+      ]
+    },
+    {
+      "path": "/dashboards",
+      "title": "Starred - Grafana",
+      "headings": [
+        "Your Data Deserves Better Than a Spreadsheet",
+        "Starred",
+        "Recently viewed"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Recently deleted",
+          "to": "/dashboard/recently-deleted"
+        },
+        {
+          "label": "Grafana Play Home",
+          "to": "/d/to6j8mh/grafana-play-home"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Starred",
+        "Expand section: Starred",
+        "Dashboards",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant"
+      ],
+      "fields": [
+        "Search for dashboards and folders",
+        "Tag filter",
+        "Owner filter",
+        "Include panels",
+        "Starred",
+        "Created by me",
+        "Sort"
+      ]
+    },
+    {
+      "path": "/dashboards/f/examples/examples",
+      "title": "Examples - Dashboards - Grafana",
+      "headings": [
+        "Your Data Deserves Better Than a Spreadsheet",
+        "Examples"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Recently deleted",
+          "to": "/dashboard/recently-deleted"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace",
+        "Close alert"
+      ],
+      "fields": [
+        "Search for dashboards and folders",
+        "Tag filter",
+        "Owner filter",
+        "Include panels",
+        "Starred",
+        "Created by me",
+        "Sort"
+      ]
+    },
+    {
+      "path": "/drilldown",
+      "title": "Drilldown - Grafana",
+      "headings": [
+        "Investigate First. Write the Query Later.",
+        "Drilldown"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Metrics",
+          "to": "/a/grafana-metricsdrilldown-app/drilldown"
+        },
+        {
+          "label": "Logs",
+          "to": "/a/grafana-lokiexplore-app/explore"
+        },
+        {
+          "label": "Traces",
+          "to": "/a/grafana-exploretraces-app"
+        },
+        {
+          "label": "Profiles",
+          "to": "/a/grafana-pyroscope-app/explore"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Drilldown",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/explore",
+      "title": "Explore - -- Grafana -- - Grafana",
+      "headings": [
+        "Your Data Knows the Answer. Go Find It.",
+        "Explore",
+        "Graph",
+        "Table"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Explore",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": [
+        "Select a data source",
+        "Query type",
+        "Series count",
+        "Start value",
+        "Min",
+        "Max",
+        "Spread",
+        "Noise",
+        "Drop (%)",
+        "Lines",
+        "Bars",
+        "Points",
+        "Stacked lines",
+        "Stacked bars"
+      ]
+    },
+    {
+      "path": "/observability",
+      "title": "Observability - Grafana",
+      "headings": [
+        "Observability",
+        "Frontend (RUM)",
+        "Services",
+        "Databases",
+        "Pods",
+        "Nodes",
+        "Explore more solutions"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "View all",
+          "to": "/a/grafana-asserts-app/catalog?entityTypeFilter=Frontend"
+        },
+        {
+          "label": "View all",
+          "to": "/a/grafana-asserts-app/catalog?entityTypeFilter=Service"
+        },
+        {
+          "label": "View all",
+          "to": "/a/grafana-asserts-app/catalog?entityTypeFilter=Database"
+        },
+        {
+          "label": "View all",
+          "to": "/a/grafana-asserts-app/catalog?entityTypeFilter=Pod"
+        },
+        {
+          "label": "View all",
+          "to": "/a/grafana-asserts-app/catalog?entityTypeFilter=Node"
+        },
+        {
+          "label": "Incident Response & Management On-call scheduling…",
+          "to": "/plugins/grafana-irm-app"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Observability",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": [
+        "Ask the Assistant - 'Why is payments-svc erroring…"
+      ]
+    },
+    {
+      "path": "/testing-and-synthetics",
+      "title": "Testing & synthetics - Grafana",
+      "headings": [
+        "Testing & synthetics",
+        "Synthetic monitoring"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Open",
+          "to": "/a/grafana-synthetic-monitoring-app/home"
+        },
+        {
+          "label": "Create",
+          "to": "/a/grafana-synthetic-monitoring-app/checks/choose-type"
+        },
+        {
+          "label": "Manage",
+          "to": "/a/grafana-synthetic-monitoring-app/probes"
+        },
+        {
+          "label": "View",
+          "to": "/a/grafana-synthetic-monitoring-app/config/terraform"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Testing & synthetics",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    }
+  ],
+  "source": {
+    "url": "https://play.grafana.org/",
+    "maxPages": 30,
+    "docs": [],
+    "maxDepth": 3,
+    "reader": "browser"
+  },
+  "createdAt": "2026-11-15T06:58:11.075Z",
+  "updatedAt": "2026-11-15T23:03:44.016Z"
+}

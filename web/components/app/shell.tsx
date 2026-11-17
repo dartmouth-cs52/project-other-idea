@@ -20,13 +20,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
+import { hostOf } from "@/lib/setup";
 import { site as haptic } from "@/lib/site";
 import { NEW_SITE_HREF, SITES_HREF, VIEWS, siteHref, type View } from "./nav";
 import { leaveFor } from "./parts";
 
 type SiteRow = NonNullable<Me["sites"]>[number];
 
-const hostOf = (origin: string) => (URL.canParse(origin) ? new URL(origin).host : origin);
 
 /** The first word of the person's name, from Google. Someone who signed in by an emailed link has none. */
 function firstName(name: string | undefined): string | undefined {

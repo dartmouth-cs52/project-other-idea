@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { clock, type Me, type SiteCard } from "@/lib/app-api";
+import { hostOf } from "@/lib/setup";
 import { Spark } from "./chart";
 import { usePolled } from "./live";
 import { NEW_SITE_HREF, siteHref } from "./nav";
@@ -13,7 +14,6 @@ import { DoneMark, GuideStatus, PageHeader, useNow, when } from "./parts";
 /** How often the list of sites asks what is new. Each card is a few counts, so this is slower than a site's own page. */
 const SITES_MS = 3_000;
 
-const hostOf = (origin: string) => (URL.canParse(origin) ? new URL(origin).host : origin);
 
 /**
  * Every site a company has, one card each, kept current. A card says whether

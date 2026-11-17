@@ -7,7 +7,7 @@
 // when it comes back.
 
 import { useEffect, useRef, useState } from "react";
-import { api, clock, type Insights, type Live, type LiveGuide } from "@/lib/app-api";
+import { api, type Insights, type Live, type LiveGuide } from "@/lib/app-api";
 
 /** How often an open page asks what is new. */
 export const LIVE_MS = 1_500;
@@ -89,7 +89,7 @@ export function useInsights(siteId: string | null, days: number, stamp: string |
   useEffect(() => {
     if (!siteId) return;
     let live = true;
-    api<Insights>(`/sites/${siteId}/insights?days=${days}&${clock()}`).then(
+    api<Insights>(`/sites/${siteId}/insights?days=${days}`).then(
       (result) => live && (setData(result), setError(null)),
       (failure: Error) => live && setError(failure.message),
     );

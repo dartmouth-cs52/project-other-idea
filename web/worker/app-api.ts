@@ -17,20 +17,27 @@
 //   GET    /api/app/approve?key=…&sig=…         an access request, for the team's approve page
 //   POST   /api/app/approve                     approve it, and email the person a sign-in link
 //
+// The setup screens, the email to a developer and the dashboard's top numbers
+// are answered in setup-api.ts.
+//
 // Every site is looked up together with the caller's organization, so a site
 // id, which is public, is never enough to read or change someone's data.
 
 import { answersOn, cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
 import { ANSWERS_DOCS_BUDGET, DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
+import { pageControls } from "../lib/setup";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
 import { groupGuides } from "./health";
 import { finishedCsv, finishedGuides, guideSteps, insights, live, monthOf, sitesOverview } from "./insights";
 import { MAX_PAGES, readMore, startReading, type BrowserBinding, type Reading } from "./reader";
+import { saveReadBatch } from "./read-batch";
+import { readingExtras, setupOf, setupRoutes } from "./setup-api";
+import type { SendEnv } from "./sign-in-email";
 
-export interface AppEnv extends AuthEnv {
+export interface AppEnv extends AuthEnv, SendEnv {
   ACCESS_REQUESTS: { put(key: string, value: string): Promise<void>; get(key: string): Promise<string | null> };
   /** Neon's connection string. A secret. */
   DATABASE_URL?: string;
@@ -94,6 +101,8 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
 
     if (path === "/sites" && request.method === "POST") return reply(await addSite(sql, org, await body(request)), 201);
     if (path === "/sites" && request.method === "GET") return reply(await sitesOverview(sql, org.id, minutesWest(url)));
+    const more = await setupRoutes({ request, env, sql, org, user, path, url });
+    if (more) return reply(more.body, more.status);
 
     const match = /^\/sites\/([^/]+)(\/read|\/insights|\/live|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?)?$/.exec(path);
     if (match) {
@@ -109,7 +118,7 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
       if (sub === "/insights" && request.method === "GET") {
         await ownedSite(sql, org, id);
         const days = Math.min(Math.max(Number(url.searchParams.get("days")) || 30, 1), 365);
-        return reply(await insights(sql, id, days, minutesWest(url)));
+        return reply(await insights(sql, id, days));
       }
       if (sub === "/live" && request.method === "GET") {
         await ownedSite(sql, org, id);
@@ -250,7 +259,7 @@ function originList(input: unknown): string[] {
 
 async function addSite(sql: Sql, org: Organization, input: Record<string, unknown>) {
   const url = siteAddress(input.url);
-  const [{ count }] = (await sql`select count(*)::int as count from sites where company_id = ${org.id}`) as { count: number }[];
+  const [{ count } = { count: 0 }] = (await sql`select count(*)::int as count from sites where company_id = ${org.id}`) as { count: number }[];
   if (count >= MAX_SITES) throw new Refusal(400, `A company can have up to ${MAX_SITES} sites for now. Write to us if you need more.`);
   const id = `site_${[...crypto.getRandomValues(new Uint8Array(6))].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
   const now = new Date().toISOString();
@@ -283,7 +292,8 @@ function readingSummary(reading: Reading | null, pages: PageNode[]) {
     failed: reading.failed.length,
     thin: reading.thin.length,
     via: reading.via ?? null,
-    pages: pages.slice(0, 60).map((page) => ({ path: page.path, title: page.title })),
+    pages: pages.slice(0, 60).map((page) => ({ path: page.path, title: page.title, controls: pageControls(page) })),
+    ...readingExtras(reading, pages),
   };
 }
 
@@ -310,6 +320,7 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string) 
     corrections: site.context.corrections ?? [],
     blocked: site.context.blocked ?? [],
     reading: readingSummary(site.reading, site.context.pages ?? []),
+    setup: setupOf(site.context),
     appearance: { ...DEFAULT_APPEARANCE, ...site.context.appearance },
     notes: site.context.notes ?? "",
     docs: docsSummary(site.context.docs ?? [], answersOn(site.context)),
@@ -455,21 +466,11 @@ async function readSite(sql: Sql, env: AppEnv, org: Organization, id: string, re
   const byPath = new Map(pages.map((page) => [page.path, page]));
   for (const page of batch.pages) byPath.set(page.path, page);
   const merged = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
-  // The address pasted may be the site's other name, acme.com for www.acme.com. The widget will run on the
-  // one it redirects to, so that becomes the site's origin and is allowed too.
-  const moved = batch.movedTo ?? null;
-  // Only the pages, the reading and that origin change, so an edit to the name or origins made meanwhile is kept.
-  await sql`
-    update sites set
-      context = jsonb_set(jsonb_set(context, '{pages}', ${JSON.stringify(merged)}::jsonb), '{updatedAt}', to_jsonb(now()::text)),
-      reading = ${JSON.stringify(batch.reading)}::jsonb,
-      origin = coalesce(${moved}::text, origin),
-      allowed_origins = case
-        when ${moved}::text is null or ${moved}::text = any(allowed_origins) or cardinality(allowed_origins) >= ${MAX_ORIGINS} then allowed_origins
-        else array_append(allowed_origins, ${moved}::text) end,
-      updated_at = now()
-    where id = ${id} and company_id = ${org.id}`;
-  return readingSummary(batch.reading, merged);
+  const from = { origin: site.origin, startedAt: site.reading?.startedAt ?? null };
+  if (await saveReadBatch(sql, { id, companyId: org.id, maxOrigins: MAX_ORIGINS }, from, batch, merged)) return readingSummary(batch.reading, merged);
+  // The address changed while this batch was read, so it was dropped. Answer with the reading that is there now.
+  const now = await ownedSite(sql, org, id);
+  return readingSummary(now.reading, now.context.pages ?? []);
 }
 
 // Approving access requests ---------------------------------------------------

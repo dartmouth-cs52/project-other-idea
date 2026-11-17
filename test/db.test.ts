@@ -129,3 +129,11 @@ test("a control an answer named that is nowhere in the product is recorded with 
   await new Store(guideOnly.sql).recordStep(request, measure, undefined);
   assert.ok(guideOnly.sent.every((statement) => !/unseen/.test(statement.text)));
 });
+
+test("an act step is recorded as a step, and its mode is not written where a guide's kind of reply goes", async () => {
+  const { sql, sent } = standIn();
+  await new Store(sql).recordStep({ ...request, mode: "act" }, { ...measure, reply: { ...measure.reply, do: "click", enter: null, commits: false, mode: "act" } }, undefined);
+  assert.deepEqual(sent.map((query) => query.text.split(" ").slice(0, 3).join(" ")), ["insert into guides", "insert into steps", "update steps set"]);
+  assert.doesNotMatch(sent.map((query) => query.text).join("\n"), /set mode = |set unseen = /);
+});
+

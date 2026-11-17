@@ -1,0 +1,720 @@
+{
+  "version": 1,
+  "id": "site_bench_toolshop",
+  "name": "Practice Software Testing – Toolshop",
+  "origin": "https://practicesoftwaretesting.com",
+  "allowedOrigins": [
+    "https://practicesoftwaretesting.com"
+  ],
+  "appearance": {
+    "accent": "#1E6EF4",
+    "position": "bottom-right",
+    "launcherLabel": "Ask"
+  },
+  "notes": "",
+  "docs": [],
+  "pages": [
+    {
+      "path": "/",
+      "title": "Practice Software Testing - Toolshop",
+      "headings": [
+        "Sort",
+        "Price Range",
+        "Search",
+        "Filters",
+        "By category:",
+        "By brand:",
+        "Sustainability:"
+      ],
+      "links": [
+        {
+          "label": "Contact",
+          "to": "/contact"
+        },
+        {
+          "label": "Combination Pliers A B C D E $14.15",
+          "to": "/product/:id"
+        },
+        {
+          "label": "Pliers A B C D E $12.01",
+          "to": "/product/:id"
+        },
+        {
+          "label": "Privacy Policy",
+          "to": "/privacy"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Practice Software Testing - Toolshop",
+        "Home",
+        "Categories",
+        "Select language",
+        "Search",
+        "Compare",
+        "Previous",
+        "Page-1",
+        "Page-2",
+        "Page-3",
+        "Page-4",
+        "Page-5",
+        "Next",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": [
+        "sort",
+        "ngx-slider",
+        "ngx-slider-max",
+        "Search",
+        "Hand Tools",
+        "Hammer",
+        "Hand Saw",
+        "Wrench",
+        "Screwdriver",
+        "Pliers",
+        "Chisels",
+        "Measures",
+        "Power Tools",
+        "Grinder",
+        "Sander"
+      ]
+    },
+    {
+      "path": "/account",
+      "title": "Overview - Practice Software Testing - Toolshop - v5.0",
+      "headings": [
+        "My account"
+      ],
+      "links": [
+        {
+          "label": "Practice Software Testing - Toolshop",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Contact",
+          "to": "/contact"
+        },
+        {
+          "label": "Favorites",
+          "to": "/account/favorites"
+        },
+        {
+          "label": "Profile",
+          "to": "/account/profile"
+        },
+        {
+          "label": "Invoices",
+          "to": "/account/invoices"
+        },
+        {
+          "label": "Messages",
+          "to": "/account/messages"
+        },
+        {
+          "label": "Privacy Policy",
+          "to": "/privacy"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Categories",
+        "Select language",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/account/favorites",
+      "title": "Favorites - Practice Software Testing - Toolshop - v5.0",
+      "headings": [
+        "Favorites"
+      ],
+      "links": [
+        {
+          "label": "Practice Software Testing - Toolshop",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Contact",
+          "to": "/contact"
+        },
+        {
+          "label": "Privacy Policy",
+          "to": "/privacy"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Categories",
+        "Select language",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/account/invoices",
+      "title": "Invoices - Practice Software Testing - Toolshop - v5.0",
+      "headings": [
+        "Invoices"
+      ],
+      "links": [
+        {
+          "label": "Practice Software Testing - Toolshop",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Contact",
+          "to": "/contact"
+        },
+        {
+          "label": "Privacy Policy",
+          "to": "/privacy"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Categories",
+        "Select language",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/account/invoices/:id",
+      "title": "",
+      "headings": [],
+      "links": [
+        {
+          "label": "Practice Software Testing - Toolshop",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Contact",
+          "to": "/contact"
+        },
+        {
+          "label": "Privacy Policy",
+          "to": "/privacy"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Categories",
+        "Select language",
+        "Download PDF",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": [
+        "Invoice Number",
+        "Invoice Date",
+        "Total",
+        "Street",
+        "Postal code",
+        "City",
+        "State",
+        "Country",
+        "Payment Method",
+        "Monthly Installments"
+      ]
+    },
+    {
+      "path": "/account/messages",
+      "title": "Messages - Practice Software Testing - Toolshop - v5.0",
+      "headings": [
+        "Messages"
+      ],
+      "links": [
+        {
+          "label": "Practice Software Testing - Toolshop",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Contact",
+          "to": "/contact"
+        },
+        {
+          "label": "Privacy Policy",
+          "to": "/privacy"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Categories",
+        "Select language",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/account/profile",
+      "title": "Profile - Practice Software Testing - Toolshop - v5.0",
+      "headings": [
+        "Profile",
+        "Password",
+        "Set up Two-Factor Authentication"
+      ],
+      "links": [
+        {
+          "label": "Practice Software Testing - Toolshop",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Contact",
+          "to": "/contact"
+        },
+        {
+          "label": "Privacy Policy",
+          "to": "/privacy"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Categories",
+        "Select language",
+        "Update Profile",
+        "eye icon",
+        "Change Password",
+        "Verify TOTP",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": [
+        "First name",
+        "Last name",
+        "Email address",
+        "Phone",
+        "Street",
+        "Postal code",
+        "City",
+        "State",
+        "Country",
+        "Current Password",
+        "New Password",
+        "Confirm New Password",
+        "TOTP code"
+      ]
+    },
+    {
+      "path": "/category/hand-tools",
+      "title": "Hand Tools - Practice Software Testing - Toolshop - v5.0",
+      "headings": [
+        "Category: Hand Tools",
+        "Sort",
+        "Filters",
+        "By category:",
+        "By brand:",
+        "Sustainability:",
+        "Combination Pliers",
+        "Pliers"
+      ],
+      "links": [
+        {
+          "label": "Practice Software Testing - Toolshop",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Contact",
+          "to": "/contact"
+        },
+        {
+          "label": "Combination Pliers A B C D E $14.15",
+          "to": "/product/:id"
+        },
+        {
+          "label": "Pliers A B C D E $12.01",
+          "to": "/product/:id"
+        },
+        {
+          "label": "Privacy Policy",
+          "to": "/privacy"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Categories",
+        "Select language",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": [
+        "Sort products",
+        "Hand Tools",
+        "Hammer",
+        "Hand Saw",
+        "Wrench",
+        "Screwdriver",
+        "Pliers",
+        "Chisels",
+        "Measures",
+        "ForgeFlex Tools",
+        "MightyCraft Hardware",
+        "Show only eco-friendly products"
+      ]
+    },
+    {
+      "path": "/category/other",
+      "title": "Other - Practice Software Testing - Toolshop - v5.0",
+      "headings": [
+        "Category: Other",
+        "Sort",
+        "Filters",
+        "By category:",
+        "By brand:",
+        "Sustainability:",
+        "Safety Goggles",
+        "Safety Helmet Face Shield"
+      ],
+      "links": [
+        {
+          "label": "Practice Software Testing - Toolshop",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Contact",
+          "to": "/contact"
+        },
+        {
+          "label": "ECO Safety Goggles A B C D E $24.26",
+          "to": "/product/:id"
+        },
+        {
+          "label": "ECO Safety Helmet Face Shield A B C D E $35.62",
+          "to": "/product/:id"
+        },
+        {
+          "label": "Privacy Policy",
+          "to": "/privacy"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Categories",
+        "Select language",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": [
+        "Sort products",
+        "Other",
+        "Tool Belts",
+        "Storage Solutions",
+        "Workbench",
+        "Safety Gear",
+        "Fasteners",
+        "ForgeFlex Tools",
+        "MightyCraft Hardware",
+        "Show only eco-friendly products"
+      ]
+    },
+    {
+      "path": "/category/power-tools",
+      "title": "Power Tools - Practice Software Testing - Toolshop - v5.0",
+      "headings": [
+        "Category: Power Tools",
+        "Sort",
+        "Filters",
+        "By category:",
+        "By brand:",
+        "Sustainability:",
+        "Sheet Sander",
+        "Belt Sander"
+      ],
+      "links": [
+        {
+          "label": "Practice Software Testing - Toolshop",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Contact",
+          "to": "/contact"
+        },
+        {
+          "label": "Sheet Sander A B C D E $58.48",
+          "to": "/product/:id"
+        },
+        {
+          "label": "Belt Sander A B C D E $73.59",
+          "to": "/product/:id"
+        },
+        {
+          "label": "Privacy Policy",
+          "to": "/privacy"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Categories",
+        "Select language",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": [
+        "Sort products",
+        "Power Tools",
+        "Grinder",
+        "Sander",
+        "Saw",
+        "Drill",
+        "ForgeFlex Tools",
+        "MightyCraft Hardware",
+        "Show only eco-friendly products"
+      ]
+    },
+    {
+      "path": "/category/special-tools",
+      "title": "Category: Special Tools",
+      "headings": [
+        "Sort",
+        "Filters",
+        "By category:",
+        "By brand:",
+        "Sustainability:"
+      ],
+      "links": [
+        {
+          "label": "Practice Software Testing - Toolshop",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Contact",
+          "to": "/contact"
+        },
+        {
+          "label": "Privacy Policy",
+          "to": "/privacy"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Categories",
+        "Select language",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": [
+        "Sort products",
+        "ForgeFlex Tools",
+        "MightyCraft Hardware",
+        "Show only eco-friendly products"
+      ]
+    },
+    {
+      "path": "/contact",
+      "title": "Contact Us - Practice Software Testing - Toolshop - v5.0",
+      "headings": [
+        "Contact"
+      ],
+      "links": [
+        {
+          "label": "Practice Software Testing - Toolshop",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Privacy Policy",
+          "to": "/privacy"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Categories",
+        "Contact",
+        "Select language",
+        "Send",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": [
+        "Subject",
+        "Message *",
+        "Attachment"
+      ],
+      "description": "Get in touch with the Practice Software Testing team."
+    },
+    {
+      "path": "/privacy",
+      "title": "Privacy Policy - Practice Software Testing - Toolshop - v5.0",
+      "headings": [
+        "Privacy Policy for Toolshop"
+      ],
+      "links": [
+        {
+          "label": "Practice Software Testing - Toolshop",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Contact",
+          "to": "/contact"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Categories",
+        "Select language",
+        "Privacy Policy",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": [],
+      "description": "Read the privacy policy for the Practice Software Testing Toolshop application."
+    },
+    {
+      "path": "/product/:id",
+      "title": "",
+      "headings": [],
+      "links": [
+        {
+          "label": "Practice Software Testing - Toolshop",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Contact",
+          "to": "/contact"
+        },
+        {
+          "label": "More information",
+          "to": "/"
+        },
+        {
+          "label": "Privacy Policy",
+          "to": "/privacy"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Categories",
+        "Select language",
+        "Decrease quantity",
+        "Increase quantity",
+        "Add to cart",
+        "Add to favourites",
+        "Pliers More information",
+        "Bolt Cutters More information",
+        "Long Nose Pliers More information",
+        "Slip Joint Pliers More information",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": [
+        "Quantity"
+      ]
+    },
+    {
+      "path": "/rentals",
+      "title": "Rentals Overview - Practice Software Testing - Toolshop - v5.0",
+      "headings": [
+        "Rentals",
+        "Excavator",
+        "Bulldozer",
+        "Crane"
+      ],
+      "links": [
+        {
+          "label": "Practice Software Testing - Toolshop",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Contact",
+          "to": "/contact"
+        },
+        {
+          "label": "Privacy Policy",
+          "to": "/privacy"
+        }
+      ],
+      "buttons": [
+        "Testing Guide",
+        "🐛 Bug Hunting",
+        "Categories",
+        "Select language",
+        "Open chat",
+        "Show live shop activity"
+      ],
+      "fields": []
+    }
+  ],
+  "source": {
+    "url": "https://practicesoftwaretesting.com/",
+    "maxPages": 30,
+    "docs": [],
+    "maxDepth": 3,
+    "reader": "browser"
+  },
+  "createdAt": "2026-11-15T06:42:52.914Z",
+  "updatedAt": "2026-11-15T22:56:55.091Z"
+}

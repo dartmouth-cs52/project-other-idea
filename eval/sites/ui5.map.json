@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "id": "site_bench_ui5",
+  "name": "Shopping Cart",
+  "origin": "https://sdk.openui5.org",
+  "allowedOrigins": [
+    "https://sdk.openui5.org"
+  ],
+  "appearance": {
+    "accent": "#1E6EF4",
+    "position": "bottom-right",
+    "launcherLabel": "Ask"
+  },
+  "notes": "",
+  "docs": [],
+  "pages": [
+    {
+      "path": "/test-resources/sap/m/demokit/cart/webapp/index.html",
+      "title": "Shopping Cart",
+      "headings": [
+        "Product Catalog",
+        "Categories",
+        "Welcome to the Shopping Cart",
+        "Promoted Items",
+        "Recently Viewed Items",
+        "Favorites"
+      ],
+      "links": [],
+      "buttons": [
+        "Accessories 34",
+        "Computer System Accessories 7",
+        "Desktop Computers 5",
+        "Flat Screen TVs 3",
+        "Flat Screens 3",
+        "Graphics Card 4",
+        "Keyboards 4",
+        "Laptops 11",
+        "Mice 7",
+        "Printers 9",
+        "Scanners 4",
+        "Servers 3",
+        "Smartphones and Tablets 9",
+        "Software 8",
+        "Speakers 3",
+        "Telecommunication 3",
+        "Login",
+        "Show Shopping Cart",
+        "Object Identifier Flat Watch HD41",
+        "Add to Shopping Cart"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/test-resources/sap/m/demokit/orderbrowser/webapp/test/mockServer.html",
+      "title": "Browse Orders",
+      "headings": [],
+      "links": [],
+      "buttons": [],
+      "fields": []
+    }
+  ],
+  "source": {
+    "url": "https://sdk.openui5.org/test-resources/sap/m/demokit/cart/webapp/index.html",
+    "maxPages": 30,
+    "docs": [],
+    "maxDepth": 3,
+    "within": [
+      "/test-resources/sap/m/demokit/cart/",
+      "/test-resources/sap/m/demokit/orderbrowser/"
+    ],
+    "also": [
+      "https://sdk.openui5.org/test-resources/sap/m/demokit/orderbrowser/webapp/test/mockServer.html"
+    ],
+    "reader": "browser"
+  },
+  "createdAt": "2026-11-15T06:06:55.839Z",
+  "updatedAt": "2026-11-15T22:56:28.564Z"
+}

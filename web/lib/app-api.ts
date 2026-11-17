@@ -18,12 +18,13 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
+export async function api<T>(path: string, init?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<T> {
   const response = await fetch(`/api/app${path}`, {
     method: init?.method ?? "GET",
     headers: init?.body === undefined ? undefined : { "content-type": "application/json" },
     body: init?.body === undefined ? undefined : JSON.stringify(init.body),
     credentials: "same-origin",
+    signal: init?.signal,
   }).catch(() => null);
   // The browser's own words for this differ in each browser, and none of them say what to do.
   if (!response) throw new ApiError(0, "Haptic couldn't be reached. Check your connection and try again.");
@@ -116,11 +117,7 @@ export type Outcome =
 
 export interface Insights {
   days: number;
-  summary: { guides: number; finished: number; unanswered: number; helped_yes: number; helped_no: number; median_ms_to_pointer: number | null; median_steps_finished: number | null };
-  /** The same length of time just before, for the change shown under each number. */
-  previous: { guides: number; finished: number; unanswered: number };
-  /** One entry for each day that had a question, by the viewer's own clock, oldest first. */
-  daily: { day: string; guides: number; finished: number; unanswered: number }[];
+  summary: { guides: number; unanswered: number; helped_yes: number; helped_no: number; median_ms_to_pointer: number | null; median_steps_finished: number | null };
   outcomes: { outcome: Outcome; count: number }[];
   recent: {
     id: string;

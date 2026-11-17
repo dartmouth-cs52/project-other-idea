@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { Mail } from "lucide-react";
 import { cn } from "cn";
 import { FieldWithButton, FormAlert, failureFrom, useFieldErrors, type Failure } from "@/components/form";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, type Me, type Reading, type Site } from "@/lib/app-api";
+import { hostOf } from "@/lib/setup";
+import { CopyLink } from "./agent-pill";
+import { DeveloperEmail } from "./developer-email";
 import { Gaps } from "./gaps";
 import { GuideDrawer } from "./guide-drawer";
 import { GuidingRules } from "./guiding-rules";
@@ -15,8 +17,9 @@ import { InstallOptions } from "./install-options";
 import { useInsights, useLive } from "./live";
 import { RANGES, daysFrom, siteHref, useAddress, type View } from "./nav";
 import { Overview } from "./overview";
-import { Card, CardTitle, CopyButton, DashboardSurface, DoneMark, FailedCard, PageHeader, Segmented, StepMark, StepTitle, when } from "./parts";
+import { Card, CardTitle, DashboardSurface, DoneMark, FailedCard, PageHeader, Segmented, StepMark, StepTitle, when } from "./parts";
 import { Questions } from "./questions";
+import { SetupGate } from "./setup/setup-gate";
 import { SiteShell } from "./shell";
 import { DeleteSite, HelpDocs, Notes, WidgetLook } from "./site-settings";
 import { FinishedGuides } from "./usage";
@@ -27,7 +30,6 @@ const WAITING_MS = 5_000;
 const CONNECTED_MS = 60_000;
 
 type SiteRow = NonNullable<Me["sites"]>[number];
-const hostOf = (origin: string) => (URL.canParse(origin) ? new URL(origin).host : origin);
 
 const SETTINGS_TABS = [
   { value: "general", name: "General" },
@@ -114,7 +116,8 @@ export function SiteView({ me, row, view, onDeleted }: { me: Me; row: SiteRow; v
     page =
       view === "overview" ? (
         <>
-          <PageHeader title={`Set up ${site.name}`} note="Three steps. This page changes by itself when the script connects." />
+          <PageHeader title={`Set up ${site.name}`} note="This page changes by itself when the script connects." />
+          <SetupGate site={site} />
           <Setup site={site} pages={pages} onChange={setSite} />
         </>
       ) : (
@@ -157,7 +160,7 @@ export function SiteView({ me, row, view, onDeleted }: { me: Me; row: SiteRow; v
           <LiveMark stamp={live?.stamp} failing={failing} />
           {range}
         </PageHeader>
-        <Overview siteId={site.id} data={numbers.data} live={live} onOpen={openIt} />
+        <Overview siteId={site.id} origin={site.origin} days={days} stamp={stamp} data={numbers.data} live={live} onOpen={openIt} />
       </>
     );
   }
@@ -264,9 +267,6 @@ type Pages = ReturnType<typeof useReading>;
 
 function Setup({ site, pages, onChange }: { site: Site; pages: Pages; onChange: (site: Site) => void }) {
   const developerLink = typeof window === "undefined" ? "" : `${window.location.origin}/install/?site=${site.id}`;
-  const mail = `mailto:?subject=${encodeURIComponent("Please add Haptic to our site")}&body=${encodeURIComponent(
-    `Hi,\n\nCould you add Haptic to ${site.origin}? It is one script tag on every page, including pages behind the login. Everything you need, for each kind of stack, is here.\n\n${developerLink}\n\nThanks`,
-  )}`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -277,14 +277,9 @@ function Setup({ site, pages, onChange }: { site: Site; pages: Pages; onChange: 
         <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
           One tag on every page, including the pages behind your login. If someone else looks after your code, send them the install page.
         </p>
-        <div className="flex flex-wrap gap-2">
-          <CopyButton text={developerLink} label="Copy link for my developer" />
-          <a href={mail} className={buttonVariants({ variant: "secondary" })}>
-            <Mail />
-            Email it to them
-          </a>
-        </div>
-        <InstallOptions scriptUrl={site.scriptUrl} siteId={site.id} />
+        <InstallOptions scriptUrl={site.scriptUrl} siteId={site.id} live={site} />
+        <CopyLink link={developerLink} />
+        <DeveloperEmail siteId={site.id} installLink={developerLink} />
       </Card>
 
       <Connection site={site} onChange={onChange} />
@@ -510,7 +505,7 @@ function InstallHealth({ site, reading, onChange }: { site: Site; reading: Readi
       <details className="rounded-lg border bg-card px-4 py-3">
         <summary className="cursor-pointer text-sm font-medium">Script tag and install options</summary>
         <div className="mt-4">
-          <InstallOptions scriptUrl={site.scriptUrl} siteId={site.id} />
+          <InstallOptions scriptUrl={site.scriptUrl} siteId={site.id} live={site} />
         </div>
       </details>
     </Card>
