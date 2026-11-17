@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import type { Browser } from "playwright";
-import { ask, BROWSERS, done, idOf, launch, page, point, markAround, startHarness, turns, type Harness } from "./harness.ts";
+import { ask, BROWSERS, done, idOf, launch, page, point, ringAround, startHarness, turns, type Harness } from "./harness.ts";
 
 // A small single-page app. Its links change the address with pushState and
 // draw the next page in place. Two of its buttons are slow in the two ways
@@ -65,12 +65,12 @@ for (const name of BROWSERS) {
       const tab = await browser.newPage();
       await tab.goto(`${harness.url}/`);
       await ask(tab, "export the report");
-      assert.ok(await markAround(tab, "#slow"));
+      assert.ok(await ringAround(tab, "#slow"));
       await tab.click("#slow");
       const [, second] = await turns(harness, 2);
       assert.equal(second!.snapshot.path, "/reports/:id");
       assert.deepEqual(second!.snapshot.elements.filter((element) => element.role === "button").map((element) => element.label), ["Export"], "the step shows the new page, not the old one under the new address");
-      assert.ok(await markAround(tab, "#export"));
+      assert.ok(await ringAround(tab, "#export"));
       await tab.close();
     });
 
@@ -87,7 +87,7 @@ for (const name of BROWSERS) {
       const tab = await browser.newPage();
       await tab.goto(`${harness.url}/`);
       await ask(tab, "export the report");
-      assert.ok(await markAround(tab, "#late"));
+      assert.ok(await ringAround(tab, "#late"));
       await tab.click("#late");
       const [, second] = await turns(harness, 2);
       assert.equal(second!.snapshot.path, "/", "the step was asked before the page changed");
@@ -96,11 +96,35 @@ for (const name of BROWSERS) {
       assert.equal(harness.hungUp, 1, "the widget hung up on the answer about the old page");
       assert.equal(third!.snapshot.path, "/reports/:id");
       assert.match(third!.event ?? "", /went from \/ to \/reports\/:id/);
-      assert.ok(await markAround(tab, "#export"));
+      assert.ok(await ringAround(tab, "#export"));
       const ms = await tab.evaluate(() => performance.now() - (window as unknown as { routeChangedAt: number }).routeChangedAt);
       assert.ok(ms < 2000, `pointed at Export ${Math.round(ms)} ms after the page changed, without waiting out the old answer`);
       console.log(`  ${name}: pointer on the new page ${Math.round(ms)} ms after the route changed`);
       await tab.close();
+    });
+
+    test("a page whose address keeps changing while the model answers is asked about again three times, then the guide stops and says why", async () => {
+      // From the second review: a feed that moves its address every 700 ms made the widget hang up and ask again without end.
+      harness.turns.length = 0;
+      harness.hungUp = 0;
+      harness.pages.set("/feed", page(`<h1>Feed</h1><button id="thing">Thing</button><script>let n = 0; setInterval(() => history.pushState({}, "", "/feed/" + ++n + "-story"), 400);</script>`));
+      // A model that takes its time, as one does.
+      harness.script = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        return done();
+      };
+      const tab = await browser.newPage();
+      await tab.goto(`${harness.url}/feed`);
+      await ask(tab, "how do I find the thing");
+      await tab.waitForFunction(() => (document.querySelector("haptic-root") as Element & { guideState?: string }).guideState === "finished", null, { timeout: 20_000 });
+      const caption = await tab.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.querySelector(".caption span")?.textContent);
+      assert.equal(caption, "This page keeps changing its address, so I've stopped for now. Ask again once it settles.");
+      assert.equal(harness.turns.length, 4, "the first question and three more");
+      await tab.waitForTimeout(3000);
+      assert.equal(harness.turns.length, 4, "it asked again after it stopped");
+      assert.equal(harness.hungUp, 4);
+      await tab.close();
+      harness.pages.delete("/feed");
     });
 
     test("going back while a step waits for a click is seen at once", async () => {
@@ -113,7 +137,7 @@ for (const name of BROWSERS) {
       await tab.goto(`${harness.url}/`);
       await tab.click("a[href='/reports/42']");
       await ask(tab, "export the report");
-      assert.ok(await markAround(tab, "#export"));
+      assert.ok(await ringAround(tab, "#export"));
       await tab.goBack();
       const [, second] = await turns(harness, 2);
       assert.match(second!.event ?? "", /went to \/ without using button "Export"/);
@@ -128,7 +152,7 @@ for (const name of BROWSERS) {
       await tab.goto(`${harness.url}/`);
       await tab.click("a[href='/reports/42']");
       await ask(tab, "where is export");
-      assert.ok(await markAround(tab, "#export"));
+      assert.ok(await ringAround(tab, "#export"));
       await tab.goBack();
       await tab.waitForFunction(() => document.querySelector("haptic-root")!.shadowRoot!.querySelector<HTMLElement>(".cursor")!.hidden, null, { timeout: 1000 });
       await tab.close();

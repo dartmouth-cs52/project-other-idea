@@ -1,22 +1,29 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
+import { actingProblems } from "../server/acting.ts";
 import { webhookAllowed } from "../server/handoff.ts";
-import { docsThatFit, buildSystemPrompt } from "../server/prompt.ts";
+import { buildSystemPrompt, docsThatFit, renderSiteMap } from "../server/prompt.ts";
 import { listSiteIds, loadSite, saveSite } from "../server/sites.ts";
 import { answersOn, DEFAULT_APPEARANCE, type SiteContext, type SiteSource } from "../shared/types.ts";
-import { crawlSite } from "./crawl.ts";
+import { browseSite, canBrowse, MAP_BUDGET } from "./browse.ts";
+import { crawlSite, type CrawlResult } from "./crawl.ts";
 import { loadDocs } from "./docs.ts";
 
 // Builds everything Haptic knows about a customer's site and prints the
 // script tag they paste into it.
 //
 //   npm run tag -- --url https://app.acme.com --name Acme --notes notes.md --docs help/
+//   npm run tag -- --url https://app.acme.com --session signed-in.json
 //   npm run tag -- refresh site_ab12cd34ef     (or: refresh --all, for a cron job)
+//   npm run tag -- acting site_ab12cd34ef on  (or off: "do it with me", without reading the site again)
 
 const HELP = `Usage:
   npm run tag -- --url <site url> [options]     Build a site's context and print its script tag
   npm run tag -- refresh <site id> | --all      Re-crawl and re-read docs for sites already built
+  npm run tag -- acting <site id> on|off        Let Haptic use the page's controls when a visitor presses
+                                                Do it, or stop it, without reading the site again.
+                                                Publish the site afterwards for it to take effect.
 
 Options:
   --url <url>          Where to start reading the site. Required.
@@ -24,6 +31,18 @@ Options:
   --notes <file>       A text file of notes about the product, in the company's own words.
   --docs <path|url>    A help doc: a file, a folder of files, or a URL. Repeat for more.
   --max-pages <n>      Most pages to read from the site. Default 30.
+  --reader <how>       browser: load each page in a browser and read it once it has drawn, as the widget
+                       does. text: read the HTML the server sends, which is empty for apps drawn by
+                       JavaScript. Default browser when Playwright is installed, otherwise text.
+  --session <file>     A signed-in session for the browser reader, so it can read pages behind a sign-in:
+                       cookies and storage in Playwright's storage-state format. Not kept in the site file.
+  --max-depth <n>      How many links away from the start the browser reader goes. Default 3.
+  --pace <ms>          Least time between two page loads. Default 1500.
+  --skip <pattern>     Leave alone pages whose address or link text matches this. Repeat for more.
+  --within <path>      Stay inside this path, like /app/. Repeat for more.
+  --also <url>         Another page to start reading from. Repeat for more.
+  --hide <words>       Keep these words out of the map, like the name of the account in --session.
+                       Repeat for more. Not kept in the site file: give it again on refresh.
   --allow <origin>     Another origin the widget may run on, like a staging site. Repeat for more.
   --accent <hex>       Color of the pointer and its highlight. Default ${DEFAULT_APPEARANCE.accent}.
   --position <side>    bottom-right or bottom-left. Default bottom-right.
@@ -39,6 +58,10 @@ Options:
   --budget-hour <usd>  The most the site may spend on the model in an hour, in US dollars. Default: the server's.
   --budget-day <usd>   The same for a day.
   --visitor-steps <n>  Steps one visitor may take in a day. For a public demo. Default: no limit.
+  --acting <on|off>    "Do it with me": Haptic uses the page's controls itself when a visitor presses Do it,
+                       and always leaves the click that saves, sends or pays to them. Default off. Where it
+                       may act (acting.paths) and the company's own commit words (acting.commitWords) are
+                       set in the site file and kept when the site is built again.
   --id <site id>       Use this id, or rebuild the site that has it, keeping what isn't given again.
   --host <url>         Where the Haptic server is reachable. Default $HAPTIC_PUBLIC_URL or http://localhost:4000.`;
 
@@ -50,6 +73,14 @@ const { values, positionals } = parseArgs({
     notes: { type: "string" },
     docs: { type: "string", multiple: true },
     "max-pages": { type: "string" },
+    reader: { type: "string" },
+    session: { type: "string" },
+    "max-depth": { type: "string" },
+    pace: { type: "string" },
+    skip: { type: "string", multiple: true },
+    within: { type: "string", multiple: true },
+    also: { type: "string", multiple: true },
+    hide: { type: "string", multiple: true },
     allow: { type: "string", multiple: true },
     accent: { type: "string" },
     position: { type: "string" },
@@ -64,6 +95,7 @@ const { values, positionals } = parseArgs({
     "budget-hour": { type: "string" },
     "budget-day": { type: "string" },
     "visitor-steps": { type: "string" },
+    acting: { type: "string" },
     id: { type: "string" },
     host: { type: "string" },
     all: { type: "boolean" },
@@ -82,11 +114,75 @@ function scriptTag(site: SiteContext): string {
   return `<script src="${host}/widget.js" data-site="${site.id}" async></script>`;
 }
 
+/** Whether "on" or "off" was given, or undefined when nothing was. */
+function onOrOff(given: string | undefined, what: string): boolean | undefined {
+  if (given === undefined) return undefined;
+  if (given !== "on" && given !== "off") fail(`${what} is on or off, not "${given}".`);
+  return given === "on";
+}
+
+/**
+ * The site's acting switched on or off. Its other settings stay, so switching
+ * it back on acts where it did before. Off is never refused: it is how a
+ * company stops acting at once, and the server reads nothing else of a site
+ * with acting off.
+ */
+function switchActing(site: SiteContext, on: boolean): SiteContext["acting"] {
+  const kept = site.acting && typeof site.acting === "object" && !Array.isArray(site.acting) ? site.acting : undefined;
+  const problems = actingProblems({ ...kept, enabled: on });
+  if (on && problems.length) fail(`Acting was left off for ${site.id}, because its settings in the site file can't be read: ${problems.join(" ")}`);
+  return { ...kept, enabled: on };
+}
+
+/** One line on whether and where Haptic may act on the site. */
+function actingLine(site: SiteContext): string {
+  if (site.acting?.enabled !== true) return "Acting is off: Haptic only points.";
+  const paths = site.acting.paths?.filter((path) => path.trim()) ?? [];
+  const where = paths.length ? `only on pages under ${paths.join(", ")}` : "anywhere on its allowed origins";
+  return `Acting is on: when a visitor presses Do it, Haptic uses the controls itself ${where}, and leaves the click that commits to them.`;
+}
+
+const pace = Number(values.pace ?? 1500);
+
+/** Reads the site's pages the way `source` says, in a browser unless it says otherwise or there is none. */
+async function readPages(source: SiteSource): Promise<CrawlResult> {
+  if (source.reader !== "text" && !canBrowse()) {
+    if (source.reader === "browser") throw new Error("The browser reader needs Playwright: npm install --no-save playwright && npx playwright install chromium");
+    console.warn("Playwright or its browser isn't installed, so pages are read as the HTML the server sends. Pages drawn by JavaScript will come back empty.");
+    source.reader = "text";
+  }
+  if (source.reader === "text") {
+    console.log(`Reading ${source.url} as HTML (up to ${source.maxPages} pages)…`);
+    return crawlSite(source.url, source.maxPages);
+  }
+  source.reader = "browser";
+  const maxDepth = source.maxDepth ?? 3;
+  console.log(`Reading ${source.url} in a browser (up to ${source.maxPages} pages, ${maxDepth} links deep${values.session ? ", signed in" : ""})…`);
+  const crawl = await browseSite(source.url, {
+    maxPages: source.maxPages,
+    maxDepth,
+    paceMs: pace,
+    ...(values.session ? { session: values.session } : {}),
+    skip: (source.skip ?? []).map((pattern) => new RegExp(pattern, "i")),
+    within: source.within ?? [],
+    also: source.also ?? [],
+    hide: values.hide ?? [],
+    onPage: (path, done) => console.log(`  ${String(done).padStart(3)} ${path}`),
+  });
+  const reasons = new Map<string, number>();
+  for (const { reason } of crawl.skipped) reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
+  if (crawl.skipped.length) console.log(`  Left ${crawl.skipped.length} links alone: ${[...reasons].map(([reason, count]) => `${count} because ${reason}`).join("; ")}.`);
+  if (crawl.signInWalls.length) {
+    console.warn(`  ${crawl.signInWalls.length} pages sent the reader to a sign-in page (${crawl.signInWalls.slice(0, 3).join(", ")}${crawl.signInWalls.length > 3 ? ", …" : ""}). Pass --session to read them signed in.`);
+  }
+  if (crawl.cut.length) console.log(`  Left ${crawl.cut.length} of the farthest pages out of the map to keep it under ${MAP_BUDGET.toLocaleString()} characters: ${crawl.cut.join(", ")}.`);
+  return crawl;
+}
+
 /** Reads the site and the docs again from `source` and returns the updated context. */
 async function build(base: SiteContext): Promise<SiteContext> {
   const { source } = base;
-  console.log(`Reading ${source.url} (up to ${source.maxPages} pages)…`);
-  const crawl = await crawlSite(source.url, source.maxPages);
+  const crawl = await readPages(source);
   if (!crawl.pages.length) {
     const why = crawl.failed[0] ? ` ${crawl.failed[0].url}: ${crawl.failed[0].reason}` : "";
     throw new Error(`Couldn't read any page from ${source.url}.${why}`);
@@ -98,7 +194,7 @@ async function build(base: SiteContext): Promise<SiteContext> {
   const links = site.pages.reduce((sum, page) => sum + page.links.length, 0);
   console.log(`  ${site.pages.length} pages, ${links} links between them, ${docs.length} help docs, ${notes.length} characters of notes.`);
   for (const { url, reason } of crawl.failed) console.warn(`  Couldn't read ${url}: ${reason}`);
-  if (crawl.thin.length) {
+  if (crawl.thin.length && source.reader === "text") {
     console.warn(
       `  ${crawl.thin.length} of ${site.pages.length} pages had almost nothing to click in their HTML (${crawl.thin.slice(0, 5).join(", ")}${crawl.thin.length > 5 ? ", …" : ""}).\n` +
         `  They're probably drawn by JavaScript or sit behind a login, which this reader can't see. The widget still reads each page live;\n` +
@@ -119,7 +215,8 @@ async function build(base: SiteContext): Promise<SiteContext> {
       console.warn("  There is no way to a person set, so when Haptic can't help it will say so and offer nothing.\n  Set one with --handoff-webhook, --handoff-url or --handoff-email before this goes in front of visitors.");
     }
   }
-  console.log(`  The site knowledge sent with each question is about ${Math.round(buildSystemPrompt(site).length / 4).toLocaleString()} tokens.`);
+  const mapChars = site.pages.length ? renderSiteMap(site.pages).length : 0;
+  console.log(`  The site map is ${mapChars.toLocaleString()} characters. The site knowledge sent with each question is about ${Math.round(buildSystemPrompt(site).length / 4).toLocaleString()} tokens.`);
   return site;
 }
 
@@ -129,8 +226,9 @@ async function main() {
   if (positionals[0] === "refresh") {
     const ids = values.all ? await listSiteIds() : positionals.slice(1);
     if (!ids.length) fail("Say which site to refresh: a site id, or --all.");
-    // Refreshing re-reads a site as it is. A setting passed with it would be dropped without a word.
-    const settings = Object.keys(values).filter((flag) => flag !== "all" && flag !== "host");
+    // Refreshing re-reads a site as it is. A setting passed with it would be dropped without a word. How it is
+    // read this time (signed in, the words to keep out of the map, the pace) is not kept, so it is given again here.
+    const settings = Object.keys(values).filter((flag) => !["all", "host", "session", "hide", "pace"].includes(flag));
     if (settings.length) fail(`refresh changes no settings, so --${settings[0]} would be ignored. To change it: npm run tag -- --id <site id> --${settings[0]} …`);
     let failures = 0;
     for (const id of ids) {
@@ -147,6 +245,18 @@ async function main() {
     }
     process.exit(failures ? 1 : 0);
   }
+  if (positionals[0] === "acting") {
+    const [, id, state] = positionals;
+    if (!id || positionals.length !== 3) fail("Say which site, and on or off: npm run tag -- acting site_ab12cd34ef on");
+    const on = onOrOff(state, "Acting");
+    const site = await loadSite(id);
+    if (!site) fail(`No site with the id ${id}.`);
+    site.acting = switchActing(site, on === true);
+    site.updatedAt = new Date().toISOString();
+    await saveSite(site);
+    console.log(`${actingLine(site)}\nThe online server reads it once it is published: npm run site:publish -- ${site.id}`);
+    return;
+  }
   if (positionals.length) fail(`Unknown command "${positionals[0]}".\n\n${HELP}`);
 
   const existing = values.id ? await loadSite(values.id) : undefined;
@@ -155,8 +265,10 @@ async function main() {
   if (!URL.canParse(url)) fail(`"${url}" isn't a full URL. Include https://.`);
   if (values.accent && !/^#[0-9a-f]{6}$/i.test(values.accent)) fail(`--accent has to be a hex color like #5b5bd6, not "${values.accent}".`);
   if (values.position && values.position !== "bottom-right" && values.position !== "bottom-left") fail("--position is bottom-right or bottom-left.");
+  const actingOn = onOrOff(values.acting, "--acting");
   const maxPages = Number(values["max-pages"] ?? existing?.source.maxPages ?? 30);
   if (!Number.isInteger(maxPages) || maxPages < 1) fail("--max-pages has to be a whole number, 1 or more.");
+  if (!Number.isInteger(pace) || pace < 0) fail("--pace has to be a whole number of milliseconds.");
 
   const budget = { ...existing?.budget };
   for (const [flag, field] of [["budget-hour", "hour"], ["budget-day", "day"], ["visitor-steps", "perCaller"]] as const) {
@@ -189,6 +301,23 @@ async function main() {
   const source: SiteSource = { url, maxPages, docs: values.docs ?? existing?.source.docs ?? [] };
   const notesFile = values.notes ?? existing?.source.notesFile;
   if (notesFile) source.notesFile = notesFile;
+  if (values.reader && values.reader !== "browser" && values.reader !== "text") fail("--reader is browser or text.");
+  const reader = (values.reader as SiteSource["reader"]) ?? existing?.source.reader;
+  if (reader) source.reader = reader;
+  const maxDepth = Number(values["max-depth"] ?? existing?.source.maxDepth ?? 3);
+  if (!Number.isInteger(maxDepth) || maxDepth < 0) fail("--max-depth has to be a whole number, 0 or more.");
+  source.maxDepth = maxDepth;
+  for (const pattern of values.skip ?? []) {
+    try {
+      new RegExp(pattern, "i");
+    } catch {
+      fail(`--skip "${pattern}" isn't a pattern that can be read.`);
+    }
+  }
+  for (const [key, given] of [["skip", values.skip], ["within", values.within], ["also", values.also]] as const) {
+    const list = given ?? existing?.source[key];
+    if (list?.length) source[key] = list;
+  }
   const now = new Date().toISOString();
   const base: SiteContext = {
     version: 1,
@@ -212,11 +341,15 @@ async function main() {
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
+  // Kept from the site being rebuilt unless --acting says otherwise. A site that never had it gets no field at all.
+  const acting = actingOn === undefined ? existing?.acting : existing ? switchActing(existing, actingOn) : { enabled: actingOn };
+  if (acting) base.acting = acting;
 
   const site = await build(base);
   const file = await saveSite(site);
   console.log(`\nSaved ${site.name} to ${file}`);
   console.log(`The widget will run on: ${site.allowedOrigins.join(", ")}`);
+  if (site.acting) console.log(actingLine(site));
   console.log(`\nPaste this just before </body> on every page:\n\n${scriptTag(site)}\n`);
 }
 

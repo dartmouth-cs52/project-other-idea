@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { chromium, firefox, webkit, type Browser, type BrowserType, type Page } from "playwright";
+import { widgetBundles } from "../../src/widget/build.ts";
 import { DEFAULT_APPEARANCE, STREAM_TYPE, type PublicSiteConfig, type SnapElement, type TurnReply, type TurnRequest } from "../../src/shared/types.ts";
 
 // Runs the real widget in real browsers, against a small server that serves
@@ -21,12 +22,10 @@ const ENGINES: Record<string, BrowserType> = { chromium, firefox, webkit };
 /** The engines this run covers. */
 export const BROWSERS = (process.env.BROWSERS ?? "chromium,firefox,webkit").split(",").map((name) => name.trim()).filter((name) => name in ENGINES);
 
-let bundle: Promise<string> | undefined;
-/** The widget as the script tag loads it, built once per run. Not minified, so a failure points at a readable line. */
-export function widgetBundle(): Promise<string> {
-  bundle ??= build({ entryPoints: [`${root}src/widget/index.ts`], bundle: true, format: "iife", target: "es2020", write: false }).then(
-    (result) => result.outputFiles[0]!.text,
-  );
+let bundle: Promise<{ widget: string; acting: string }> | undefined;
+/** The widget's two files, widget.js and the code that acts, as the server serves them, built once per run. Not minified, so a failure points at a readable line. */
+export function widgetBundle(): Promise<{ widget: string; acting: string }> {
+  bundle ??= widgetBundles({ minify: false });
   return bundle;
 }
 
@@ -81,7 +80,7 @@ export interface Harness {
 }
 
 export async function startHarness(): Promise<Harness> {
-  const widget = await widgetBundle();
+  const { widget, acting } = await widgetBundle();
   const harness: Harness = {
     url: "",
     pages: new Map(),
@@ -95,6 +94,7 @@ export async function startHarness(): Promise<Harness> {
   const server: Server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/widget.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(widget);
+    if (url.pathname === "/widget-act.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(acting);
     if (url.pathname.startsWith("/v1/sites/")) return res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(harness.config));
     if (req.method === "POST" && url.pathname === "/v1/turn") {
       const request = JSON.parse(await readBody(req)) as TurnRequest;
@@ -187,38 +187,26 @@ export function idOf(request: TurnRequest, label: string): string {
 export const point = (id: string, say = "Click it.", status: TurnReply["status"] = "continue"): Answer => ({ reply: { target: id, status, say } });
 export const done = (say = "That's it."): Answer => ({ reply: { target: null, status: "done", say } });
 
-/** How far the mark stands off the control it is drawn around. */
-const MARK_GAP = 5;
-
-/** True once the mark is drawn around the element the selector picks. It lands when the pointer does, a little after the step arrives. */
-export async function markAround(tab: Page, selector: string, timeoutMs = 3000): Promise<boolean> {
+/** True once the highlight ring is drawn around the element the selector picks. */
+export async function ringAround(tab: Page, selector: string, timeoutMs = 3000): Promise<boolean> {
   try {
     await tab.waitForFunction(
-      ([selector, gap]) => {
+      (selector) => {
         const host = document.querySelector("haptic-root");
-        const mark = host?.shadowRoot?.querySelector<HTMLElement>(".mark");
+        const ring = host?.shadowRoot?.querySelector<HTMLElement>(".ring");
         const target = document.querySelector(selector);
-        if (!mark || mark.hidden || !target) return false;
-        // Its size is read from its style, since it scales a little as it lands.
-        const [left, top, width] = [mark.style.left, mark.style.top, mark.style.width].map(parseFloat) as [number, number, number];
+        if (!ring || ring.hidden || !target) return false;
+        const a = ring.getBoundingClientRect();
         const b = target.getBoundingClientRect();
-        return Math.abs(left + gap - b.left) < 2 && Math.abs(top + gap - b.top) < 2 && Math.abs(width - gap * 2 - b.width) < 2;
+        return Math.abs(a.left + 4 - b.left) < 2 && Math.abs(a.top + 4 - b.top) < 2 && Math.abs(a.width - 8 - b.width) < 2;
       },
-      [selector, MARK_GAP] as const,
+      selector,
       { timeout: timeoutMs, polling: 20 },
     );
     return true;
   } catch {
     return false;
   }
-}
-
-/** What the line under the bubbles in the chat says, or "" when it is not showing. */
-export function stateOf(tab: Page): Promise<string> {
-  return tab.evaluate(() => {
-    const state = document.querySelector("haptic-root")?.shadowRoot?.querySelector<HTMLElement>(".state");
-    return !state || state.hidden ? "" : `${state.className.replace("state ", "")}: ${state.textContent?.trim()}`;
-  });
 }
 
 /** True when a click at the middle of the widget part this selector picks would reach it, and not land on the page or a dialog's backdrop. */

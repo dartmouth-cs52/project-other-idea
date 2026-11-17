@@ -1,16 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Mail } from "lucide-react";
 import { FieldWithButton, FormAlert, failureFrom, useFieldErrors, type Failure } from "@/components/form";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, type Reading, type Site } from "@/lib/app-api";
 import { InstallOptions } from "./install-options";
+import { CopyLink } from "./agent-pill";
+import { DeveloperEmail } from "./developer-email";
+import { SetupGate } from "./setup/setup-gate";
 import { GuidingRules } from "./guiding-rules";
 import { InsightsView } from "./insights-view";
 import { SiteSettings } from "./site-settings";
-import { Card, CardTitle, CopyButton, DoneMark, FailedCard, StepMark, when } from "./parts";
+import { Card, CardTitle, DoneMark, FailedCard, StepMark, when } from "./parts";
 
 /** How often the page asks whether the script has been seen, while waiting for it. */
 const WAITING_MS = 5_000;
@@ -86,12 +88,15 @@ export function SiteView({ siteId, onDeleted }: { siteId: string; onDeleted: () 
         <SiteSettings site={site} onChange={setSite} onDeleted={onDeleted} />
       ) : site.connected ? (
         <>
-          <InsightsView siteId={site.id} refreshKey={refreshKey} onCorrected={(corrections) => setSite({ ...site, corrections })} />
+          <InsightsView siteId={site.id} origin={site.origin} refreshKey={refreshKey} onCorrected={(corrections) => setSite({ ...site, corrections })} />
           <GuidingRules site={site} onChange={setSite} />
           <InstallHealth site={site} reading={pages.reading} onChange={setSite} />
         </>
       ) : (
-        <Setup site={site} pages={pages} onChange={setSite} />
+        <>
+          <SetupGate site={site} />
+          <Setup site={site} pages={pages} onChange={setSite} />
+        </>
       )}
     </div>
   );
@@ -142,9 +147,6 @@ type Pages = ReturnType<typeof useReading>;
 
 function Setup({ site, pages, onChange }: { site: Site; pages: Pages; onChange: (site: Site) => void }) {
   const developerLink = typeof window === "undefined" ? "" : `${window.location.origin}/install/?site=${site.id}`;
-  const mail = `mailto:?subject=${encodeURIComponent("Please add Haptic to our site")}&body=${encodeURIComponent(
-    `Hi,\n\nCould you add Haptic to ${site.origin}? It is one script tag on every page, including pages behind the login. Everything you need, for each kind of stack, is here.\n\n${developerLink}\n\nThanks`,
-  )}`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -158,14 +160,9 @@ function Setup({ site, pages, onChange }: { site: Site; pages: Pages; onChange: 
         <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
           One tag on every page, including the pages behind your login. If someone else looks after your code, send them the install page.
         </p>
-        <div className="flex flex-wrap gap-2">
-          <CopyButton text={developerLink} label="Copy link for my developer" />
-          <a href={mail} className={buttonVariants({ variant: "secondary" })}>
-            <Mail />
-            Email it to them
-          </a>
-        </div>
-        <InstallOptions scriptUrl={site.scriptUrl} siteId={site.id} />
+        <InstallOptions scriptUrl={site.scriptUrl} siteId={site.id} live={site} />
+        <CopyLink link={developerLink} />
+        <DeveloperEmail siteId={site.id} installLink={developerLink} />
       </Card>
 
       <Connection site={site} onChange={onChange} />
@@ -401,7 +398,7 @@ function InstallHealth({ site, reading, onChange }: { site: Site; reading: Readi
       <details className="rounded-lg border bg-card px-4 py-3">
         <summary className="cursor-pointer text-sm font-medium">Script tag and install options</summary>
         <div className="mt-4">
-          <InstallOptions scriptUrl={site.scriptUrl} siteId={site.id} />
+          <InstallOptions scriptUrl={site.scriptUrl} siteId={site.id} live={site} />
         </div>
       </details>
     </Card>

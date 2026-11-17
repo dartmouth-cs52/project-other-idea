@@ -37,9 +37,8 @@ for (const name of BROWSERS) {
         }).observe(cursor, { attributes: true });
       });
       await ask(tab, "delete my workspace");
-      // It is said in the chat, as a reply to the question.
-      const reply = tab.locator("haptic-root .reply p").first();
-      await reply.filter({ hasText: BLOCKED_SAY }).waitFor({ timeout: 3000 });
+      const caption = tab.locator("haptic-root .caption span");
+      await caption.filter({ hasText: BLOCKED_SAY }).waitFor({ timeout: 3000 });
       const pointerShown = await tab.evaluate(() => (window as unknown as { pointerShown?: boolean }).pointerShown === true);
       assert.equal(pointerShown, false, "the pointer never went to it, not even while the reply was coming");
       await new Promise((resolve) => setTimeout(resolve, 200));

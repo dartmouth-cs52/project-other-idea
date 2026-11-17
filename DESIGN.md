@@ -432,7 +432,7 @@ Components are shadcn/ui, restyled only through tokens and variants.
   confirms at the end.
 - **Pointer:** 24px. Glides to its target, and dips with the mark when the
   person clicks. No face, no mascot.
-- **Target mark:** A 2px Pointer blue outline that stands 5px off the control,
+- **Target mark:** A 2px Pointer blue outline that stands 4 to 5px off the control,
   with a thin white edge on both sides and a soft shadow, the same recipe as
   the pointer. The gap and the white edge are what stop it reading as the
   control's own keyboard focus ring.
@@ -501,8 +501,8 @@ left the screen completely. Nothing switches while any of it can be seen.
 
 How a guide should feel. Only what the designer has signed off belongs here.
 Behaviour that merely exists in the widget code is not a design decision. The
-widget in `src/widget` follows this model, and its chat is the one in the home
-page's demo.
+widget in `src/widget` follows what is signed off below, and where it still
+differs from the rest, the bullet says so.
 
 Signed off: Haptic sits in the bottom right, in the place of support chat,
 because it is meant to replace it. The chat stays open once a question is
@@ -524,26 +524,29 @@ stays. The rest below is proposed.
   from slightly larger as the pointer lands, then holds still. Between steps
   the mark and the caption go and the pointer waits where it is, so the next
   glide starts from the control just used. If nothing happens for about four
-  seconds the mark pulses once, and no more often than that. The widget does
-  not pulse yet.
+  seconds the mark pulses once, and no more often than that. In the widget the
+  pointer goes with the mark between steps, and the next glide starts from
+  where it was. The mark breathes only when Haptic has done part of a task
+  itself and hands the last click to the person.
 - **Say one thing.** A caption names the next action in a short sentence. It
-  carries no buttons.
+  carries no buttons. In the widget it carries a small × that stops the guide,
+  so there is a way out beside the pointer when the chat has been closed.
 - **Keep the conversation and the exit in view.** The chat stays open for the
   whole guide, with the question at the top and a stop button in the ask box.
 - **Never cover the control.** When the chat would sit on the control being
-  pointed at, or on its caption, it closes for that step and comes back when
-  the pointer leaves. For that step only, the caption carries a small × that
-  stops the guide, so the exit is still in view.
+  pointed at, or on its caption, it moves to the other side of the window
+  while the pointer is there, and comes back when it has gone.
 - **A wrong click is not an error, and Haptic says so.** The ask box shows
   "Finding the way from here" at once. The next caption opens with "Not that
   one." and names the step that gets the person back. It is plain text in the
   usual caption: no Error red, no alert. If the click also leads to the goal,
   Haptic carries on without comment.
-- **Finish plainly.** Haptic confirms in a sentence in the chat, shows the
-  green tick, and the ask box is ready again. The tick is only for a guide the
+- **Finish plainly.** Haptic confirms in a sentence, shows the green tick in
+  the chat, and the ask box is ready again. The tick is only for a guide the
   person followed to the end, the same ending that is billed. An answer in
   words, a sentence that says Haptic can't help, and a control that was shown
-  and not used all end without it.
+  and not used all end without it. In the widget the sentence that ends a
+  guide stays in a caption just above the chat, where its × puts it away.
 - **An answer is read in the chat.** When Haptic answers in words, the chat
   shows the question as an Ink bubble on the right and the answer as a Muted
   bubble on the left. Under the answer, after a hairline, 12px Muted text says
