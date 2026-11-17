@@ -46,7 +46,8 @@ export async function launch(): Promise<Browser> {
   } catch {
     throw new Error("Playwright isn't installed. Add it for this run: npm install --no-save playwright && npx playwright install chromium");
   }
-  return chromium.launch();
+  // CHROMIUM_PATH runs a Chromium already on the machine, where Playwright's own download isn't there.
+  return chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 }
 
 /**

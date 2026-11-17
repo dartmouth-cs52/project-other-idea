@@ -135,6 +135,7 @@ export function HeroDemo() {
         <MockWindow address={`${APP_DOMAIN}/${scene.view === "projects" ? "projects" : "settings/billing"}`}>
           <Stage
             pointing={scene}
+            status={STATUS[scene.composer]}
             layoutKey={`${scene.view}-${scene.menu}-${scene.form}-${scene.saved}`}
             // On a desktop the window fits the screen it is on, so the ask box in its corner is never
             // below the fold. 370px is what sits above the stage plus a margin under the window:
@@ -222,7 +223,7 @@ export function HeroDemo() {
               </div>
             </motion.div>
 
-            <div className="absolute right-5 bottom-5 z-10 w-[19rem] max-w-[calc(100%-2.5rem)]">{!scene.fading && <Chat view={chatView(scene)} />}</div>
+            <div className="absolute right-5 bottom-5 z-15 w-[19rem] max-w-[calc(100%-2.5rem)]">{!scene.fading && <Chat view={chatView(scene)} />}</div>
           </Stage>
         </MockWindow>
       </DemoFrame>
