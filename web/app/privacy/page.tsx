@@ -97,8 +97,10 @@ export default function Privacy() {
       <p>
         A company can turn on Do it with me, which is off unless it does. Then a person can ask Haptic to do the steps
         with them: it clicks, types and chooses on the page while they watch, and the final click is always theirs. It
-        types only what the person wrote in their question. It never presses anything that saves, sends, pays or
-        deletes, and never types passwords or payment details. To check that its own typing took, it reads that
+        types only what the person wrote in their question. It leaves to the person anything whose name or address
+        says it saves, sends, pays or deletes, and never types passwords or payment details. It does follow a plain
+        link that opens a form to fill in, and if a click of its own ever sends something to the product, it stops
+        there and says so. To check that its own typing took, it reads that
         field&apos;s value inside the person&apos;s browser, and never sends it.
       </p>
       <p>

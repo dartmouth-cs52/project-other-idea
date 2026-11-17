@@ -77,7 +77,7 @@ export const faqs = [
   },
   {
     q: "Does Haptic click things for my users?",
-    a: "Not unless you turn it on. By default Haptic points and explains, and the person does the clicking, so they stay in control and learn where things are. With Do it with me turned on, a person can ask Haptic to do the steps while they watch, and the final click is always theirs. It never presses anything that saves, sends, pays or deletes, and never types passwords or payment details.",
+    a: "Not unless you turn it on. By default Haptic points and explains, and the person does the clicking, so they stay in control and learn where things are. With Do it with me turned on, a person can ask Haptic to do the steps while they watch, and the final click is always theirs. It leaves to the person anything whose name or address says it saves, sends, pays or deletes, and never types passwords or payment details. If a click of its own ever sends something to your product, it stops at once and says so.",
   },
   {
     q: "Does it work in apps behind a login?",
