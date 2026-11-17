@@ -41,6 +41,17 @@ export interface Me {
   sites?: { id: string; name: string; origin: string; connected: boolean }[];
 }
 
+/** The company's Team page: worker/team.ts. */
+export interface Team {
+  /** An owner or admin, who may add people, change roles and remove people. */
+  canManage: boolean;
+  members: { id: string; name: string | null; email: string; role: "owner" | "admin" | "member" | string; joined: string; you: boolean }[];
+  /** Added, and not signed in yet. */
+  invites: { id: string; email: string; invitedAt: string; invitedBy: string | null }[];
+  /** Whole email domains approved for the company: anyone at one joins when they sign in. */
+  domains: string[];
+}
+
 /** The company's billing page: worker/billing.ts. */
 export interface Billing {
   /** Stripe's keys are on the server, so a plan can be bought. */

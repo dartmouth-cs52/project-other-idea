@@ -21,7 +21,8 @@
 //   POST   /api/app/approve                     approve it, and email the person a sign-in link
 //
 // The setup screens, the email to a developer and the dashboard's top numbers
-// are answered in setup-api.ts, and billing, under /api/app/billing, in billing.ts.
+// are answered in setup-api.ts, billing, under /api/app/billing, in billing.ts,
+// and the Team page, under /api/app/team, in team.ts.
 //
 // Every site is looked up together with the caller's organization, so a site
 // id, which is public, is never enough to read or change someone's data.
@@ -35,6 +36,7 @@ import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./
 import { boundedText } from "./body";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
 import { billingRoutes, type BillingEnv } from "./billing";
+import { teamRoutes } from "./team";
 import { siteBrand } from "./brand";
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
 import { groupGuides } from "./health";
@@ -114,6 +116,8 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
     if (more) return reply(more.body, more.status);
     const billing = await billingRoutes({ request, env, sql, org, user, path, url });
     if (billing) return reply(billing.body, billing.status);
+    const people = await teamRoutes({ request, sql, org, user, path, sendLink: (email) => sendSignInLink(env, url.origin, email, signedInUrl(url.origin)) });
+    if (people) return reply(people.body, people.status);
 
     const match = /^\/sites\/([^/]+)(\/read|\/insights|\/live|\/brand|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?|\/teach(?:\/[^/]+)?|\/taught\/[^/]+)?$/.exec(path);
     if (match) {

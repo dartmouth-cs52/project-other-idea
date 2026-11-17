@@ -95,6 +95,16 @@ npx wrangler dev --port 8787 --local-upstream localhost:8787
 
 To go back to Neon's own email, turn the webhook off. Neon's webhook URL must be public HTTPS, so this cannot be tried against `wrangler dev`. `test/neon-hook.test.ts` at the top of the repository signs requests the way Neon does instead.
 
+## The team
+
+The Team page, `/dashboard/?view=team` (`components/app/team.tsx`, reached from the account menu), lists everyone at the company with their role, and the people added who haven't signed in yet. `worker/team.ts` answers `/api/app/team` and enforces every rule. A company's people are Neon Auth's `neon_auth.member` rows, each an owner, an admin or a member.
+
+- **Everyone** sees the whole team.
+- **Owners and admins** add people, make someone an admin or a member again, take back an invitation, and take someone off the team. They are also the ones who can pay (see [Billing](#billing)).
+- **Nobody** changes or removes the owner, who is whoever signed in first, or changes or removes themselves, so a company always keeps someone who can manage it.
+
+Adding someone approves their address for the company, as approving an access request does, with `approvals.invited_by` naming who added them (`../db/migrations/0016`). It emails them a sign-in link, and their first sign-in puts them on the team as a member. A company adds at most 20 people a day. An address already on another company, or approved for one, is refused. Removing someone deletes their membership and their own approval, so signing in again doesn't put them back. Someone let in by an approval of their whole email domain can't be removed here, and the page says why. A company always keeps at least one approval.
+
 ## Billing
 
 Companies pay through Stripe for the plans in `lib/site.ts`. The unit is a finished guide, as the server decides it ([docs/operations.md](../docs/operations.md#which-guides-are-finished)). Each paid plan is one monthly subscription with two prices: the flat fee, paid at the start of the month, and finished guides, counted by a Stripe meter and paid at the end of it. The guides price has graduated tiers, so the plan's included guides cost nothing and each one after them costs the overage price. A month of 1,200 finished guides on Team comes to $149 + 200 × $0.12.

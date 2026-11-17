@@ -35,6 +35,8 @@ export function daysFrom(text: string | null): number {
 
 /** The list of every site, which is where sign-in lands. It is kept in lib/dashboard.ts, where the Worker can reach it too. */
 export { SITES_HREF } from "@/lib/dashboard";
+/** Everyone at the company, and adding people. */
+export const TEAM_HREF = "/dashboard/?view=team";
 /** The company's plan and what it has used, across every site. */
 export const BILLING_HREF = "/dashboard/?view=billing";
 /** Adding a site, on the setup screens, one question at a time. */
