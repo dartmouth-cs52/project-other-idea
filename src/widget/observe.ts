@@ -21,6 +21,11 @@ export const LIST_STOPPED_MS = 1200;
 export const ADDRESS_BELONGS_MS = 1500;
 /** A dialog over the pointed control counts once it has stayed this long: a page that flickers one up and away has not covered it. */
 export const COVERED_MS = 250;
+/**
+ * The browser's autofill writes every field it fills in one go. Once it has filled a field other than the pointed one,
+ * the pointed field's own turn comes at once or not at all; after this long, it did not come.
+ */
+export const AUTOFILL_DONE_MS = 250;
 
 /** What the pointer is on, as far as hearing goes. */
 export interface Pointed {
@@ -72,6 +77,8 @@ export interface Where {
   inPopup: boolean;
   /** That control is a box around the pointed one. */
   aroundTarget: boolean;
+  /** That control is a field: one text is typed into, or a dropdown, or the label of one. Clicking into it is not using it. */
+  field?: boolean;
 }
 
 /** What has become of the pointed control and the page since the pointer went up. */
@@ -106,8 +113,12 @@ export type Seen =
   | { type: "click"; at: number; where: Where }
   /** A key went down outside the widget. `inTyped` is true when the keyboard was in something text is typed into. */
   | { type: "key"; at: number; key: string; inTarget: boolean; inTyped: boolean }
-  /** Something was typed, picked or ticked. `byPage` when the page's script fired it, as a calendar does when it writes the picked day into its field. */
-  | { type: "input"; at: number; inTarget: boolean; byPage?: boolean }
+  /**
+   * Something was typed, picked or ticked. `byPage` when the page's script fired it, as a calendar does when it writes
+   * the picked day into its field. `autofill` when the browser filled the field in from what it keeps, as Chrome's
+   * autofill does: in one go, with no typing, and often in the fields around it too.
+   */
+  | { type: "input"; at: number; inTarget: boolean; byPage?: boolean; autofill?: boolean }
   /** The pointed control lost the keyboard. */
   | { type: "left"; at: number }
   /** The window lost the keyboard to a frame inside the pointed control: a click in the frame, which the page never hears. */
@@ -116,7 +127,13 @@ export type Seen =
 
 export type Verdict =
   /** They used the pointed control. */
-  | { how: "clicked" | "filled" | "opened"; onTarget: true; strayed: false }
+  | { how: "clicked" | "opened"; onTarget: true; strayed: false }
+  /**
+   * They filled in the pointed field. `autofill` when the browser did it for them, which can fill other fields too.
+   * `then` when they went on to click another control before their typing paused: what they clicked, or "" for a
+   * control with no name that is safe to send.
+   */
+  | { how: "filled"; onTarget: true; strayed: false; autofill?: true; then?: string }
   | { how: "key"; key: string; onTarget: true; strayed: false }
   /** They picked from what the pointed control opened. */
   | { how: "chose"; names: string[]; onTarget: true; strayed: false }
@@ -142,6 +159,12 @@ export interface Heard {
   opened?: number;
   /** When typing in the pointed control was last heard. */
   typed?: number;
+  /**
+   * A click into another field while the pointer is on a field, not yet a wrong click: clicking into a field is not
+   * using it. Typing there is. So is the browser's autofill started from there, unless it fills the pointed field
+   * too, which is the step. `filledAt` once the autofill has filled the other field.
+   */
+  elsewhere?: { at: number; name: string; filledAt?: number };
   /** When the visitor last typed or clicked in the pointed control. */
   usedAt?: number;
   /** What was picked in the pointed control's popup so far. */
@@ -165,7 +188,13 @@ const ACT_IN_FIELD = new Set(["enter", "escape", "tab"]);
 export function waiting(heard: Heard, now: number): boolean {
   const lately = (since: number | undefined, ms: number) => since !== undefined && now - since <= ms;
   return (
-    !!heard.press || heard.typed !== undefined || heard.picks.length > 0 || heard.coveredAt !== undefined || lately(heard.opened, 5000) || lately(heard.gesture?.at, OUTCOME_WINDOW_MS)
+    !!heard.press ||
+    heard.typed !== undefined ||
+    heard.picks.length > 0 ||
+    heard.coveredAt !== undefined ||
+    heard.elsewhere?.filledAt !== undefined ||
+    lately(heard.opened, 5000) ||
+    lately(heard.gesture?.at, OUTCOME_WINDOW_MS)
   );
 }
 
@@ -181,6 +210,7 @@ export function hear(heard: Heard, seen: Seen, pointed: Pointed): Heard {
   const acted = (where: Where, at: number): Heard => {
     if (where.onTarget) {
       next.usedAt = at;
+      next.elsewhere = undefined;
       // For a field, clicking into it is not the action. Typing or picking is.
       if (!pointed.typed && !pointed.select) return say(used);
       // A dropdown that already shows the right choice gives nothing to hear: the
@@ -199,6 +229,17 @@ export function hear(heard: Heard, seen: Seen, pointed: Pointed): Heard {
     }
     // Blank space, plain text, or a box around the control: not worth a step by itself. What the page does next may be.
     if (!where.controls.length || where.aroundTarget) return pointed.anyClick ? say({ how: "elsewhere", onTarget: false, strayed: true }) : next;
+    // A field the visitor typed in and then left for another control is filled in: going on to the next field, or to
+    // the button, is how a form is used. Only the pause in their typing had not come yet, and a wrong click told them
+    // "Not that one".
+    if (pointed.typed && next.typed !== undefined) return say({ ...filled, then: where.name });
+    // Into another field, from a field: what they do there decides. Chrome's autofill is offered in every field of a
+    // form and fills them all, the pointed one too, so a visitor who clicked into Last name to pick a suggestion has
+    // filled in First name. Typing in Last name is the wrong field.
+    if ((pointed.typed || pointed.select) && where.field) {
+      next.elsewhere = { at, name: where.name };
+      return next;
+    }
     return say({ how: "other", name: where.name, onTarget: false, strayed: true });
   };
 
@@ -238,13 +279,26 @@ export function hear(heard: Heard, seen: Seen, pointed: Pointed): Heard {
       return next;
     }
     case "input":
-      if (!seen.inTarget) return next;
+      if (!seen.inTarget) {
+        const away = next.elsewhere;
+        // Only the field they clicked into, and only the visitor or the browser in it, not the page's script.
+        if (!away || seen.byPage) return next;
+        if (!seen.autofill) return say({ how: "other", name: away.name, onTarget: false, strayed: true });
+        // The browser's autofill, started there: it fills that field first, and then the rest of the form.
+        next.elsewhere = { ...away, filledAt: away.filledAt ?? seen.at };
+        return next;
+      }
       // The page writing into a field is not the visitor typing in it. A box ticked or a choice picked by the page's script is still news of a pick.
       if (seen.byPage && pointed.typed) return next;
+      // Back in the pointed field, by click or by keyboard: whatever they did in the other field no longer counts against them.
+      next.elsewhere = undefined;
       if (pointed.ticked) return say(used);
-      if (pointed.select) return say(filled);
+      if (pointed.select) return say(seen.autofill ? { ...filled, autofill: true } : filled);
       next.typed = seen.at;
       next.usedAt = seen.at;
+      // The browser's autofill writes the whole value at once, so there is no pause to wait for. Heard at once, the
+      // next step is asked for while the visitor is still looking at the form it filled in.
+      if (seen.autofill) return say({ ...filled, autofill: true });
       return next;
     case "left":
       // Leaving a dropdown after opening it is a pick too, whichever choice it was.
@@ -265,6 +319,9 @@ export function hear(heard: Heard, seen: Seen, pointed: Pointed): Heard {
       }
       if (next.picks.length && (!fate.popupOpen || at - (next.pickedAt ?? at) >= PICKS_QUIET_MS)) return say({ how: "chose", names: next.picks, onTarget: true, strayed: false });
       if (next.typed !== undefined && at - next.typed >= (pointed.typingPauseMs ?? TYPING_PAUSE_MS)) return say(filled);
+      // The autofill they started in another field filled that field and not the pointed one: they used the other field.
+      const away = next.elsewhere;
+      if (away?.filledAt !== undefined && at - away.filledAt >= AUTOFILL_DONE_MS) return say({ how: "other", name: away.name, onTarget: false, strayed: true });
       // They clicked into the field, its choices opened, and they stopped: the next thing to show is the choice.
       if (pointed.typed && next.opened !== undefined && next.typed === undefined && !next.picks.length && fate.listOpen && at - next.opened >= LIST_STOPPED_MS) {
         return say({ how: "opened", onTarget: true, strayed: false });

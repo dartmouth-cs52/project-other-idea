@@ -65,8 +65,8 @@ interface Options {
 function server(options: Options = {}) {
   const sql = psqlSql(DB) as unknown as ConstructorParameters<typeof Store>[0];
   // A report looks for its guide at once, and twice more: enough for a row written a moment late, and quick to give up.
-  const store = new Store(sql, 3, [0, 250, 400]);
-  const elsewhere = new Store(sql, 3, [0, 250, 400]);
+  const store = new Store(sql, 3, { reportWaitsMs: [0, 250, 400] });
+  const elsewhere = new Store(sql, 3, { reportWaitsMs: [0, 250, 400] });
   const work: Promise<unknown>[] = [];
   const later = (write: Promise<unknown> | undefined) => void (write && work.push(write));
   const app = createApp({

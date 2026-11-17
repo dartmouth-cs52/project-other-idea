@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { api, type Correction, type GuideDetail } from "@/lib/app-api";
 import { PointHereInstead } from "./guiding-rules";
 import { GuideStatus, seconds, when } from "./parts";
+import { teachable, TeachButton } from "./teach";
 
 /**
  * One guide, step by step, in a panel beside the page: what was pointed at,
@@ -64,6 +65,7 @@ export function GuideDrawer({
         </SheetHeader>
         {shown && (
           <div className="flex flex-col gap-4 p-5">
+            {teachable(shown.outcome) && <TeachButton siteId={siteId} question={shown.question} guide={shown.id} onStarted={onClose} />}
             {shown.cancelled_steps > 0 && (
               <p className="text-sm leading-5 text-muted-foreground">
                 {shown.cancelled_steps === 1 ? "One step was" : `${shown.cancelled_steps} steps were`} asked again because the page changed while Haptic was answering. Pages that load slowly after a

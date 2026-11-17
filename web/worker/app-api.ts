@@ -15,6 +15,8 @@
 //   POST   /api/app/sites/:id/corrections       point a step of a guide at another control from now on
 //   DELETE /api/app/sites/:id/corrections/:id   take a correction back
 //   PUT    /api/app/sites/:id/blocked           the controls Haptic must never point at
+//   …      /api/app/sites/:id/teach[/:session]  Teach Haptic: start, follow, review and save (worker/teach.ts)
+//   DELETE /api/app/sites/:id/taught/:route     take a taught route back
 //   GET    /api/app/approve?key=…&sig=…         an access request, for the team's approve page
 //   POST   /api/app/approve                     approve it, and email the person a sign-in link
 //
@@ -27,13 +29,16 @@
 import { answersOn, cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
 import { ANSWERS_DOCS_BUDGET, DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
+import { signedInUrl } from "../lib/dashboard";
 import { pageControls } from "../lib/setup";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
+import { boundedText } from "./body";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
 import { siteBrand } from "./brand";
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
 import { groupGuides } from "./health";
 import { finishedCsv, finishedGuides, guideSteps, insights, live, monthOf, sitesOverview } from "./insights";
+import { routeView, teachApi, TeachRefused } from "./teach";
 import { MAX_PAGES, readMore, startReading, type BrowserBinding, type Reading } from "./reader";
 import { saveReadBatch } from "./read-batch";
 import { readingExtras, setupOf, setupRoutes } from "./setup-api";
@@ -55,6 +60,7 @@ const SITE_ID = /^site_[a-z0-9_]{3,40}$/;
 const MAX_SITES = 5;
 const MAX_ORIGINS = 20;
 const MAX_REFUSED_SHOWN = 5;
+const MAX_NOTES = 20_000;
 
 interface SeenOrigin {
   origin: string;
@@ -106,15 +112,15 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
     const more = await setupRoutes({ request, env, sql, org, user, path, url });
     if (more) return reply(more.body, more.status);
 
-    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/live|\/brand|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?)?$/.exec(path);
+    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/live|\/brand|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?|\/teach(?:\/[^/]+)?|\/taught\/[^/]+)?$/.exec(path);
     if (match) {
       const id = match[1] ?? "";
       if (!SITE_ID.test(id)) throw new Refusal(404, "No such site.");
       const sub = match[2];
       if (!sub && request.method === "GET") return reply(await siteStatus(sql, env, org, id));
-      if (!sub && request.method === "PATCH") return reply(await changeSite(sql, env, org, id, await body(request)));
+      if (!sub && request.method === "PATCH") return reply(await changeSite(sql, env, org, id, await body(request, SITE_BODY)));
       if (!sub && request.method === "DELETE") return reply(await deleteSite(sql, org, id, await body(request)));
-      if (sub === "/docs" && request.method === "POST") return reply(await addDoc(sql, env, org, id, await body(request)), 201);
+      if (sub === "/docs" && request.method === "POST") return reply(await addDoc(sql, env, org, id, await body(request, DOC_BODY)), 201);
       if (sub === "/docs" && request.method === "DELETE") return reply(await removeDoc(sql, env, org, id, url.searchParams.get("source") ?? ""));
       if (sub === "/read" && request.method === "POST") return reply(await readSite(sql, env, org, id, (await body(request)).restart === true));
       if (sub === "/insights" && request.method === "GET") {
@@ -161,6 +167,18 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
           throw error;
         }
       }
+      if (sub?.startsWith("/teach") || sub?.startsWith("/taught/")) {
+        const site = await ownedSite(sql, org, id);
+        const kind = sub.startsWith("/taught/") ? "taught" : "teach";
+        const rest = sub.slice(kind === "taught" ? "/taught/".length : "/teach".length).replace(/^\//, "");
+        try {
+          const result = await teachApi(sql, site, org.id, { id: user.id, name: user.name, email: user.email }, request.method, kind, rest, () => body(request));
+          return reply(result.body, result.status);
+        } catch (error) {
+          if (error instanceof TeachRefused) throw new Refusal(error.status, error.message);
+          throw error;
+        }
+      }
       if (match[3] && request.method === "GET") {
         await ownedSite(sql, org, id);
         const steps = await guideSteps(sql, id, match[3]);
@@ -182,9 +200,30 @@ function minutesWest(url: URL): number {
   return Number.isFinite(asked) ? Math.min(Math.max(Math.round(asked), -840), 840) : 0;
 }
 
-async function body(request: Request): Promise<Record<string, unknown>> {
-  const text = await request.text();
-  if (text.length > 20_000) throw new Refusal(413, "That is too long.");
+/** How long a request body may be, in characters as sent, and what to say when it is longer. */
+interface BodyLimit {
+  max: number;
+  message: string;
+  /** The input to show the message under. */
+  field?: string;
+}
+
+const ANY_BODY: BodyLimit = { max: 20_000, message: "That is too long." };
+/**
+ * A pasted doc. Tidying drops indentation and blank lines, so a paste up to twice a doc's length can still
+ * fit, and JSON sends each line break, tab or quote as two characters, so its body can be four times as long.
+ */
+const DOC_BODY: BodyLimit = {
+  max: MAX_DOC_CHARS * 4 + 4_000,
+  message: `That is too long to add. One doc can be up to ${MAX_DOC_CHARS.toLocaleString()} characters. Split it, or paste the part that matters.`,
+  field: "text",
+};
+/** The settings form: the notes, each line break sent as two characters, and the widget's look beside them. */
+const SITE_BODY: BodyLimit = { max: MAX_NOTES * 2 + 4_000, message: `Notes can be up to ${MAX_NOTES.toLocaleString()} characters.`, field: "notes" };
+
+async function body(request: Request, limit: BodyLimit = ANY_BODY): Promise<Record<string, unknown>> {
+  const text = await boundedText(request, limit.max);
+  if (text === null) throw new Refusal(413, limit.message, limit.field);
   try {
     const value = JSON.parse(text || "{}");
     if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
@@ -325,6 +364,7 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string) 
     origins,
     corrections: site.context.corrections ?? [],
     blocked: site.context.blocked ?? [],
+    taught: (site.context.taught ?? []).map(routeView),
     reading: readingSummary(site.reading, site.context.pages ?? []),
     setup: setupOf(site.context),
     appearance: { ...DEFAULT_APPEARANCE, ...site.context.appearance },
@@ -354,7 +394,6 @@ function docsSummary(docs: Doc[], answers: boolean) {
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
-const MAX_NOTES = 20_000;
 
 /** The widget's look, checked field by field. Anything not given keeps its value. */
 function appearanceFrom(input: unknown, current: Appearance): Appearance {
@@ -365,10 +404,9 @@ function appearanceFrom(input: unknown, current: Appearance): Appearance {
     if (typeof raw.accent !== "string" || !HEX.test(raw.accent)) throw new Refusal(400, "The colour must be a hex value like #1E6EF4.", "accent");
     next.accent = raw.accent.toUpperCase();
   }
-  if (raw.position !== undefined) {
-    if (raw.position !== "bottom-right" && raw.position !== "bottom-left") throw new Refusal(400, "The corner must be bottom-right or bottom-left.", "position");
-    next.position = raw.position;
-  }
+  // The launcher is bottom right on every site. A site stored on the left before that choice went is put right on any save.
+  if (raw.position !== undefined && raw.position !== "bottom-right") throw new Refusal(400, "The launcher is always in the bottom right corner.", "position");
+  next.position = "bottom-right";
   // The launcher's own colour. Null, or nothing, puts it back to Ink.
   if (raw.launcher !== undefined) {
     if (raw.launcher === null || raw.launcher === "") delete next.launcher;
@@ -407,7 +445,8 @@ async function addDoc(sql: Sql, env: AppEnv, org: Organization, id: string, inpu
     const text = typeof input.text === "string" ? input.text : "";
     if (!title.trim()) throw new Refusal(400, "Give the doc a title.", "title");
     if (!text.trim()) throw new Refusal(400, "Paste the doc's text.", "text");
-    doc = pastedDoc(title, text.slice(0, MAX_DOC_CHARS * 2));
+    // DOC_BODY bounds the text, so it is tidied whole: a doc over the limit is refused with its real length, not cut short.
+    doc = pastedDoc(title, text);
   }
   if (doc.text.length < 40) {
     throw new Refusal(400, from === "url" ? "There was almost no text on that page. Paste the text instead." : "That is too short to help. Paste the whole article.", from);
@@ -548,7 +587,7 @@ async function approve(request: Request, env: AppEnv, sql: Sql, url: URL) {
   } else {
     await sql`insert into approvals (email, company, request_key) values (${entry.email}, ${company}, ${key}) on conflict (email) do nothing`;
   }
-  // The sign-in link is their invitation. If it expires, they ask for another on the sign-in page.
-  const sent = await sendSignInLink(env, url.origin, entry.email, `${url.origin}/dashboard/`);
+  // The sign-in link is their invitation, and lands where every sign-in does. If it expires, they ask for another on the sign-in page.
+  const sent = await sendSignInLink(env, url.origin, entry.email, signedInUrl(url.origin));
   return { ok: true, scope, sent, email: entry.email };
 }

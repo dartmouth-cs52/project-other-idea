@@ -32,8 +32,8 @@ import { findOpenModal } from "./snapshot.ts";
 export interface ActUi {
   /** Glides the pointer to this point of the page (client coordinates) and resolves when it is there; at once under reduced motion. */
   glideTo(x: number, y: number): Promise<void>;
-  /** Draws a press's ripple at this point. Nothing under reduced motion. */
-  ripple(x: number, y: number): void;
+  /** Shows a press where the pointer is: the pointer and the ring dip and come back. Nothing under reduced motion. */
+  tap(): void;
 }
 
 /** What the guide's hearing made of what happened at a control: the same verdict it gives for a visitor's step. */
@@ -810,7 +810,7 @@ async function chooseNative(run: Run, select: HTMLSelectElement): Promise<Outcom
   else select.selectedIndex = option.index;
   fire(run, select, new Event("input", { bubbles: true, composed: true }), true);
   fire(run, select, new Event("change", { bubbles: true }), true);
-  run.ctx.ui.ripple(point.x, point.y);
+  run.ctx.ui.tap();
   if (!(await waitFor(run, () => option.selected, 600))) return run.failed(select, undefined, "set");
   // A page that put the old choice back a moment later did not take it.
   await run.pause(150);
@@ -1467,7 +1467,7 @@ async function pressAt(run: Run, control: Element, at: { x: number; y: number; h
   const downOk = fire(run, hit, pointerEvent("pointerdown", x, y, { button: 0, buttons: 1, pressure: 0.5 }), true);
   const mouseOk = downOk ? fire(run, hit, mouseEvent("mousedown", x, y, { button: 0, buttons: 1, detail: 1 }), true) : true;
   if (mouseOk) focusFrom(hit, run.session.host);
-  run.ctx.ui.ripple(x, y);
+  run.ctx.ui.tap();
   await sleep(HOLD_MS);
   run.check();
   const now = hitAt(x, y, run.session.host);

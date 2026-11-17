@@ -488,6 +488,14 @@ export class Guide {
     if (this.ui.state !== "idle") this.ui.setState("finished");
   }
 
+  /** Start over: the guide, if one runs, is called off as Stop does, and the chat is cleared, "What I did" with it. */
+  restart() {
+    this.stop();
+    this.didOnShow = undefined;
+    this.ui.startOver();
+    this.ui.setState("idle");
+  }
+
   /** The visitor let Haptic carry on after it paused for their own hand. The page is read afresh. */
   carryOn() {
     const session = this.acting;
@@ -525,7 +533,6 @@ export class Guide {
     this.acting = undefined;
     this.expectLoadUntil = 0;
     this.ui.setActing(false);
-    this.ui.yourTurn(false);
   }
 
   /**
@@ -592,7 +599,6 @@ export class Guide {
     const { ui } = this;
     if (el?.isConnected) {
       ui.pointAt(el, say);
-      ui.yourTurn(true);
       // Shown until the visitor clicks anywhere, as the last pointer of a guide is.
       this.leavePointerUp();
     } else ui.say(say);
@@ -1066,7 +1072,6 @@ export class Guide {
 
     if (handover) {
       ui.setBusy("");
-      ui.yourTurn(true);
       this.showDid(handover.session, ACTING_WORDS.nothingSaved(handover.commit), handover.commit);
     } else if (inPanel) ui.setBusy("");
     else this.pointingNow();
@@ -1123,7 +1128,6 @@ export class Guide {
       if (handover) {
         this.didOnShow = undefined;
         ui.hideDid();
-        ui.yourTurn(false);
       }
       // The last step was there to be used or left. Doing something else puts it away, with no more questions.
       if (last && !what.onTarget) return this.end(this.unconfirmed ?? "shown");
@@ -1246,7 +1250,6 @@ export class Guide {
     session.before = pageNow;
     ui.setState("acting");
     ui.setBusy(ACTING_WORDS.doing);
-    ui.yourTurn(false);
     ui.pointAt(plan.el, reply.say);
     // A press that may load another page: the page after it carries on acting, if it comes soon.
     if (plan.navigates) this.expectLoad();
@@ -1259,7 +1262,7 @@ export class Guide {
         session: session.gate,
         config: this.config,
         listing,
-        ui: { glideTo: (x, y) => ui.glideTo(x, y), ripple: (x, y) => ui.ripple(x, y) },
+        ui: { glideTo: (x, y) => ui.glideTo(x, y), tap: () => ui.tap() },
         listen: (target) => this.hearHaptic(target, listing),
       },
     );
@@ -1304,10 +1307,10 @@ export class Guide {
   /**
    * One step of an act request that the visitor does: a value they did not
    * give, a control the gate keeps for them, a step the engine could not do.
-   * The pointer stays, its ring breathes, and acting carries on when the
-   * hearing hears them do it. Haptic does not pause for their hand now: it is
-   * their turn. For a choice (`picks`), the click that opens the list is not
-   * the step: the pick is.
+   * The pointer stays, and acting carries on when the hearing hears them do
+   * it. Haptic does not pause for their hand now: it is their turn. For a
+   * choice (`picks`), the click that opens the list is not the step: the
+   * pick is.
    */
   private visitorTurn(run: number, given: Element, listing: Map<Element, SnapElement>, say: string, event: string, picks = false) {
     const { ui } = this;
@@ -1318,7 +1321,6 @@ export class Guide {
     ui.setState("pointing");
     ui.setBusy(ACTING_WORDS.yourTurn);
     ui.pointAt(el, say);
-    ui.yourTurn(true);
     this.save();
     const how: Hearing = { anyClick: false, keys: keysAsked(say), subject: VISITOR, ...(this.previous?.dialog ? { dialog: this.previous.dialog } : {}) };
     const isOpen = (on: Element) => on.isConnected && (on.getAttribute("aria-expanded") === "true" || !!on.querySelector("[aria-expanded='true']"));
@@ -1358,7 +1360,6 @@ export class Guide {
       if (this.last && what.onTarget) this.last.used = true;
       const told = [event, what.event || what.gone?.words].filter(Boolean).join(" ");
       this.save(told);
-      ui.yourTurn(false);
       ui.rest();
       ui.setState("asking");
       ui.setBusy(ACTING_WORDS.doing);
@@ -1557,7 +1558,8 @@ export class Guide {
     const el = last?.el?.deref();
     // The same question asked again, because the page moved under it, says the same.
     if (this.stuck?.step === this.step) return this.stuck.said;
-    if (!last?.used || !el || pageState(page.snapshot) !== last.page) {
+    // A field pointed at because it was invalid is pointed at again until what is typed is accepted: retyping is the step.
+    if (!last?.used || !el || pageState(page.snapshot) !== last.page || statesOf(last.listed).includes("invalid")) {
       this.stuck = undefined;
       return "";
     }
@@ -1781,6 +1783,28 @@ function isTyped(el: Element): boolean {
   return isField(el) && !(el instanceof HTMLSelectElement) && !(el as HTMLInputElement).readOnly && !(el instanceof HTMLInputElement && el.type === "range");
 }
 
+/**
+ * Whether the browser itself filled in a field, from what it keeps: Chrome's autofill and the like. The field is then
+ * in the `:autofill` state as its input event arrives, and the event is not one of typing. Chrome sends a plain Event,
+ * and Firefox an InputEvent that replaces the text. Typing, pasting and dictating are InputEvents of other kinds.
+ */
+function filledByBrowser(event: Event, field: Element): boolean {
+  if (typeof InputEvent === "function" && event instanceof InputEvent && event.inputType !== "insertReplacementText") return false;
+  for (const state of [":autofill", ":-webkit-autofill"]) {
+    try {
+      return field.matches(state);
+    } catch {
+      // A browser that does not know this name for the state: try the other.
+    }
+  }
+  return false;
+}
+
+/** A field a visitor fills in: one text is typed into, or a dropdown. Clicking into one is not yet using it. */
+function isFieldToFill(el: Element | null | undefined): boolean {
+  return !!el && (isTyped(el) || el instanceof HTMLSelectElement);
+}
+
 /** The element the keyboard is in, looking inside shadow roots. */
 function activeElement(): Element | null {
   let active = document.activeElement;
@@ -1994,6 +2018,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
       known: !!first && (listing.has(first) || !isNew(first)),
       inPopup: !onTarget && !!first && (opened || insidePopup(path, first)),
       aroundTarget: !onTarget && !opened && !!first && first.contains(target),
+      field: !!first && isFieldToFill(first instanceof HTMLLabelElement ? first.control : first),
     };
   };
   const fate = (): Fate => {
@@ -2019,8 +2044,12 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     switch (verdict.how) {
       case "clicked":
         return target.matches('[role="slider"], input[type="range"]') ? `${who} moved ${name}.` : `${who} clicked ${name}.`;
-      case "filled":
-        return `${who} filled in ${name}. You can't see what they entered.`;
+      case "filled": {
+        // Autofill fills a whole form, so the model is told to look at the fields around this one before asking for them.
+        const how = verdict.autofill ? " with the browser's autofill, which may have filled in other fields of the form too" : "";
+        const then = verdict.then === undefined ? "" : `, then clicked ${verdict.then ? `"${verdict.then}"` : "another control"}`;
+        return `${who} filled in ${name}${how}${then}. You can't see what they entered.`;
+      }
       case "opened":
         return `${who} clicked into ${name}, and a list of choices opened.`;
       case "key":
@@ -2129,7 +2158,13 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   const onInput = (event: Event) => {
     const path = outside(event);
     if (!path) return;
-    feed({ type: "input", at: performance.now(), inTarget: path.includes(target), ...(byActor(event) ? {} : { byPage: true }) });
+    const inTarget = path.includes(target);
+    // Another field is heard as it is typed in or filled. Its change event, when it is left, says nothing more, and
+    // arrives between the browser's autofill of that field and of the pointed one.
+    if (!inTarget && event.type !== "input") return;
+    const field = inTarget ? target : path[0] instanceof Element ? path[0] : undefined;
+    const autofill = event.type === "input" && event.isTrusted && !!field && filledByBrowser(event, field);
+    feed({ type: "input", at: performance.now(), inTarget, ...(byActor(event) ? {} : { byPage: true }), ...(autofill ? { autofill } : {}) });
   };
   const onLeave = (event: Event) => {
     if (event.target === target) feed({ type: "left", at: performance.now() });

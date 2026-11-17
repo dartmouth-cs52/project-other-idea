@@ -11,7 +11,10 @@ const MAX_CORRECTIONS = 200;
 const MAX_BLOCKED = 50;
 /** The kinds of control a person can pick. They match the roles the widget gives what it lists. */
 export const CONTROL_ROLES = ["button", "link", "tab", "menuitem", "textbox", "select", "checkbox", "radio", "switch", "combobox", "option", "clickable"];
-/** How many visitors must have seen a learned label before it is offered here, as it is before the prompt gets it. */
+/**
+ * How many visitors must have seen a learned label, from how many networks, before it is offered here, as before the
+ * prompt gets it (src/server/learned.ts). Anyone can make up visitors, so a label from one network is never offered.
+ */
 const LEARNED_SHOWN_AT = 3;
 
 /** A correction or list turned away. `field` names the one input at fault, as Refusal's does in app-api.ts. */
@@ -56,11 +59,12 @@ export async function knownControls(sql: Sql, site: { id: string; context: SiteC
   for (const label of page?.fields ?? []) add("textbox", label);
   try {
     const learned = (await sql`
-      select kind, label from outline_labels where site_id = ${site.id} and route = ${route} and kind in ('link', 'button') and visitor_count >= ${LEARNED_SHOWN_AT}
-      order by visitor_count desc, seen_count desc limit 100`) as { kind: string; label: string }[];
+      select kind, label from outline_labels where site_id = ${site.id} and route = ${route} and kind in ('link', 'button')
+        and visitor_count >= ${LEARNED_SHOWN_AT} and network_count >= ${LEARNED_SHOWN_AT}
+      order by network_count desc, visitor_count desc, seen_count desc limit 100`) as { kind: string; label: string }[];
     for (const row of learned) add(row.kind, row.label);
   } catch {
-    // Nothing learned yet, or the table isn't there. The crawl's controls are still offered.
+    // Nothing learned yet, or the table or its networks (db/migrations/0014) aren't there. The crawl's controls are still offered.
   }
   return found.slice(0, 200);
 }

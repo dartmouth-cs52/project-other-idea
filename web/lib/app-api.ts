@@ -75,6 +75,48 @@ export interface Correction {
   createdAt: string;
 }
 
+/** One step someone taught Haptic, with the sentence the dashboard shows it as. Names only, never what was typed. */
+export interface TaughtStep {
+  kind: "press" | "choose" | "type" | "check" | "uncheck" | "enter";
+  path: string;
+  role: string;
+  label: string;
+  context?: string;
+  dialog?: string;
+  choice?: string;
+  row?: true;
+  /** Its words say it saves, sends, pays or deletes: always the visitor's click. */
+  commits?: true;
+  /** Left for the visitor in Do it with me. */
+  leave?: true;
+  note?: string;
+  /** "On /budgets, press New budget". */
+  text: string;
+  /** The recorder couldn't read a name for its control. It has to be named or deleted before saving. */
+  unnamed: boolean;
+}
+
+/** A route someone taught Haptic by doing the task, as saved. */
+export interface TaughtRoute {
+  id: string;
+  question: string;
+  steps: TaughtStep[];
+  createdAt: string;
+  by?: string;
+}
+
+/** A teach session: waiting for the tab to open, under way, steps ready to review, or done with. */
+export interface TeachSession {
+  id: string;
+  question: string;
+  status: "waiting" | "teaching" | "ready" | "saved" | "cancelled" | "expired";
+  createdAt: string;
+  expiresAt: string;
+  by: string | null;
+  stepCount: number;
+  steps: TaughtStep[] | null;
+}
+
 export interface Site {
   id: string;
   name: string;
@@ -82,7 +124,7 @@ export interface Site {
   allowedOrigins: string[];
   scriptUrl: string;
   /** `launcher` is the Ask button's own colour. Missing means Ink. */
-  appearance: { accent: string; position: "bottom-right" | "bottom-left"; launcherLabel: string; launcher?: string };
+  appearance: { accent: string; position: "bottom-right"; launcherLabel: string; launcher?: string };
   notes: string;
   docs: {
     budget: number;
@@ -96,6 +138,8 @@ export interface Site {
   reading: Reading | null;
   corrections: Correction[];
   blocked: ControlName[];
+  /** Routes taught by doing the task. Absent from a server older than Teach Haptic. */
+  taught?: TaughtRoute[];
 }
 
 export type Outcome =

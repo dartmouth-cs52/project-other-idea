@@ -62,7 +62,8 @@ document.documentElement.append(host);
 const session: GateSession = { words: "", host, actions: 0, typed: 0, failures: 0 };
 let stopped = false;
 const glides: [number, number][] = [];
-const ripples: [number, number][] = [];
+/** How many presses the engine showed. */
+let taps = 0;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const idOf = (el: Element | undefined) => (el ? el.id || el.tagName.toLowerCase() : undefined);
@@ -126,7 +127,7 @@ async function run(spec: Spec): Promise<Summary> {
         glides.push([x, y]);
         return sleep(30);
       },
-      ripple: (x, y) => void ripples.push([x, y]),
+      tap: () => void taps++,
     },
     listen: (target) => listen(target, listing),
   };
@@ -164,7 +165,9 @@ const counters = new Map<string, () => Record<string, number>>();
   run,
   session,
   glides,
-  ripples,
+  get taps() {
+    return taps;
+  },
   hears: !!waitForAction,
   watch: (selector: string) => void counters.set(selector, count(selector)),
   counted: (selector: string) => counters.get(selector)?.() ?? {},

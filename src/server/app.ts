@@ -17,9 +17,11 @@ import {
 import { publicActing } from "./acting.ts";
 import type { Alert, Budget, Gate } from "./budget.ts";
 import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
-import { parseOutlineReport, visitorHash } from "./learned.ts";
+import { networkHash, parseOutlineReport, visitorHash } from "./learned.ts";
 import { ceilingFor, measureTurn, TurnCancelled, TurnError } from "./model.ts";
 import type { TurnMeasure } from "./model.ts";
+import { teachCall, type TeachStore } from "./teach.ts";
+import { taughtFor } from "../shared/teach.ts";
 
 // What the Haptic server answers: the widget file, each site's public
 // settings, and the one endpoint the widget calls for every step of a guide.
@@ -39,6 +41,8 @@ export interface AppParts {
   widget(): Promise<string>;
   /** The code that acts, widget-act.js, which the widget loads from beside itself on a site with acting on. Without it, such a site is guided by pointer. */
   widgetActing?(): Promise<string>;
+  /** Teach mode, widget-teach.js, which the widget loads from beside itself only for a teaching link (src/shared/teach.ts). Without it, the page says teach mode couldn't be loaded. */
+  widgetTeaching?(): Promise<string>;
   /** How long browsers may keep the widget before asking again, in seconds. 0 for never. */
   widgetMaxAge: number;
   /** True when this caller has asked for too many steps lately. */
@@ -76,15 +80,21 @@ export interface AppParts {
   onSeen?(site: SiteContext, origin: string, allowed: boolean): void;
   /**
    * Told about an outline of a page a visitor saw, for learning the site.
-   * `visitor` is already hashed with the site's id. Must not throw.
+   * `visitor` is already hashed with the site's id, and so is `network`, the
+   * network the caller's address belongs to (`networkHash` in learned.ts).
+   * It is absent when the caller's address is not known. Must not throw.
    */
-  onOutline?(site: SiteContext, visitor: string, outline: PageOutline): void;
+  onOutline?(site: SiteContext, visitor: string, outline: PageOutline, network?: string): void;
   /** Told how a guide ended, whether it helped, or that the visitor asked for a person. Must not throw. */
   onReport?(site: SiteContext, guide: string, report: GuideReport): void;
   /** How the handoff form is posted to a company's webhook. The web's own fetch unless a test says otherwise. */
   fetch?: typeof fetch;
   /** True on a developer's machine, where a webhook may be on the same machine. */
   localWebhooks?: boolean;
+  /** Where teach sessions are kept (src/server/teach.ts). Without one, teach mode is refused. */
+  teach?: TeachStore;
+  /** True when this caller has made too many teach calls lately. `overLimit` when not given. */
+  overTeachLimit?(key: string): boolean | Promise<boolean>;
 }
 
 const MAX_BODY_BYTES = 512 * 1024;
@@ -125,9 +135,11 @@ export function createApp(parts: AppParts) {
       });
     }
 
-    if (request.method === "GET" && (url.pathname === "/widget.js" || (url.pathname === "/widget-act.js" && parts.widgetActing))) {
+    const scripts: Record<string, (() => Promise<string>) | undefined> = { "/widget.js": parts.widget, "/widget-act.js": parts.widgetActing, "/widget-teach.js": parts.widgetTeaching };
+    const scriptFor = request.method === "GET" ? scripts[url.pathname] : undefined;
+    if (scriptFor) {
       const cache = parts.widgetMaxAge > 0 ? `public, max-age=${parts.widgetMaxAge}` : "no-store";
-      const script = url.pathname === "/widget.js" ? await parts.widget() : await parts.widgetActing!();
+      const script = await scriptFor.call(parts);
       return new Response(script, { headers: { ...cors, "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": cache } });
     }
 
@@ -213,6 +225,12 @@ export function createApp(parts: AppParts) {
     // An outline of a page a visitor saw, for learning the site. Sent as
     // text/plain, which needs no preflight. Answered at once: what is learned
     // is written after the response, and never on a step's path.
+    //
+    // What is learned here ends up in the prompt of everyone on the site. Like
+    // every write it needs an Origin the site lists (`mayWrite`), which is a
+    // low bar, since any program can write the header itself. What such a
+    // caller cannot do is arrive from several networks at once, and that is
+    // what is counted (`networkHash`).
     if (request.method === "POST" && url.pathname === "/v1/outline") {
       const report = parseOutlineReport(await readJson(request));
       if (!report) return json(400, { error: "That isn't a valid outline." });
@@ -222,7 +240,7 @@ export function createApp(parts: AppParts) {
       if (await parts.overLimit(`${site.id} outline ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
       // Without the widget's random id there is no way to count this visitor once, so the outline isn't used.
       if (site.learn === false || !report.visitor) return json(200, { ok: false });
-      parts.onOutline?.(site, await visitorHash(site.id, report.visitor), report.outline);
+      parts.onOutline?.(site, await visitorHash(site.id, report.visitor), report.outline, await networkHash(site.id, caller));
       return json(200, { ok: true });
     }
 
@@ -242,6 +260,18 @@ export function createApp(parts: AppParts) {
       if (form.guide) parts.onReport?.(site, form.guide, { site: site.id, handoff: true });
       return json(200, { ok: true });
     }
+
+    // Teach mode: a person at the company showing Haptic a task in their own app. Never a model call.
+    const teaching = await teachCall(
+      { loadSite: (id) => parts.loadSite(id), teach: parts.teach, overLimit: (key) => (parts.overTeachLimit ?? parts.overLimit)(key) },
+      request,
+      url,
+      origin,
+      caller,
+      () => readJson(request),
+      json,
+    );
+    if (teaching) return teaching;
 
     return undefined;
   };
@@ -396,8 +426,11 @@ const LISTED_ROLES = new Set([
  * mode (or why not), what the model said to do, whether the server took
  * over a click the model had left to the visitor, what the server's check
  * left and why it removed the rest, and whether the step was the hand-over.
+ * With `site`, whether a route the company taught was in the step's prompt
+ * (`taught`), which is how a route can be seen to be used, or not, for a
+ * question; the route itself is not logged.
  */
-export function turnCounts(request: TurnRequest, measure: TurnMeasure): TurnCounts {
+export function turnCounts(request: TurnRequest, measure: TurnMeasure, site?: Pick<SiteContext, "taught">): TurnCounts {
   const { reply } = measure;
   const counts: TurnCounts = {
     haptic: "turn",
@@ -413,6 +446,7 @@ export function turnCounts(request: TurnRequest, measure: TurnMeasure): TurnCoun
     // "pointed": the server pointed at the control the sentence named. "asked": the model was asked again. "logged": neither.
     recheck: measure.recheck ? (measure.recheck.pointed ? "pointed" : measure.recheck.asked ? "asked" : "logged") : "none",
   };
+  if (site) counts.taught = taughtFor(site.taught, request.goal) !== undefined;
   if (!measure.acting) return counts;
   counts.acting = reply.mode === "act" ? "on" : (measure.acting.refused ?? "off");
   if (reply.mode !== "act") return counts;
