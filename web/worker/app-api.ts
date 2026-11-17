@@ -5,31 +5,46 @@
 //   GET    /api/app/sites/:id                   a site, its install health and how far the reading has got
 //   PATCH  /api/app/sites/:id                   change its name or the origins it may run on
 //   POST   /api/app/sites/:id/read              read a few more public pages
+//   GET    /api/app/sites                       every site the company has, as the list of sites shows them
 //   GET    /api/app/sites/:id/insights          the dashboard: questions, outcomes, what to fix
+//   GET    /api/app/sites/:id/live              the newest questions and the step each is on, asked for every second or two
+//   GET    /api/app/sites/:id/brand             the site's icon and its own colour, read from its first page
 //   GET    /api/app/sites/:id/guides/:guide     one guide, step by step
 //   GET    /api/app/sites/:id/groups?key=…      the guides for one question, grouped by meaning
 //   GET    /api/app/sites/:id/controls?route=…  the controls known on a page, for "Point here instead"
 //   POST   /api/app/sites/:id/corrections       point a step of a guide at another control from now on
 //   DELETE /api/app/sites/:id/corrections/:id   take a correction back
 //   PUT    /api/app/sites/:id/blocked           the controls Haptic must never point at
+//   …      /api/app/sites/:id/teach[/:session]  Teach Haptic: start, follow, review and save (worker/teach.ts)
+//   DELETE /api/app/sites/:id/taught/:route     take a taught route back
 //   GET    /api/app/approve?key=…&sig=…         an access request, for the team's approve page
 //   POST   /api/app/approve                     approve it, and email the person a sign-in link
+//
+// The setup screens, the email to a developer and the dashboard's top numbers
+// are answered in setup-api.ts.
 //
 // Every site is looked up together with the caller's organization, so a site
 // id, which is public, is never enough to read or change someone's data.
 
-import { cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
+import { answersOn, cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
 import { textUpTo } from "./body-text";
-import { DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
+import { ANSWERS_DOCS_BUDGET, DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
+import { signedInUrl } from "../lib/dashboard";
+import { pageControls } from "../lib/setup";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
+import { siteBrand } from "./brand";
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
 import { groupGuides } from "./health";
-import { finishedCsv, finishedGuides, guideSteps, insights, monthOf } from "./insights";
+import { finishedCsv, finishedGuides, guideSteps, insights, live, monthOf, sitesOverview } from "./insights";
+import { routeView, teachApi, TeachRefused } from "./teach";
 import { MAX_PAGES, readMore, startReading, type BrowserBinding, type Reading } from "./reader";
+import { saveReadBatch } from "./read-batch";
+import { readingExtras, setupOf, setupRoutes } from "./setup-api";
+import type { SendEnv } from "./sign-in-email";
 
-export interface AppEnv extends AuthEnv {
+export interface AppEnv extends AuthEnv, SendEnv {
   ACCESS_REQUESTS: { put(key: string, value: string): Promise<void>; get(key: string): Promise<string | null> };
   /** Neon's connection string. A secret. */
   DATABASE_URL?: string;
@@ -93,8 +108,11 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
     if (!org) throw new Refusal(403, "Your account isn't approved yet.");
 
     if (path === "/sites" && request.method === "POST") return reply(await addSite(sql, org, await body(request)), 201);
+    if (path === "/sites" && request.method === "GET") return reply(await sitesOverview(sql, org.id, minutesWest(url)));
+    const more = await setupRoutes({ request, env, sql, org, user, path, url });
+    if (more) return reply(more.body, more.status);
 
-    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?)?$/.exec(path);
+    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/live|\/brand|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?|\/teach(?:\/[^/]+)?|\/taught\/[^/]+)?$/.exec(path);
     if (match) {
       const id = match[1] ?? "";
       if (!SITE_ID.test(id)) throw new Refusal(404, "No such site.");
@@ -109,6 +127,14 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
         await ownedSite(sql, org, id);
         const days = Math.min(Math.max(Number(url.searchParams.get("days")) || 30, 1), 365);
         return reply(await insights(sql, id, days));
+      }
+      if (sub === "/live" && request.method === "GET") {
+        await ownedSite(sql, org, id);
+        return reply(await live(sql, id));
+      }
+      if (sub === "/brand" && request.method === "GET") {
+        const site = await ownedSite(sql, org, id);
+        return reply(await siteBrand(site.origin));
       }
       if (sub === "/finished" && request.method === "GET") {
         const site = await ownedSite(sql, org, id);
@@ -137,7 +163,19 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
           if (match[4] && request.method === "DELETE") return reply({ corrections: await removeCorrection(sql, site, org.id, match[4]) });
           if (sub === "/blocked" && request.method === "PUT") return reply({ blocked: await setBlocked(sql, id, org.id, (await body(request)).controls) });
         } catch (error) {
-          if (error instanceof Invalid) throw new Refusal(400, error.message);
+          if (error instanceof Invalid) throw new Refusal(400, error.message, error.field);
+          throw error;
+        }
+      }
+      if (sub?.startsWith("/teach") || sub?.startsWith("/taught/")) {
+        const site = await ownedSite(sql, org, id);
+        const kind = sub.startsWith("/taught/") ? "taught" : "teach";
+        const rest = sub.slice(kind === "taught" ? "/taught/".length : "/teach".length).replace(/^\//, "");
+        try {
+          const result = await teachApi(sql, site, org.id, { id: user.id, name: user.name, email: user.email }, request.method, kind, rest, () => body(request));
+          return reply(result.body, result.status);
+        } catch (error) {
+          if (error instanceof TeachRefused) throw new Refusal(error.status, error.message);
           throw error;
         }
       }
@@ -154,6 +192,12 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
     console.error("app api:", error);
     return reply({ error: "Something went wrong on our side." }, 500);
   }
+}
+
+/** The viewer's clock against UTC, in minutes, as the page sends it. No part of the world is more than 14 hours off. */
+function minutesWest(url: URL): number {
+  const asked = Number(url.searchParams.get("tz"));
+  return Number.isFinite(asked) ? Math.min(Math.max(Math.round(asked), -840), 840) : 0;
 }
 
 /** How long a request body may be, in characters as sent, and what to say when it is longer. */
@@ -236,13 +280,13 @@ async function ownedSite(sql: Sql, org: Organization, id: string): Promise<SiteR
 /** An address someone pasted, as a URL Haptic can read, or a refusal that says what is wrong with it. */
 function siteAddress(input: unknown): URL {
   let text = typeof input === "string" ? input.trim() : "";
-  if (!text) throw new Refusal(400, "Paste your site's address.");
+  if (!text) throw new Refusal(400, "Paste your site's address.", "url");
   // With no scheme, a local or private address is a developer's own machine, which serves plain http. Anything else gets https.
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) text = `${/^(localhost|127\.|10\.|192\.168\.|\[::1\])/i.test(text) ? "http" : "https"}://${text}`;
-  if (!URL.canParse(text)) throw new Refusal(400, "That isn't a web address. Try something like https://app.example.com.");
+  if (!URL.canParse(text)) throw new Refusal(400, "That isn't a web address. Try something like https://app.example.com.", "url");
   const url = new URL(text);
-  if (url.protocol !== "https:" && url.protocol !== "http:") throw new Refusal(400, "Use an address that starts with https://.");
-  if (!url.hostname.includes(".") && url.hostname !== "localhost") throw new Refusal(400, "That address is missing its domain, like .com.");
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw new Refusal(400, "Use an address that starts with https://.", "url");
+  if (!url.hostname.includes(".") && url.hostname !== "localhost") throw new Refusal(400, "That address is missing its domain, like .com.", "url");
   url.hash = "";
   return url;
 }
@@ -254,7 +298,7 @@ function originList(input: unknown): string[] {
   for (const item of input) {
     const text = typeof item === "string" ? item.trim().replace(/\/$/, "") : "";
     if (!URL.canParse(text) || new URL(text).origin !== text || !/^https?:$/.test(new URL(text).protocol)) {
-      throw new Refusal(400, `"${String(item).slice(0, 80)}" isn't an origin. An origin is the start of an address only, like https://app.example.com.`);
+      throw new Refusal(400, `"${String(item).slice(0, 80)}" isn't an origin. An origin is the start of an address only, like https://app.example.com.`, "allowedOrigins");
     }
     origins.add(text);
   }
@@ -264,7 +308,7 @@ function originList(input: unknown): string[] {
 
 async function addSite(sql: Sql, org: Organization, input: Record<string, unknown>) {
   const url = siteAddress(input.url);
-  const [{ count }] = (await sql`select count(*)::int as count from sites where company_id = ${org.id}`) as { count: number }[];
+  const [{ count } = { count: 0 }] = (await sql`select count(*)::int as count from sites where company_id = ${org.id}`) as { count: number }[];
   if (count >= MAX_SITES) throw new Refusal(400, `A company can have up to ${MAX_SITES} sites for now. Write to us if you need more.`);
   const id = `site_${[...crypto.getRandomValues(new Uint8Array(6))].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
   const now = new Date().toISOString();
@@ -297,7 +341,8 @@ function readingSummary(reading: Reading | null, pages: PageNode[]) {
     failed: reading.failed.length,
     thin: reading.thin.length,
     via: reading.via ?? null,
-    pages: pages.slice(0, 60).map((page) => ({ path: page.path, title: page.title })),
+    pages: pages.slice(0, 60).map((page) => ({ path: page.path, title: page.title, controls: pageControls(page) })),
+    ...readingExtras(reading, pages),
   };
 }
 
@@ -323,19 +368,24 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string) 
     origins,
     corrections: site.context.corrections ?? [],
     blocked: site.context.blocked ?? [],
+    taught: (site.context.taught ?? []).map(routeView),
     reading: readingSummary(site.reading, site.context.pages ?? []),
+    setup: setupOf(site.context),
     appearance: { ...DEFAULT_APPEARANCE, ...site.context.appearance },
     notes: site.context.notes ?? "",
-    docs: docsSummary(site.context.docs ?? []),
+    docs: docsSummary(site.context.docs ?? [], answersOn(site.context)),
+    // On means answering in words from the docs. Chosen is null when the site follows the default: on once it has docs.
+    answers: { on: answersOn(site.context), chosen: site.context.answers?.enabled ?? null },
   };
 }
 
 /** The docs as the settings page lists them: no text, and whether each one is in the prompt. */
-function docsSummary(docs: Doc[]) {
-  const fit = docsThatFit(docs);
+function docsSummary(docs: Doc[], answers: boolean) {
+  const budget = answers ? ANSWERS_DOCS_BUDGET : DOCS_BUDGET;
+  const fit = docsThatFit(docs, budget);
   const used = docs.filter((doc) => fit.has(doc.source)).reduce((sum, doc) => sum + doc.text.length, 0);
   return {
-    budget: DOCS_BUDGET,
+    budget,
     used,
     list: docs.map((doc) => ({
       title: doc.title,
@@ -355,16 +405,22 @@ function appearanceFrom(input: unknown, current: Appearance): Appearance {
   const raw = input as Record<string, unknown>;
   const next = { ...current };
   if (raw.accent !== undefined) {
-    if (typeof raw.accent !== "string" || !HEX.test(raw.accent)) throw new Refusal(400, "The colour must be a hex value like #1E6EF4.");
+    if (typeof raw.accent !== "string" || !HEX.test(raw.accent)) throw new Refusal(400, "The colour must be a hex value like #1E6EF4.", "accent");
     next.accent = raw.accent.toUpperCase();
   }
   if (raw.position !== undefined) {
-    if (raw.position !== "bottom-right" && raw.position !== "bottom-left") throw new Refusal(400, "The corner must be bottom-right or bottom-left.");
+    if (raw.position !== "bottom-right" && raw.position !== "bottom-left") throw new Refusal(400, "The corner must be bottom-right or bottom-left.", "position");
     next.position = raw.position;
+  }
+  // The launcher's own colour. Null, or nothing, puts it back to Ink.
+  if (raw.launcher !== undefined) {
+    if (raw.launcher === null || raw.launcher === "") delete next.launcher;
+    else if (typeof raw.launcher !== "string" || !HEX.test(raw.launcher)) throw new Refusal(400, "The colour must be a hex value like #1E6EF4.", "launcher");
+    else next.launcher = raw.launcher.toUpperCase();
   }
   if (raw.launcherLabel !== undefined) {
     const label = typeof raw.launcherLabel === "string" ? cleanText(raw.launcherLabel, 24) : "";
-    if (!label) throw new Refusal(400, "Give the button a label, such as Ask.");
+    if (!label) throw new Refusal(400, "Give the button a label, such as Ask.", "launcherLabel");
     next.launcherLabel = label;
   }
   return next;
@@ -376,25 +432,34 @@ async function addDoc(sql: Sql, env: AppEnv, org: Organization, id: string, inpu
   const docs = site.context.docs ?? [];
   if (docs.length >= MAX_DOCS) throw new Refusal(400, `A site can have up to ${MAX_DOCS} help docs. Remove one first.`);
   let doc: Doc;
+  // The input the doc came from, which is the one at fault when its text will not do.
+  let from: "url" | "text";
   if (typeof input.url === "string" && input.url.trim()) {
+    from = "url";
     let text = input.url.trim();
     if (!/^https?:\/\//i.test(text)) text = `https://${text}`;
-    if (!URL.canParse(text)) throw new Refusal(400, "That isn't a web address.");
+    if (!URL.canParse(text)) throw new Refusal(400, "That isn't a web address. Try something like https://help.example.com/billing.", "url");
     try {
       doc = await docFromUrl(new URL(text));
     } catch (error) {
-      throw new Refusal(400, `Haptic couldn't read that page. ${(error as Error).message}`);
+      throw new Refusal(400, `Haptic couldn't read that page. ${(error as Error).message}`, "url");
     }
   } else {
+    from = "text";
     const title = typeof input.title === "string" ? input.title : "";
     const text = typeof input.text === "string" ? input.text : "";
-    if (!title.trim() || !text.trim()) throw new Refusal(400, "Give the doc a title and some text.");
+    if (!title.trim()) throw new Refusal(400, "Give the doc a title.", "title");
+    if (!text.trim()) throw new Refusal(400, "Paste the doc's text.", "text");
     // DOC_BODY bounds the text, so it is tidied whole: a doc over the limit is refused with its real length, not cut short.
     doc = pastedDoc(title, text);
   }
-  if (doc.text.length < 40) throw new Refusal(400, "There was almost no text there. Paste the text instead.");
-  if (doc.text.length > MAX_DOC_CHARS) throw new Refusal(400, `That doc is ${doc.text.length.toLocaleString()} characters. One doc can be up to ${MAX_DOC_CHARS.toLocaleString()}. Split it, or paste the part that matters.`);
-  if (docs.some((existing) => existing.source === doc.source)) throw new Refusal(400, "That page is already one of the help docs.");
+  if (doc.text.length < 40) {
+    throw new Refusal(400, from === "url" ? "There was almost no text on that page. Paste the text instead." : "That is too short to help. Paste the whole article.", from);
+  }
+  if (doc.text.length > MAX_DOC_CHARS) {
+    throw new Refusal(400, `That doc is ${doc.text.length.toLocaleString()} characters. One doc can be up to ${MAX_DOC_CHARS.toLocaleString()}. Split it, or paste the part that matters.`, from);
+  }
+  if (docs.some((existing) => existing.source === doc.source)) throw new Refusal(400, "That page is already one of the help docs.", "url");
   await sql`
     update sites set context = jsonb_set(context, '{docs}', coalesce(context->'docs', '[]'::jsonb) || ${JSON.stringify([doc])}::jsonb), updated_at = now()
     where id = ${id} and company_id = ${org.id}`;
@@ -416,7 +481,7 @@ async function deleteSite(sql: Sql, org: Organization, id: string, input: Record
   const site = await ownedSite(sql, org, id);
   const host = new URL(site.origin).host;
   if (typeof input.confirm !== "string" || input.confirm.trim().toLowerCase() !== host.toLowerCase()) {
-    throw new Refusal(400, `Type ${host} to confirm.`);
+    throw new Refusal(400, `Type ${host} to confirm.`, "confirm");
   }
   await sql`delete from sites where id = ${id} and company_id = ${org.id}`;
   return { deleted: id };
@@ -425,18 +490,22 @@ async function deleteSite(sql: Sql, org: Organization, id: string, input: Record
 async function changeSite(sql: Sql, env: AppEnv, org: Organization, id: string, input: Record<string, unknown>) {
   const site = await ownedSite(sql, org, id);
   const name = input.name === undefined ? site.name : typeof input.name === "string" && input.name.trim() ? input.name.trim().slice(0, 80) : null;
-  if (!name) throw new Refusal(400, "Give the site a name.");
+  if (!name) throw new Refusal(400, "Give the site a name.", "name");
   const origins = input.allowedOrigins === undefined ? site.allowed_origins : originList(input.allowedOrigins);
   if (!origins.length) throw new Refusal(400, "Keep at least one origin, or the widget can't run anywhere.");
   const appearance = input.appearance === undefined ? null : appearanceFrom(input.appearance, { ...DEFAULT_APPEARANCE, ...site.context.appearance });
   if (input.notes !== undefined && typeof input.notes !== "string") throw new Refusal(400, "notes must be text.");
   const notes = typeof input.notes === "string" ? input.notes.trim() : null;
-  if (notes !== null && notes.length > MAX_NOTES) throw new Refusal(400, `Notes can be up to ${MAX_NOTES.toLocaleString()} characters.`);
+  if (notes !== null && notes.length > MAX_NOTES) throw new Refusal(400, `Notes can be up to ${MAX_NOTES.toLocaleString()} characters.`, "notes");
+  if (input.answers !== undefined && typeof input.answers !== "boolean") throw new Refusal(400, "answers must be true or false.");
+  // Switching Answers keeps how long an answer's article may go before it is marked as possibly out of date.
+  const answers = typeof input.answers === "boolean" ? { ...site.context.answers, enabled: input.answers } : null;
   // Only the fields given change, inside the context too, so a page read finishing meanwhile keeps its pages.
   await sql`
     update sites set name = ${name}, allowed_origins = ${origins},
       context = jsonb_set(jsonb_set(context, '{appearance}', coalesce(${appearance === null ? null : JSON.stringify(appearance)}::jsonb, context->'appearance', '{}'::jsonb)),
-        '{notes}', coalesce(to_jsonb(${notes}::text), context->'notes', '""'::jsonb)),
+        '{notes}', coalesce(to_jsonb(${notes}::text), context->'notes', '""'::jsonb))
+        || jsonb_strip_nulls(jsonb_build_object('answers', ${answers === null ? null : JSON.stringify(answers)}::jsonb)),
       updated_at = now()
     where id = ${id} and company_id = ${org.id}`;
   // The widget server keeps its copy of a site for up to a minute, so a newly allowed address starts working within that.
@@ -453,21 +522,11 @@ async function readSite(sql: Sql, env: AppEnv, org: Organization, id: string, re
   const byPath = new Map(pages.map((page) => [page.path, page]));
   for (const page of batch.pages) byPath.set(page.path, page);
   const merged = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
-  // The address pasted may be the site's other name, acme.com for www.acme.com. The widget will run on the
-  // one it redirects to, so that becomes the site's origin and is allowed too.
-  const moved = batch.movedTo ?? null;
-  // Only the pages, the reading and that origin change, so an edit to the name or origins made meanwhile is kept.
-  await sql`
-    update sites set
-      context = jsonb_set(jsonb_set(context, '{pages}', ${JSON.stringify(merged)}::jsonb), '{updatedAt}', to_jsonb(now()::text)),
-      reading = ${JSON.stringify(batch.reading)}::jsonb,
-      origin = coalesce(${moved}::text, origin),
-      allowed_origins = case
-        when ${moved}::text is null or ${moved}::text = any(allowed_origins) or cardinality(allowed_origins) >= ${MAX_ORIGINS} then allowed_origins
-        else array_append(allowed_origins, ${moved}::text) end,
-      updated_at = now()
-    where id = ${id} and company_id = ${org.id}`;
-  return readingSummary(batch.reading, merged);
+  const from = { origin: site.origin, startedAt: site.reading?.startedAt ?? null };
+  if (await saveReadBatch(sql, { id, companyId: org.id, maxOrigins: MAX_ORIGINS }, from, batch, merged)) return readingSummary(batch.reading, merged);
+  // The address changed while this batch was read, so it was dropped. Answer with the reading that is there now.
+  const now = await ownedSite(sql, org, id);
+  return readingSummary(now.reading, now.context.pages ?? []);
 }
 
 // Approving access requests ---------------------------------------------------
@@ -533,7 +592,7 @@ async function approve(request: Request, env: AppEnv, sql: Sql, url: URL) {
   } else {
     await sql`insert into approvals (email, company, request_key) values (${entry.email}, ${company}, ${key}) on conflict (email) do nothing`;
   }
-  // The sign-in link is their invitation. If it expires, they ask for another on the sign-in page.
-  const sent = await sendSignInLink(env, url.origin, entry.email, `${url.origin}/dashboard/`);
+  // The sign-in link is their invitation, and lands where every sign-in does. If it expires, they ask for another on the sign-in page.
+  const sent = await sendSignInLink(env, url.origin, entry.email, signedInUrl(url.origin));
   return { ok: true, scope, sent, email: entry.email };
 }

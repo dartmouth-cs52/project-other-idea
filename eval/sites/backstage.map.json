@@ -1,0 +1,2052 @@
+{
+  "version": 1,
+  "id": "site_bench_backstage",
+  "name": "Backstage",
+  "origin": "https://demo.backstage.io",
+  "allowedOrigins": [
+    "https://demo.backstage.io"
+  ],
+  "appearance": {
+    "accent": "#1E6EF4",
+    "position": "bottom-right",
+    "launcherLabel": "Ask"
+  },
+  "notes": "",
+  "docs": [],
+  "pages": [
+    {
+      "path": "/api-docs",
+      "title": "APIs",
+      "headings": [
+        "Backstage API Explorer"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "APIs"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/catalog",
+      "title": "Catalog",
+      "headings": [
+        "Backstage Catalog",
+        "All Components (17)"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "Catalog",
+        "Support",
+        "Owned 8",
+        "Owned",
+        "Starred 0",
+        "All 17",
+        "All",
+        "Component",
+        "all",
+        "Open",
+        "clear search"
+      ],
+      "fields": [
+        "Owner",
+        "Lifecycle",
+        "Tags",
+        "Processing Status",
+        "Namespace",
+        "Search"
+      ]
+    },
+    {
+      "path": "/catalog/backstage/group/maintainers",
+      "title": "backstage/maintainers | Backstage Demo",
+      "headings": [
+        "Catalog",
+        "backstage/maintainers"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Search"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/catalog/default/api/github-mcp-server",
+      "title": "GitHub MCP Server | Overview | Backstage Demo",
+      "headings": [
+        "Catalog",
+        "GitHub MCP Server"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        },
+        {
+          "label": "maintainers",
+          "to": "/catalog/backstage/group/maintainers"
+        },
+        {
+          "label": "Todo",
+          "to": "/catalog/default/api/github-mcp-server/todo"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "Documentation",
+        "mcp-server",
+        "Copy text"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/catalog/default/api/internal_backstage_openapi_doc",
+      "title": "Backstage API | Overview | Backstage Demo",
+      "headings": [
+        "Catalog",
+        "Backstage API",
+        "Backstage API 1 OAS 3.0",
+        "Entity",
+        "Locations",
+        "TemplatesInspect template parameters and test templates wit…",
+        "TasksCreate, list, inspect, cancel, and retry tasks, and re…",
+        "ActionsList installed template actions."
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        },
+        {
+          "label": "backstage",
+          "to": "/catalog/default/group/backstage"
+        },
+        {
+          "label": "Todo",
+          "to": "/catalog/default/api/internal_backstage_openapi_doc/todo"
+        },
+        {
+          "label": "Entity",
+          "to": "/catalog/default/api/internal_backstage_openapi_doc#/Entity"
+        },
+        {
+          "label": "/api /catalog /refresh",
+          "to": "/catalog/default/api/internal_backstage_openapi_doc#/Entity/RefreshEntity"
+        },
+        {
+          "label": "/api /catalog /entities",
+          "to": "/catalog/default/api/internal_backstage_openapi_doc#/Entity/GetEntities"
+        },
+        {
+          "label": "/api /catalog /entities /by-uid /{uid}",
+          "to": "/catalog/default/api/internal_backstage_openapi_doc#/Entity/GetEntityByUid"
+        },
+        {
+          "label": "/api /catalog /entities /by-uid /{uid}",
+          "to": "/catalog/default/api/internal_backstage_openapi_doc#/Entity/DeleteEntityByUid"
+        },
+        {
+          "label": "/api /catalog /entities /by-name /{kind} /{namesp…",
+          "to": "/catalog/default/api/internal_backstage_openapi_doc#/Entity/GetEntityByName"
+        },
+        {
+          "label": "/api /catalog /entities /by-name /{kind} /{namesp…",
+          "to": "/catalog/default/api/internal_backstage_openapi_doc#/Entity/GetEntityAncestryByName"
+        },
+        {
+          "label": "/api /catalog /entities /by-refs",
+          "to": "/catalog/default/api/internal_backstage_openapi_doc#/Entity/GetEntitiesByRefs"
+        },
+        {
+          "label": "/api /catalog /entities /by-query",
+          "to": "/catalog/default/api/internal_backstage_openapi_doc#/Entity/GetEntitiesByQuery"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "Documentation",
+        "OpenAPI",
+        "Raw",
+        "Authorize",
+        "Collapse operation",
+        "POST /api /catalog /refresh",
+        "authorization button locked",
+        "post ​/api​/catalog​/refresh",
+        "GET /api /catalog /entities",
+        "get ​/api​/catalog​/entities",
+        "GET /api /catalog /entities /by-uid /{uid}",
+        "get ​/api​/catalog​/entities​/by-uid​/{uid}",
+        "DELETE /api /catalog /entities /by-uid /{uid}",
+        "delete ​/api​/catalog​/entities​/by-uid​/{uid}",
+        "GET /api /catalog /entities /by-name /{kind} /{na…"
+      ],
+      "fields": [
+        "Servers"
+      ]
+    },
+    {
+      "path": "/catalog/default/component/artist-lookup",
+      "title": "artist-lookup | Overview | Backstage Demo",
+      "headings": [
+        "Catalog",
+        "artist-lookup"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        },
+        {
+          "label": "team-a",
+          "to": "/catalog/default/group/team-a"
+        },
+        {
+          "label": "artist-engagement-portal",
+          "to": "/catalog/default/system/artist-engagement-portal"
+        },
+        {
+          "label": "Docs",
+          "to": "/catalog/default/component/artist-lookup/docs"
+        },
+        {
+          "label": "APIs",
+          "to": "/catalog/default/component/artist-lookup/apis"
+        },
+        {
+          "label": "Todo",
+          "to": "/catalog/default/component/artist-lookup/todo"
+        }
+      ],
+      "buttons": [
+        "Search"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/catalog/default/component/backstage",
+      "title": "backstage | Overview | Backstage Demo",
+      "headings": [],
+      "links": [],
+      "buttons": [],
+      "fields": []
+    },
+    {
+      "path": "/catalog/default/group/cncf",
+      "title": "cncf | Backstage Demo",
+      "headings": [
+        "Catalog",
+        "cncf"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Search"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/catalog/default/group/team-a",
+      "title": "Catalog",
+      "headings": [
+        "team-a"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        },
+        {
+          "label": "Docs",
+          "to": "/catalog/default/group/team-a/docs"
+        },
+        {
+          "label": "Todo",
+          "to": "/catalog/default/group/team-a/todo"
+        }
+      ],
+      "buttons": [
+        "Search"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/catalog/default/Group/team-a",
+      "title": "Catalog",
+      "headings": [
+        "team-a"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        },
+        {
+          "label": "Docs",
+          "to": "/catalog/default/Group/team-a/docs"
+        },
+        {
+          "label": "Todo",
+          "to": "/catalog/default/Group/team-a/todo"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "My Group",
+        "Add to favorites",
+        "More actions",
+        "Overview"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/catalog/default/Group/team-a/docs",
+      "title": "team-a | Docs | Backstage Demo",
+      "headings": [
+        "Catalog",
+        "team-a",
+        "Missing Annotation"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "Overview",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "Todo",
+          "to": "/catalog/default/Group/team-a/todo"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "Docs",
+        "Read more , Opens in a new window"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/catalog/default/Group/team-a/todo",
+      "title": "team-a | Todo | Backstage Demo",
+      "headings": [
+        "Catalog",
+        "team-a",
+        "TODOs"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "Overview",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "Docs",
+          "to": "/catalog/default/Group/team-a/docs"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "Todo"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/catalog/default/system/artist-engagement-portal",
+      "title": "artist-engagement-portal | Overview | Backstage Demo",
+      "headings": [
+        "Catalog",
+        "artist-engagement-portal"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        },
+        {
+          "label": "team-a",
+          "to": "/catalog/default/group/team-a"
+        },
+        {
+          "label": "Artists",
+          "to": "/catalog/default/domain/artists"
+        },
+        {
+          "label": "Docs",
+          "to": "/catalog/default/system/artist-engagement-portal/docs"
+        },
+        {
+          "label": "Todo",
+          "to": "/catalog/default/system/artist-engagement-portal/todo"
+        }
+      ],
+      "buttons": [
+        "Search"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/catalog/default/system/audio-playback",
+      "title": "audio-playback | Overview | Backstage Demo",
+      "headings": [
+        "Catalog",
+        "audio-playback"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        },
+        {
+          "label": "team-c",
+          "to": "/catalog/default/group/team-c"
+        },
+        {
+          "label": "playback",
+          "to": "/catalog/default/domain/playback"
+        },
+        {
+          "label": "Docs",
+          "to": "/catalog/default/system/audio-playback/docs"
+        },
+        {
+          "label": "Todo",
+          "to": "/catalog/default/system/audio-playback/todo"
+        }
+      ],
+      "buttons": [
+        "Search"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/catalog/default/user/breanna.davison",
+      "title": "breanna.davison | Overview | Backstage Demo",
+      "headings": [
+        "Catalog",
+        "breanna.davison"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        },
+        {
+          "label": "Docs",
+          "to": "/catalog/default/user/breanna.davison/docs"
+        },
+        {
+          "label": "Todo",
+          "to": "/catalog/default/user/breanna.davison/todo"
+        }
+      ],
+      "buttons": [
+        "Search"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/catalog/default/user/guest",
+      "title": "Catalog",
+      "headings": [
+        "Guest User"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        },
+        {
+          "label": "Docs",
+          "to": "/catalog/default/user/guest/docs"
+        },
+        {
+          "label": "Todo",
+          "to": "/catalog/default/user/guest/todo"
+        }
+      ],
+      "buttons": [
+        "Search"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/catalog/development/user/guest",
+      "title": "Catalog",
+      "headings": [
+        "Guest User"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        },
+        {
+          "label": "Docs",
+          "to": "/catalog/development/user/guest/docs"
+        },
+        {
+          "label": "Todo",
+          "to": "/catalog/development/user/guest/todo"
+        }
+      ],
+      "buttons": [
+        "Search"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/create/actions",
+      "title": "Create",
+      "headings": [],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Search"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/create/tasks",
+      "title": "Create",
+      "headings": [],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Search"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/create/templates",
+      "title": "Templates",
+      "headings": [
+        "Create"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "Templates",
+        "Tasks",
+        "Actions",
+        "Template Editor",
+        "Templating Extensions"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/docs",
+      "title": "Docs",
+      "headings": [
+        "All (3)"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "Docs",
+        "Owned 0",
+        "Starred 0",
+        "All 3",
+        "All",
+        "Open",
+        "Clear Search"
+      ],
+      "fields": [
+        "Owner",
+        "Tags",
+        "Search"
+      ]
+    },
+    {
+      "path": "/docs/default/component/backstage",
+      "title": "backstage | Backstage Demo",
+      "headings": [
+        "Documentation",
+        "Backstage"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        },
+        {
+          "label": "Documentation",
+          "to": "/docs"
+        },
+        {
+          "label": "new destination",
+          "to": "/docs/default/component/backstage/overview/what-is-backstage"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "Settings"
+      ],
+      "fields": [
+        "Search docs"
+      ]
+    },
+    {
+      "path": "/docs/default/component/backstage-demo",
+      "title": "backstage-demo | Backstage Demo",
+      "headings": [
+        "Documentation",
+        "Backstage Demo"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        },
+        {
+          "label": "Documentation",
+          "to": "/docs"
+        },
+        {
+          "label": "Next: Basic Markdown",
+          "to": "/docs/default/component/backstage-demo/examples/basic"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "Settings",
+        "Skip to content",
+        "expand-nav",
+        "TechDocs",
+        "Examples"
+      ],
+      "fields": [
+        "Search docs"
+      ]
+    },
+    {
+      "path": "/explore",
+      "title": "Domains",
+      "headings": [
+        "Explore the Backstage ecosystem"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "Explore",
+        "Domains",
+        "Groups",
+        "Tools"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/home",
+      "title": "Backstage Demo",
+      "headings": [],
+      "links": [
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Close",
+        "Search",
+        "Home"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/mui-to-bui",
+      "title": "mui-to-bui",
+      "headings": [
+        "BUI Theme Converter"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "MUI to BUI",
+        "mui-to-bui"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/notifications",
+      "title": "Notifications",
+      "headings": [],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "Notifications"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/settings/general",
+      "title": "Settings",
+      "headings": [],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "General",
+        "Authentication Providers",
+        "Feature Flags",
+        "Notifications"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/tech-radar",
+      "title": "Tech Radar | Company Radar | Backstage Demo",
+      "headings": [
+        "Tech Radar"
+      ],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "Tech Radar"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/visualizer/tree",
+      "title": "Visualizer",
+      "headings": [],
+      "links": [
+        {
+          "label": "Home",
+          "to": "/home"
+        },
+        {
+          "label": "Catalog",
+          "to": "/catalog"
+        },
+        {
+          "label": "My Group",
+          "to": "/catalog/default/Group/team-a"
+        },
+        {
+          "label": "APIs",
+          "to": "/api-docs"
+        },
+        {
+          "label": "Docs",
+          "to": "/docs"
+        },
+        {
+          "label": "Create",
+          "to": "/create"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Tech Radar",
+          "to": "/tech-radar"
+        },
+        {
+          "label": "MUI to BUI",
+          "to": "/mui-to-bui"
+        },
+        {
+          "label": "Visualizer",
+          "to": "/visualizer"
+        },
+        {
+          "label": "Notifications",
+          "to": "/notifications"
+        },
+        {
+          "label": "Settings",
+          "to": "/settings"
+        }
+      ],
+      "buttons": [
+        "Search",
+        "Copy as JSON",
+        "Tree",
+        "Detailed",
+        "Text",
+        "Toggle fullscreen"
+      ],
+      "fields": []
+    }
+  ],
+  "source": {
+    "url": "https://demo.backstage.io/",
+    "maxPages": 30,
+    "docs": [],
+    "maxDepth": 3,
+    "reader": "browser"
+  },
+  "createdAt": "2026-11-15T06:33:21.707Z",
+  "updatedAt": "2026-11-15T23:00:53.687Z"
+}

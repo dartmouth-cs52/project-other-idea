@@ -22,12 +22,26 @@ const OUTCOME = `case
   when coalesce(g.last_step_at, g.started_at) < now() - interval '${ABANDONED_AFTER}' then 'abandoned'
   else 'under_way' end`;
 
+/** A guide still open that hasn't moved for this long is shown as paused: the person has most likely walked away. */
+const PAUSED_AFTER = "2 minutes";
+/**
+ * True for a guide with no ending whose newest step, or its question if it has no step, is older than
+ * that. It only changes the words beside a guide. Nothing is counted by it, and a guide still becomes
+ * abandoned on the same clock as before. The database's own clock decides, so a dashboard on a computer
+ * whose clock is wrong shows the same thing as any other.
+ */
+export const PAUSED = `(g.outcome is null and coalesce(g.last_step_at, g.started_at) < now() - interval '${PAUSED_AFTER}')`;
+
 /**
  * The visitor got what they came for: they said so, or the guide finished, was answered in words, or showed them
  * where it is, and they didn't say it didn't help. A first answer they read without clicking ("shown") counts:
  * Haptic knew where it was, which is what "can't find" is about.
+ *
+ * A guide with no ending has a null outcome, and "null in (...)" is null in SQL, not false. The check
+ * for null keeps this false for such a guide, so "not SUCCEEDED" holds for it. Without it an abandoned
+ * guide was left out of where people stopped, and the dashboard said they got no first step.
  */
-export const SUCCEEDED = `(g.helped is true or (g.helped is distinct from false and g.outcome in ('finished', 'answered', 'shown')))`;
+export const SUCCEEDED = `(g.helped is true or (g.helped is distinct from false and g.outcome is not null and g.outcome in ('finished', 'answered', 'shown')))`;
 /**
  * Guides that count toward finding and finishing. Not one still under way,
  * and not one no change to the product could finish: a question left for a
@@ -93,7 +107,7 @@ export async function cantFind(sql: Sql, site: string, since: string): Promise<C
 /** The guides in one group, newest first, for the dashboard to open one by one. */
 export async function groupGuides(sql: Sql, site: string, key: string, since: string) {
   return sql.query(
-    `select g.id, g.question, g.started_at, g.helped, ${OUTCOME} as outcome, g.step_count
+    `select g.id, g.question, g.started_at, g.helped, ${OUTCOME} as outcome, ${PAUSED} as paused, g.step_count
     from guides g where g.site_id = $1 and g.question_group = $2 and g.started_at >= $3
     order by g.started_at desc limit 50`,
     [site, key.slice(0, 300), since],

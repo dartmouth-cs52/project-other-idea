@@ -11,18 +11,29 @@ const MAX_CORRECTIONS = 200;
 const MAX_BLOCKED = 50;
 /** The kinds of control a person can pick. They match the roles the widget gives what it lists. */
 export const CONTROL_ROLES = ["button", "link", "tab", "menuitem", "textbox", "select", "checkbox", "radio", "switch", "combobox", "option", "clickable"];
-/** How many visitors must have seen a learned label before it is offered here, as it is before the prompt gets it. */
+/**
+ * How many visitors must have seen a learned label, from how many networks, before it is offered here, as before the
+ * prompt gets it (src/server/learned.ts). Anyone can make up visitors, so a label from one network is never offered.
+ */
 const LEARNED_SHOWN_AT = 3;
 
-export class Invalid extends Error {}
+/** A correction or list turned away. `field` names the one input at fault, as Refusal's does in app-api.ts. */
+export class Invalid extends Error {
+  constructor(
+    message: string,
+    readonly field?: string,
+  ) {
+    super(message);
+  }
+}
 
 function control(input: unknown): ControlName {
   const raw = (input ?? {}) as Record<string, unknown>;
   const label = typeof raw.label === "string" ? raw.label.replace(/\s+/g, " ").trim() : "";
-  if (!label) throw new Invalid("Name the control by the words on it.");
-  if (label.length > 80) throw new Invalid("That label is too long. Use the words on the control.");
+  if (!label) throw new Invalid("Name the control by the words on it.", "label");
+  if (label.length > 80) throw new Invalid("That label is too long. Use the words on the control.", "label");
   const role = typeof raw.role === "string" && raw.role ? raw.role : undefined;
-  if (role && !CONTROL_ROLES.includes(role)) throw new Invalid(`"${role.slice(0, 20)}" isn't a kind of control.`);
+  if (role && !CONTROL_ROLES.includes(role)) throw new Invalid(`"${role.slice(0, 20)}" isn't a kind of control.`, "role");
   return role ? { role, label } : { label };
 }
 
@@ -48,11 +59,12 @@ export async function knownControls(sql: Sql, site: { id: string; context: SiteC
   for (const label of page?.fields ?? []) add("textbox", label);
   try {
     const learned = (await sql`
-      select kind, label from outline_labels where site_id = ${site.id} and route = ${route} and kind in ('link', 'button') and visitor_count >= ${LEARNED_SHOWN_AT}
-      order by visitor_count desc, seen_count desc limit 100`) as { kind: string; label: string }[];
+      select kind, label from outline_labels where site_id = ${site.id} and route = ${route} and kind in ('link', 'button')
+        and visitor_count >= ${LEARNED_SHOWN_AT} and network_count >= ${LEARNED_SHOWN_AT}
+      order by network_count desc, visitor_count desc, seen_count desc limit 100`) as { kind: string; label: string }[];
     for (const row of learned) add(row.kind, row.label);
   } catch {
-    // Nothing learned yet, or the table isn't there. The crawl's controls are still offered.
+    // Nothing learned yet, or the table or its networks (db/migrations/0014) aren't there. The crawl's controls are still offered.
   }
   return found.slice(0, 200);
 }

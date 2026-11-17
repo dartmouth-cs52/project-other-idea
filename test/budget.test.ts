@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { admit, DEFAULT_LIMITS, describeAlert, emptyMeter, limitsFor, MemoryBudget, settle, type Ceiling, type Limits } from "../src/server/budget.ts";
+import { admit, DEFAULT_LIMITS, describeAlert, emptyMeter, limitsFor, MemoryBudget, meterFor, settle, type Ceiling, type Limits } from "../src/server/budget.ts";
 import { configure } from "../src/server/model.ts";
 import { costOf } from "../src/server/prices.ts";
 import { DEFAULT_APPEARANCE, STREAM_TYPE, type SiteContext } from "../src/shared/types.ts";
@@ -168,6 +168,11 @@ test("a site's own limits come first, then the server's settings, then the defau
   assert.deepEqual(limitsFor(site, {}), { ...DEFAULT_LIMITS });
   assert.deepEqual(limitsFor(site, { HAPTIC_BUDGET_HOUR: "5", HAPTIC_BUDGET_DAY: "junk" }), { hour: 5, day: DEFAULT_LIMITS.day });
   assert.deepEqual(limitsFor({ ...site, budget: { day: 40, perCaller: 30 } }, { HAPTIC_BUDGET_HOUR: "5", HAPTIC_BUDGET_DAY: "20" }), { hour: 5, day: 40, perCaller: 30 });
+  // A server whose sites share one meter, like staging, holds every site to its own limits, whatever a site sets.
+  const own = { ...site, budget: { hour: 50, day: 400, perCaller: 30 } };
+  assert.deepEqual(meterFor(own, { HAPTIC_BUDGET_HOUR: "1", HAPTIC_BUDGET_DAY: "3" }), { name: own.id, limits: { hour: 50, day: 400, perCaller: 30 } });
+  assert.deepEqual(meterFor(own, { HAPTIC_BUDGET_HOUR: "1", HAPTIC_BUDGET_DAY: "3", HAPTIC_BUDGET_SHARED: "1" }), { name: "all sites", limits: { hour: 1, day: 3 } });
+  assert.equal(meterFor({ ...site, id: "site_other" }, { HAPTIC_BUDGET_SHARED: "1" }).name, "all sites");
 });
 
 const turn = (headers: Record<string, string> = {}) =>

@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { chromium, firefox, webkit, type Browser, type BrowserType, type Page } from "playwright";
+import { widgetBundles } from "../../src/widget/build.ts";
 import { DEFAULT_APPEARANCE, STREAM_TYPE, type PublicSiteConfig, type SnapElement, type TurnReply, type TurnRequest } from "../../src/shared/types.ts";
 
 // Runs the real widget in real browsers, against a small server that serves
@@ -21,12 +22,10 @@ const ENGINES: Record<string, BrowserType> = { chromium, firefox, webkit };
 /** The engines this run covers. */
 export const BROWSERS = (process.env.BROWSERS ?? "chromium,firefox,webkit").split(",").map((name) => name.trim()).filter((name) => name in ENGINES);
 
-let bundle: Promise<string> | undefined;
-/** The widget as the script tag loads it, built once per run. Not minified, so a failure points at a readable line. */
-export function widgetBundle(): Promise<string> {
-  bundle ??= build({ entryPoints: [`${root}src/widget/index.ts`], bundle: true, format: "iife", target: "es2020", write: false }).then(
-    (result) => result.outputFiles[0]!.text,
-  );
+let bundle: Promise<{ widget: string; acting: string; teach: string }> | undefined;
+/** The widget's two files, widget.js and the code that acts, as the server serves them, built once per run. Not minified, so a failure points at a readable line. */
+export function widgetBundle(): Promise<{ widget: string; acting: string; teach: string }> {
+  bundle ??= widgetBundles({ minify: false });
   return bundle;
 }
 
@@ -81,7 +80,7 @@ export interface Harness {
 }
 
 export async function startHarness(): Promise<Harness> {
-  const widget = await widgetBundle();
+  const { widget, acting, teach } = await widgetBundle();
   const harness: Harness = {
     url: "",
     pages: new Map(),
@@ -95,6 +94,8 @@ export async function startHarness(): Promise<Harness> {
   const server: Server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/widget.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(widget);
+    if (url.pathname === "/widget-act.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(acting);
+    if (url.pathname === "/widget-teach.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(teach);
     if (url.pathname.startsWith("/v1/sites/")) return res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(harness.config));
     if (req.method === "POST" && url.pathname === "/v1/turn") {
       const request = JSON.parse(await readBody(req)) as TurnRequest;
@@ -154,8 +155,13 @@ export function page(body: string, head = ""): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Fixture</title>${head}</head><body>${body}<script src="/widget.js" data-site="site_test" async></script></body></html>`;
 }
 
-export async function launch(name: string): Promise<Browser> {
-  return ENGINES[name]!.launch();
+/** CHROMIUM_PATH runs Chromium from a browser already on the machine, where Playwright's own download isn't there. */
+export async function launch(name: string, how: { full?: boolean } = {}): Promise<Browser> {
+  const executablePath = name === "chromium" ? process.env.CHROMIUM_PATH : undefined;
+  if (executablePath) return ENGINES[name]!.launch({ executablePath });
+  // Playwright runs Chromium's headless shell unless asked for the whole browser, and the shell lacks some of it, such
+  // as autofill. `npx playwright install chromium` downloads both.
+  return ENGINES[name]!.launch(how.full && name === "chromium" ? { channel: "chromium" } : {});
 }
 
 /** Opens the panel, types the question and sends it. */
