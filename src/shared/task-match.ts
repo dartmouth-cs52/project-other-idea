@@ -15,6 +15,11 @@ import { questionKey } from "./types";
 // - the thing acted on: the head of what follows the action, the last word
 //   before a preposition, so "add a marketing budget" and "add a budget for
 //   marketing" are about a budget, and "add a budget owner" is about an owner;
+// - which one, where the taught question says: the words before the thing in
+//   "pay the Brightdesk Coworking bill" say which bill. A question that names
+//   no bill ("where do I pay bills") or one of the same words ("pay the
+//   Brightdesk bill") is that task. One that names something else instead
+//   ("pay the Fjord Freight bill") is not;
 // - and neither asks what not to do: a question with "not", "don't",
 //   "can't", "without" and the like never matches.
 //
@@ -104,11 +109,15 @@ const PREPOSITIONS = new Set([
   "para", "por", "en", "con", "de", "del", "al", "pour", "dans", "avec", "sur", "au", "aux", "fur", "zu", "zum", "zur", "im", "mit", "von", "vom", "auf", "voor", "naar", "met", "van", "op", "per", "da", "di", "nel", "nella", "sul",
 ]);
 
-/** What a question is read as: its actions, the thing acted on, and whether it is about not doing something. */
+/** What a question is read as: its actions, the thing acted on, which one, and whether it is about not doing something. */
 export interface TaskReading {
   actions: Action[];
   /** The head of what is acted on, stemmed: "budget" for "a marketing budget for Q1". */
   object?: string;
+  /** The words before the head, which say which one, stemmed: "marketing" for "a marketing budget for Q1". */
+  which: string[];
+  /** Every word that carries meaning and is neither an action nor the head, stemmed: "marketing" and "q1" there. */
+  names: string[];
   negated: boolean;
 }
 
@@ -170,27 +179,36 @@ export function readTask(question: string): TaskReading {
     actions.add("explain");
   }
   // "Adding a teammate" is inviting one.
-  const object = objectOf(words, marked);
+  const { object, which } = objectOf(words, marked);
   if (actions.has("create") && object && PEOPLE.has(object)) {
     actions.delete("create");
     actions.add("invite");
   }
-  return { actions: [...actions].sort(), ...(object ? { object } : {}), negated };
+  const names = new Set<string>();
+  for (let at = 0; at < words.length; at++) {
+    const word = stemWord(words[at]!);
+    if (carriesMeaning(words, marked, at) && !PREPOSITIONS.has(words[at]!) && word !== object) names.add(word);
+  }
+  return { actions: [...actions].sort(), ...(object ? { object } : {}), which, names: [...names], negated };
+}
+
+/** True for a word that says something about the task: not an action word, a filler, a negation, a vague verb, a number or a masked value. */
+function carriesMeaning(words: string[], marked: Set<number>, at: number): boolean {
+  const word = words[at]!;
+  return !marked.has(at) && !FILLER.has(word) && !NEGATIONS.has(word) && !AMBIGUOUS.has(word) && word.length > 1 && !/^\d+$/.test(word) && !/^\[(?:email|number)\]$/.test(word);
 }
 
 /** Heads that are people: adding one of them is inviting them. */
 const PEOPLE = new Set(["user", "teammate", "member", "person", "people", "employee", "colleague", "coworker", "admin", "approver", "collaborator"]);
 
 /**
- * The head of what is acted on: the content words after the first action
- * word, up to a preposition, and the last of them. A language that puts the
- * verb last ("budget erstellen") has them before it instead.
+ * What is acted on: the content words after the first action word, up to a
+ * preposition. The last of them is the head, and those before it say which
+ * one. A language that puts the verb last ("budget erstellen") has them
+ * before it instead.
  */
-function objectOf(words: string[], marked: Set<number>): string | undefined {
-  const content = (at: number) => {
-    const word = words[at]!;
-    return !marked.has(at) && !FILLER.has(word) && !NEGATIONS.has(word) && !AMBIGUOUS.has(word) && word.length > 1 && !/^\d+$/.test(word) && !/^\[(?:email|number)\]$/.test(word);
-  };
+function objectOf(words: string[], marked: Set<number>): { object?: string; which: string[] } {
+  const content = (at: number) => carriesMeaning(words, marked, at);
   const firstAction = [...marked].sort((a, b) => a - b)[0];
   const phrase: string[] = [];
   if (firstAction !== undefined) {
@@ -213,7 +231,9 @@ function objectOf(words: string[], marked: Set<number>): string | undefined {
     }
   }
   const head = phrase[phrase.length - 1];
-  return head ? stemWord(head) : undefined;
+  if (!head) return { which: [] };
+  const object = stemWord(head);
+  return { object, which: [...new Set(phrase.slice(0, -1).map(stemWord))].filter((word) => word !== object) };
 }
 
 /**
@@ -228,5 +248,8 @@ export function sameTask(taught: string, asked: string): boolean {
   if (x.negated || y.negated) return false;
   if (!x.actions.length || x.actions.length !== y.actions.length || x.actions.some((action, index) => action !== y.actions[index])) return false;
   if (x.actions.includes("explain")) return false;
-  return !!x.object && x.object === y.object;
+  if (!x.object || x.object !== y.object) return false;
+  // The taught question says which one, and the visitor's names something else instead: another vendor's bill, another team's budget.
+  if (x.which.length && y.names.length && !x.which.some((word) => y.names.includes(word))) return false;
+  return true;
 }

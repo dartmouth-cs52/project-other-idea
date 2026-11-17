@@ -426,6 +426,72 @@
       "asked": "remove a teammate",
       "match": false,
       "why": "remove"
+    },
+    {
+      "taught": "pay the Brightdesk Coworking bill",
+      "asked": "how do I pay the Brightdesk bill",
+      "match": true,
+      "why": "one of the words that say which bill is enough"
+    },
+    {
+      "taught": "pay the Brightdesk Coworking bill",
+      "asked": "pay a bill from Brightdesk Coworking",
+      "match": true,
+      "why": "the same bill, named after the thing"
+    },
+    {
+      "taught": "pay the Brightdesk Coworking bill",
+      "asked": "where do I pay bills",
+      "match": true,
+      "why": "names no bill, so it may be this one"
+    },
+    {
+      "taught": "how do I pay a bill",
+      "asked": "pay the Fjord Freight bill",
+      "match": true,
+      "why": "taught for any bill"
+    },
+    {
+      "taught": "how do I add a marketing budget",
+      "asked": "create a budget for marketing",
+      "match": true,
+      "why": "the same budget, named after the thing"
+    },
+    {
+      "taught": "pay the Brightdesk Coworking bill",
+      "asked": "pay the Fjord Freight bill",
+      "match": false,
+      "why": "another vendor's bill"
+    },
+    {
+      "taught": "pay the Brightdesk Coworking bill",
+      "asked": "pay a bill from Fjord Freight",
+      "match": false,
+      "why": "another vendor, named after the thing"
+    },
+    {
+      "taught": "how do I pay the Brightdesk bill",
+      "asked": "pagar la bill de Fjord Freight",
+      "match": false,
+      "why": "another vendor, in Spanish"
+    },
+    {
+      "taught": "pay the Brightdesk Coworking bill",
+      "asked": "pay the overdue bill",
+      "match": false,
+      "why": "says which bill in other words: unsure"
+    },
+    {
+      "taught": "how do I add a marketing budget",
+      "asked": "add a sales budget",
+      "match": false,
+      "why": "another team's budget"
+    },
+    {
+      "taught": "how do I change the billing address",
+      "asked": "change the shipping address",
+      "match": false,
+      "why": "another address"
     }
   ]
 }
