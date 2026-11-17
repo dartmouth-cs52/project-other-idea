@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { actingProblems } from "../server/acting.ts";
 import { Store } from "../server/db.ts";
 import { listSiteIds, loadSite } from "../server/sites.ts";
+import { suggestionsProblem } from "../shared/suggestions.ts";
 import type { SiteContext } from "../shared/types.ts";
 
 // Copies site contexts from data/sites into Neon, which the online server reads.
@@ -49,6 +50,12 @@ for (const id of ids) {
   const problems = site.acting?.enabled === false ? [] : actingProblems(site.acting);
   if (problems.length) {
     console.error(`Nothing was published, because of ${id}: ${problems.join(" ")}`);
+    process.exit(1);
+  }
+  // Suggested questions are checked as the dashboard checks them. A file without any keeps the ones set in the dashboard.
+  const wrong = suggestionsProblem(site.suggestions);
+  if (wrong) {
+    console.error(`Nothing was published, because of ${id}. ${wrong}`);
     process.exit(1);
   }
   sites.push(site);

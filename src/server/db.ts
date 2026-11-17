@@ -1,5 +1,6 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { BLOCKED_SAY } from "../shared/corrections.ts";
+import { checkSuggestions } from "../shared/suggestions.ts";
 import { cleanText, normalizePath, NO_MODEL, questionKey, REASONS, type GuideOutcome, type GuideReport, type PageOutline, type SiteContext, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { MAX_VISITORS, openingRows, outlineRows, visitorHash, withLearned, type LearnedLabel, type LearnedOpening } from "./learned.ts";
 import type { TurnMeasure } from "./model.ts";
@@ -219,14 +220,17 @@ export class Store {
 
   /**
    * Saves a site built by `npm run tag`. A site the team made by hand has no company until one claims it.
-   * Corrections and controls never to point at are made in the dashboard, so a publish keeps them unless it brings its own.
+   * Corrections, controls never to point at and suggested questions are made in the dashboard, so a publish keeps them
+   * unless it brings its own. Suggested questions it brings are checked and cleaned first, and refused if they can't be.
    */
   async saveSite(site: SiteContext): Promise<void> {
+    const saved = site.suggestions === undefined ? site : { ...site, suggestions: checkSuggestions(site.suggestions) };
     await this.sql`
       insert into sites (id, name, origin, allowed_origins, context)
-      values (${site.id}, ${site.name}, ${site.origin}, ${site.allowedOrigins}, ${JSON.stringify(site)}::jsonb)
+      values (${site.id}, ${site.name}, ${site.origin}, ${site.allowedOrigins}, ${JSON.stringify(saved)}::jsonb)
       on conflict (id) do update set name = excluded.name, origin = excluded.origin, allowed_origins = excluded.allowed_origins,
-        context = jsonb_strip_nulls(jsonb_build_object('corrections', sites.context->'corrections', 'blocked', sites.context->'blocked')) || excluded.context,
+        context = jsonb_strip_nulls(jsonb_build_object('corrections', sites.context->'corrections', 'blocked', sites.context->'blocked',
+          'suggestions', sites.context->'suggestions')) || excluded.context,
         updated_at = now()`;
   }
 

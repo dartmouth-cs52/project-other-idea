@@ -5,6 +5,7 @@ import { actingProblems } from "../server/acting.ts";
 import { webhookAllowed } from "../server/handoff.ts";
 import { buildSystemPrompt, docsThatFit, renderSiteMap } from "../server/prompt.ts";
 import { listSiteIds, loadSite, saveSite } from "../server/sites.ts";
+import { checkSuggestions, SuggestionsRefused } from "../shared/suggestions.ts";
 import { answersOn, DEFAULT_APPEARANCE, type SiteContext, type SiteSource } from "../shared/types.ts";
 import { browseSite, canBrowse, MAP_BUDGET } from "./browse.ts";
 import { crawlSite, type CrawlResult } from "./crawl.ts";
@@ -17,6 +18,7 @@ import { loadDocs } from "./docs.ts";
 //   npm run tag -- --url https://app.acme.com --session signed-in.json
 //   npm run tag -- refresh site_ab12cd34ef     (or: refresh --all, for a cron job)
 //   npm run tag -- acting site_ab12cd34ef on  (or off: "do it with me", without reading the site again)
+//   npm run tag -- suggestions site_ab12cd34ef --suggest "Lock my card" --suggest-do "Issue a virtual card"
 
 const HELP = `Usage:
   npm run tag -- --url <site url> [options]     Build a site's context and print its script tag
@@ -24,6 +26,10 @@ const HELP = `Usage:
   npm run tag -- acting <site id> on|off        Let Haptic use the page's controls when a visitor presses
                                                 Do it, or stop it, without reading the site again.
                                                 Publish the site afterwards for it to take effect.
+  npm run tag -- suggestions <site id> [--suggest <text>]... [--suggest-do <text>]...
+                                                Set the questions suggested above the ask box, in the
+                                                order given, without reading the site again. None given
+                                                takes them all away. Publish the site afterwards.
 
 Options:
   --url <url>          Where to start reading the site. Required.
@@ -62,11 +68,17 @@ Options:
                        and always leaves the click that saves, sends or pays to them. Default off. Where it
                        may act (acting.paths) and the company's own commit words (acting.commitWords) are
                        set in the site file and kept when the site is built again.
+  --suggest <text>     A question to suggest above the ask box, for a visitor to press. One line of up to
+                       60 characters. Repeat for up to 3, in the order they show. Kept when the site is built
+                       again unless given again.
+  --suggest-do <text>  The same, pressed as Do it with me where acting is on, and as an ordinary question
+                       anywhere else. Mix it with --suggest in the order they should show.
   --id <site id>       Use this id, or rebuild the site that has it, keeping what isn't given again.
   --host <url>         Where the Haptic server is reachable. Default $HAPTIC_PUBLIC_URL or http://localhost:4000.`;
 
-const { values, positionals } = parseArgs({
+const { values, positionals, tokens } = parseArgs({
   allowPositionals: true,
+  tokens: true,
   options: {
     url: { type: "string" },
     name: { type: "string" },
@@ -96,6 +108,8 @@ const { values, positionals } = parseArgs({
     "budget-day": { type: "string" },
     "visitor-steps": { type: "string" },
     acting: { type: "string" },
+    suggest: { type: "string", multiple: true },
+    "suggest-do": { type: "string", multiple: true },
     id: { type: "string" },
     host: { type: "string" },
     all: { type: "boolean" },
@@ -132,6 +146,30 @@ function switchActing(site: SiteContext, on: boolean): SiteContext["acting"] {
   const problems = actingProblems({ ...kept, enabled: on });
   if (on && problems.length) fail(`Acting was left off for ${site.id}, because its settings in the site file can't be read: ${problems.join(" ")}`);
   return { ...kept, enabled: on };
+}
+
+/**
+ * The suggested questions given with --suggest and --suggest-do, in the order they were given, checked and cleaned as
+ * the dashboard does. Undefined when neither flag was given.
+ */
+function givenSuggestions(): SiteContext["suggestions"] {
+  const given = tokens.flatMap((token) =>
+    token.kind === "option" && (token.name === "suggest" || token.name === "suggest-do") ? [{ text: token.value ?? "", act: token.name === "suggest-do" }] : [],
+  );
+  if (!given.length) return undefined;
+  try {
+    return checkSuggestions(given);
+  } catch (error) {
+    if (!(error instanceof SuggestionsRefused)) throw error;
+    fail(error.index === undefined ? error.message : `"${given[error.index]?.text}": ${error.message}`);
+  }
+}
+
+/** The suggested questions, one line each, as the widget shows them. */
+function suggestionLines(site: SiteContext): string {
+  const list = site.suggestions ?? [];
+  if (!list.length) return "No suggested questions: the ask box opens with none above it.";
+  return `Suggested above the ask box:\n${list.map((one) => `  ${one.text}${one.act ? "  (Do it with me, where acting is on)" : ""}`).join("\n")}`;
 }
 
 /** One line on whether and where Haptic may act on the site. */
@@ -257,6 +295,20 @@ async function main() {
     console.log(`${actingLine(site)}\nThe online server reads it once it is published: npm run site:publish -- ${site.id}`);
     return;
   }
+  if (positionals[0] === "suggestions") {
+    const [, id] = positionals;
+    if (!id || positionals.length !== 2) fail('Say which site, and the questions: npm run tag -- suggestions site_ab12cd34ef --suggest "Lock my card"');
+    const others = Object.keys(values).filter((flag) => !["suggest", "suggest-do", "host"].includes(flag));
+    if (others.length) fail(`suggestions changes only the suggested questions, so --${others[0]} would be ignored.`);
+    const site = await loadSite(id);
+    if (!site) fail(`No site with the id ${id}.`);
+    // An empty list is kept as one, so publishing it takes away the ones set in the dashboard too.
+    site.suggestions = givenSuggestions() ?? [];
+    site.updatedAt = new Date().toISOString();
+    await saveSite(site);
+    console.log(`${suggestionLines(site)}\nThe online server reads them once the site is published: npm run site:publish -- ${site.id}`);
+    return;
+  }
   if (positionals.length) fail(`Unknown command "${positionals[0]}".\n\n${HELP}`);
 
   const existing = values.id ? await loadSite(values.id) : undefined;
@@ -266,6 +318,7 @@ async function main() {
   if (values.accent && !/^#[0-9a-f]{6}$/i.test(values.accent)) fail(`--accent has to be a hex color like #5b5bd6, not "${values.accent}".`);
   if (values.position && values.position !== "bottom-right" && values.position !== "bottom-left") fail("--position is bottom-right or bottom-left.");
   const actingOn = onOrOff(values.acting, "--acting");
+  const suggestions = givenSuggestions() ?? existing?.suggestions;
   const maxPages = Number(values["max-pages"] ?? existing?.source.maxPages ?? 30);
   if (!Number.isInteger(maxPages) || maxPages < 1) fail("--max-pages has to be a whole number, 1 or more.");
   if (!Number.isInteger(pace) || pace < 0) fail("--pace has to be a whole number of milliseconds.");
@@ -338,6 +391,7 @@ async function main() {
     ...(Object.keys(budget).length ? { budget } : {}),
     ...(answers ? { answers } : {}),
     ...(Object.keys(handoff).length ? { handoff } : {}),
+    ...(suggestions ? { suggestions } : {}),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
@@ -350,6 +404,7 @@ async function main() {
   console.log(`\nSaved ${site.name} to ${file}`);
   console.log(`The widget will run on: ${site.allowedOrigins.join(", ")}`);
   if (site.acting) console.log(actingLine(site));
+  if (site.suggestions?.length) console.log(suggestionLines(site));
   console.log(`\nPaste this just before </body> on every page:\n\n${scriptTag(site)}\n`);
 }
 

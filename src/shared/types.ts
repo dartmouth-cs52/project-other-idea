@@ -47,6 +47,11 @@ export interface SiteContext {
   corrections?: Correction[];
   /** Controls Haptic must never point at, like "Delete workspace". Enforced by the server and the widget, not left to the prompt. */
   blocked?: ControlName[];
+  /**
+   * Up to three questions the company suggests, shown above the ask box for a visitor to press. The company's own
+   * words, never a visitor's. Checked and cleaned when saved (src/shared/suggestions.ts). None: the widget shows none.
+   */
+  suggestions?: Suggestion[];
   createdAt: string;
   updatedAt: string;
 }
@@ -185,6 +190,19 @@ export interface PublicSiteConfig {
   /** Controls Haptic must never point at. The widget checks every pointer against it. */
   blocked?: ControlName[];
   handoff?: PublicHandoff;
+  /** The questions the company suggests, when it has any. `act` is sent only while the site has acting on. */
+  suggestions?: Suggestion[];
+}
+
+/**
+ * A question the company suggests, shown as a pill above the ask box. Pressing it asks it, exactly as if the visitor
+ * had typed it and pressed send. With `act`, pressing it is pressing Do it, where acting is on for the site and the
+ * page, with the same first-use line and the same gate; anywhere else it is an ordinary question.
+ */
+export interface Suggestion {
+  /** One line, 1 to 60 characters. */
+  text: string;
+  act?: boolean;
 }
 
 // Acting ("do it with me") ----------------------------------------------------

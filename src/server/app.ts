@@ -14,6 +14,7 @@ import {
   type TurnReply,
   type TurnRequest,
 } from "../shared/types.ts";
+import { usableSuggestions } from "../shared/suggestions.ts";
 import { publicActing } from "./acting.ts";
 import type { Alert, Budget, Gate } from "./budget.ts";
 import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
@@ -144,6 +145,9 @@ export function createApp(parts: AppParts) {
         // Only a site with acting on says anything about it, so every other site's settings read as they always have.
         const acting = publicActing(site);
         if (acting) config.acting = acting;
+        // The company's own suggested questions, and only those that pass their check. Each says it is one to do only while acting is on.
+        const suggestions = usableSuggestions(site.suggestions, acting !== undefined);
+        if (suggestions.length) config.suggestions = suggestions;
       }
       if (site.learn === false) config.learn = false;
       if (site.blocked?.length) config.blocked = site.blocked;
