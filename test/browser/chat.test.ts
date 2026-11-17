@@ -56,6 +56,9 @@ const watchClasses = (tab: Page) =>
     }
   });
 const seen = (tab: Page) => tab.evaluate(() => (window as unknown as { seen: string[] }).seen);
+/** How far up the launcher and the chat sit from the window's bottom, and how far its right edge is from the window's. */
+const dockBottom = (tab: Page) => part(tab, ".dock").evaluate((dock) => Math.round(parseFloat(getComputedStyle(dock).bottom)));
+const inFromRight = (tab: Page) => part(tab, ".launcher").evaluate((el) => Math.round(window.innerWidth - el.getBoundingClientRect().right));
 
 /** The glow's element, as the browser has it: whether it is displayed, how it is blended into the page, and where it sits. */
 const veil = (tab: Page) =>
@@ -415,23 +418,49 @@ for (const name of BROWSERS) {
       await still.close();
     });
 
-    test("moves to the other side of the window when it would cover the control, and comes back when the pointer has gone", async () => {
+    test("moves up the right side of the window when it would cover the control, and back down when the pointer has gone", async () => {
       harness.script = async (request, index) => {
         if (index > 0) await sleep(500);
         return point(idOf(request, index === 0 ? "Save changes" : "Invite teammate"), "Click it.");
       };
-      const side = () => part(tab, ".dock").evaluate((dock) => (dock.classList.contains("left") ? "left" : "right"));
       await ask(tab, "save my changes");
       assert.ok(await ringAround(tab, "#corner"));
-      await tab.waitForFunction(() => document.querySelector("haptic-root")!.shadowRoot!.querySelector(".dock")!.classList.contains("left"), undefined, { timeout: 2000 });
-      assert.equal(await part(tab, ".panel").isVisible(), true, "the chat is still open, on the other side");
+      await tab.waitForFunction(() => parseFloat(getComputedStyle(document.querySelector("haptic-root")!.shadowRoot!.querySelector(".dock")!).bottom) > 20, undefined, { timeout: 2000 });
+      assert.equal(await part(tab, ".panel").isVisible(), true, "the chat is still open, above the control");
+      assert.equal(await inFromRight(tab), 20, "it went up, not sideways");
+      const [panel, corner] = await Promise.all([part(tab, ".panel").boundingBox(), tab.locator("#corner").boundingBox()]);
+      assert.ok(panel!.y + panel!.height < corner!.y, JSON.stringify({ panel, corner }));
       // The control it would have covered can be clicked.
       await tab.locator("#corner").click({ trial: true, timeout: 1000 });
 
       await tab.click("#corner");
       assert.ok(await ringAround(tab, "#invite"));
       await sleep(400);
-      assert.equal(await side(), "right", "it is back on its own side for a control it does not cover");
+      assert.equal(await dockBottom(tab), 20, "it is back in its corner for a control it does not cover");
+      assert.equal(await inFromRight(tab), 20);
+    });
+
+    test("with no room for the chat above the control, tucks the chat away for the step, and the launcher brings it back", async () => {
+      // A short window: the open chat can't fit between the control and the top of the window.
+      await tab.setViewportSize({ width: 1000, height: 420 });
+      harness.script = (request) => point(idOf(request, "Save changes"), "Click it.");
+      await ask(tab, "save my changes");
+      assert.ok(await ringAround(tab, "#corner"));
+      await part(tab, ".panel").waitFor({ state: "hidden", timeout: 2000 });
+      assert.equal(await guideState(tab), "pointing", "the guide carries on");
+      assert.equal(await inFromRight(tab), 20, "the launcher went up, not sideways");
+      // The launcher alone is clear of the control, in its corner here, and the control can be clicked.
+      const [launcher, corner] = await Promise.all([part(tab, ".launcher").boundingBox(), tab.locator("#corner").boundingBox()]);
+      const clear = launcher!.y >= corner!.y + corner!.height || launcher!.y + launcher!.height <= corner!.y || launcher!.x >= corner!.x + corner!.width;
+      assert.ok(clear, JSON.stringify({ launcher, corner }));
+      await tab.locator("#corner").click({ trial: true, timeout: 1000 });
+
+      // The visitor asks for it: it comes back, and stays for this step.
+      await part(tab, ".launcher").click();
+      assert.equal(await part(tab, ".panel").isVisible(), true);
+      await sleep(500);
+      assert.equal(await part(tab, ".panel").isVisible(), true, "it is not tucked away again");
+      assert.equal(await inFromRight(tab), 20);
     });
   });
 }

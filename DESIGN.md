@@ -471,8 +471,9 @@ Components are shadcn/ui, restyled only through tokens and variants.
 - **Caption:** Ink bubble with Paper text, 14px, at most 288px wide. Text only.
   It sits under the target, or above when the space under it is busy, and
   never over the next control.
-- **Launcher:** The pill in the bottom right corner that opens the chat. Ink
-  with Paper words. A company can give it its own site's colour, so it looks
+- **Launcher:** The pill in the bottom right corner that opens the chat. It
+  is on the right on every site and only ever moves up that side, to clear a
+  control of the page's, never across to the left. Ink with Paper words. A company can give it its own site's colour, so it looks
   like part of the site, the way a support button does. Its words are then
   Paper or Ink, whichever reads better on that colour. The pointer never takes
   the site's colour. The two have opposite jobs: the launcher belongs to the

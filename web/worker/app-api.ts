@@ -365,10 +365,9 @@ function appearanceFrom(input: unknown, current: Appearance): Appearance {
     if (typeof raw.accent !== "string" || !HEX.test(raw.accent)) throw new Refusal(400, "The colour must be a hex value like #1E6EF4.", "accent");
     next.accent = raw.accent.toUpperCase();
   }
-  if (raw.position !== undefined) {
-    if (raw.position !== "bottom-right" && raw.position !== "bottom-left") throw new Refusal(400, "The corner must be bottom-right or bottom-left.", "position");
-    next.position = raw.position;
-  }
+  // The launcher is bottom right on every site. A site stored on the left before that choice went is put right on any save.
+  if (raw.position !== undefined && raw.position !== "bottom-right") throw new Refusal(400, "The launcher is always in the bottom right corner.", "position");
+  next.position = "bottom-right";
   // The launcher's own colour. Null, or nothing, puts it back to Ink.
   if (raw.launcher !== undefined) {
     if (raw.launcher === null || raw.launcher === "") delete next.launcher;
