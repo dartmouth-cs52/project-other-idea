@@ -160,7 +160,7 @@ export function WidgetLook({ site, onChange }: { site: Site; onChange: (site: Si
     <form onSubmit={save} noValidate>
       <Card>
         <CardTitle>How the widget looks</CardTitle>
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <div className="flex flex-col gap-5">
             <Field id="launcher" label="Ask button colour" required error={fields.errors.launcher} hint="The button people press to ask. Match it to your website so it looks like part of it.">
               <div className="flex flex-wrap gap-2">

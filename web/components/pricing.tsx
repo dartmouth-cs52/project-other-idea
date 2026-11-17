@@ -29,7 +29,7 @@ export function Pricing() {
         names, the prices, what each includes and who it is for start at the same height across a row.
         The list's 16px gap is the space between those four inside a card, and between cards.
       */}
-      <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <ul className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {pricing.plans.map((plan) => (
           <li key={plan.id} className="row-span-4 grid grid-rows-subgrid rounded-xl border bg-muted p-6">
             <h3 className="font-medium">{plan.name}</h3>

@@ -186,7 +186,7 @@ function Plans({ billing, busy, onCheckout, onSwitch }: { billing: Billing; busy
   return (
     <Card>
       <CardTitle>Plans</CardTitle>
-      <ul className="grid gap-4 md:grid-cols-2">
+      <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {billing.plans.map((plan) => {
           const current = plan.id === billing.plan.id;
           return (

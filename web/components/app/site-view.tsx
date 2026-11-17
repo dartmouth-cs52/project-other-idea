@@ -209,7 +209,7 @@ function PagesRead({ reading }: { reading: Reading | null }) {
           : "Haptic is still reading your public pages, following links, tabs and menus. It never submits a form or changes anything."}
       </p>
       {reading.pages.length > 0 && (
-        <ul className="grid max-h-56 gap-x-6 gap-y-1 overflow-y-auto rounded-lg border bg-card p-4 text-sm sm:grid-cols-2">
+        <ul className="grid grid-cols-1 max-h-56 gap-x-6 gap-y-1 overflow-y-auto rounded-lg border bg-card p-4 text-sm sm:grid-cols-2">
           {reading.pages.map((page) => (
             <li key={page.path} className="truncate">
               <span>{page.title || page.path}</span> <span className="text-muted-foreground">{page.path}</span>
@@ -319,7 +319,7 @@ function ReadPages({ pages }: { pages: Pages }) {
       </p>
       {stalled && !done && <p className="text-sm text-muted-foreground">Reading stopped for now. It picks up again when you reload this page.</p>}
       {reading.pages.length > 0 && (
-        <ul className="grid max-h-56 gap-x-6 gap-y-1 overflow-y-auto rounded-lg border bg-card p-4 text-sm sm:grid-cols-2">
+        <ul className="grid grid-cols-1 max-h-56 gap-x-6 gap-y-1 overflow-y-auto rounded-lg border bg-card p-4 text-sm sm:grid-cols-2">
           {reading.pages.map((page) => (
             <li key={page.path} className="truncate">
               <span>{page.title || page.path}</span> <span className="text-muted-foreground">{page.path}</span>
