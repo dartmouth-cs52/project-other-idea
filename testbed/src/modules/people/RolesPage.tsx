@@ -74,7 +74,7 @@ function RolesBody() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {ROLES.map((r) => (
           <div key={r} className="flex flex-col gap-2 rounded-lg border border-line bg-panel p-4 shadow-xs">
             <span className="flex items-center justify-between">
@@ -104,7 +104,7 @@ function RolesBody() {
         description="Read-only for built-in roles."
         bodyClassName="p-0"
       >
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full border-separate border-spacing-0 text-[13px]">
             <thead>
               <tr>
@@ -219,7 +219,7 @@ function CustomRoleModal({ open, onOpenChange }: { open: boolean; onOpenChange: 
       }
     >
       <div className="flex flex-col gap-5">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Role name" error={error}>
             {(id) => <Input id={id} autoFocus value={name} aria-invalid={!!error} placeholder="Travel coordinator" onChange={(e) => (setName(e.target.value), setError(null))} />}
           </Field>
@@ -238,7 +238,7 @@ function CustomRoleModal({ open, onOpenChange }: { open: boolean; onOpenChange: 
             )}
           </Field>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {ACTION_GROUPS.map((g) => (
             <fieldset key={g.area} className="flex flex-col gap-2">
               <legend className="mb-1 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{g.area}</legend>

@@ -75,7 +75,7 @@ export function PoliciesPage() {
         {() => (
           <div className="flex flex-col gap-5">
             <RulesCard />
-            <div className="grid gap-5 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               <ReceiptRules />
               <PerDiem />
             </div>
@@ -155,8 +155,9 @@ function RuleRow({ rule, index, last, canEdit, onMove }: { rule: PolicyRule; ind
       </button>
       <span className="tabular w-5 text-center text-[12.5px] text-ink-3">{index + 1}</span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex items-center gap-2">
-          <Link to={`/policies/${rule.id}`} className={cn("truncate text-[13.5px] font-medium hover:underline", !rule.enabled && "text-ink-3")}>
+        {/* The badges go under the name when there is no room beside it, as on a phone, rather than squeezing it to nothing. */}
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Link to={`/policies/${rule.id}`} className={cn("max-w-full truncate text-[13.5px] font-medium hover:underline", !rule.enabled && "text-ink-3")}>
             {rule.name}
           </Link>
           <Badge tone={rule.action === "block" ? "danger" : rule.action === "require_approval" ? "brand" : "neutral"}>{ACTION_LABELS[rule.action]}</Badge>

@@ -27,7 +27,7 @@ export function SyncPage() {
 function SyncBody() {
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex flex-col gap-5">
           <LedgerbookCard />
           <FailedItems />

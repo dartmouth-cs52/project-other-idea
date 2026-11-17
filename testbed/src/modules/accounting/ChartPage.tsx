@@ -108,7 +108,7 @@ function ChartBody({ onAdd }: { onAdd: (parentId: string) => void }) {
         </span>
       </div>
       {/* Wider than the card, so it scrolls sideways inside it. The add button sits in the last column, on purpose. */}
-      <div className="overflow-x-auto" data-scroll="chart">
+      <div className="relative overflow-x-auto" data-scroll="chart">
         <table role="treegrid" aria-label="Chart of accounts" className="w-full min-w-[1480px] text-[13px]">
           <thead className="bg-sunken text-left text-[12px] text-ink-3">
             <tr>
@@ -241,7 +241,7 @@ function AddAccountModal({ parentId, open, onOpenChange }: { parentId: string | 
         </>
       }
     >
-      <div className="grid gap-3 sm:grid-cols-[120px_1fr]">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[120px_1fr]">
         <Field label="Parent account" className="sm:col-span-2">
           {(id) => <Combobox id={id} value={parent} onChange={setParent} options={accounts.map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} placeholder="None (top level)" />}
         </Field>

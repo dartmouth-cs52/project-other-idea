@@ -203,7 +203,7 @@ function Detail({ r }: { r: Reimbursement }) {
         }
       />
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
         <div className="flex flex-col gap-5">
           {r.status === "rejected" ? (
             <Callout tone="danger" title="Sent back">
@@ -366,8 +366,8 @@ function ReceiptPanel({ r }: { r: Reimbursement }) {
   if (r.kind === "mileage")
     return (
       <Card title="Route">
-        <div className="flex items-center gap-4 rounded-lg bg-sunken/70 p-4">
-          <svg viewBox="0 0 220 60" className="h-16 w-56 shrink-0" aria-hidden>
+        <div className="flex flex-wrap items-center gap-4 rounded-lg bg-sunken/70 p-4">
+          <svg viewBox="0 0 220 60" className="h-16 w-56 max-w-full shrink-0" aria-hidden>
             <path d="M10 45 C 60 5, 120 60, 210 15" fill="none" stroke="var(--np-brand)" strokeWidth="2.5" strokeDasharray="5 4" />
             <circle cx="10" cy="45" r="5" fill="var(--np-brand)" />
             <circle cx="210" cy="15" r="5" fill="var(--np-ink)" />

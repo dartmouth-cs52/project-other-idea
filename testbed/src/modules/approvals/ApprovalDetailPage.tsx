@@ -96,7 +96,7 @@ function Body({ a }: { a: Approval }) {
   const requester = people.get(a.requesterId);
   const subject = subjectHref(a);
   return (
-    <div className="grid gap-5 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
       <div className="flex flex-col gap-5 lg:col-span-2">
         <Card title="Request">
           <DescriptionList

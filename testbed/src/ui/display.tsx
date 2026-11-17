@@ -49,12 +49,12 @@ export function Card({ title, description, actions, children, className, bodyCla
   return (
     <section className={cn("rounded-lg border border-line bg-panel shadow-xs", className)}>
       {title || actions ? (
-        <header className="flex items-start justify-between gap-4 border-b border-line px-4 py-3">
+        <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b border-line px-4 py-3">
           <div className="flex min-w-0 flex-col gap-0.5">
             {title ? <h2 className="text-[14px] font-semibold text-ink">{title}</h2> : null}
             {description ? <p className="text-[12.5px] text-ink-3">{description}</p> : null}
           </div>
-          {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+          {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
         </header>
       ) : null}
       <div className={cn("p-4", bodyClassName)}>{children}</div>
@@ -110,7 +110,7 @@ export function PageHeader({ title, description, crumbs, actions, meta, tabs }: 
 /** Page-level tabs that are links, so each tab has its own address. */
 export function LinkTabs({ tabs, active }: { tabs: { to: string; label: string; count?: number }[]; active: string }) {
   return (
-    <div role="tablist" className="flex gap-4 overflow-x-auto border-b border-line">
+    <div role="tablist" className="relative flex gap-4 overflow-x-auto border-b border-line">
       {tabs.map((t) => (
         <Link
           key={t.to}
@@ -134,9 +134,9 @@ export function LinkTabs({ tabs, active }: { tabs: { to: string; label: string; 
 export function Tabs({ value, onValueChange, tabs, children, className }: { value: string; onValueChange: (v: string) => void; tabs: { value: string; label: ReactNode }[]; children: ReactNode; className?: string }) {
   return (
     <RTabs.Root value={value} onValueChange={onValueChange} className={className}>
-      <RTabs.List className="mb-4 flex gap-1 rounded-md bg-sunken p-1">
+      <RTabs.List className="relative mb-4 flex max-w-full gap-1 overflow-x-auto rounded-md bg-sunken p-1">
         {tabs.map((t) => (
-          <RTabs.Trigger key={t.value} value={t.value} className="cursor-pointer rounded-[5px] px-3 py-1 text-[13px] font-medium text-ink-3 data-[state=active]:bg-panel data-[state=active]:text-ink data-[state=active]:shadow-xs">
+          <RTabs.Trigger key={t.value} value={t.value} className="shrink-0 cursor-pointer rounded-[5px] px-3 py-1 text-[13px] font-medium whitespace-nowrap text-ink-3 data-[state=active]:bg-panel data-[state=active]:text-ink data-[state=active]:shadow-xs">
             {t.label}
           </RTabs.Trigger>
         ))}

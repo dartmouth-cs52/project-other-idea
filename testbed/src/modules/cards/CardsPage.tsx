@@ -261,7 +261,7 @@ function CardsBody({ view, scoped }: { view: View; scoped: Card[] }) {
           {rows.length === 0 ? (
             <NoCards onClear={() => setFilters(NO_FILTERS)} />
           ) : (
-            <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {rows.slice(0, 48).map((c) => {
                 const rule = freezeRule(c);
                 return (

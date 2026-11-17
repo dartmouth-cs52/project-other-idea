@@ -18,7 +18,8 @@ import { ConfirmDialog } from "./overlay";
 /** Steps across the top of a wizard. */
 export function Stepper({ steps, current }: { steps: string[]; current: number }) {
   return (
-    <ol className="flex items-center gap-2" aria-label="Progress">
+    // Wraps onto a second line on a phone rather than running off the side of the page.
+    <ol className="flex flex-wrap items-center gap-2" aria-label="Progress">
       {steps.map((s, i) => (
         <li key={s} className="flex items-center gap-2" aria-current={i === current ? "step" : undefined}>
           <span

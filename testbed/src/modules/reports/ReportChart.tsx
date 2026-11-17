@@ -147,7 +147,7 @@ export function PivotTable({ result, metric, rowLabel }: { result: Result; metri
   const pivot = result.pivot!;
   const colTotals = pivot.cols.map((c) => pivot.rows.reduce((s, r) => s + (pivot.cells.get(`${r.key}\u0000${c.key}`) ?? 0), 0));
   return (
-    <div className="max-h-[560px] overflow-auto" role="region" aria-label="Pivot table" tabIndex={0}>
+    <div className="relative max-h-[560px] overflow-auto" role="region" aria-label="Pivot table" tabIndex={0}>
       <table className="border-separate border-spacing-0 text-[12.5px]">
         <thead>
           <tr>

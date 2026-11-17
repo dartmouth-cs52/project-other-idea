@@ -155,7 +155,7 @@ function DetailBody({ tx, save, onSplit, onLost }: { tx: Transaction; save: (f: 
   const tagOptions = [...new Set([...TAG_OPTIONS, ...tx.tags])].map((t) => ({ value: t, label: t }));
 
   return (
-    <div className="grid gap-5 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
       <div className="flex flex-col gap-5 lg:col-span-2">
         {tx.violations.length ? (
           <Callout tone="warn" title={tx.violations.length === 1 ? "This charge breaks 1 policy" : `This charge breaks ${tx.violations.length} policies`}>
@@ -176,7 +176,7 @@ function DetailBody({ tx, save, onSplit, onLost }: { tx: Transaction; save: (f: 
         ) : null}
 
         <Card title="Details" description="Coding and notes for accounting. Changes save as you go.">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Category" hint={account ? `Posts to ${account.code} ${account.name}` : "Pick one so this posts to the right account."}>
               {(id) => (
                 <Combobox
@@ -395,7 +395,8 @@ function SplitModal({ tx, open, onOpenChange }: { tx: Transaction; open: boolean
       }
     >
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-[1fr_120px_1fr_28px] gap-2 text-xs font-medium text-ink-3">
+        {/* On a phone each line is two rows, the category over the amount and the memo, and these headings would not line up. */}
+        <div className="grid grid-cols-[1fr_120px_1fr_28px] gap-2 text-xs font-medium text-ink-3 max-sm:hidden">
           <span>Category</span>
           <span>Amount</span>
           <span>Memo</span>
@@ -403,11 +404,30 @@ function SplitModal({ tx, open, onOpenChange }: { tx: Transaction; open: boolean
         </div>
         {lines.map((l, i) => (
           <div key={l.key} className="flex flex-col gap-1">
-            <div className="grid grid-cols-[1fr_120px_1fr_28px] items-center gap-2">
-              <Combobox aria-label={`Line ${i + 1} category`} value={l.categoryId} options={categories} placeholder="Category" onChange={(v) => setLine(l.key, { categoryId: v })} />
-              <Input aria-label={`Line ${i + 1} amount`} type="number" step="0.01" min="0" prefix="$" value={l.amount} onChange={(e) => setLine(l.key, { amount: e.target.value })} aria-invalid={tried && !!lineErrors[i]} />
-              <Input aria-label={`Line ${i + 1} memo`} value={l.memo} onChange={(e) => setLine(l.key, { memo: e.target.value })} placeholder="Optional" />
-              <IconButton label={`Remove line ${i + 1}`} size="icon-sm" icon={<Trash2 />} disabled={lines.length <= 2} onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} />
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_28px] items-center gap-2 sm:grid-cols-[1fr_120px_1fr_28px]">
+              <Combobox className="max-sm:col-span-2" aria-label={`Line ${i + 1} category`} value={l.categoryId} options={categories} placeholder="Category" onChange={(v) => setLine(l.key, { categoryId: v })} />
+              <Input
+                aria-label={`Line ${i + 1} amount`}
+                className="max-sm:col-start-1 max-sm:row-start-2"
+                type="number"
+                step="0.01"
+                min="0"
+                prefix="$"
+                value={l.amount}
+                onChange={(e) => setLine(l.key, { amount: e.target.value })}
+                aria-invalid={tried && !!lineErrors[i]}
+              />
+              <Input
+                aria-label={`Line ${i + 1} memo`}
+                className="max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-2"
+                value={l.memo}
+                onChange={(e) => setLine(l.key, { memo: e.target.value })}
+                placeholder="Optional"
+              />
+              <IconButton
+                className="max-sm:col-start-3 max-sm:row-start-1"
+                label={`Remove line ${i + 1}`}
+                size="icon-sm" icon={<Trash2 />} disabled={lines.length <= 2} onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} />
             </div>
             {tried && lineErrors[i] ? <p className="text-xs text-danger">{lineErrors[i]}</p> : null}
           </div>

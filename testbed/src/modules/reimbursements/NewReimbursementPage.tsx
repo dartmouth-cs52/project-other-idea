@@ -285,7 +285,7 @@ function ReimbursementForm({ existing }: { existing?: Reimbursement }) {
                 <Field label="Merchant" error={errors.merchant}>
                   {(id) => <Input id={id} value={f.merchant} onChange={(e) => set("merchant", e.target.value)} placeholder="e.g. Metro Rideshare" aria-invalid={!!errors.merchant} />}
                 </Field>
-                <div className="grid gap-4 sm:grid-cols-[1fr_110px_1fr]">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_110px_1fr]">
                   <Field label="Amount" error={errors.amount}>
                     {(id) => <Input id={id} inputMode="decimal" value={f.amount} onChange={(e) => set("amount", e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" aria-invalid={!!errors.amount} />}
                   </Field>
@@ -338,8 +338,9 @@ function ReimbursementForm({ existing }: { existing?: Reimbursement }) {
                 {f.split ? (
                   <div className="flex flex-col gap-2">
                     {f.lines.map((line, i) => (
-                      <div key={i} className="grid grid-cols-[1fr_130px_1fr_32px] items-end gap-2">
-                        <Field label={`Line ${i + 1} category`}>
+                      // On a phone: the category and the way to remove the line, then the amount and the note under them.
+                      <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_32px] items-end gap-2 sm:grid-cols-[1fr_130px_1fr_32px]">
+                        <Field label={`Line ${i + 1} category`} className="max-sm:col-span-2">
                           {(id) => (
                             <Select
                               id={id}
@@ -351,14 +352,21 @@ function ReimbursementForm({ existing }: { existing?: Reimbursement }) {
                             />
                           )}
                         </Field>
-                        <Field label="Amount">
+                        <Field label="Amount" className="max-sm:col-start-1 max-sm:row-start-2">
                           {(id) => <Input id={id} inputMode="decimal" value={line.amount} onChange={(e) => set("lines", f.lines.map((l, j) => (j === i ? { ...l, amount: e.target.value.replace(/[^\d.]/g, "") } : l)))} />}
                         </Field>
-                        <Field label="Note" optional>
+                        <Field label="Note" optional className="max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-2">
                           {(id) => <Input id={id} value={line.memo} onChange={(e) => set("lines", f.lines.map((l, j) => (j === i ? { ...l, memo: e.target.value } : l)))} />}
                         </Field>
                         {/* Icon-only, the tooltip says "Remove line". */}
-                        <IconButton icon={<Trash2 />} label="Remove line" size="icon" disabled={f.lines.length <= 2} onClick={() => set("lines", f.lines.filter((_, j) => j !== i))} />
+                        <IconButton
+                          icon={<Trash2 />}
+                          label="Remove line"
+                          size="icon"
+                          className="max-sm:col-start-3 max-sm:row-start-1"
+                          disabled={f.lines.length <= 2}
+                          onClick={() => set("lines", f.lines.filter((_, j) => j !== i))}
+                        />
                       </div>
                     ))}
                     <div className="flex items-center justify-between pt-1">
@@ -380,7 +388,7 @@ function ReimbursementForm({ existing }: { existing?: Reimbursement }) {
         {f.kind === "mileage" ? (
           <Card title="Trip" description={`Northpine pays ${money(MILEAGE_RATE)} a mile, the 2026 IRS rate. Miles are worked out from the route.`}>
             <div className="flex flex-col gap-4">
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="From" error={errors.origin}>
                   {(id) => <Input id={id} value={f.origin} onChange={(e) => set("origin", e.target.value)} placeholder="e.g. Portland, OR" aria-invalid={!!errors.origin} />}
                 </Field>
@@ -388,7 +396,7 @@ function ReimbursementForm({ existing }: { existing?: Reimbursement }) {
                   {(id) => <Input id={id} value={f.destination} onChange={(e) => set("destination", e.target.value)} placeholder="e.g. Salem, OR" aria-invalid={!!errors.destination} />}
                 </Field>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Date" error={errors.date}>
                   {(id) => <DatePicker id={id} value={f.date} onChange={(v) => set("date", v)} />}
                 </Field>

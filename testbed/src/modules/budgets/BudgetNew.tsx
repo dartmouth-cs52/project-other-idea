@@ -109,7 +109,7 @@ function BudgetForm() {
     >
       <UnsavedGuard when={dirty} />
       <Card title="Basics">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Budget name" error={errors.name} className="sm:col-span-2">
             {(id) => <Input id={id} value={d.name} aria-invalid={!!errors.name} placeholder="Marketing events, Q1" onChange={(e) => set({ name: e.target.value })} />}
           </Field>
