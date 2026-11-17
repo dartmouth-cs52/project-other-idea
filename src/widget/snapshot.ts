@@ -1748,6 +1748,53 @@ function seenOf(el: Element, rect: DOMRect, facts: Map<Element, BoxFacts>): Seen
   return { rect: new DOMRect(left, top, right - left, bottom - top), fixed: position === "fixed" };
 }
 
+/** A box around a control that cuts off what is drawn of it: across, down, or both. */
+export interface Clip {
+  box: Element;
+  across: boolean;
+  down: boolean;
+}
+
+/**
+ * The boxes around a control that cut off what is drawn of it, nearest first:
+ * those `seenOf` clips it by while it is in view, like a list, a table or a
+ * panel that scrolls. The page is not one, since its scrolling is the
+ * window's. Only styles decide which boxes they are, so the pointer, which
+ * follows a control every frame, reads them once and reads where the boxes
+ * are as it goes (`drawnPart`). Undefined when the control, or a box it is
+ * drawn in, is clipped to nothing: none of it is ever drawn.
+ */
+export function clipsOf(el: Element): Clip[] | undefined {
+  const facts = new Map<Element, BoxFacts>();
+  const own = factsOf(el, facts);
+  if (own.clippedAway) return undefined;
+  const clips: Clip[] = [];
+  let position = own.position;
+  for (let node = drawnParent(el), depth = 0; node && depth < 100; node = drawnParent(node), depth++) {
+    if (!isElement(node)) continue;
+    if (isPageEdge(node)) break;
+    const box = factsOf(node, facts);
+    if (!laysOut(box, position)) continue;
+    if (box.position !== "static" || position === "fixed") position = box.position === "static" ? "relative" : box.position;
+    if (box.clippedAway) return undefined;
+    if (box.overflowX === "visible" && box.overflowY === "visible") continue;
+    clips.push({ box: node, across: box.overflowX !== "visible", down: box.overflowY !== "visible" });
+  }
+  return clips;
+}
+
+/** The part of a control's box that the boxes clipping it let be drawn, where they are now. Undefined when none of it is. */
+export function drawnPart(rect: DOMRect, clips: Clip[]): DOMRect | undefined {
+  let [left, top, right, bottom] = [rect.left, rect.top, rect.right, rect.bottom];
+  for (const clip of clips) {
+    const box = clip.box.getBoundingClientRect();
+    if (clip.across) [left, right] = [Math.max(left, box.left), Math.min(right, box.right)];
+    if (clip.down) [top, bottom] = [Math.max(top, box.top), Math.min(bottom, box.bottom)];
+    if (right - left <= 0 || bottom - top <= 0) return undefined;
+  }
+  return clips.length ? new DOMRect(left, top, right - left, bottom - top) : rect;
+}
+
 /**
  * Whether a box lies where no scrolling can bring it: above the top of the
  * page, or before its start, as a link that skips to the content is parked

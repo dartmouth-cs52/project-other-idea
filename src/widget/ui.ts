@@ -1,4 +1,5 @@
 import type { Appearance, Source, TurnReply } from "../shared/types.ts";
+import { clipsOf, drawnPart, type Clip } from "./snapshot.ts";
 
 // Everything Haptic draws: the launcher, the chat with its ask box, the
 // pointer, the ring around its target and the caption. It all lives in one
@@ -31,6 +32,8 @@ const RESTART_PATH = "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5"
 const TICK_PATH = "M20 6 9 17l-5-5";
 /** A click on the control is acknowledged like a pressed button: the ring and the pointer dip and come back. */
 const PRESS_MS = 240;
+/** How long the boxes that clip the pointed control are trusted before they are read again, in case the page restyled one. */
+const CLIPS_MS = 500;
 /** What the chat says while the pointer shows a step, in a guide Haptic is not doing itself. */
 export const SHOWING = "Showing you how";
 /** Under the ask box, when Send is pressed with nothing typed. */
@@ -475,8 +478,19 @@ export class Ui {
   private held?: { x: number; y: number };
   /** The caption is on show with nothing to point at (`say`). */
   private saying = false;
-  /** The pointer and its caption are put away because what they point at has left the page, until it comes back. */
+  /**
+   * The pointer and its caption are put away until what they point at can be
+   * seen again: it has left the page, or the visitor scrolled it out of view.
+   */
   private lost = false;
+  /**
+   * The pointer and its caption have been on the control in view since it was
+   * pointed at. Until then a control out of view is one being scrolled to, and
+   * the pointer waits where it was, to glide to it once it is in view.
+   */
+  private reached = false;
+  /** The boxes that clip `target`, and when they were read. See `drawnOf`. */
+  private clips?: { of: Element; at: number; clips: Clip[] | undefined };
   /** The timer that keeps our element placed, while it is in use. */
   private placing?: ReturnType<typeof setInterval>;
   /** Watches what our element is inside, when that is something of the page's. */
@@ -1202,6 +1216,7 @@ export class Ui {
   rest() {
     this.endPress();
     this.pointed = undefined;
+    this.reached = false;
     this.pointedBox = undefined;
     this.captionAvoid = [];
     this.target = undefined;
@@ -1399,6 +1414,7 @@ export class Ui {
       this.pointed = el;
       this.held = undefined;
       this.tip = undefined;
+      this.reached = false;
       if (!same) {
         this.captionAbove = false;
         this.under = undefined;
@@ -1414,16 +1430,19 @@ export class Ui {
     // The ring goes round the control now, and is not left for the next frame as the pointer's glide is. On a machine
     // that draws slowly the next frame is a while off, and a guide that says it is pointing has its ring up.
     const target = this.target;
-    if (target?.isConnected && target.getClientRects().length) this.ringAt(target.getBoundingClientRect());
+    if (target?.isConnected && target.getClientRects().length) this.ringAt(this.drawnOf(target, target.getBoundingClientRect()));
     cancelAnimationFrame(this.frame);
     this.frame = requestAnimationFrame(this.track);
   }
 
-  /** Puts the ring round a box of the page, or puts it away when the box is not in the window, and says which. */
-  private ringAt(rect: DOMRect): boolean {
-    const onScreen = rect.bottom > 0 && rect.top < window.innerHeight && rect.width + rect.height > 0;
+  /**
+   * Puts the ring round a box of the page, or puts it away when the box is not
+   * in the window, or none of it is drawn (`drawnOf`), and says which.
+   */
+  private ringAt(rect: DOMRect | undefined): boolean {
+    const onScreen = !!rect && rect.bottom > 0 && rect.top < window.innerHeight && rect.width + rect.height > 0;
     this.ring.hidden = !onScreen;
-    if (!onScreen) return false;
+    if (!rect || !onScreen) return false;
     // In presentation mode the ring is thicker, and stands further out so it does not cover the control's edge.
     const pad = this.present ? 10 : 4;
     this.ring.style.left = `${rect.left - pad}px`;
@@ -1499,6 +1518,7 @@ export class Ui {
     this.endPress();
     this.saying = false;
     this.lost = false;
+    this.reached = false;
     this.pointed = undefined;
     this.pointedBox = undefined;
     this.captionAvoid = [];
@@ -1649,11 +1669,25 @@ export class Ui {
   /** Chooses what the pointer goes on for the control `el`, and says so in `pointedAt`. */
   private aim(el: Element) {
     const rect = el.getBoundingClientRect();
-    this.aimed = rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
+    const drawn = this.drawnOf(el, rect);
+    this.aimed = !!drawn && drawn.bottom > 0 && drawn.top < window.innerHeight && drawn.right > 0 && drawn.left < window.innerWidth;
     this.target = partToClick(el, this.aimed);
     this.mark(this.target);
     // The ring's corners follow the control's own, a little rounder for standing off it. Presentation mode has its own.
     if (!this.present) this.ring.style.setProperty("border-radius", `${Math.min((parseFloat(getComputedStyle(this.target).borderTopLeftRadius) || 6) + 4, (rect.height + 8) / 2 || 10)}px`);
+  }
+
+  /**
+   * The part of a control's box the visitor can see, once the boxes around it
+   * that clip it have cut it down, like the list a choice scrolls in. Undefined
+   * when none of it can be seen. Which boxes those are is read again only for
+   * another control, or after `CLIPS_MS`; where they are is read every time.
+   */
+  private drawnOf(el: Element, rect: DOMRect): DOMRect | undefined {
+    const now = performance.now();
+    if (this.clips?.of !== el || now - this.clips.at > CLIPS_MS) this.clips = { of: el, at: now, clips: clipsOf(el) };
+    const clips = this.clips.clips;
+    return clips && drawnPart(rect, clips);
   }
 
   /** Follows the target every frame, so scrolling and layout shifts don't strand the pointer. */
@@ -1670,13 +1704,22 @@ export class Ui {
   };
 
   private follow(el: Element) {
-    // A control that has left the page, or is no longer laid out, has nothing to point at: the pointer and its sentence
-    // go with it, and nothing is left floating where it was. They come back if the page puts it back.
-    if (!el.isConnected || !el.getClientRects().length) {
-      this.ring.hidden = true;
-      this.cursor.hidden = true;
-      this.caption.hidden = true;
-      this.lost = true;
+    const gone = !el.isConnected || !el.getClientRects().length;
+    const whole = gone ? undefined : el.getBoundingClientRect();
+    // What the visitor can see of the control. The ring, the pointer and the caption are drawn over the page, where
+    // nothing of the page clips them, so they go by this and not by where the control is laid out: a choice the
+    // visitor scrolled out of its list is still laid out above or below the list, over whatever the page has there.
+    const rect = whole && this.drawnOf(el, whole);
+    if (!this.ringAt(rect) || !whole || !rect) {
+      // A control that has left the page, or is no longer laid out, has nothing to point at, and neither has one the
+      // visitor scrolled out of view, out of the window or out of the box it scrolls in: the pointer and its sentence
+      // go, and nothing is left floating where it was. They come back when it can be seen again. One that was out of
+      // view when it was pointed at is being scrolled to, and the pointer waits where it was, to glide to it.
+      if (gone || this.reached) {
+        this.cursor.hidden = true;
+        this.caption.hidden = true;
+        this.lost = true;
+      }
       return;
     }
     if (this.lost) {
@@ -1684,22 +1727,19 @@ export class Ui {
       this.cursor.hidden = false;
       this.caption.hidden = this.captionText.textContent === "";
     }
-    let rect = el.getBoundingClientRect();
-    if (!this.ringAt(rect)) return;
     // A control pointed at while it was scrolled out of view is looked at again once it is in view.
     if (!this.aimed && this.pointed) {
       this.aim(this.pointed);
       if (this.target !== el) return;
-      rect = el.getBoundingClientRect();
-      this.ringAt(rect);
     }
 
     // As `ringAt` stands the ring off the control.
     const pad = this.present ? 10 : 4;
-    this.pointedBox = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+    this.pointedBox = { left: whole.left, top: whole.top, right: whole.right, bottom: whole.bottom };
 
     this.at = this.held ?? this.tipOn(el, rect);
     this.cursor.style.transform = `translate(${this.at.x - this.tipIn.x}px, ${this.at.y - this.tipIn.y}px)`;
+    this.reached = true;
 
     // The caption goes below the control, or above it when there is no room below or when something opened below.
     // A text field is the other way round: the browser opens its own list under it, of saved addresses or of what
