@@ -3,6 +3,7 @@
 
 import { checkRequest, cleanRequest, emailDomain, isPersonalEmail, type AccessField, type AccessRequest } from "../lib/access-request";
 import { appApi, approveLink, type AppEnv } from "./app-api";
+import { billingSweep, stripeWebhook, WEBHOOK_PATH } from "./billing";
 import { proxyAuth } from "./auth";
 import { boundedText } from "./body";
 import { database } from "./db";
@@ -32,7 +33,19 @@ export interface Env extends AppEnv, HookEnv {
 
 const SITE = "joinhaptic.com";
 
-/** The Worker's daily schedule, in wrangler.jsonc. Runs apart from any request. */
+/** The Worker's schedules, in wrangler.jsonc: billing every hour, and the rest once a day. Runs apart from any request. */
+export async function onSchedule(cron: string, env: Env): Promise<void> {
+  if (cron === HOURLY) {
+    await billingSweep(env).catch((error: Error) => console.error("Billing sweep failed:", error.message));
+    return;
+  }
+  await daily(env);
+}
+
+/** The hourly schedule in wrangler.jsonc. Any other is the daily one. */
+export const HOURLY = "17 * * * *";
+
+/** Once a day. */
 export async function daily(env: Env): Promise<void> {
   if (!env.DATABASE_URL) return;
   try {
@@ -59,6 +72,8 @@ export async function handle(request: Request, env: Env, assets: Assets): Promis
   }
 
   if (url.pathname === "/api/request-access") return requestAccess(request, env, url);
+  // Stripe, telling us a subscription or an invoice changed. Signed by Stripe, and checked in billing.ts.
+  if (url.pathname === WEBHOOK_PATH) return stripeWebhook(request, env);
   // Neon Auth hands us each sign-in link to email. Signed by Neon, so it needs no rate limit of its own.
   if (url.pathname === HOOK_PATH) return neonHook(request, env);
   if (url.pathname.startsWith("/api/auth/")) {
