@@ -1767,7 +1767,7 @@ export class Ui {
       const fitsAbove = rect.top - box.height - 12 >= 8;
       const above = this.captionAbove !== suggestsBelow(el) ? fitsAbove || !fitsBelow : !fitsBelow;
       top = above ? Math.max(8, rect.top - box.height - 12) : rect.bottom + 14;
-      left = Math.min(Math.max(8, rect.left), window.innerWidth - box.width - 8);
+      left = this.captionLeft(rect, box, top);
     }
     this.caption.style.left = `${left}px`;
     this.caption.style.top = `${top}px`;
@@ -1884,7 +1884,9 @@ export class Ui {
       );
     }
     const fits = (place: { left: number; top: number }) => place.left >= 12 && place.top >= 12 && place.left + box.width <= width - 12 && place.top + box.height <= height - 12;
-    const avoid = [ring, pointer, ...this.captionAvoid, ...open.boxes];
+    // The launcher and the chat in their corner too, so they never move up the window for the caption alone.
+    const dock = this.dockHome(rect);
+    const avoid = [ring, pointer, ...this.captionAvoid, ...open.boxes, ...(dock ? [dock] : [])];
     const free = (place: { left: number; top: number }) =>
       !avoid.some((other) => overlaps({ left: place.left, top: place.top, right: place.left + box.width, bottom: place.top + box.height }, other, 0));
     return places.find((place) => fits(place) && free(place)) ?? places.find(fits) ?? { left: clampX(rect.left), top: clampY(ring.bottom + gap) };
@@ -1950,16 +1952,45 @@ export class Ui {
   }
 
   /**
-   * Keeps the launcher, and the chat above it, off the control being pointed
-   * at and off its caption. They stay on the right of the window: while they
-   * would cover them they move up it, to just above, and they come back down
-   * when the step is over. When the open chat has no room above the control,
-   * it is tucked away for the step and the launcher alone goes up, unless the
-   * visitor opened it during the step. The caption's × still stops the guide,
-   * and the launcher brings the chat back.
+   * Where the caption starts across the window, below or above the control:
+   * under the control's left edge, unless that runs it under the launcher and
+   * the chat in their corner. Then it moves left, as far as it must to clear
+   * them, and no further than to end at the control's right edge, where the
+   * pointer hangs. A long caption under a button just left of the chat, like
+   * a dialog's last button, used to run on under the chat, and the chat
+   * jumped up the window for it and dropped back on the next step, for a
+   * control it never covered. When moving left can't clear them, the caption
+   * stays under the left edge and the dock moves up out of its way for the
+   * step (see `keepLauncherOff`).
    */
-  private keepLauncherOff(rect: DOMRect, caption?: Box) {
-    const inWay = [{ left: rect.left - 4, top: rect.top - 4, right: rect.right + 4, bottom: rect.bottom + 4 }, ...(caption ? [caption] : [])];
+  private captionLeft(rect: DOMRect, box: DOMRect, top: number): number {
+    const fit = (x: number) => Math.min(Math.max(8, x), window.innerWidth - box.width - 8);
+    const left = fit(rect.left);
+    const dock = this.dockHome(rect);
+    const at = (x: number): Box => ({ left: x, top, right: x + box.width, bottom: top + box.height });
+    if (!dock || !overlaps(at(left), dock, 4)) return left;
+    const over = fit(Math.min(left, Math.max(rect.right - box.width, dock.left - CLEAR - box.width)));
+    return overlaps(at(over), dock, 4) ? left : over;
+  }
+
+  /**
+   * The box the launcher and the open chat take in their own place, for the
+   * caption to keep off, so they never move up the window for the caption
+   * alone. None when the control pointed at is in it: they move for the
+   * control anyway, to above it and its caption.
+   */
+  private dockHome(rect: DOMRect): Box | undefined {
+    const home = boxAt(this.home, this.dockSizes().whole);
+    // As `keepLauncherOff` keeps them off the control: 4px round it, and 4px more.
+    return overlaps(home, rect, 8) ? undefined : home;
+  }
+
+  /**
+   * The room the launcher takes alone, and with the open chat above it. The
+   * chat's size is the last it showed, so a chat tucked away for the step
+   * keeps its room for when it comes back.
+   */
+  private dockSizes(): { alone: { w: number; h: number }; chat?: { w: number; h: number }; whole: { w: number; h: number } } {
     const launch = this.dock.querySelector(".launch")!.getBoundingClientRect();
     const alone = { w: launch.width, h: launch.height };
     if (!this.panel.hidden && !this.dock.classList.contains("tucked")) {
@@ -1967,7 +1998,23 @@ export class Ui {
       this.chatSize = { w: shown.width, h: shown.height + DOCK_GAP };
     }
     const chat = this.panel.hidden ? undefined : this.chatSize;
-    const whole = chat ? { w: Math.max(alone.w, chat.w), h: alone.h + chat.h } : alone;
+    return { alone, chat, whole: chat ? { w: Math.max(alone.w, chat.w), h: alone.h + chat.h } : alone };
+  }
+
+  /**
+   * Keeps the launcher, and the chat above it, off the control being pointed
+   * at and off its caption. They stay on the right of the window: while they
+   * would cover them they move up it, to just above, and they come back down
+   * when the step is over. The caption keeps off them where it can (see
+   * `captionLeft`), so it is nearly always the control they move for. When
+   * the open chat has no room above the control, it is tucked away for the
+   * step and the launcher alone goes up, unless the visitor opened it during
+   * the step. The caption's × still stops the guide, and the launcher brings
+   * the chat back.
+   */
+  private keepLauncherOff(rect: DOMRect, caption?: Box) {
+    const inWay = [{ left: rect.left - 4, top: rect.top - 4, right: rect.right + 4, bottom: rect.bottom + 4 }, ...(caption ? [caption] : [])];
+    const { alone, chat, whole } = this.dockSizes();
     const spot = freeUp(this.home.y, whole, inWay, window.innerHeight - whole.h - 8);
     if (spot || !chat || this.chatWanted) {
       this.tuck(false);
