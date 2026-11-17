@@ -44,7 +44,7 @@ export function SetupFlow() {
   // Null until someone moves, so the first screen comes from the site as it loads.
   const [chosen, setChosen] = useState<{ step: SetupStepId; for: string | null } | null>(null);
   const [direction, setDirection] = useState<1 | -1>(1);
-  // Where the setup is, when saving it failed: shown on every screen with Retry, until a save goes through.
+  // Where the setup is, when saving it failed: shown on every screen with Try again, until a save goes through.
   const [unsaved, setUnsaved] = useState<{ id: string; body: Record<string, unknown> } | null>(null);
   const pages = useSetupReading(site);
   useEnterToContinue();
@@ -98,7 +98,7 @@ export function SetupFlow() {
   const current = site && site.id === siteId ? site : null;
   const step: SetupStepId | null = chosen && chosen.for === siteId ? chosen.step : !siteId ? "address" : current ? stepFor(current) : null;
 
-  /** Saves where the setup is on the site. True when it went. When it didn't, every screen says so, with Retry. */
+  /** Saves where the setup is on the site. True when it went. When it didn't, every screen says so, with Try again. */
   async function save(body: Record<string, unknown>, id = siteId): Promise<boolean> {
     if (!id) return true;
     try {
