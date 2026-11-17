@@ -13,7 +13,9 @@ import { ask, BROWSERS, idOf, launch, page, point, startHarness, turns, type Har
 // (Autofill.trigger), so the events are the ones Chrome really sends: on each
 // field a focus, a keydown with no key, an input that is a plain Event, a
 // change, a keyup and a blur, with the field already in the :autofill state.
-// Firefox and WebKit have no such switch, so this runs in Chromium only.
+// Firefox and WebKit have no such switch, so this runs in Chromium only, and
+// in the whole of Chromium: the headless shell Playwright runs by default has
+// no autofill, and answers "'Autofill.trigger' wasn't found".
 
 const FORM = page(`
   <main style="font:16px system-ui;padding:40px;max-width:640px">
@@ -49,7 +51,7 @@ describe("the browser's autofill", { skip: !BROWSERS.includes("chromium") && "on
   let tab: Page;
   let cdp: CDPSession;
   before(async () => {
-    browser = await launch("chromium");
+    browser = await launch("chromium", { full: true });
     harness = await startHarness();
     harness.pages.set("/", FORM);
   });
