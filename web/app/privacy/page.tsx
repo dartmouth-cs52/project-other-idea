@@ -65,7 +65,8 @@ export default function Privacy() {
       <p>
         Haptic does note whether a field is marked as not accepted, by the page itself or by the browser&apos;s own
         check, such as an email field that holds no email address, so it can ask for the field to be fixed before
-        moving on. That is a yes or a no, and nothing of what was typed.
+        moving on. It notes the same of an email address with no dot in its domain, which the browser accepts and
+        nearly every form does not. That is a yes or a no, and nothing of what was typed.
       </p>
       <p>
         Before anything leaves the browser, in what it reads, in the page&apos;s address and in the question itself,

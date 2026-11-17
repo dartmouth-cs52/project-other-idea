@@ -9,6 +9,7 @@ import {
   leftForVisitor,
   newTeachToken,
   routeText,
+  sentence,
   stepText,
   taughtFor,
   TEACH_TOKEN,
@@ -269,6 +270,45 @@ test("steps are written plainly, naming the page when it changes and the dialog 
   assert.equal(stepText(step({ role: "tab", label: "Owners" }), step({})), "Open the Owners tab");
   assert.equal(stepText(step({ kind: "check", role: "switch", label: "Roll over" }), step({})), "Turn on Roll over");
   assert.equal(stepText(step({ label: "icon:plus" }), step({})), "Press the plus icon");
+});
+
+test("a question or step that ends with its own mark, in any script, gets no second one", () => {
+  // No mark of its own: a full stop, after a closing quote or bracket and after a comma too.
+  for (const [text, shown] of [
+    ["how do I add a budget", "how do I add a budget."],
+    ["  how do I add a budget  ", "how do I add a budget."],
+    ["كيف أضيف ميزانية", "كيف أضيف ميزانية."],
+    ["كيف أضيف ميزانية،", "كيف أضيف ميزانية،."],
+    ["How do I open \"Settings\"", "How do I open \"Settings\"."],
+    ["How do I add a budget (optional?)", "How do I add a budget (optional?)."],
+    ["How do I add a budget (etc.)", "How do I add a budget (etc.)."],
+    ["Add a budget; then share it", "Add a budget; then share it."],
+    ["Add a budget;", "Add a budget;."],
+    ["On /budgets, press New budget", "On /budgets, press New budget."],
+  ] as [string, string][]) assert.equal(sentence(text), shown, text);
+  // Its own mark, so as it is.
+  for (const text of [
+    "how do I add a budget?",
+    "Add a budget!",
+    "Add a budget.",
+    "How do I add a budget...",
+    "How do I add a budget\u2026",
+    "كيف أضيف ميزانية؟",
+    "كيف أضيف ميزانية؟\u200F",
+    "میں بجٹ کیسے شامل کروں۔",
+    "मैं बजट कैसे जोड़ूँ।",
+    "如何添加预算。",
+    "予算を追加するには？",
+    "「予算を追加するには？」",
+    "Ինչպե՞ս ավելացնել բյուջե։",
+    "Πώς προσθέτω προϋπολογισμό;",
+    "Πώς προσθέτω προϋπολογισμό;".normalize("NFD"),
+    "Πώς προσθέτω προϋπολογισμό\u037E",
+    "\"How do I?\"",
+    "“How do I add a budget?”",
+    "„Wie füge ich ein Budget hinzu?“",
+    "On /budgets, press هل تحتاج مساعدة؟",
+  ]) assert.equal(sentence(text), text, text);
 });
 
 test("a visitor's question gets the route taught for the same task, the closest and then the newest", () => {

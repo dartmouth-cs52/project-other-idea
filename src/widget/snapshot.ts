@@ -1189,6 +1189,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   );
   let usable = mergeCells(reach.kept);
   markChosen(usable);
+  markRequiredByOptional(usable);
   nameRows(usable);
   tellTwinsApart(usable);
   for (const c of usable) {
@@ -2978,13 +2979,67 @@ function isRequired(el: Element, role: string): boolean {
   return names.some(markedRequired);
 }
 
+/** Words that mark a field as one its form can be sent without: "Personal note (optional)", "Phone, optional". */
+const OPTIONAL_MARK = /\(\s*optional\s*\)|\boptional$/i;
+/**
+ * Fields that a form marking only what is optional requires the rest of.
+ * A tick box, a switch or a choice among buttons is left as the page says:
+ * one alone is rarely required, and one marked optional says nothing of the
+ * fields around it.
+ */
+const REQUIRED_UNLESS_OPTIONAL = new Set(["textbox", "combobox", "select", "spinbutton"]);
+
+/**
+ * Marks as required the fields a form needs when it says so the other way
+ * round: it marks the fields it can be sent without, "(optional)", and no
+ * field as required. That is how many forms are written (it is GOV.UK's rule),
+ * and without it the model takes the unmarked fields for optional too. On
+ * Northpine's invite, which marks only "Personal note (optional)", the guide
+ * said Department was optional and pointed at "Send invite", and the form
+ * then asked for a department. The form is a <form>, or the dialog it is in
+ * when there is none. A dropdown that offers no empty choice always has one
+ * made, so it can never hold the form up and is not marked. Nothing a field
+ * holds is read: the mark comes from the page's own words and markup.
+ */
+function markRequiredByOptional(candidates: Candidate[]) {
+  const formOf = (el: Element) => el.closest("form") ?? el.closest(DIALOGS);
+  const fields = new Map<Element, Candidate[]>();
+  for (const c of candidates) {
+    if (!REQUIRED_UNLESS_OPTIONAL.has(c.role)) continue;
+    const form = formOf(c.el);
+    if (!form) continue;
+    const list = fields.get(form);
+    if (list) list.push(c);
+    else fields.set(form, [c]);
+  }
+  for (const list of fields.values()) {
+    if (!list.some((c) => OPTIONAL_MARK.test(c.label)) || list.some((c) => c.state?.includes("required"))) continue;
+    for (const c of list) {
+      if (OPTIONAL_MARK.test(c.label) || c.state?.includes("disabled") || isReadOnly(c.el) || alwaysChosen(c.el)) continue;
+      c.state = ["required", ...(c.state ?? [])];
+    }
+  }
+}
+
+/** Whether a field can be read and not changed: what it holds is the page's, not the visitor's to fill in. */
+function isReadOnly(el: Element): boolean {
+  return (el as HTMLInputElement).readOnly === true || el.getAttribute("aria-readonly") === "true";
+}
+
+/** A dropdown the browser draws that always shows one of its choices: it takes one choice, and none of its choices is empty. */
+function alwaysChosen(el: Element): boolean {
+  return isTag(el, "select") && !el.multiple && el.size <= 1 && !Array.from(el.options).some((option) => option.value === "");
+}
+
 /**
  * Whether the page or the browser says what a field holds will not do. The
  * page says so with aria-invalid. The browser says so by its own check of the
  * field's type, pattern, length or range, such as "charlie" in an email field,
  * which the model cannot see because what was typed is never read: without
- * this it takes the field as filled in and moves on. Only that yes or no is
- * read. An empty field the form requires is not invalid: "required" says that.
+ * this it takes the field as filled in and moves on. An email address with no
+ * dot in its domain will not do either, though the browser takes it (see
+ * `notAnAddress`). Only that yes or no is read. An empty field the form
+ * requires is not invalid: "required" says that.
  */
 function isInvalid(el: Element, role: string): boolean {
   if (!CAN_BE_REQUIRED.has(role)) return false;
@@ -2993,7 +3048,31 @@ function isInvalid(el: Element, role: string): boolean {
   const field = el as Partial<HTMLInputElement>;
   // A field the browser does not check, being disabled or read-only, is not the visitor's to fix.
   const validity = field.willValidate ? field.validity : undefined;
-  return !!validity && !validity.valid && !validity.valueMissing;
+  if (validity && !validity.valid && !validity.valueMissing) return true;
+  return !!validity && notAnAddress(el);
+}
+
+/**
+ * Whether an email field holds an address that the browser's own check
+ * passed and that no form sends to: its domain has no dot, or ends in a
+ * single character or in digits. The browser follows the HTML standard,
+ * which takes "theochain@dad" for an address on a local network, so the
+ * guide saw the field as filled in, pointed at "Send invite", and the form
+ * refused it. It is called only once the browser's check has passed, so the
+ * rest of the address is already well formed. Only an <input type="email">
+ * is checked: a text field whose autocomplete says email may be a sign-in
+ * field that takes a user name too. An empty field is not invalid. Only the
+ * yes or no leaves the browser.
+ */
+function notAnAddress(el: Element): boolean {
+  if (!isTag(el, "input") || el.type !== "email") return false;
+  // An email field that takes several addresses takes them with commas between.
+  const addresses = (el.multiple ? el.value.split(",") : [el.value]).map((address) => address.trim()).filter(Boolean);
+  return addresses.some((address) => {
+    const labels = address.slice(address.lastIndexOf("@") + 1).split(".");
+    const ending = labels[labels.length - 1]!;
+    return labels.length < 2 || ending.length < 2 || /^\d+$/.test(ending);
+  });
 }
 
 /**
