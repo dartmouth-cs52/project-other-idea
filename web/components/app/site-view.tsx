@@ -7,7 +7,6 @@ import { FieldWithButton, FormAlert, failureFrom, useFieldErrors, type Failure }
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, type Me, type Reading, type Site } from "@/lib/app-api";
-import { hostOf } from "@/lib/setup";
 import { CopyLink } from "./agent-pill";
 import { DeveloperEmail } from "./developer-email";
 import { Gaps } from "./gaps";
@@ -92,7 +91,7 @@ export function SiteView({ me, row, view, onDeleted }: { me: Me; row: SiteRow; v
   else if (view === "knowledge") {
     page = (
       <>
-        <PageHeader title="Knowledge" note="What Haptic reads before it answers, and what you have corrected." />
+        <PageHeader title="Knowledge" />
         <Notes site={site} onChange={setSite} />
         <HelpDocs site={site} onChange={setSite} />
         <GuidingRules site={site} onChange={setSite} />
@@ -102,7 +101,7 @@ export function SiteView({ me, row, view, onDeleted }: { me: Me; row: SiteRow; v
   } else if (view === "settings") {
     page = (
       <>
-        <PageHeader title="Settings" note={`${site.name}, ${hostOf(site.origin)}`} />
+        <PageHeader title="Settings" />
         <Segmented tabs label="Settings" value={tab} onChange={(next) => set({ tab: next === "general" ? undefined : next })} options={SETTINGS_TABS} />
         {tab === "general" && (
           <>
@@ -139,7 +138,7 @@ export function SiteView({ me, row, view, onDeleted }: { me: Me; row: SiteRow; v
   } else if (view === "questions") {
     page = (
       <>
-        <PageHeader title="Questions" note={`Everything asked on ${hostOf(site.origin)}, newest first.`}>
+        <PageHeader title="Questions">
           <Reconnecting failing={failing} />
           {range}
         </PageHeader>
@@ -149,7 +148,7 @@ export function SiteView({ me, row, view, onDeleted }: { me: Me; row: SiteRow; v
   } else if (view === "gaps") {
     page = (
       <>
-        <PageHeader title="Gaps" note="What people could not find, and where guides stop.">
+        <PageHeader title="Gaps">
           {range}
         </PageHeader>
         <Gaps siteId={site.id} data={numbers.data} onOpen={openIt} />
@@ -158,7 +157,7 @@ export function SiteView({ me, row, view, onDeleted }: { me: Me; row: SiteRow; v
   } else {
     page = (
       <>
-        <PageHeader title="Overview" note={`${site.name}, ${hostOf(site.origin)}`}>
+        <PageHeader title="Overview">
           <Reconnecting failing={failing} />
           {range}
         </PageHeader>

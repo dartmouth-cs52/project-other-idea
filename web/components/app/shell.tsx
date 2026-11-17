@@ -23,7 +23,7 @@ import { auth } from "@/lib/auth-client";
 import { hostOf } from "@/lib/setup";
 import { site as haptic } from "@/lib/site";
 import { NEW_SITE_HREF, SITES_HREF, VIEWS, siteHref, type View } from "./nav";
-import { leaveFor } from "./parts";
+import { SiteIcon, leaveFor } from "./parts";
 
 type SiteRow = NonNullable<Me["sites"]>[number];
 
@@ -50,7 +50,8 @@ function Slash() {
  */
 export function TopBar({ me, current }: { me?: Me; current?: SiteRow }) {
   const router = useRouter();
-  const sites = me?.sites ?? [];
+  // The sites whose script is running come first, here and on the list of sites, since those are the ones with something to see.
+  const sites = [...(me?.sites ?? [])].sort((a, b) => Number(b.connected) - Number(a.connected));
   const inside = Boolean(me?.approved && sites.length);
 
   async function signOut() {
@@ -86,7 +87,8 @@ export function TopBar({ me, current }: { me?: Me; current?: SiteRow }) {
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Sites</DropdownMenuLabel>
                 {sites.map((item) => (
-                  <DropdownMenuItem key={item.id} onClick={() => router.push(siteHref(item.id))} className="gap-2 py-1.5">
+                  <DropdownMenuItem key={item.id} onClick={() => router.push(siteHref(item.id))} className="gap-2.5 py-1.5">
+                    <SiteIcon site={item} small />
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate font-medium">{item.name}</span>
                       <span className="truncate text-xs text-muted-foreground">{hostOf(item.origin)}</span>
@@ -145,8 +147,9 @@ export function Plain({ me, children, wide = false }: { me?: Me; children: React
 
 /**
  * One site: the bar across the top, its pages down the left, and the page
- * chosen beside them. Below 1024px the pages are a row under the bar that
- * scrolls sideways.
+ * chosen beside them. The list of pages is fixed to the window, so it and its
+ * line stay where they are however far the page scrolls. Below 1024px the
+ * pages are a row under the bar that scrolls sideways.
  */
 export function SiteShell({ me, current, view, children }: { me: Me; current: SiteRow; view: View; children: ReactNode }) {
   return (
@@ -157,18 +160,16 @@ export function SiteShell({ me, current, view, children }: { me: Me; current: Si
           <PageLink key={item.id} site={current.id} item={item} on={item.id === view} />
         ))}
       </nav>
-      <div className="flex min-h-0 flex-1">
-        <aside className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r p-3 lg:flex">
-          <nav aria-label={`${current.name} pages`} className="flex flex-col gap-0.5">
-            {VIEWS.map((item) => (
-              <PageLink key={item.id} site={current.id} item={item} on={item.id === view} />
-            ))}
-          </nav>
-        </aside>
-        <main className="min-w-0 flex-1">
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">{children}</div>
-        </main>
-      </div>
+      <aside className="fixed top-14 bottom-0 left-0 z-30 hidden w-56 flex-col gap-1 overflow-y-auto border-r bg-background p-3 lg:flex">
+        <nav aria-label={`${current.name} pages`} className="flex flex-col gap-0.5">
+          {VIEWS.map((item) => (
+            <PageLink key={item.id} site={current.id} item={item} on={item.id === view} />
+          ))}
+        </nav>
+      </aside>
+      <main className="min-w-0 flex-1 lg:pl-56">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">{children}</div>
+      </main>
     </>
   );
 }

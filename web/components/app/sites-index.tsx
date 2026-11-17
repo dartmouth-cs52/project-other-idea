@@ -9,7 +9,7 @@ import { hostOf } from "@/lib/setup";
 import { Spark } from "./chart";
 import { usePolled } from "./live";
 import { NEW_SITE_HREF, siteHref } from "./nav";
-import { DoneMark, GuideStatus, PageHeader, useNow, when } from "./parts";
+import { DoneMark, GuideStatus, PageHeader, SiteIcon, useNow, when } from "./parts";
 
 /** How often the list of sites asks what is new. Each card is a few counts, so this is slower than a site's own page. */
 const SITES_MS = 3_000;
@@ -24,12 +24,12 @@ export function SitesIndex({ me }: { me: Me }) {
   const { data } = usePolled<{ sites: SiteCard[] }>(`/sites?${clock()}`, SITES_MS);
   useNow();
   // Until the counts arrive, the names from sign-in hold each card's place.
-  const sites = data?.sites;
+  const sites = data ? [...data.sites].sort(byActivity) : undefined;
   const names = me.sites ?? [];
 
   return (
     <>
-      <PageHeader title="Sites" note={me.organization?.name}>
+      <PageHeader title="Sites">
         <Link href={NEW_SITE_HREF} className={buttonVariants()}>
           <Plus />
           Add a site
@@ -52,6 +52,17 @@ export function SitesIndex({ me }: { me: Me }) {
   );
 }
 
+/**
+ * The order of the cards: sites whose script is running first, the one asked
+ * most recently at their head, then the ones still waiting for the script. So
+ * the first card is the one with something happening on it.
+ */
+function byActivity(a: SiteCard, b: SiteCard): number {
+  if (a.connected !== b.connected) return Number(b.connected) - Number(a.connected);
+  const asked = (site: SiteCard) => (site.last ? new Date(site.last.started_at).getTime() : 0);
+  return asked(b) - asked(a) || a.name.localeCompare(b.name);
+}
+
 function Card({ site }: { site: SiteCard }) {
   const share = site.guides ? Math.round((site.finished / site.guides) * 100) : null;
   return (
@@ -60,9 +71,7 @@ function Card({ site }: { site: SiteCard }) {
       className="group flex h-full flex-col rounded-xl border bg-card outline-none transition-colors hover:border-foreground/25 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       <div className="flex items-start gap-3 p-5">
-        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-sm font-medium uppercase" aria-hidden>
-          {site.name.slice(0, 1)}
-        </span>
+        <SiteIcon site={site} />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-base font-medium">{site.name}</span>
           <span className="truncate text-sm text-muted-foreground">{hostOf(site.origin)}</span>
@@ -84,7 +93,7 @@ function Card({ site }: { site: SiteCard }) {
           <Spark daily={site.daily} className="w-28 shrink-0" />
         </div>
       ) : (
-        <p className="flex-1 px-5 pb-5 text-sm leading-5 text-muted-foreground">Waiting for the script. Add it to this site, and its questions show up here as they are asked.</p>
+        <p className="flex-1 px-5 pb-5 text-sm leading-5 text-muted-foreground">Waiting for the script.</p>
       )}
       <div className="flex min-h-11 items-center gap-3 border-t px-5 py-2.5 text-xs leading-5 text-muted-foreground">
         {site.last ? (
