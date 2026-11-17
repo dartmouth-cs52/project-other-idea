@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Send } from "lucide-react";
 import { FieldWithButton, FormAlert, failureFrom, useFieldErrors, type Failure } from "@/components/form";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/lib/app-api";
 import { checkEmail } from "@/lib/setup";
 import { CopyLink } from "./agent-pill";
-import { DoneMark } from "./parts";
 
 type State = { kind: "idle" } | { kind: "sending" } | { kind: "sent"; to: string } | { kind: "failed"; failure: Failure };
 
@@ -23,6 +22,18 @@ export function DeveloperEmail({ siteId, installLink }: { siteId: string; instal
   const [state, setState] = useState<State>({ kind: "idle" });
   const id = `developer-${siteId}`;
   const fields = useFieldErrors({ to: id });
+  const thanks = useRef<HTMLDivElement>(null);
+  const again = useRef(false);
+
+  // The thank you takes the keyboard when it replaces the form, so a screen reader reads it, and the field takes it back
+  // when the form returns for someone else.
+  useEffect(() => {
+    if (state.kind === "sent") thanks.current?.focus();
+    else if (state.kind === "idle" && again.current) {
+      again.current = false;
+      document.getElementById(id)?.focus();
+    }
+  }, [state.kind, id]);
 
   async function send(event: FormEvent) {
     event.preventDefault();
@@ -43,18 +54,16 @@ export function DeveloperEmail({ siteId, installLink }: { siteId: string; instal
 
   if (state.kind === "sent") {
     return (
-      <div className="flex flex-col gap-3" data-developer-email="sent">
-        <p className="flex items-start gap-2 text-base leading-6" role="status">
-          <DoneMark className="mt-0.5" />
-          <span>
-            Sent to <span className="font-medium">{state.to}</span>. Their reply comes to you.
-          </span>
-        </p>
+      <div ref={thanks} tabIndex={-1} role="status" className="flex flex-col items-start gap-3 outline-none" data-developer-email="sent">
+        <div className="flex flex-col gap-1">
+          <p className="text-base leading-6 font-medium [overflow-wrap:anywhere]">Sent to {state.to}.</p>
+          <p className="text-sm leading-5 text-muted-foreground">Their reply comes to you.</p>
+        </div>
         <Button
-          variant="ghost"
-          className="self-start"
+          variant="secondary"
           onClick={() => {
             setTo("");
+            again.current = true;
             setState({ kind: "idle" });
           }}
         >

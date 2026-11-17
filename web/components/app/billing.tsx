@@ -11,7 +11,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FormAlert, failureFrom, type Failure } from "@/components/form";
-import { api, type Billing, type Me } from "@/lib/app-api";
+import { api, ApiError, type Billing } from "@/lib/app-api";
 import { monthTotal, type PaidPlan } from "@/lib/billing-plans";
 import { pricing, site } from "@/lib/site";
 import { siteHref } from "./nav";
@@ -24,7 +24,10 @@ const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month
 /** The last day of a period that ends at midnight UTC on `end`. */
 const lastDay = (end: string) => day(new Date(new Date(end).getTime() - 1).toISOString());
 
-export function BillingPage({ me }: { me: Me }) {
+/** A billing action that didn't go through: which one ("portal", or the plan whose button was pressed), and what to say. */
+type Failed = { at: string; failure: Failure; retry?: () => void };
+
+export function BillingPage() {
   const params = useSearchParams();
   const router = useRouter();
   const [billing, setBilling] = useState<Billing | null>(null);
@@ -51,12 +54,13 @@ export function BillingPage({ me }: { me: Me }) {
 
   return (
     <DashboardSurface>
-      <PageHeader title="Billing" note={me.organization ? `${me.organization.name}, across all of its sites` : undefined} />
+      <PageHeader title="Billing" />
       {failed && !billing && <FailedCard title="Billing didn't load" message={failed} retry={() => setAttempt((n) => n + 1)} level={2} />}
       {!billing && !failed && (
         <div className="flex flex-col gap-6">
           <Skeleton className="h-40 rounded-xl" />
           <Skeleton className="h-56 rounded-xl" />
+          <Skeleton className="h-72 rounded-xl" />
         </div>
       )}
       {billing && <Loaded billing={billing} onChange={setBilling} />}
@@ -66,13 +70,16 @@ export function BillingPage({ me }: { me: Me }) {
 
 function Loaded({ billing, onChange }: { billing: Billing; onChange: (next: Billing) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
-  const [failure, setFailure] = useState<Failure | null>(null);
+  // What didn't go through, said under the button that was pressed: the portal's in the plan's card, a plan's in its own
+  // tile. Try again where trying again could help: Haptic couldn't be reached, or Stripe or Haptic failed on their side.
+  // A refusal, or billing that isn't set up on this server (503), would only say the same again.
+  const [failed, setFailed] = useState<Failed | null>(null);
   const current = billing.plans.find((plan) => plan.id === billing.plan.id);
   const subscription = billing.subscription;
 
   async function go(what: string, path: string, body?: unknown) {
     setBusy(what);
-    setFailure(null);
+    setFailed(null);
     try {
       const answer = await api<{ url?: string } & Partial<Billing>>(path, { method: "POST", body: body ?? {} });
       if (answer.url) return window.location.assign(answer.url);
@@ -81,13 +88,18 @@ function Loaded({ billing, onChange }: { billing: Billing; onChange: (next: Bill
       onChange(answer as Billing);
     } catch (error) {
       // Switching plan is done here; checkout and the portal are Stripe's own pages, opened from here.
-      setFailure(failureFrom(path === "/billing/plan" ? "The plan didn't change" : "Stripe didn't open", error));
+      const passing = !(error instanceof ApiError) || error.status === 0 || (error.status >= 500 && error.status !== 503);
+      setFailed({
+        at: what,
+        failure: failureFrom(path === "/billing/plan" ? "The plan didn't change" : "Stripe didn't open", error),
+        retry: passing ? () => void go(what, path, body) : undefined,
+      });
     }
     setBusy(null);
   }
 
   const trouble = subscription && ["past_due", "unpaid", "incomplete"].includes(subscription.status);
-  const plans = <Plans billing={billing} busy={busy} onCheckout={(plan) => go(plan, "/billing/checkout", { plan })} onSwitch={(plan) => go(plan, "/billing/plan", { plan })} />;
+  const plans = <Plans billing={billing} busy={busy} failed={failed} onForget={() => setFailed(null)} onCheckout={(plan) => go(plan, "/billing/checkout", { plan })} onSwitch={(plan) => go(plan, "/billing/plan", { plan })} />;
 
   return (
     <>
@@ -118,7 +130,7 @@ function Loaded({ billing, onChange }: { billing: Billing; onChange: (next: Bill
           </p>
         )}
         {billing.testMode && <p className="text-xs text-muted-foreground">Stripe test mode. Nothing is charged.</p>}
-        <FormAlert failure={failure} />
+        {failed?.at === "portal" && <FormAlert failure={failed.failure} retry={failed.retry} />}
       </Card>
 
       {/* During early access the plans come first: choosing one is what this page is for. On a paid plan, what has been used this period is. */}
@@ -180,9 +192,30 @@ function Usage({ billing, plan }: { billing: Billing; plan: PaidPlan | undefined
   );
 }
 
-function Plans({ billing, busy, onCheckout, onSwitch }: { billing: Billing; busy: string | null; onCheckout: (plan: string) => void; onSwitch: (plan: string) => void }) {
+function Plans({
+  billing,
+  busy,
+  failed,
+  onForget,
+  onCheckout,
+  onSwitch,
+}: {
+  billing: Billing;
+  busy: string | null;
+  failed: Failed | null;
+  /** Puts away what was said about a failure, when the confirmation it came from opens or closes. */
+  onForget: () => void;
+  onCheckout: (plan: string) => void;
+  onSwitch: (plan: string) => void;
+}) {
   const subscription = billing.subscription;
-  const [confirming, setConfirming] = useState<string | null>(null);
+  const [confirming, setConfirmingOnly] = useState<string | null>(null);
+  // Opening or closing a plan's confirmation puts away what was said about an earlier switch, so its Try again can never
+  // switch the plan without the confirmation in view.
+  const setConfirming = (id: string | null) => {
+    setConfirmingOnly(id);
+    onForget();
+  };
   const changeable = subscription && ["active", "trialing", "past_due"].includes(subscription.status);
   const onPaid = billing.plans.some((plan) => plan.id === billing.plan.id);
 
@@ -216,17 +249,19 @@ function Plans({ billing, busy, onCheckout, onSwitch }: { billing: Billing; busy
                 {current ? (
                   <span className="text-sm text-muted-foreground">Your plan</span>
                 ) : !billing.canManage || !billing.ready ? null : !subscription ? (
-                  <Button disabled={busy !== null} onClick={() => onCheckout(plan.id)}>
+                  // Secondary, as every plan has one: one primary button a view, and no plan is marked as the one to pick.
+                  <Button variant="secondary" disabled={busy !== null} onClick={() => onCheckout(plan.id)}>
                     {busy === plan.id ? "Opening Stripe" : `Choose ${plan.name}`}
                   </Button>
                 ) : changeable && onPaid ? (
                   confirming === plan.id ? (
+                    // The way back sits to the left of the step it backs out of, as on every form.
                     <>
+                      <Button variant="secondary" disabled={busy !== null} onClick={() => setConfirming(null)}>
+                        Keep my plan
+                      </Button>
                       <Button disabled={busy !== null} onClick={() => onSwitch(plan.id)}>
                         {busy === plan.id ? "Switching" : `Switch to ${plan.name} now`}
-                      </Button>
-                      <Button variant="ghost" disabled={busy !== null} onClick={() => setConfirming(null)}>
-                        Keep my plan
                       </Button>
                     </>
                   ) : (
@@ -241,6 +276,7 @@ function Plans({ billing, busy, onCheckout, onSwitch }: { billing: Billing; busy
                   The change takes effect now. The monthly fee is prorated on your next invoice. Guides finished before the switch are billed at your current plan&apos;s rate.
                 </p>
               )}
+              {failed?.at === plan.id && <FormAlert failure={failed.failure} retry={failed.retry} />}
             </li>
           );
         })}
