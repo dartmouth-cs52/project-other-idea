@@ -169,7 +169,8 @@ button { font: inherit; cursor: pointer; }
 /* With no mouse, the minimize button is out while the chat is open, and has room round it for a finger. */
 @media (hover: none) {
   .dock:not(.tucked):has(> .panel:not([hidden])) .launch:not(.mini) .hide { opacity: 1; transform: none; pointer-events: auto; }
-  .hide::after { content: ""; position: absolute; inset: -12px; }
+  /* Grown out to the side and below, away from the launcher it sits on, so a tap on the launcher is never taken for it. */
+  .hide::after { content: ""; position: absolute; inset: 0 -12px -12px 0; }
 }
 .launch.mini .hide { display: none; }
 .panel { width: min(320px, calc(var(--fit-w, 100vw) - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 14px;
