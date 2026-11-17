@@ -24,6 +24,7 @@ const addBudget: Task = {
     { expect: [button("New budget")], act: { click: 'role=button[name="New budget"]' } },
     { expect: [any("Budget name")], act: { fill: ['role=textbox[name="Budget name"]', "Offsite fund"] } },
     { expect: [any("Department")], act: { click: 'role=combobox[name="Department"]' } },
+    { expect: [{ label: "Search departments…", role: "combobox" }], act: { fill: ["[cmdk-input]", "Marketing"] } },
     { expect: [any("Marketing")], act: { click: 'role=option[name="Marketing"s]' } },
     { expect: [any("Amount")], act: { fill: ['role=textbox[name="Amount"]', "50000"] } },
     { expect: [button("Create budget")] },
@@ -35,6 +36,8 @@ const addBudget: Task = {
  * ACTS_SET=northpine-teach): what the visitor fills in is theirs, and Create
  * budget is handed over, never pressed. Pressing New budget on the list sets
  * off acting's tripwire on Northpine, route or not, so this starts past it.
+ * Haptic may hand the visitor the department's open list by its search box,
+ * so the visitor's part has a search in it: they type the name and pick it.
  */
 const addBudgetInForm: Task = {
   id: "budgets-add-in-form",
@@ -44,6 +47,7 @@ const addBudgetInForm: Task = {
   steps: [
     { expect: [any("Budget name")], act: { fill: ['role=textbox[name="Budget name"]', "Marketing programs"] } },
     { expect: [any("Department")], act: { click: 'role=combobox[name="Department"]' } },
+    { expect: [{ label: "Search departments…", role: "combobox" }], act: { fill: ["[cmdk-input]", "Marketing"] } },
     { expect: [any("Marketing")], act: { click: 'role=option[name="Marketing"s]' } },
     { expect: [any("Amount")], act: { fill: ['role=textbox[name="Amount"]', "50000"] } },
     { expect: [button("Create budget")] },
