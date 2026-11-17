@@ -317,8 +317,9 @@ test("on a site with Answers on, an answer in words to a question of fact or exp
     assert.equal(measure.reply.say, freezeAnswer.say, goal);
     assert.deepEqual(measure.cited, ["freeze.md"], goal);
   }
-  // "I can't help" is a fixed sentence, and is never looked at.
-  const { sent } = use([{ reply: written({ mode: "cannot_help", reason: "not_covered", say: "Click Freeze card." }) }], "ask");
+  // "I can't help" is a fixed sentence, and what the model wrote under it is never looked at. (Only "not covered" to a
+  // question that asks for a way is asked about again: see the test of it below.)
+  const { sent } = use([{ reply: written({ mode: "cannot_help", reason: "sensitive", say: "Click Freeze card." }) }], "ask");
   const cannot = await measureTurn(withDocs, { site: withDocs.id, goal: "how do I freeze this card", step: 0, history: [], snapshot: cardPage });
   assert.equal(sent.length, 1);
   assert.equal(cannot.reply.mode, "cannot_help");
@@ -426,6 +427,57 @@ test("a guide that ends in words is left alone when the goal is a question of fa
     assert.equal(measure.reply.target, null, say);
     assert.equal(measure.recheck, undefined, say);
   }
+});
+
+// Haptic's demo app with its help docs, 17 November: "How do I delete this workspace?" on the home page, where the way
+// is behind the account menu, was answered "I couldn't find that on Acme Console or in its help docs." in 7 replies of 12.
+const demoHome: Snapshot = {
+  path: "/demo",
+  title: "Acme Console",
+  headings: ["Projects"],
+  text: [],
+  truncated: false,
+  elements: [
+    { id: "e1", role: "link", label: "Projects", href: "/demo/projects", context: "nav" },
+    { id: "e2", role: "link", label: "Team", href: "/demo/team", context: "nav" },
+    { id: "e5", role: "button", label: "A", context: "header", state: ["collapsed"] },
+  ],
+};
+const cannotFind = written({ mode: "cannot_help", status: "done", reason: "not_covered" });
+const opensAccount = written({ target: "e5", status: "continue", say: "Click the round A button at the top right to open the account menu." });
+const deleteIt: TurnRequest = { site: withDocs.id, goal: "How do I delete this workspace?", step: 0, history: [], snapshot: demoHome };
+
+test('on a site with Answers on, "not covered" to a first question that asks for a way is asked about once more, and the second reply is the one sent', async () => {
+  const { sent } = use([{ streams: '{"mode":"cannot_help","target":null', reply: cannotFind }, { streams: '{"mode":"guide","target":"e5"', reply: opensAccount }], "ask");
+  const early: string[] = [];
+  const { result: measure, lines } = await logging(() => measureTurn(withDocs, deleteIt, undefined, { onTarget: (id) => early.push(id) }));
+  assert.equal(sent.length, 2);
+  assert.deepEqual(JSON.parse(sent[1]!.messages.at(-2)!.content as string), cannotFind);
+  assert.match(sent[1]!.messages.at(-1)!.content as string, /says you can't help because nothing covers it\. The visitor asked for a way/);
+  assert.deepEqual(measure.reply, { target: "e5", status: "continue", say: "Click the round A button at the top right to open the account menu.", mode: "guide" });
+  assert.deepEqual(measure.recheck, { named: "", asked: true, gaveUp: true });
+  // The second reply's pointer goes out as soon as it is known, though the first reply declined.
+  assert.deepEqual(early, ["e5"]);
+  assert.deepEqual(lines.filter((line) => line.startsWith("recheck ")), ['recheck site_docs step 0: "not covered" to a question that asks for a way, asking again']);
+  // The model may say it again: then the visitor reads the fixed sentence, and is offered a person as before.
+  const twice = use([{ reply: cannotFind }, { reply: cannotFind }], "ask");
+  const still = await measureTurn(withDocs, deleteIt);
+  assert.equal(twice.sent.length, 2);
+  assert.deepEqual(still.reply, { target: null, status: "stuck", say: "I couldn't find that on Test or in its help docs.", mode: "cannot_help", reason: "not_covered" });
+});
+
+test('"not covered" is left as it is for a question of fact, a question for a person, one off the subject, a later step, and when the check is not asking', async () => {
+  const once = async (reply: ModelReply, request: TurnRequest, recheck = "ask") => {
+    const { sent } = use([{ reply }, { reply: opensAccount }], recheck);
+    const measure = await measureTurn(withDocs, request);
+    return [sent.length, measure.reply.mode, measure.reply.reason];
+  };
+  assert.deepEqual(await once(cannotFind, { ...deleteIt, goal: "can a workspace be deleted?" }), [1, "cannot_help", "not_covered"]);
+  assert.deepEqual(await once({ ...cannotFind, reason: "sensitive" }, deleteIt), [1, "cannot_help", "sensitive"]);
+  assert.deepEqual(await once({ ...cannotFind, reason: "off_topic" }, deleteIt), [1, "cannot_help", "off_topic"]);
+  assert.deepEqual(await once(cannotFind, { ...deleteIt, step: 2, event: 'The user clicked link "Team".' }), [1, "cannot_help", "not_covered"]);
+  assert.deepEqual(await once(cannotFind, deleteIt, "log"), [1, "cannot_help", "not_covered"]);
+  assert.deepEqual(await once(cannotFind, deleteIt, "off"), [1, "cannot_help", "not_covered"]);
 });
 
 test('"Not that one." is said only to a visitor who used something other than the step shown', async () => {

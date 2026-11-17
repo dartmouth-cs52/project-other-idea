@@ -27,6 +27,8 @@ A how-to question is guided to the end, whether or not an article describes the 
 - A guide that ends in words naming the goal's control, with no word that says to use it ("Existing keys are listed there, and Create API key makes a new one."), is asked about once more. This holds on a site without Answers too.
 - An answer that points and calls that the end ("done") goes on from the pointer instead: it is the first step, and the widget asks again once the visitor has used it. For a question of fact, "done" with a pointer still only shows where the thing is.
 
+- "I couldn't find that" (`cannot_help` with `not_covered`) to a first question that asks for a way is asked about once more, since the way is often behind an account menu or a settings page. The model may say it again, and then the fixed sentence stands and a person is offered as before. A question of fact, one for a person and one off the subject are never asked about again.
+
 A step's sentence may repeat an amount of money the visitor wrote in their own question ("raise the budget to $75,000": "Click Edit budget, then set $75,000"). Any other amount still costs the step its words, and so does any amount when the question itself is about a price, a refund or the visitor's own account. An answer in words is held to the rule whoever wrote the figure.
 
 In the widget, an answer is read in the panel: the question, the answer, and under it each article's title, link and date. If the answer is about a control on the page, the pointer goes to it as well. A step's sentence stays beside the pointer. Questions answered in words are remembered until the visitor presses Stop, so "and who can remove them?" is read with what came before.

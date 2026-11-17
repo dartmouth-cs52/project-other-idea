@@ -336,6 +336,23 @@ export function namedForTheGoalNote(element: SnapElement): string {
   );
 }
 
+// On a site with Answers on the model may also say it can't help, and the visitor then reads a fixed sentence: "I
+// couldn't find that on Acme Console or in its help docs." It says so too readily to a visitor who asked for a way.
+// Asked "How do I delete this workspace?" on the home page of Haptic's demo app, where the way is behind the account
+// menu and then Settings, it said so in 7 replies of 12 on 17 November, and pointed at the account menu in 5. The
+// same question was guided to the end 9 runs in 9 while the site had Answers off. So that reply, to a first question
+// that wants the way, is asked about once more. The model may say it again, and then the fixed sentence stands.
+
+/** What the model is told when it said nothing covers a question that asks for a way. Both ways out are open. */
+export function gaveUpNote(): string {
+  return (
+    `Your reply says you can't help because nothing covers it. The visitor asked for a way to do something on this site, and the way is often a level or two down: ` +
+    `behind an account menu, a settings page, a tab, or a page the site map lists. Look again at this page's list and the site map. ` +
+    `If something there could lead toward what they asked, reply in mode "guide" with it as the target and status "continue". ` +
+    `If nothing could, reply "cannot_help" with reason "not_covered" again.`
+  );
+}
+
 // In act mode the same contradiction stops the run, at any step. A reply of
 // "continue" with nothing pointed at is the visitor's turn on nothing: Haptic
 // does nothing, and the visitor is left with nothing to use. Seen on

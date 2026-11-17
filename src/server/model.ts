@@ -7,7 +7,7 @@ import { ACTING_LIMITS, ACTS, actionsAllowed, MODES, REASONS, type Act, type Mod
 import { actingFor, type NotActing } from "./acting.ts";
 import { declinedReply, finishAnswer, neverDecided, type Finished, type ModelReply, type Overruled } from "./answers.ts";
 import type { Ceiling } from "./budget.ts";
-import { judgeNamed, namedButNotDone, namedButNotDoneNote, namedButNotPointed, namedButNotPointedNote, namedForTheGoal, namedForTheGoalNote, pressLeftToVisitor, wantsTheWay, type NamedVerdict } from "./check.ts";
+import { gaveUpNote, judgeNamed, namedButNotDone, namedButNotDoneNote, namedButNotPointed, namedButNotPointedNote, namedForTheGoal, namedForTheGoalNote, pressLeftToVisitor, wantsTheWay, type NamedVerdict } from "./check.ts";
 import { costOf } from "./prices.ts";
 import { answersOn, articlesOf, buildSystemPrompt, buildUserMessage } from "./prompt.ts";
 import { checkSay, SAY_MAX_CHARS, SAY_MAX_SENTENCES, SAY_WITHOUT_WORDS, tidySay, withoutBlame, type Rule } from "./rules.ts";
@@ -165,8 +165,9 @@ export interface TurnMeasure {
    * The listed control the first reply's sentence told the visitor to use while it pointed at nothing, and whether the model was asked again.
    * `act` is set when it was an act reply of "continue" naming a control Haptic could press (namedButNotDone).
    * `verdict` is how a guide's reply was judged (judgeNamed), and `pointed` is set when the server pointed at the control itself.
+   * `gaveUp` is set, with no control named, when the first reply said nothing covers a question that asks for a way.
    */
-  recheck?: { named: string; asked: boolean; act?: true; verdict?: NamedVerdict; pointed?: true };
+  recheck?: { named: string; asked: boolean; act?: true; verdict?: NamedVerdict; pointed?: true; gaveUp?: true };
   /**
    * Set when the widget asked to act. `refused`: why the step was answered as
    * a guide. `capped`: the step was past the site's cap, so the model was not
@@ -444,6 +445,36 @@ export async function measureTurn(
         // A second call that failed may still have been paid for.
         if (error instanceof TurnError) answer.usd += error.usd;
         // The first reply is still one the visitor can be shown.
+        console.warn(`recheck ${site.id} step ${request.step}: asking again failed, so the first reply stands:`, error instanceof Error ? error.message : error);
+      }
+    }
+  }
+
+  // "I couldn't find that", to a first question that asks for a way, is asked about once more too (check.ts, gaveUpNote):
+  // the way is often behind a menu the model did not think to open. Its second reply is the one sent, whatever it says.
+  const gaveUp =
+    kind === "cannot_help" &&
+    (answer.reply.reason ?? "not_covered") === "not_covered" &&
+    settings.model !== "mock" &&
+    settings.recheck !== "off" &&
+    !answer.declined &&
+    request.step === 0 &&
+    !request.event &&
+    wantsTheWay(request.goal);
+  if (gaveUp) {
+    const ask = settings.recheck === "ask";
+    console.log(`recheck ${site.id} step ${request.step}: "not covered" to a question that asks for a way${ask ? ", asking again" : ""}`);
+    answer.recheck = { named: "", asked: ask, gaveUp: true };
+    if (ask) {
+      try {
+        // A reply that declines points at nothing. The second one may point, and its pointer goes out as early as any.
+        declining = false;
+        const again = await claudeTurn(site, request, settings, answers, modeKnown, targetKnown, signal, { reply: answer.reply, note: gaveUpNote() });
+        if (!onPage(again.reply.target)) again.reply.target = null;
+        answer = { ...again, tokens: added(answer.tokens, again.tokens), usd: answer.usd + again.usd, recheck: answer.recheck };
+      } catch (error) {
+        if (error instanceof TurnCancelled) throw new TurnCancelled(answer.usd + error.usd);
+        if (error instanceof TurnError) answer.usd += error.usd;
         console.warn(`recheck ${site.id} step ${request.step}: asking again failed, so the first reply stands:`, error instanceof Error ? error.message : error);
       }
     }
