@@ -128,7 +128,8 @@ async function boot() {
   const pageOff = (script.dataset.acting ?? "").trim().toLowerCase() === "off";
   const acting = config.acting && typeof config.acting === "object" && !pageOff ? config.acting : undefined;
   // What the guide and its gate are told of acting. The setting is set aside if the code that acts cannot be loaded.
-  const gateConfig: GateConfig = { ...(acting ? { acting } : {}), ...(pageOff ? { pageOff } : {}) };
+  // Haptic's own server is told to the gate too: what the widget sends there is never the page sending something.
+  const gateConfig: GateConfig = { ...(acting ? { acting } : {}), ...(pageOff ? { pageOff } : {}), own: api };
   let actingLoaded: boolean | undefined;
   const actingReady = acting
     ? loadActing(script).then((ok) => {
