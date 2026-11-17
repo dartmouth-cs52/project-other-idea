@@ -525,6 +525,39 @@ for (const name of BROWSERS) {
       assert.equal(await inFromRight(tab), 20);
     });
 
+    test("stays in its corner when only the caption would run under it: the caption moves over instead", async () => {
+      // A dialog's last button, just left of the chat's column, as on a page's "Invite people" dialog. The caption is
+      // long, so under the button's left edge it would run on under the chat. The chat used to jump up the window to
+      // clear it, and drop back on the next step, for a control it never covered.
+      harness.pages.set(
+        "/beside",
+        page(`<main style="font:14px system-ui;padding:40px"><h1>Invite people</h1>
+          <button id="beside" style="position:fixed;right:370px;bottom:200px">Send invite</button></main>`),
+      );
+      await tab.goto(`${harness.url}/beside`);
+      await part(tab, ".launcher").waitFor();
+      // Every place the dock is put, however briefly.
+      await part(tab, ".dock").evaluate((dock) => {
+        const moves = ((window as unknown as { moves: string[] }).moves = [] as string[]);
+        new MutationObserver(() => moves.push((dock as HTMLElement).style.bottom)).observe(dock, { attributes: true, attributeFilter: ["style"] });
+      });
+      const say = "Click Send invite to send the invitation. Role, Department and Entity are optional to adjust first if you need to.";
+      harness.script = (request) => point(idOf(request, "Send invite"), say);
+      await ask(tab, "lets invite him");
+      assert.ok(await ringAround(tab, "#beside"));
+      await part(tab, ".caption").waitFor();
+      // The dock is looked at again every 200ms while the pointer is up.
+      await sleep(700);
+      const moves = await tab.evaluate(() => (window as unknown as { moves: string[] }).moves);
+      assert.ok(moves.every((bottom) => parseFloat(bottom) === 20), `it never left its corner: ${JSON.stringify(moves)}`);
+      assert.equal(await dockBottom(tab), 20);
+      const [caption, panel, button] = await Promise.all([part(tab, ".caption").boundingBox(), part(tab, ".panel").boundingBox(), tab.locator("#beside").boundingBox()]);
+      assert.ok(caption!.width > 300, `the caption is long enough to have reached the chat: ${caption!.width}`);
+      assert.ok(caption!.x + caption!.width <= panel!.x, `the caption is clear of the chat: ${JSON.stringify({ caption, panel })}`);
+      assert.ok(caption!.y >= button!.y + button!.height, "it is still below the button");
+      assert.ok(caption!.x < button!.x + button!.width && caption!.x + caption!.width >= button!.x + button!.width, "and still under it, its right edge at or past the button's");
+    });
+
     test("with no room for the chat above the control, tucks the chat away for the step, and the launcher brings it back", async () => {
       // A short window: the open chat can't fit between the control and the top of the window.
       await tab.setViewportSize({ width: 1000, height: 420 });

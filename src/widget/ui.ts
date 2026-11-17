@@ -33,6 +33,12 @@ const RESTART_PATH = "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5"
 const TICK_PATH = "M20 6 9 17l-5-5";
 /** A click on the control is acknowledged like a pressed button: the ring and the pointer dip and come back. */
 const PRESS_MS = 240;
+/**
+ * How long a control pointed at while out of the window is given to come into
+ * it, as the guide scrolls it there, before its sentence is put at the edge of
+ * the window with the way to it.
+ */
+const ARRIVE_MS = 1500;
 /** What the chat says while the pointer shows a step, in a guide Haptic is not doing itself. */
 export const SHOWING = "Showing you how";
 /** Under the ask box, when Send is pressed with nothing typed. */
@@ -233,6 +239,12 @@ button { font: inherit; cursor: pointer; }
   border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; pointer-events: auto; }
 .caption .close:hover { background: rgba(250,250,249,.25); }
 .caption .close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+/* With the control scrolled out of the window, the caption waits at that edge, led by the way back to it. */
+.caption .where { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 24px; height: 24px; margin-left: -6px; border: 0;
+  border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; pointer-events: auto; }
+.caption .where:hover { background: rgba(250,250,249,.25); }
+.caption .where svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.caption .where.down svg { transform: rotate(180deg); }
 .helped { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 2px 8px 12px; }
 .helped span { margin-right: auto; color: #78716c; }
 .helped button { display: inline-flex; align-items: center; justify-content: center; height: 32px; border: 0; border-radius: 999px; padding: 0 14px;
@@ -294,8 +306,9 @@ const PRESENT_CSS = `
 .caption { animation: none; }
 .caption { max-width: min(780px, calc(100vw - 32px)); gap: 14px; border-radius: 20px; padding: 14px 14px 14px 24px; font-size: 27px; line-height: 36px;
   box-shadow: 0 0 0 3px var(--accent), 0 14px 40px rgba(0,0,0,.4); }
-.caption .close { width: 36px; height: 36px; }
-.caption .close svg { width: 16px; height: 16px; }
+.caption .close, .caption .where { width: 36px; height: 36px; }
+.caption .close svg, .caption .where svg { width: 16px; height: 16px; }
+.caption .where { margin-left: -12px; }
 .panel:has(.did:not([hidden])) { width: min(380px, calc(100vw - 40px)); }
 .did h2 { font-size: 18px; line-height: 24px; }
 .did .line { font-size: 17px; line-height: 24px; padding: 5px 8px; }
@@ -458,6 +471,10 @@ export class Ui {
   private target?: Element;
   /** Whether `target` has been chosen with the control on screen, where what lies at its middle can be seen. */
   private aimed = false;
+  /** When the guide last pointed at a new control. */
+  private pointedTime = -Infinity;
+  /** The control is out of the window, and the way to it, while the pointer is put away and its sentence waits at the window's edge. */
+  private outOfView?: "up" | "down" | "unseen";
   /** Where in the target's box the tip went, for the box it was found for, so the page is looked at only when the box moves. */
   private tip?: { box: string; dx: number; dy: number };
   /** The caption is above the control rather than below it, because something opened where it was. */
@@ -550,7 +567,13 @@ export class Ui {
     const hidden = { hidden: "" };
     root.append(
       make("div", { class: "ring", ...hidden }),
-      make("div", { class: "caption", ...hidden }, make("span"), make("button", { class: "close", "aria-label": "Stop guide" }, icon(CROSS_PATH, { "aria-hidden": "true" }))),
+      make(
+        "div",
+        { class: "caption", ...hidden },
+        make("button", { class: "where", type: "button", ...hidden }, icon(ARROW_PATH, { "aria-hidden": "true" })),
+        make("span"),
+        make("button", { class: "close", "aria-label": "Stop guide" }, icon(CROSS_PATH, { "aria-hidden": "true" })),
+      ),
       make("div", { class: "cursor", ...hidden }, icon(POINTER_PATH, { width: "24", height: "24" })),
       make("div", { class: "asked", ...hidden }),
       make(
@@ -1026,6 +1049,7 @@ export class Ui {
       if (button.classList.contains("person-open")) return this.onHandoff?.open();
       if (button.classList.contains("person-cancel")) return this.onHandoff?.cancel();
       if (button.classList.contains("person-send")) return this.onHandoff?.send();
+      if (button.classList.contains("where")) return this.bringBack();
       const name = (["launcher", "hide", "dismiss", "send", "stop", "close", "doit", "go", "resume", "restart"] as const).find((name) => button.classList.contains(name));
       if (name) this.buttons[name]();
     };
@@ -1254,6 +1278,7 @@ export class Ui {
   /** Between two of Haptic's steps: the caption and the ring go, and the pointer rests where it is, so the next glide starts there. */
   rest() {
     this.endPress();
+    this.backInView();
     this.pointed = undefined;
     this.pointedBox = undefined;
     this.captionAvoid = [];
@@ -1466,10 +1491,12 @@ export class Ui {
     this.caption.classList.remove("said");
     this.saying = false;
     this.lost = false;
+    this.backInView();
     if (el !== this.pointed) {
       // A control the page drew again, in the same place, is the same control: the caption stays off what it opened.
       const same = !!this.pointedBox && sameBox(this.pointedBox, el.getBoundingClientRect());
       this.pointed = el;
+      this.pointedTime = performance.now();
       this.chatWanted = false;
       this.held = undefined;
       this.tip = undefined;
@@ -1573,6 +1600,7 @@ export class Ui {
     this.endPress();
     this.saying = false;
     this.lost = false;
+    this.backInView();
     this.pointed = undefined;
     this.pointedBox = undefined;
     this.captionAvoid = [];
@@ -1762,7 +1790,12 @@ export class Ui {
       this.caption.hidden = this.captionText.textContent === "";
     }
     let rect = el.getBoundingClientRect();
-    if (!this.ringAt(rect)) return;
+    if (!this.ringAt(rect)) return this.offView(rect);
+    if (this.outOfView) {
+      this.backInView();
+      this.cursor.hidden = false;
+      this.caption.hidden = this.captionText.textContent === "";
+    }
     // A control pointed at while it was scrolled out of view is looked at again once it is in view.
     if (!this.aimed && this.pointed) {
       this.aim(this.pointed);
@@ -1791,7 +1824,7 @@ export class Ui {
       const fitsAbove = rect.top - box.height - 12 >= 8;
       const above = this.captionAbove !== suggestsBelow(el) ? fitsAbove || !fitsBelow : !fitsBelow;
       top = above ? Math.max(8, rect.top - box.height - 12) : rect.bottom + 14;
-      left = Math.min(Math.max(8, rect.left), window.innerWidth - box.width - 8);
+      left = this.captionLeft(rect, box, top);
     }
     this.caption.style.left = `${left}px`;
     this.caption.style.top = `${top}px`;
@@ -1803,6 +1836,66 @@ export class Ui {
     this.keepLauncherOff(rect, caption);
     if (caption) this.keepCaptionOff(el, caption);
     if (this.present) this.showAsked([this.ring.getBoundingClientRect(), this.pointerBox()]);
+  }
+
+  /**
+   * The control is out of the window. The pointer and its caption are drawn
+   * over the window, not the page, so left where they were they would point
+   * at whatever scrolled under them. The pointer is put away, and the caption
+   * waits at the edge of the window the control went off, led by a button
+   * that brings it back, until the control is in the window again. Just after
+   * the guide pointed at a control out of the window, while its own scroll
+   * brings it in, neither shows. A point Haptic is about to press, while it
+   * acts, is where it is in the window whatever the control does, and stays.
+   */
+  private offView(rect: DOMRect) {
+    if (this.held) return;
+    const way = rect.bottom <= 0 ? "up" : rect.top >= window.innerHeight ? "down" : undefined;
+    const arriving = !this.aimed && performance.now() - this.pointedTime < ARRIVE_MS;
+    const where = this.caption.querySelector<HTMLElement>(".where")!;
+    this.cursor.hidden = true;
+    if (!way || arriving || this.captionText.textContent === "") {
+      // Not yet in, or nowhere to say it is: nothing is left floating over the page meanwhile.
+      this.outOfView = "unseen";
+      this.caption.hidden = true;
+      where.hidden = true;
+      return;
+    }
+    if (this.outOfView !== way) {
+      this.outOfView = way;
+      const label = way === "up" ? "Scroll up to it" : "Scroll down to it";
+      where.setAttribute("aria-label", label);
+      where.title = label;
+      where.classList.toggle("down", way === "down");
+      // What lay under the caption beside the control says nothing about what lies under it at the edge, or once it is back.
+      if (!this.under?.moved) this.under = undefined;
+    }
+    where.hidden = false;
+    this.caption.hidden = false;
+    const box = this.caption.getBoundingClientRect();
+    const margin = 12;
+    const left = Math.min(Math.max(margin, rect.left), window.innerWidth - box.width - margin);
+    const top = way === "up" ? margin : window.innerHeight - box.height - margin;
+    this.caption.style.left = `${left}px`;
+    this.caption.style.top = `${top}px`;
+    const now = performance.now();
+    if (now - this.looked < 200) return;
+    this.looked = now;
+    this.keepLauncherOff(rect, { left, top, right: left + box.width, bottom: top + box.height });
+  }
+
+  /** The control is in the window again, or the pointer has moved on: the caption's way back to it goes. */
+  private backInView() {
+    this.outOfView = undefined;
+    const where = this.caption.querySelector<HTMLElement>(".where");
+    if (where) where.hidden = true;
+  }
+
+  /** The caption's button: scrolls the control it is about back into the window, where the pointer and ring come back to it. */
+  private bringBack() {
+    const el = this.target;
+    if (!el?.isConnected) return;
+    el.scrollIntoView({ block: "center", inline: "nearest", behavior: lessMotion() ? "auto" : "smooth" });
   }
 
   /** The box the pointer is drawn in, round its tip, at the size it is drawn. */
@@ -1848,7 +1941,9 @@ export class Ui {
       );
     }
     const fits = (place: { left: number; top: number }) => place.left >= 12 && place.top >= 12 && place.left + box.width <= width - 12 && place.top + box.height <= height - 12;
-    const avoid = [ring, pointer, ...this.captionAvoid, ...open.boxes];
+    // The launcher and the chat in their corner too, so they never move up the window for the caption alone.
+    const dock = this.dockHome(rect);
+    const avoid = [ring, pointer, ...this.captionAvoid, ...open.boxes, ...(dock ? [dock] : [])];
     const free = (place: { left: number; top: number }) =>
       !avoid.some((other) => overlaps({ left: place.left, top: place.top, right: place.left + box.width, bottom: place.top + box.height }, other, 0));
     return places.find((place) => fits(place) && free(place)) ?? places.find(fits) ?? { left: clampX(rect.left), top: clampY(ring.bottom + gap) };
@@ -1914,16 +2009,45 @@ export class Ui {
   }
 
   /**
-   * Keeps the launcher, and the chat above it, off the control being pointed
-   * at and off its caption. They stay on the right of the window: while they
-   * would cover them they move up it, to just above, and they come back down
-   * when the step is over. When the open chat has no room above the control,
-   * it is tucked away for the step and the launcher alone goes up, unless the
-   * visitor opened it during the step. The caption's × still stops the guide,
-   * and the launcher brings the chat back.
+   * Where the caption starts across the window, below or above the control:
+   * under the control's left edge, unless that runs it under the launcher and
+   * the chat in their corner. Then it moves left, as far as it must to clear
+   * them, and no further than to end at the control's right edge, where the
+   * pointer hangs. A long caption under a button just left of the chat, like
+   * a dialog's last button, used to run on under the chat, and the chat
+   * jumped up the window for it and dropped back on the next step, for a
+   * control it never covered. When moving left can't clear them, the caption
+   * stays under the left edge and the dock moves up out of its way for the
+   * step (see `keepLauncherOff`).
    */
-  private keepLauncherOff(rect: DOMRect, caption?: Box) {
-    const inWay = [{ left: rect.left - 4, top: rect.top - 4, right: rect.right + 4, bottom: rect.bottom + 4 }, ...(caption ? [caption] : [])];
+  private captionLeft(rect: DOMRect, box: DOMRect, top: number): number {
+    const fit = (x: number) => Math.min(Math.max(8, x), window.innerWidth - box.width - 8);
+    const left = fit(rect.left);
+    const dock = this.dockHome(rect);
+    const at = (x: number): Box => ({ left: x, top, right: x + box.width, bottom: top + box.height });
+    if (!dock || !overlaps(at(left), dock, 4)) return left;
+    const over = fit(Math.min(left, Math.max(rect.right - box.width, dock.left - CLEAR - box.width)));
+    return overlaps(at(over), dock, 4) ? left : over;
+  }
+
+  /**
+   * The box the launcher and the open chat take in their own place, for the
+   * caption to keep off, so they never move up the window for the caption
+   * alone. None when the control pointed at is in it: they move for the
+   * control anyway, to above it and its caption.
+   */
+  private dockHome(rect: DOMRect): Box | undefined {
+    const home = boxAt(this.home, this.dockSizes().whole);
+    // As `keepLauncherOff` keeps them off the control: 4px round it, and 4px more.
+    return overlaps(home, rect, 8) ? undefined : home;
+  }
+
+  /**
+   * The room the launcher takes alone, and with the open chat above it. The
+   * chat's size is the last it showed, so a chat tucked away for the step
+   * keeps its room for when it comes back.
+   */
+  private dockSizes(): { alone: { w: number; h: number }; chat?: { w: number; h: number }; whole: { w: number; h: number } } {
     const launch = this.dock.querySelector(".launch")!.getBoundingClientRect();
     const alone = { w: launch.width, h: launch.height };
     if (!this.panel.hidden && !this.dock.classList.contains("tucked")) {
@@ -1931,7 +2055,23 @@ export class Ui {
       this.chatSize = { w: shown.width, h: shown.height + DOCK_GAP };
     }
     const chat = this.panel.hidden ? undefined : this.chatSize;
-    const whole = chat ? { w: Math.max(alone.w, chat.w), h: alone.h + chat.h } : alone;
+    return { alone, chat, whole: chat ? { w: Math.max(alone.w, chat.w), h: alone.h + chat.h } : alone };
+  }
+
+  /**
+   * Keeps the launcher, and the chat above it, off the control being pointed
+   * at and off its caption. They stay on the right of the window: while they
+   * would cover them they move up it, to just above, and they come back down
+   * when the step is over. The caption keeps off them where it can (see
+   * `captionLeft`), so it is nearly always the control they move for. When
+   * the open chat has no room above the control, it is tucked away for the
+   * step and the launcher alone goes up, unless the visitor opened it during
+   * the step. The caption's × still stops the guide, and the launcher brings
+   * the chat back.
+   */
+  private keepLauncherOff(rect: DOMRect, caption?: Box) {
+    const inWay = [{ left: rect.left - 4, top: rect.top - 4, right: rect.right + 4, bottom: rect.bottom + 4 }, ...(caption ? [caption] : [])];
+    const { alone, chat, whole } = this.dockSizes();
     const spot = freeUp(this.home.y, whole, inWay, window.innerHeight - whole.h - 8);
     if (spot || !chat || this.chatWanted) {
       this.tuck(false);

@@ -90,6 +90,137 @@ test("a field the browser or the page will not accept is marked invalid, and one
   assert.ok(!JSON.stringify(snapshot).includes("charlie"), "what was typed was sent");
 });
 
+test("an email address with no dot in its domain is marked invalid, though the browser takes it (Northpine: the guide pointed at \"Send invite\" after \"theochain@dad\")", { skip }, async () => {
+  const typed: Record<string, string> = {
+    "#no-dot": "theochain@dad",
+    "#short": "theochain@dad.c",
+    "#digits": "theochain@dad.123",
+    "#whole": "theochain@dad.example",
+    "#several": "ana@northpine.example, theochain@dad",
+    "#all": "ana@northpine.example, theochain@dad.example",
+    "#sign-in": "charlie",
+  };
+  const snapshot = await read(
+    `<form>
+      <label>No dot <input id="no-dot" type="email"></label>
+      <label>One letter ending <input id="short" type="email"></label>
+      <label>Digits ending <input id="digits" type="email"></label>
+      <label>Whole <input id="whole" type="email"></label>
+      <label>Several, one without a dot <input id="several" type="email" multiple></label>
+      <label>Several, all whole <input id="all" type="email" multiple></label>
+      <label>Email or user name <input id="sign-in" type="text" autocomplete="email"></label>
+      <label>Still empty <input type="email"></label>
+      <label>Locked <input type="email" value="theochain@dad" readonly></label>
+      <button>Send</button>
+    </form>`,
+    {
+      before: async (page) => {
+        for (const [field, value] of Object.entries(typed)) await page.fill(field, value);
+      },
+    },
+  );
+  const states = Object.fromEntries(snapshot.elements.map((element) => [element.label, element.state ?? []]));
+  for (const label of ["No dot", "One letter ending", "Digits ending", "Several, one without a dot"]) assert.ok(states[label]?.includes("invalid"), `${label}: ${JSON.stringify(states)}`);
+  // Only a field typed as email is checked. A text field whose autocomplete says email may take a user name too, as many sign-in forms do.
+  for (const label of ["Whole", "Several, all whole", "Email or user name", "Still empty", "Locked"]) assert.ok(!states[label]?.includes("invalid"), `${label}: ${JSON.stringify(states)}`);
+  // Only the mark is sent, never what was typed.
+  for (const secret of ["theochain", "charlie"]) assert.ok(!JSON.stringify(snapshot).includes(secret), `"${secret}" was sent`);
+});
+
+test("a form that marks only its optional fields has the others listed as required (Northpine: the guide called Department optional, and the invite asked for one)", { skip }, async () => {
+  const snapshot = await read(
+    `<form>
+      <label for="email">Email address</label><input id="email" type="email">
+      <label for="role">Role</label><select id="role"><option>Admin</option><option selected>Employee</option></select>
+      <label for="team">Team</label><select id="team"><option value="">Choose a team</option><option value="t1">Sales</option></select>
+      <label for="dept">Department</label><button type="button" id="dept" role="combobox" aria-label="Department" aria-expanded="false">Choose a department</button>
+      <label for="seats">Seats</label><input id="seats" type="number">
+      <label for="workspace">Workspace</label><input id="workspace" value="northpine" readonly>
+      <label for="region">Region</label><input id="region" disabled>
+      <label><input type="checkbox"> Send me a copy</label>
+      <label for="note">Personal note<span style="margin-left:4px">(optional)</span></label><textarea id="note"></textarea>
+      <button>Send invite</button>
+    </form>
+    <form>
+      <label for="name">Name *</label><input id="name">
+      <label for="company">Company</label><input id="company">
+      <label for="phone">Phone (optional)</label><input id="phone">
+      <button>Save contact</button>
+    </form>
+    <form>
+      <label for="city">City</label><input id="city">
+      <label><input type="checkbox"> Gift wrap (optional)</label>
+      <button>Save address</button>
+    </form>`,
+  );
+  const states = Object.fromEntries(snapshot.elements.map((element) => [element.label, element.state ?? []]));
+  assert.deepEqual(states["Email address"], ["required"]);
+  assert.deepEqual(states["Department"], ["required", "collapsed"]);
+  // A dropdown can be left empty only when it offers an empty choice. One that cannot always has a choice made.
+  assert.deepEqual(states["Team"], ["required"]);
+  assert.deepEqual(states["Role"], []);
+  assert.deepEqual(states["Seats"], ["required"]);
+  // What the visitor cannot change is not theirs to fill in, and a tick box is left as the page says.
+  assert.deepEqual(states["Workspace"], []);
+  assert.deepEqual(states["Region"], ["disabled"]);
+  assert.deepEqual(states["Send me a copy"], []);
+  assert.deepEqual(states["Personal note(optional)"], []);
+  // A form that marks what it requires has said which fields it requires, and the rest are not guessed at.
+  assert.deepEqual(states["Name *"], ["required"]);
+  assert.deepEqual(states["Company"], []);
+  assert.deepEqual(states["Phone (optional)"], []);
+  // A tick box marked optional says nothing of the fields around it.
+  assert.deepEqual(states["City"], []);
+});
+
+test("in a dialog with no form, the fields not marked optional are required, and nothing outside it is (Northpine's invite)", { skip }, async () => {
+  const snapshot = await read(
+    `<label for="search">Search people</label><input id="search">
+    <div role="dialog" aria-modal="true" aria-labelledby="invite-title" style="position:fixed;inset:40px;background:#fff;border:1px solid #999">
+      <h2 id="invite-title">Invite people</h2>
+      <input type="email" aria-label="Email address 1">
+      <label for="dept">Department</label><button type="button" id="dept" role="combobox" aria-label="Department" aria-expanded="false">Choose a department</button>
+      <label for="note">Personal note<span>(optional)</span></label><textarea id="note"></textarea>
+      <button>Cancel</button><button>Send invite</button>
+    </div>`,
+  );
+  assert.equal(snapshot.dialog, "Invite people");
+  const states = Object.fromEntries(snapshot.elements.map((element) => [element.label, element.state ?? []]));
+  assert.deepEqual(states["Email address 1"], ["required"]);
+  assert.deepEqual(states["Department"], ["required", "collapsed"]);
+  assert.deepEqual(states["Personal note(optional)"], []);
+});
+
+test("after the visitor types an address with no dot in its domain and pauses, the next step is asked for with the field marked invalid (Northpine's invite)", { skip }, async () => {
+  const shown = await browser!.widget(
+    `<div role="dialog" aria-modal="true" aria-labelledby="invite-title" style="position:fixed;inset:40px;background:#fff;border:1px solid #999;padding:16px">
+      <h2 id="invite-title">Invite people</h2>
+      <input id="email" type="email" aria-label="Email address 1" aria-invalid="false">
+      <label for="dept">Department</label><button type="button" id="dept" role="combobox" aria-label="Department" aria-expanded="false">Choose a department</button>
+      <label for="note">Personal note<span>(optional)</span></label><textarea id="note"></textarea>
+      <button>Cancel</button><button>Send invite</button>
+    </div>`,
+    (request, index) => {
+      const email = request.snapshot.elements.find((element) => element.label === "Email address 1");
+      return index === 0 ? { target: email?.id ?? null, status: "continue", say: "Type their email address." } : { target: null, status: "done", say: "That is all." };
+    },
+  );
+  try {
+    await shown.ask("invite theo");
+    await shown.page.locator("#email").click();
+    await shown.page.keyboard.type("theochain@dad");
+    await shown.waitFor(2);
+    const request = JSON.parse(shown.sent[1] ?? "{}") as { event?: string; snapshot: { elements: { label: string; state?: string[] }[] } };
+    const states = Object.fromEntries(request.snapshot.elements.map((element) => [element.label, element.state ?? []]));
+    assert.match(request.event ?? "", /filled in/);
+    assert.deepEqual(states["Email address 1"], ["required", "invalid"]);
+    assert.deepEqual(states["Department"], ["required", "collapsed"]);
+    for (const body of shown.sent) assert.ok(!body.includes("theochain"), "what was typed was sent");
+  } finally {
+    await shown.close();
+  }
+});
+
 test("an editor is listed once, by the name its page gives it, and nothing inside it is listed", { skip }, async () => {
   const snapshot = await read(`<h1>Notes</h1>
     <div contenteditable="true" aria-label="Message body">Dear Dana, <a href="/secret">this link</a> <button contenteditable="false">Mention: Priya</button></div>
