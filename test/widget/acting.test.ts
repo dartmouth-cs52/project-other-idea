@@ -126,7 +126,7 @@ test("the first Do it on a site says what will happen, and nothing is asked unti
     // Asked again on the same site: straight to work.
     await session.page.locator("haptic-root .caption .close").click();
     await session.untilState("finished");
-    await session.page.locator("haptic-root .ask input").fill("can you issue another card");
+    await session.page.locator("haptic-root .ask textarea").fill("can you issue another card");
     await session.page.locator("haptic-root .panel .doit").click();
     await session.untilAsked(2);
     assert.equal(session.requests[1]!.mode, "act");
@@ -140,7 +140,7 @@ test("the visitor's words only colour Do it: Enter still asks to be shown, in an
   const session = await start(CARD_FORM, (request) => (request.mode === "act" ? handOver(request, "Issue card", "Ready.") : words("Use the form.")), "/", { acting: { ...ACTING_ON, confirmFirst: false } });
   try {
     await session.page.locator("haptic-root .launcher").click();
-    const input = session.page.locator("haptic-root .ask input");
+    const input = session.page.locator("haptic-root .ask textarea");
     const nudged = () => session.page.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.querySelector(".panel")!.classList.contains("nudged"));
     await input.fill("how do I issue a card");
     assert.equal(await nudged(), false);
@@ -179,8 +179,8 @@ test("Do it shows only where acting is allowed: not on a site without it, not on
     try {
       await session.page.locator("haptic-root .launcher").click();
       assert.equal(await doItShown(session), false, `Do it shows on ${what}`);
-      await session.page.locator("haptic-root .ask input").fill("can you issue a card");
-      await session.page.locator("haptic-root .ask input").press("Control+Enter");
+      await session.page.locator("haptic-root .ask textarea").fill("can you issue a card");
+      await session.page.locator("haptic-root .ask textarea").press("Control+Enter");
       await session.page.waitForTimeout(500);
       assert.ok(session.requests.every((request) => request.mode === undefined), `act mode was asked for on ${what}`);
     } finally {

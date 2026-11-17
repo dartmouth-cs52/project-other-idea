@@ -64,7 +64,8 @@ button { font: inherit; cursor: pointer; }
 [hidden] { display: none !important; }
 .ask { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 10px; background: #f5f5f4; }
 .ask:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
-.ask input { width: 100%; height: 40px; font: inherit; color: inherit; padding: 4px 12px 0; border: 0; background: transparent; outline: none; }
+.ask textarea { display: block; width: 100%; height: 40px; max-height: 76px; font: inherit; color: inherit; padding: 12px 12px 4px; border: 0; background: transparent;
+  outline: none; resize: none; overflow-y: auto; scrollbar-width: thin; }
 .panel ::placeholder { color: #78716c; }
 .panel .row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 6px 10px 8px; }
 .panel .send { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0;
@@ -300,7 +301,8 @@ export class Ui {
   readonly host: HTMLElement;
   private readonly panel: HTMLElement;
   private readonly form: HTMLFormElement;
-  private readonly input: HTMLInputElement;
+  /** The ask box: one line that grows to three as the question does, so a long one is read whole while it is typed. Enter sends it. */
+  private readonly input: HTMLTextAreaElement;
   private readonly status: HTMLElement;
   private readonly statusText: HTMLElement;
   private readonly ring: HTMLElement;
@@ -440,7 +442,7 @@ export class Ui {
           make(
             "form",
             { class: "ask" },
-            make("input", { type: "text", placeholder: "What do you want to do?", "aria-label": "Ask a question", maxlength: "300" }),
+            make("textarea", { rows: "1", placeholder: "What do you want to do?", "aria-label": "Ask a question", maxlength: "300", enterkeyhint: "send" }),
             make(
               "div",
               { class: "row" },
@@ -465,7 +467,7 @@ export class Ui {
     const pick = <T extends Element>(selector: string) => root.querySelector(selector) as T;
     this.panel = pick(".panel");
     this.form = pick(".ask");
-    this.input = pick(".ask input");
+    this.input = pick(".ask textarea");
     this.thread = pick(".thread");
     this.handoff = pick(".handoff");
     this.status = pick(".status");
@@ -544,7 +546,7 @@ export class Ui {
       close: handlers.onStop,
       doit: () => this.doIt(handlers),
       go: () => {
-        const question = this.input.value.trim();
+        const question = this.typed();
         this.first.hidden = true;
         remember(this.acting);
         if (question) handlers.onAsk(question, true);
@@ -553,19 +555,23 @@ export class Ui {
     };
     this.form.addEventListener("submit", (event) => {
       event.preventDefault();
-      const question = this.input.value.trim();
+      const question = this.typed();
       this.first.hidden = true;
       if (question) handlers.onAsk(question, false);
     });
-    // Ctrl or Cmd and Enter is Do it. The visitor's own words only colour the button.
+    // Enter sends the question, as it did when the box was one line: a box of several lines would start a new one.
+    // Ctrl or Cmd and Enter is Do it. The visitor's own words only colour the button. Shift and Enter is a new line,
+    // and Enter that only picks a word while one is being composed, as in Japanese, is left to the keyboard.
     this.input.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" || !(event.ctrlKey || event.metaKey) || !this.panel.classList.contains("acts")) return;
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
       event.preventDefault();
-      this.doIt(handlers);
+      if ((event.ctrlKey || event.metaKey) && this.panel.classList.contains("acts")) this.doIt(handlers);
+      else if (!event.ctrlKey && !event.metaKey) this.form.requestSubmit();
     });
     this.input.addEventListener("input", () => {
       this.panel.classList.toggle("nudged", !!this.acting && asksToDo(this.input.value));
       this.first.hidden = true;
+      this.fitAsk();
     });
 
     // Typing in the ask box mustn't trigger the page's keyboard shortcuts or
@@ -891,6 +897,18 @@ export class Ui {
     });
   }
 
+  /** The question in the ask box, on one line. */
+  private typed(): string {
+    return this.input.value.replace(/\s+/g, " ").trim();
+  }
+
+  /** Makes the ask box as tall as what is in it, up to the three lines its stylesheet allows. Past that it scrolls. */
+  private fitAsk() {
+    const box = this.input;
+    box.style.height = "";
+    if (box.value && box.scrollHeight > box.clientHeight) box.style.height = `${box.scrollHeight}px`;
+  }
+
   /** Show the ask box busy with a message, or back to the input when `text` is empty. `paused` adds Carry on beside Stop. */
   setBusy(text: string, paused = false) {
     this.form.hidden = text !== "";
@@ -904,6 +922,7 @@ export class Ui {
       this.hideHandoff();
     } else {
       this.input.value = "";
+      this.fitAsk();
       this.panel.classList.remove("nudged");
       this.setNote("");
       this.showActs();
@@ -1044,7 +1063,7 @@ export class Ui {
    * starts it.
    */
   private doIt(handlers: UiHandlers) {
-    const question = this.input.value.trim();
+    const question = this.typed();
     if (!this.acting || !this.panel.classList.contains("acts")) return;
     if (!question) return this.input.focus();
     if (this.acting.confirmFirst && !remembered(this.acting)) {
