@@ -407,6 +407,25 @@ function inForm(el: Element): boolean {
   return !!(el as HTMLButtonElement).form || !!el.closest("form, [role='form']");
 }
 
+/**
+ * Whether `el` is how a table's column is sorted: the only control in its
+ * column header (a `th` or `role="columnheader"`), or a header marked with
+ * `aria-sort` that is pressed itself. Seen live on Northpine's Bills
+ * (17 November): "find my most expensive bill" had the model ask to click the
+ * Amount header, and it went to the visitor as a button nobody could read.
+ * Not in a form, where a script can send it from any button, as for
+ * `opensByName`. A header that holds more than one control, or a field, is
+ * something else, and is judged by its words.
+ */
+function sortsAColumn(el: Element): boolean {
+  if (inForm(el)) return false;
+  if (el.matches("th, [role='columnheader']")) return el.hasAttribute("aria-sort");
+  const header = el.closest("th, [role='columnheader']");
+  if (!header) return false;
+  const controls = Array.from(header.querySelectorAll("button, [role='button'], a[href], input, select, textarea, [role='checkbox'], [role='combobox'], [contenteditable]:not([contenteditable='false'])"));
+  return controls.length === 1 && controls[0] === el;
+}
+
 /** Whether it says it opens a menu, a list or a dialog. */
 function isOpener(el: Element): boolean {
   const popup = (el.getAttribute("aria-haspopup") ?? "").toLowerCase();
@@ -1019,6 +1038,8 @@ function judgePress(el: Element, control: ControlKind, listedName: string, sessi
   if (styledDestructive(el)) return { refused: { reason: "styled", at: el } };
   // Rule 8: safe because of what it is: a visit whose words and address commit nothing (its address is judged on its chain). A choice is judged further where it is planned.
   if (link || choice || control === "tab" || control === "combobox" || isOpener(el)) return {};
+  // Also rule 8, by what it is: the one button of a table's column header sorts the table. It changes the view, not the data.
+  if (control === "button" && sortsAColumn(el)) return {};
   // Rule 9: safe because of its words.
   if (verdict.safe) return {};
   // Also rule 8, by its words: a button whose name says it opens something to look at or fill in, with no commit word of any
