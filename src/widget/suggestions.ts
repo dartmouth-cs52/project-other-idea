@@ -16,11 +16,14 @@ import type { AskBox, Ui } from "./ui.ts";
 // no style and no listener.
 //
 // They never stand in the visitor's way. Only the pills themselves take a
-// press, never the space around and between them. One that would reach into
-// the top of the window is left out, the last first, so a short window shows
-// fewer or none. And a press anywhere on the page puts them away until the
-// visitor comes back to the ask box or opens the panel again. While they are
-// away nothing of theirs listens on the page.
+// press, never the space around and between them. They never lie over a
+// control the page keeps in place as it scrolls, like the buttons of a top
+// bar, the rule the launcher's own place follows: one that would, or that
+// would reach into the top of the window, is left out, the last first, so a
+// short window shows fewer or none. A control that scrolls can be scrolled
+// out from under them, as from under the panel. And a press anywhere on the
+// page puts them away until the visitor comes back to the ask box or opens
+// the panel again. While they are away nothing of theirs listens on the page.
 
 const CSS = `
 .panel { position: relative; }
@@ -49,6 +52,11 @@ const PRESENT_CSS = `
 const TOP_ROOM = 12;
 /** The least space kept between a pill and the window's far side. */
 const SIDE_ROOM = 12;
+/** How far apart the points are that a pill's box is looked at the page through, across it. Less than the smallest icon button. */
+const LOOK_EVERY = 14;
+/** What a visitor can press or type in, as the launcher's place reads it (`USABLE` in ui.ts). */
+const CONTROL =
+  'a[href], button, input:not([type="hidden"]), select, textarea, summary, iframe, [role="button"], [role="link"], [role="tab"], [role="checkbox"], [role="switch"], [role="radio"], [role="menuitem"], [role="combobox"], [tabindex]:not([tabindex="-1"])';
 
 /** Puts the site's suggested questions above the ask box. Nothing at all happens for a site with none. */
 export function showSuggestions(ui: Ui, given: unknown): void {
@@ -111,22 +119,45 @@ class Suggestions {
   };
 
   /**
-   * Shows the pills, the first ones the company listed, as many as there is
-   * room for above the panel without reaching into the top of the window.
-   * False when there is room for none.
+   * Shows the pills, the first ones the company listed, as many as fit above
+   * the panel without reaching into the top of the window or lying over a
+   * control the page keeps in place. False when none fit.
    */
   private fit(): boolean {
     const pills = Array.from(this.group.querySelectorAll<HTMLButtonElement>(".pill"));
     this.group.hidden = false;
-    for (const pill of pills) pill.hidden = false;
     const panel = this.group.parentElement?.getBoundingClientRect();
     if (panel) {
       // As wide as the room between the panel's far edge and the other side of the window, so a long one is cut, not pushed off.
       const right = !this.group.matches(".dock.left .suggest");
       this.group.style.maxWidth = `${Math.max(0, right ? panel.right - SIDE_ROOM : window.innerWidth - panel.left - SIDE_ROOM)}px`;
     }
-    for (let last = pills.length - 1; last >= 0 && this.group.getBoundingClientRect().top < TOP_ROOM; last--) pills[last]!.hidden = true;
-    return pills.some((pill) => !pill.hidden);
+    const pinned = new Map<Element, boolean>();
+    for (let count = pills.length; count > 0; count--) {
+      // The stack keeps to the panel, so with one fewer the others move down: each count is laid out and looked at afresh.
+      pills.forEach((pill, index) => (pill.hidden = index >= count));
+      if (pills.slice(0, count).every((pill) => this.clear(pill.getBoundingClientRect(), pinned))) return true;
+    }
+    return false;
+  }
+
+  /** Whether a pill here keeps out of the top of the window and off every control of the page's that stays put as it scrolls. */
+  private clear(box: DOMRect, pinned: Map<Element, boolean>): boolean {
+    if (box.top < TOP_ROOM) return false;
+    const huge = (window.innerWidth * window.innerHeight) / 3;
+    for (let x = box.left + 4; x < box.right; x += LOOK_EVERY) {
+      for (const y of [box.top + box.height * 0.15, box.top + box.height / 2, box.top + box.height * 0.85]) {
+        const under = document.elementsFromPoint(x, y).find((el) => el !== this.ui.host);
+        const control = under?.closest(CONTROL);
+        if (!control) continue;
+        // A box as big as a good part of the window holds controls rather than being one, as for the launcher.
+        const rect = control.getBoundingClientRect();
+        if (rect.width * rect.height > huge) continue;
+        if (!pinned.has(control)) pinned.set(control, staysPut(control));
+        if (pinned.get(control)) return false;
+      }
+    }
+    return true;
   }
 
   /** What is listened for only while the pills are wanted: a press on the page, and the window or the panel changing size. */
@@ -165,6 +196,16 @@ class Suggestions {
       console.warn("[Haptic]", error);
     }
   };
+}
+
+/** Whether an element, or a box it sits in, stays put on screen when the page scrolls, as `pinned` in ui.ts reads it. */
+function staysPut(el: Element): boolean {
+  for (let at: Node | null = el; at; at = at.parentNode ?? (at as ShadowRoot).host ?? null) {
+    if (!(at instanceof Element)) continue;
+    const position = getComputedStyle(at).position;
+    if (position === "fixed" || position === "sticky") return true;
+  }
+  return false;
 }
 
 /** Adds the pills' styles to the widget's own, from a stylesheet object where the browser has them, as ui.ts does. */

@@ -328,6 +328,45 @@ test("a short window shows fewer, the first ones listed, and none where there is
   }
 });
 
+test("they never lie over a control the page keeps in place, like a top bar's, and may lie over one that scrolls away", async () => {
+  // A bar fixed to the top of the window, with a button at its right end, over the cards.
+  const BAR = `<header style="position:fixed;top:0;left:0;right:0;height:60px;background:#f5f5f4;z-index:10">
+      <button id="profile" type="button" style="position:absolute;right:28px;top:14px;width:240px;height:32px">Profile</button></header>
+    <div style="height:60px"></div>${CARDS}`;
+  const session = await start(BAR, () => words("Done."), "/", { suggestions: SUGGESTED });
+  try {
+    await root(session).locator(".launcher").click();
+    const tall = await drawn(session);
+    assert.deepEqual(tall.texts, TEXTS);
+    // A button of the page's own, which scrolls with it, under the middle pill: the pills stay.
+    const middle = tall.boxes[1]!;
+    await session.page.evaluate(
+      ([left, top]: number[]) => {
+        const row = document.createElement("button");
+        row.id = "approve";
+        row.textContent = "Approve";
+        row.style.cssText = `position:absolute;left:${left}px;top:${top! + window.scrollY}px;width:120px;height:28px`;
+        document.body.append(row);
+      },
+      [middle.left + 20, middle.top + 5] as number[],
+    );
+    await field(session).press("Escape");
+    await root(session).locator(".launcher").click();
+    assert.deepEqual(await texts(session), TEXTS, "a control that scrolls away took a pill away");
+
+    // A window just short enough that the first pill would lie over the bar's button: it is left out, and the rest move down.
+    const fromFoot = 800 - tall.panel.top;
+    await session.page.setViewportSize({ width: 1366, height: Math.round(tall.panel.top - tall.boxes[0]!.top + 20 + fromFoot) });
+    await session.until(async () => (await texts(session)).length === 2, () => "two pills to show under the bar");
+    const short = await drawn(session);
+    assert.deepEqual(short.texts, TEXTS.slice(0, 2));
+    const profile = (await session.page.locator("#profile").boundingBox())!;
+    for (const box of short.boxes) assert.ok(box.top >= profile.y + profile.height, `a pill at ${box.top} lies over the bar's button`);
+  } finally {
+    await session.close();
+  }
+});
+
 test("in presentation mode the pills are drawn larger, and still fit above the panel", async () => {
   const session = await start(CARDS, () => words("Done."), "/", { suggestions: SUGGESTED, present: true });
   try {
