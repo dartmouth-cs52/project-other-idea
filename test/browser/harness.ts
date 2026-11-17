@@ -53,6 +53,16 @@ export async function labelsOf(tab: Page, body: string, before?: string): Promis
   });
 }
 
+/** Shows this markup in a fresh page and returns each listed control's states by its label, like { "Email": ["required"] }. A control with none gets an empty list. */
+export async function statesOf(tab: Page, body: string, head = ""): Promise<Record<string, string[]>> {
+  await tab.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}</style>${head}</head><body>${body}</body></html>`);
+  await tab.addScriptTag({ content: await snapshotBundle() });
+  return tab.evaluate(() => {
+    const snapshot = (window as unknown as { hapticSnapshot(ignore: Element): import("../../src/shared/types.ts").Snapshot }).hapticSnapshot(document.createElement("div"));
+    return Object.fromEntries(snapshot.elements.map((element) => [element.label, element.state ?? []]));
+  });
+}
+
 /** How the scripted server answers one step. */
 export interface Answer {
   reply: TurnReply;
@@ -92,43 +102,56 @@ export async function startHarness(): Promise<Harness> {
     close: async () => {},
   };
   const server: Server = createServer(async (req, res) => {
-    const url = new URL(req.url ?? "/", "http://localhost");
-    if (url.pathname === "/widget.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(widget);
-    if (url.pathname === "/widget-act.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(acting);
-    if (url.pathname === "/widget-teach.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(teach);
-    if (url.pathname.startsWith("/v1/sites/")) return res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(harness.config));
-    if (req.method === "POST" && url.pathname === "/v1/turn") {
-      const request = JSON.parse(await readBody(req)) as TurnRequest;
-      const index = harness.turns.push(request) - 1;
-      let gone = false;
-      res.on("close", () => {
-        if (!res.writableFinished) {
-          gone = true;
-          harness.hungUp++;
-        }
-      });
-      const answer = await harness.script(request, index);
-      if (gone) return;
-      res.writeHead(200, { "Content-Type": STREAM_TYPE, "Cache-Control": "no-store" });
-      if (answer.reply.target) res.write(JSON.stringify({ target: answer.reply.target }) + "\n");
-      if (answer.holdMs) await new Promise((resolve) => setTimeout(resolve, answer.holdMs));
-      if (gone) return;
-      return res.end(JSON.stringify(answer.reply) + "\n");
-    }
-    if (req.method === "POST") {
-      const text = await readBody(req);
-      let body: unknown = text;
-      try {
-        body = JSON.parse(text);
-      } catch {
-        // Kept as text.
+    try {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      if (url.pathname === "/widget.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(widget);
+      if (url.pathname === "/widget-act.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(acting);
+      if (url.pathname === "/widget-teach.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(teach);
+      if (url.pathname.startsWith("/v1/sites/")) return res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(harness.config));
+      if (req.method === "POST" && url.pathname === "/v1/turn") {
+        const request = JSON.parse(await readBody(req)) as TurnRequest;
+        const index = harness.turns.push(request) - 1;
+        let gone = false;
+        res.on("close", () => {
+          if (!res.writableFinished) {
+            gone = true;
+            harness.hungUp++;
+          }
+        });
+        const answer = await harness.script(request, index);
+        if (gone) return;
+        res.writeHead(200, { "Content-Type": STREAM_TYPE, "Cache-Control": "no-store" });
+        if (answer.reply.target) res.write(JSON.stringify({ target: answer.reply.target }) + "\n");
+        if (answer.holdMs) await new Promise((resolve) => setTimeout(resolve, answer.holdMs));
+        if (gone) return;
+        return res.end(JSON.stringify(answer.reply) + "\n");
       }
-      harness.posts.push({ path: url.pathname, body });
-      return res.writeHead(200, { "Content-Type": "application/json" }).end("{}");
+      if (req.method === "POST") {
+        const text = await readBody(req);
+        let body: unknown = text;
+        try {
+          body = JSON.parse(text);
+        } catch {
+          // Kept as text.
+        }
+        harness.posts.push({ path: url.pathname, body });
+        return res.writeHead(200, { "Content-Type": "application/json" }).end("{}");
+      }
+      const page = harness.pages.get(url.pathname) ?? harness.fallback;
+      if (page === undefined) return res.writeHead(404).end("Not found");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }).end(page);
+    } catch (error) {
+      // The browser hung up part way through: a test that ends while a guide is still going closes its browser or
+      // context with a request still arriving, such as the report the widget sends with keepalive as the page goes,
+      // and reading the rest of it fails with "aborted". Nobody is left to answer, and what never arrived in full
+      // is not recorded.
+      if (res.destroyed) return;
+      // Anything else is a fault of the test's own, such as a script that throws. The page is answered, so that it
+      // is not left waiting, and the fault still fails the test.
+      if (res.headersSent) res.destroy();
+      else res.writeHead(500, { "Content-Type": "text/plain" }).end(String(error));
+      throw error;
     }
-    const page = harness.pages.get(url.pathname) ?? harness.fallback;
-    if (page === undefined) return res.writeHead(404).end("Not found");
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }).end(page);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   harness.url = `http://localhost:${(server.address() as AddressInfo).port}`;
@@ -167,8 +190,8 @@ export async function launch(name: string, how: { full?: boolean } = {}): Promis
 /** Opens the panel, types the question and sends it. */
 export async function ask(tab: Page, question: string): Promise<void> {
   await tab.locator("haptic-root .launcher").click();
-  await tab.locator("haptic-root .ask input").fill(question);
-  await tab.locator("haptic-root .ask input").press("Enter");
+  await tab.locator("haptic-root .ask textarea").fill(question);
+  await tab.locator("haptic-root .ask textarea").press("Enter");
 }
 
 /** Waits until the widget has asked for at least `count` steps. */

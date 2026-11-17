@@ -1,6 +1,6 @@
 # Deploying and running Haptic
 
-How the hosted service is deployed and run: the widget Worker, the database, what is recorded, how finished guides are defined, the off switch, spend limits, and what a step costs. For the project overview, see the [README](../README.md).
+How the hosted service is deployed and run: the widget Worker, the database, what is recorded, how finished guides are defined, the off switch, spend limits, what a step costs, and verified routes. For the project overview, see the [README](../README.md).
 
 ## Deploying
 
@@ -26,7 +26,7 @@ To keep a site's context current, run `npm run tag -- refresh --all` on a schedu
 
 ## The database
 
-Sites, and every guide and step, are kept in Neon, in the project called haptic. The tables are in `db/migrations`, and `npm run db:migrate` applies the ones a database is missing, to the database in `DATABASE_URL`. It talks to Neon over HTTPS. With a `DATABASE_URL` repository secret in GitHub, each deploy of the widget server applies them first; without one the deploy warns, and they have to be applied by hand. Until they are, the server and the dashboard still work, and what needs a missing table or column is skipped and logged. The Worker reads the connection string from a secret:
+Sites, and every guide and step, are kept in Neon, in the project called haptic. The tables are in `db/migrations`, and `npm run db:migrate` applies the ones a database is missing, to the database in `DATABASE_URL`. It talks to Neon over HTTPS. Both deploys, the website's and the widget server's, apply them before they publish, from the `DATABASE_URL` repository secret in GitHub, and a change to `db/migrations` alone starts both. Without that secret neither deploy goes ahead: a deploy that publishes code without its tables is how Teach Haptic once shipped with no `teach_sessions` table. One push can start both deploys at once, so the runner skips a migration the other run applied at the same moment rather than failing on it (`test/migrate.test.ts`). On a database a migration hasn't reached, such as one migrated by hand, the server and the dashboard still work, and what needs a missing table or column is skipped and logged: Teach Haptic, for one, says it isn't set up on this server yet, and the log names the migration it needs. The Worker reads the connection string from a secret:
 
 ```bash
 npx wrangler secret put DATABASE_URL
@@ -54,13 +54,13 @@ Pricing on joinhaptic.com bills only finished guides, so the widget reports "fin
 
 The widget's report is only its word, and anything that can send a request can send one. So the server keeps "finished" only when its own record of the guide bears it out (`endingFor` in `src/server/db.ts`). The newest step it recorded for the guide has to:
 
-- have been answered by the model. A question the off switch or the budget turned away is not on record at all, and a step past the cap on acting, which the server answers by itself, never starts a guide's record and ends one as "step limit";
+- have been answered by the model, or from a [verified route](#verified-routes) on a site that serves them. A question the off switch or the budget turned away is not on record at all, and a step past the cap on acting, which the server answers by itself, never starts a guide's record and ends one as "step limit";
 - have said the guide was done, or pointed at a control the visitor could then use. The second is how the click that commits in Do it with me is finished, since the reply that points at it can still say "continue";
 - not be a first answer in words alone, which is "shown"; nor a step where the model was stuck ("nothing to point at"), named a control the site's owner ruled out ("blocked"), answered in words from the help docs ("answered"), or said it couldn't help (the reason it gave).
 
 A report of "finished" that the record contradicts is kept as the ending the record shows, which is not billed, and the server's log says so. One for a guide with no step on record keeps no ending, so it stays a guide that never reported one. The report names the step its ending rests on, the last one the widget had an answer to, and that step is the one judged. So the look the widget asks for straight after the visitor uses the last control cannot change it, even when a report held up on its way arrives after that look is on record. A report from a widget too old to name its step is judged by the newest step on record. The widget reports the ending as soon as it is known, often before the step's own row is written, and from a page that may be on its way out: the server waits for that row, up to about ten seconds, and if it never comes, judges the newest step on record instead. Every other outcome is free, and is kept as reported, and the first outcome kept is the one that stays.
 
-What this does not check: that the visitor really used the control. The server sees no clicks, so that is the widget's word. Someone willing to pay for the model's answers out of a site's budget, at most 30 steps a minute from one address, can still make guides that look finished. What it rules out is making them for nothing: every finished guide is a step the model answered, on a site that was on and within its budget.
+What this does not check: that the visitor really used the control. The server sees no clicks, so that is the widget's word. Someone willing to pay for the model's answers out of a site's budget, at most 30 steps a minute from one address, can still make guides that look finished. What it rules out is making them for nothing: every finished guide is a step the model answered, on a site that was on and within its budget. The exception is a site set to answer from verified routes. There a guide can finish on a step a route answered, which cost nothing and is not held to the budget, though only for a question, a screen and a control that guides the model answered had confirmed, and still at most 30 steps a minute from one address.
 
 ### Sending finished guides to Stripe
 
@@ -91,6 +91,8 @@ The limit of 30 steps a minute slows one caller down. It does not bound the bill
 
    A step's cost is only known once the model has answered, so a step is let through with the most it could cost set aside, and that is swapped for what it did cost when it ends. Steps that arrive together are counted against what is left, and a site can pass a limit by less than one step. Near a limit this lets fewer steps run at once: a visitor can read the resting sentence a little before the money has run out.
 
+   A step answered from a [verified route](#verified-routes) makes no model call, so nothing is set aside for it and nothing is added. It is answered even when the site has spent its budget, and it does not count toward a visitor's steps for the day.
+
 A site can have its own limits, and a public demo can also limit each visitor:
 
 ```bash
@@ -112,3 +114,24 @@ The online server calls the model named by `HAPTIC_MODEL` in `wrangler.jsonc`, w
 A step can ask the model twice. With `HAPTIC_RECHECK` at its default, `ask`, a guide's reply that tells the visitor to use a listed control without pointing at it is judged in code (`judgeNamed` in `src/server/check.ts`): the control is pointed at, the model is asked about it once more, or the reply stands. A guide that ends in words that only name the goal's control ("Create API key makes a new one", with "done" and no pointer) is asked about once more as well, and never pointed at in code (`namedForTheGoal`). On a site with Answers on, "not covered" to a first question that asks for a way is asked about once more too. An act reply that stalls is asked about too. Both calls are charged to the site's budget, which sets aside room for the second. A site with Answers on is judged the same for its guide replies, a step or the sentence that ends a guide. An answer in words from a help article is looked at only when the visitor asked for a way ("how do I…"), never for a question of fact or explanation.
 
 The rules and everything known about the site are the same on every step, so the model provider keeps them ready (a prompt cache) and charges a fraction of the price to read them again. They are kept for an hour after a site's last step. `HAPTIC_CACHE=5m` keeps them for five minutes, which is cheaper to write and only wins on a site that is never quiet that long. Every step logs how many tokens were read from the cache and how many had to be written.
+
+## Verified routes
+
+For a question on a screen, the control that was right last time, so the same question on the same screen can be answered without the model (issue 13, `src/server/routes.ts`). A route is keyed on the question (masked and normalized as the dashboard groups questions), the page's path, any open dialog, and the control the previous step used, which the widget sends as `after`. It is learned from the model's answer to a guide's step, trusted once a guide that used it finishes (as the server's record bears out, see [Which guides are finished](#which-guides-are-finished)), and loses that trust when someone answers No to Did this help or the model answers differently. A route that points again at the control just used is never kept, because a loop and a form's repeated Next button look the same. Each site has a mode, set from the Overview page of its dashboard, and kept in `sites.routes_mode`:
+
+- **shadow**, the default: every step is looked up beside the model call, and the step records whether the model chose the same control. The visitor always gets the model's answer, so this costs nothing and adds no wait.
+- **serve**: a trusted route is answered without the model, but only when exactly one control on the live page matches it, it does not point again at the control just used, and the site's owner has not ruled that control out. The lookup gets 250 ms, before the budget is asked, and anything else goes to the model. So does a step that one of the owner's corrections or a taught route covers, since a route learned before them would not know of them.
+- **off**: no lookups.
+
+No lookup is made after a wrong click, when the widget tells the model it is pointing at the same control again, in Do it with me, or for a later step whose previous control the widget does not know. An answer in words is never kept as a route. A step answered from a route is recorded like any other, with `route` as its model and no cost.
+
+A route keeps the question's key, the page's path, the open dialog's title, the control used before and the control pointed at (by role, label, icon and link target, with the label masked), where on the page it sits, and the model's sentence, masked like every step's. Each step adds the same keys and what the lookup found to its own row (`db/migrations/0008_routes.sql`).
+
+How often questions repeat, and whether serving would be right, is on each site's Overview page and in a report across every site:
+
+```bash
+npm run routes:report                     # the last 7 days
+npm run routes:report -- --days 30 --site site_ab12cd34ef
+```
+
+"Had a route" is the repeat rate issue 13 asks for: the same question on the same screen at the same point. "Could be served" is the share of steps that would skip the model, and "model agreed" says whether doing so would have been right. Turn serving on for a site once both are high.

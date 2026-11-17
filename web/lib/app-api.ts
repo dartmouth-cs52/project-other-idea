@@ -152,9 +152,15 @@ export interface Site {
   name: string;
   origin: string;
   allowedOrigins: string[];
+  routesMode: "off" | "shadow" | "serve";
   scriptUrl: string;
-  /** `launcher` is the Ask button's own colour. Missing means Ink. */
+  /** `launcher` is the Ask button's own colour, as it is drawn. Missing means Ink. `accent` is always Haptic's blue. */
   appearance: { accent: string; position: "bottom-right"; launcherLabel: string; launcher?: string };
+  /**
+   * The launcher's colour is read from the site once, when the site is added. `waiting` is true until that has
+   * finished for the site's address or a person has chosen a colour. `source` says where the colour came from.
+   */
+  launcherMatch?: { waiting: boolean; source: "matched" | "chosen" | null };
   notes: string;
   docs: {
     budget: number;
@@ -220,6 +226,25 @@ export interface Insights {
   health: HealthGroup[];
   /** Groups the company was told about in the last month. */
   alerts: { key: string; sent_at: string; emailed: boolean }[];
+  /** How often questions repeat, and how verified routes are doing. Null until db/migrations/0008_routes is applied. */
+  routes: RouteMetrics | null;
+}
+
+/** How often questions repeat, and how verified routes are doing. The same shape src/shared/route-metrics.ts describes. */
+export interface RouteMetrics {
+  guides: number;
+  repeated_guides: number;
+  looked_up: number;
+  repeats: number;
+  servable: number;
+  agreed: number;
+  disagreed: number;
+  served: number;
+  served_used: number;
+  served_ms: number | null;
+  model_ms: number | null;
+  routes: number;
+  trusted_routes: number;
 }
 
 /** One of a site's newest questions, with the step it has reached. */
