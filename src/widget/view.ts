@@ -46,6 +46,26 @@ export function inSight(): View {
 }
 
 /**
+ * The window the page is laid out in, measured as the page's boxes are: where
+ * the page's position: fixed elements go, and the window its reading goes by.
+ * What can be seen lies inside it, `offsetLeft` and `offsetTop` in from its
+ * corner, wherever the browser measures from.
+ */
+export function wholeWindow(view: View = inSight()): Box {
+  const shown = window.visualViewport;
+  // inSight measured from visualViewport only when it has a size; otherwise what can be seen is the window.
+  const measured = !!shown && shown.width > 0 && shown.height > 0;
+  const left = view.left - (measured && Number.isFinite(shown.offsetLeft) ? shown.offsetLeft : 0);
+  const top = view.top - (measured && Number.isFinite(shown.offsetTop) ? shown.offsetTop : 0);
+  // The root's own box is the window's in a page with a doctype, and is not changed by a pinch, unlike innerWidth in Safari.
+  const html = document.documentElement;
+  const standards = document.compatMode === "CSS1Compat";
+  const width = (standards && html.clientWidth) || window.innerWidth;
+  const height = (standards && html.clientHeight) || window.innerHeight;
+  return { left, top, right: left + width, bottom: top + height };
+}
+
+/**
  * How much Haptic's own launcher, chat and sentence are shrunk, or grown, so
  * they look their usual size on a page zoomed in or out: the inverse of the
  * zoom, within reason. A page zoomed to eight times does not get a chat an

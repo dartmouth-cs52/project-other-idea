@@ -3,6 +3,7 @@ import { keyAllowed, openConfirmation, planPick, reachable, SAYS, sentAfter, tri
 import { markOwn, type Verdict } from "./observe.ts";
 import { isDrawn, isLayer, POPUP_ROLES, watchPopups, type Popups } from "./popups.ts";
 import { findOpenModal } from "./snapshot.ts";
+import { inSight } from "./view.ts";
 
 // The acting engine (DESIGN section 3): it does one step the gate allowed,
 // with the events a person's mouse and keyboard make, shows each move, and
@@ -1571,14 +1572,20 @@ async function bringIntoView(run: Run, el: Element): Promise<void> {
   }
 }
 
-/** Waits until the element's box is the same for two frames running, at most `STILL_MS`. */
+/**
+ * Waits until the element is in the same place on the screen for two frames
+ * running, at most `STILL_MS`. On a page zoomed in, what is seen glides across
+ * the page while the page's boxes, measured from the window, stand still, so
+ * the box is taken from the corner of what can be seen (see view.ts).
+ */
 async function still(run: Run, el: Element): Promise<void> {
   let before = "";
   let same = 0;
   for (const until = Date.now() + STILL_MS; Date.now() < until; ) {
     run.check();
     const rect = el.getBoundingClientRect();
-    const now = `${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.width)},${Math.round(rect.height)}`;
+    const view = inSight();
+    const now = `${Math.round(rect.left - view.left)},${Math.round(rect.top - view.top)},${Math.round(rect.width)},${Math.round(rect.height)}`;
     same = now === before ? same + 1 : 0;
     if (same >= 2) return;
     before = now;
@@ -1586,11 +1593,17 @@ async function still(run: Run, el: Element): Promise<void> {
   }
 }
 
-/** Whether the whole element is inside the window and inside every box around it that scrolls. */
+/**
+ * Whether the whole element is in sight and inside every box around it that
+ * scrolls. In sight is less than the window on a phone zoomed in or with its
+ * keyboard up (see view.ts): Haptic presses only what the visitor can see it
+ * press.
+ */
 function onScreen(el: Element): boolean {
   const rect = el.getBoundingClientRect();
   if (rect.width === 0 && rect.height === 0) return false;
-  if (rect.top < 0 || rect.left < 0 || rect.bottom > window.innerHeight || rect.right > window.innerWidth) return false;
+  const view = inSight();
+  if (rect.top < view.top - 1 || rect.left < view.left - 1 || rect.bottom > view.bottom + 1 || rect.right > view.right + 1) return false;
   for (let at = el.parentElement, depth = 0; at && at !== document.body && depth < 12; at = at.parentElement, depth++) {
     const style = getComputedStyle(at);
     if (!/auto|scroll|hidden|overlay/.test(style.overflowY + style.overflowX)) continue;

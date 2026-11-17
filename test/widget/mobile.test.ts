@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import { closeBrowser, point, start, words, type Session } from "./harness.ts";
+import { ACTING_ON, closeBrowser, point, start, words, type Session } from "./harness.ts";
 
 after(closeBrowser);
 
@@ -355,6 +355,218 @@ test("a control cut off by the foot of the screen is brought into sight, with it
       return !cursor.hidden;
     });
     assert.ok(tip, "the pointer is not on show");
+  } finally {
+    await session.close();
+  }
+});
+
+/** Whether two boxes share any of their area. */
+const overlap = (a: Box, b: Box) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+
+/**
+ * Fakes the keyboard as the keyboard test does: the window stays as it is
+ * and less of it can be seen, as on an iPhone. The browser itself does not
+ * know, so its own scrolling still centres in the whole window.
+ */
+const KEYBOARD = (height: number) => `(() => {
+  const real = window.visualViewport;
+  const fake = {
+    get width() { return real.width; },
+    get height() { return real.height - ${height}; },
+    get offsetLeft() { return real.offsetLeft; },
+    get offsetTop() { return real.offsetTop; },
+    get pageLeft() { return real.pageLeft; },
+    get pageTop() { return real.pageTop; },
+    get scale() { return real.scale; },
+    addEventListener: real.addEventListener.bind(real),
+    removeEventListener: real.removeEventListener.bind(real),
+  };
+  Object.defineProperty(window, "visualViewport", { configurable: true, get: () => fake });
+  real.dispatchEvent(new Event("resize"));
+})()`;
+
+/** A reply held until `release` is called, so the page can be zoomed or its keyboard put up while the guide waits for it. */
+function held() {
+  let release!: () => void;
+  const ready = new Promise<void>((resolve) => (release = resolve));
+  return { ready, release };
+}
+
+const PINNED = phonePage(`<h1 id="top">Expenses</h1>
+  ${Array.from({ length: 30 }, (_, n) => `<p>Row ${n + 1} of a long list of charges.</p>`).join("")}
+  <button id="chat" type="button" aria-label="Chat with us" style="position:fixed;right:16px;bottom:16px;width:56px;height:56px;border-radius:28px;padding:0">?</button>`);
+
+for (const measures of ["Chrome", "Safari"] as const) {
+  test(`zoomed in, the launcher keeps off a button the page pins in its corner once what is seen is moved over it, measured as ${measures} measures`, async () => {
+    const session = await start(PINNED, () => words("Done."), "/", { device: PHONE });
+    try {
+      if (measures === "Safari") await session.page.evaluate(SAFARI);
+      // Not zoomed, the page's chat button is in sight, and the launcher sits above it.
+      const before = (await trueBox(session, ours(".launcher")))!;
+      assert.ok(!overlap(before, (await trueBox(session, "#chat"))!), `the launcher covers the chat button to start with: ${JSON.stringify(before)}`);
+      // Zoomed in at the top of the page, the chat button is out of sight, and the launcher goes down to the corner.
+      await zoomTo(session, 2, "#top");
+      const zoomed = await shown(session);
+      assert.ok(!overlap((await trueBox(session, "#chat"))!, zoomed), "the chat button is in sight zoomed in at the top: not the case to test");
+      // What is seen is moved to the page's corner, the zoom as it was: the chat button is now in sight, in the corner of the screen.
+      await session.page.evaluate(() => document.getElementById("chat")!.scrollIntoView({ block: "end", inline: "end" }));
+      await session.page.waitForTimeout(1000);
+      const screen = await shown(session);
+      assert.equal(screen.scale, 2);
+      const chat = (await trueBox(session, "#chat"))!;
+      assert.ok(inside(chat, screen), `the chat button is not in sight after the move: ${JSON.stringify(chat)}, the screen ${JSON.stringify(screen)}`);
+      const launcher = (await trueBox(session, ours(".launcher")))!;
+      assert.ok(inside(launcher, screen), `the launcher is off the screen: ${JSON.stringify(launcher)}, the screen ${JSON.stringify(screen)}`);
+      assert.ok(!overlap(launcher, chat), `the launcher covers the page's chat button: ${JSON.stringify(launcher)}, the button ${JSON.stringify(chat)}`);
+    } finally {
+      await session.close();
+    }
+  });
+}
+
+/** A short form, all of it in the window, with its one button low on the right. */
+const LOW = phonePage(`<h1 id="top">Issue a card</h1>
+  ${Array.from({ length: 4 }, (_, n) => `<p>Line ${n + 1} of the form.</p>`).join("")}
+  <div style="display:flex;justify-content:flex-end;margin-top:180px"><button id="next" type="button">Next</button></div>
+  ${Array.from({ length: 20 }, (_, n) => `<p>More below ${n + 1}</p>`).join("")}`);
+
+for (const measures of ["Chrome", "Safari"] as const) {
+  test(`zoomed in, a control wholly out of sight though in the window is brought into sight, with its pointer, measured as ${measures} measures`, async () => {
+    const zoom = held();
+    const session = await start(LOW, async (request, index) => (index === 0 ? (await zoom.ready, point(request, "Next", "Tap Next to go on.")) : words("Done.")), "/", { device: PHONE });
+    try {
+      if (measures === "Safari") await session.page.evaluate(SAFARI);
+      await session.ask("how do I go on");
+      await session.untilAsked(1);
+      // The page was read with the button in the window. Zoomed in at its top, the button is out of sight, below and to the right.
+      await zoomTo(session, 2, "#top");
+      const screen = await shown(session);
+      const before = (await trueBox(session, "#next"))!;
+      // The window as the page is laid out in it, which Safari's innerWidth and innerHeight do not give.
+      const window = await session.page.evaluate(() => ({ width: document.documentElement.clientWidth, height: document.documentElement.clientHeight }));
+      assert.ok(before.bottom <= window.height && before.right <= window.width, `the button is not in the window: ${JSON.stringify(before)}`);
+      assert.ok(!overlap(before, screen), `the button is in sight to start with: ${JSON.stringify(before)}, the screen ${JSON.stringify(screen)}`);
+      zoom.release();
+      await session.untilState("pointing");
+      await session.page.waitForTimeout(1500);
+      const after = await shown(session);
+      const button = (await trueBox(session, "#next"))!;
+      assert.ok(inside(button, after), `the button is still out of sight: ${JSON.stringify(button)}, the screen ${JSON.stringify(after)}`);
+      assert.ok(await trueBox(session, ours(".ring")), "the ring is not on show");
+    } finally {
+      await session.close();
+    }
+  });
+}
+
+test("a link parked off the page until the keyboard reaches it is not scrolled to as the guide points at it, as on a computer", async () => {
+  // The page's reading lists it as showing on focus and not as out of view: the keyboard, not scrolling, brings it in.
+  const session = await start(
+    `<style>.skip { position: absolute; top: -100px; left: 0; } .skip:focus { top: 0; }</style>
+    <a class="skip" href="#main">Skip to main content</a>
+    <main id="main"><h1>Welcome</h1>${Array.from({ length: 60 }, (_, n) => `<p>Line ${n + 1}</p>`).join("")}</main>`,
+    (request, index) => (index === 0 ? point(request, "Skip to main content", "Press Tab to show Skip to main content.") : words("Done.")),
+  );
+  try {
+    await session.page.evaluate(() => window.scrollTo(0, 600));
+    await session.ask("how do I skip to the content");
+    await session.untilState("pointing");
+    await session.page.waitForTimeout(1000);
+    assert.equal(await session.page.evaluate(() => window.scrollY), 600, "the page was scrolled to a link parked off it");
+  } finally {
+    await session.close();
+  }
+});
+
+test("with the keyboard up, a control wholly under it is brought up into sight, with its pointer", async () => {
+  const session = await start(FOOT, (request, index) => (index === 0 ? point(request, "Next", "Tap Next to go on.") : words("Done.")), "/", { device: PHONE });
+  try {
+    const keyboard = 300;
+    // The button low in the window, where the keyboard will cover all of it.
+    await session.page.evaluate((keyboard: number) => {
+      const next = document.getElementById("next")!.getBoundingClientRect();
+      window.scrollBy(0, next.top - (window.innerHeight - keyboard) - 60);
+    }, keyboard);
+    await session.page.evaluate(KEYBOARD(keyboard));
+    await session.page.waitForTimeout(300);
+    const before = (await trueBox(session, "#next"))!;
+    const screen = await shown(session);
+    assert.ok(before.top >= screen.bottom && before.bottom <= (await session.page.evaluate(() => innerHeight)), `the button is not wholly under the keyboard and in the window: ${JSON.stringify(before)}`);
+    await session.ask("how do I go on");
+    await session.untilState("pointing");
+    await session.page.waitForTimeout(1500);
+    const after = await shown(session);
+    const button = (await trueBox(session, "#next"))!;
+    assert.ok(inside(button, after), `the button is still under the keyboard: ${JSON.stringify(button)}, the part above it ${JSON.stringify(after)}`);
+  } finally {
+    await session.close();
+  }
+});
+
+/** What the page saw when its button was clicked: where the button was, and the part of the page on the screen. */
+const CLICK_SEEN = `<script>
+  document.addEventListener('click', (event) => {
+    const button = event.target instanceof Element && event.target.closest('#next');
+    if (!button) return;
+    const v = window.visualViewport;
+    const r = (Element.prototype.trueRect ?? Element.prototype.getBoundingClientRect).call(button);
+    window.clicked = { button: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }, screen: { left: v.offsetLeft, top: v.offsetTop, right: v.offsetLeft + v.width, bottom: v.offsetTop + v.height } };
+  }, true);
+</script>`;
+
+const clicked = (session: Session) => session.page.evaluate(() => (window as unknown as { clicked?: { button: Box; screen: Box } }).clicked);
+
+/** An act reply: Haptic clicks the control itself. */
+const clicking = (request: Parameters<typeof point>[0], label: string, say: string) => ({ ...point(request, label, say), do: "click" as const, commits: false, mode: "act" as const });
+
+for (const measures of ["Chrome", "Safari"] as const) {
+  test(`doing it on a zoomed page, Haptic clicks a control only once it is in sight, measured as ${measures} measures`, async () => {
+    const zoom = held();
+    const session = await start(LOW.replace("</body>", `${CLICK_SEEN}</body>`), async (request, index) => (index === 0 ? (await zoom.ready, clicking(request, "Next", "Going on.")) : words("Done.")), "/", {
+      device: PHONE,
+      acting: { ...ACTING_ON, confirmFirst: false },
+    });
+    try {
+      if (measures === "Safari") await session.page.evaluate(SAFARI);
+      await session.ask("can you go on", { act: true });
+      await session.untilAsked(1);
+      await zoomTo(session, 2, "#top");
+      assert.ok(!overlap((await trueBox(session, "#next"))!, await shown(session)), "the button is in sight to start with: not the case to test");
+      zoom.release();
+      await session.untilAsked(2, 15_000);
+      const seen = await clicked(session);
+      assert.ok(seen, "Haptic did not click the button");
+      assert.ok(inside(seen.button, seen.screen), `Haptic clicked the button out of sight: ${JSON.stringify(seen.button)}, the screen ${JSON.stringify(seen.screen)}`);
+    } finally {
+      await session.close();
+    }
+  });
+}
+
+test("doing it with the keyboard up, Haptic leaves a control under the keyboard that nothing brings into sight to the visitor", async () => {
+  // The button at the very foot of the page: no scrolling brings it up out from under the keyboard.
+  const page = phonePage(`<h1>Issue a card</h1>${Array.from({ length: 30 }, (_, n) => `<p>Line ${n + 1} of the form.</p>`).join("")}
+    <div style="display:flex;justify-content:flex-end"><button id="next" type="button">Next</button></div>${CLICK_SEEN}`);
+  const session = await start(page, (request, index) => (index === 0 ? clicking(request, "Next", "Going on.") : words("Done.")), "/", {
+    device: PHONE,
+    acting: { ...ACTING_ON, confirmFirst: false },
+  });
+  try {
+    await session.page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await session.page.evaluate(KEYBOARD(300));
+    await session.page.waitForTimeout(300);
+    assert.ok((await trueBox(session, "#next"))!.top >= (await shown(session)).bottom, "the button is not under the keyboard: not the case to test");
+    await session.ask("can you go on", { act: true });
+    // Either Haptic clicks and the guide asks again, or it shows the visitor the step.
+    await session.until(async () => session.requests.length >= 2 || (await session.state()) === "pointing", "Haptic to click the button or leave it to the visitor", 15_000);
+    await session.page.waitForTimeout(500);
+    assert.equal(await clicked(session), undefined, "Haptic clicked a button under the keyboard");
+    assert.equal(session.requests.length, 1, "the guide went on as if the button had been clicked");
+    // The visitor is told, above the keyboard, with the way down to the button.
+    await session.until(async () => /I'll leave this one to you/.test(await session.caption()), "the sentence that leaves the step to the visitor", 5000);
+    const caption = (await trueBox(session, ours(".caption")))!;
+    assert.ok(inside(caption, await shown(session)), `the sentence is under the keyboard: ${JSON.stringify(caption)}`);
+    assert.equal(await session.page.locator("haptic-root .caption .where").getAttribute("aria-label"), "Scroll down to it");
   } finally {
     await session.close();
   }

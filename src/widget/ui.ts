@@ -492,6 +492,8 @@ export class Ui {
   private resized = false;
   /** A look for the launcher's place once what can be seen has stopped changing, as a pinch ends. */
   private viewSettled?: ReturnType<typeof setTimeout>;
+  /** Where the corner of what can be seen was in the window when the launcher's place was last looked for (see `cornerOf`). */
+  private lookedFrom = { x: 0, y: 0 };
   /** The sizes last given to our stylesheet for what can be seen, so they are only set again when they change. */
   private fitted = { k: 1, w: 0, h: 0 };
   /** The control the guide pointed at. */
@@ -859,12 +861,15 @@ export class Ui {
       this.resized = false;
       try {
         const scale = this.fitted.k;
-        this.dockAt(this.spot);
+        const here = this.dockAt(this.spot);
         this.placeSaid();
         if (resized) this.findHome();
-        // Zoomed in or out, the launcher's corner is a different size on the page: its place is looked for again once
-        // the pinch is over, not at every step of it.
-        else if (this.fitted.k !== scale) {
+        // Zoomed in or out, the launcher's corner is a different size on the page. Moved across the page, as a page
+        // zoomed in is, the corner is over another part of the window, where the page may pin a control of its own,
+        // like a chat button, that was out of sight when the place was looked for. Either way its place is looked for
+        // again once the pinch or the move is over, not at every step of it. A move too small to bring the launcher over
+        // anything, less than the room it keeps from the page's controls, is not looked at.
+        else if (this.fitted.k !== scale || far(cornerOf(here), this.lookedFrom) > ROOM) {
           clearTimeout(this.viewSettled);
           this.viewSettled = setTimeout(this.findHome, 300);
         }
@@ -883,14 +888,16 @@ export class Ui {
    * window to the nearest place that is free, and stays in the corner when
    * there is none. It never moves along the bottom or to the left side, so a
    * visitor always finds it on the right. Looked at when the widget
-   * starts, when the page has loaded, when the window is resized, and when a
-   * guide is put away: never on a timer, and never while the visitor is using
-   * the widget, so it does not move under their hand.
+   * starts, when the page has loaded, when the window is resized, once a
+   * pinch or a move of what can be seen across the window is over, and when a
+   * guide is put away. While the visitor is using the widget it is only
+   * noted, and the launcher does not move under their hand.
    */
   findHome = () => {
     try {
       // Measured at the size it is drawn at on a zoomed page, which measure() sets.
-      this.measure();
+      const here = this.measure();
+      this.lookedFrom = cornerOf(here);
       const launcher = this.dock.querySelector(".launcher")?.getBoundingClientRect();
       if (!launcher?.width || !launcher.height) return;
       const size = { w: launcher.width, h: launcher.height };
@@ -2135,14 +2142,16 @@ export class Ui {
    * Puts the launcher, and the ask box above it, at a height on the right of
    * what can be seen. On a phone that can be well inside the window our
    * element covers: zoomed in, with the keyboard up, or on a page wider than
-   * the screen (see view.ts).
+   * the screen (see view.ts). Returns what it measured to do so.
    */
-  private dockAt(spot: Spot) {
+  private dockAt(spot: Spot): Here {
     this.spot = spot;
     const here = this.measure();
+    const corner = cornerOf(here);
     // Set through the element's style object, which a page's policy on inline style does not reach.
-    this.dock.style.setProperty("right", `${here.right - here.view.right + EDGE * here.k}px`);
-    this.dock.style.setProperty("bottom", `${here.bottom - here.view.bottom + spot.y}px`);
+    this.dock.style.setProperty("right", `${corner.x + EDGE * here.k}px`);
+    this.dock.style.setProperty("bottom", `${corner.y + spot.y}px`);
+    return here;
   }
 
   /**
@@ -2486,6 +2495,8 @@ interface Spot {
 const EDGE = 20;
 /** The room kept between the launcher and a control of the page's it moved off. */
 const CLEAR = 12;
+/** The least room the launcher's place leaves between it and a control of the page's (see `freeUp`). */
+const ROOM = 4;
 /** The room kept above the launcher for the ask box, which opens above it. */
 const BOX_ROOM = 220;
 
@@ -2510,6 +2521,18 @@ interface Here {
   bottom: number;
 }
 
+/**
+ * How far in from the bottom right corner of the window our element covers
+ * the bottom right corner of what can be seen is, which the launcher's place
+ * is measured from. Both are 0 on a computer. On a phone zoomed in, the corner
+ * moves across the window as what is seen moves across the page, and with the
+ * keyboard up it is above the keyboard.
+ */
+const cornerOf = (here: Here) => ({ x: here.right - here.view.right, y: here.bottom - here.view.bottom });
+
+/** How far apart two points are along whichever of the two directions they are further apart in. */
+const far = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+
 /** The open chat is put away while a step shows when it and the launcher would take more than this share of what can be seen: on a phone. */
 const CROWDED = 0.2;
 
@@ -2533,7 +2556,7 @@ function freeUp(from: number, size: { w: number; h: number }, blocked: Box[], to
   let y = from;
   for (let tries = 0; tries < 40 && y <= top; tries++) {
     const box = boxAt({ y }, size, view);
-    const inWay = blocked.filter((control) => overlaps(box, control, 4));
+    const inWay = blocked.filter((control) => overlaps(box, control, ROOM));
     if (!inWay.length) return { y };
     // Clear of all of them at once: just above the highest.
     y = Math.ceil(Math.max(...inWay.map((control) => view.bottom - control.top + CLEAR)));

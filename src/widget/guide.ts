@@ -26,7 +26,7 @@ import { onAddressChange } from "./navigation.ts";
 import { isDrawn, POPUP_ROLES, watchPopups } from "./popups.ts";
 import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, sameView, statesOf, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
 import { ACTING_WORDS, type DidShown, type Ui, SHOWING } from "./ui.ts";
-import { inSight } from "./view.ts";
+import { inSight, wholeWindow } from "./view.ts";
 
 // Runs one guide: ask the model for a step, point at it, wait for the visitor
 // to act, let the page settle, and go again until the model has nothing more
@@ -823,7 +823,7 @@ export class Guide {
       const listed = page.snapshot.elements.find((element) => element.id === id);
       // A control the site's owner ruled out gets no pointer, not even for a moment.
       if (isBlocked(listed, this.blocked)) return;
-      if (listed?.offscreen || cutOff(el)) el.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (listed?.offscreen || outOfSight(el)) el.scrollIntoView({ block: "center", behavior: "smooth" });
       ui.pointAt(el, "");
       if (acting) {
         pointedEarly = el;
@@ -1075,7 +1075,7 @@ export class Guide {
     const target = el;
     if (early?.el !== target) {
       dropEarly();
-      if (listed?.offscreen || cutOff(target)) target.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (listed?.offscreen || outOfSight(target)) target.scrollIntoView({ block: "center", behavior: "smooth" });
     }
     // If they have already used it, the caption would only flash. An answer's words are in the panel, so its pointer goes alone.
     if (!acted) ui.pointAt(target, inPanel ? "" : reply.say);
@@ -2623,19 +2623,31 @@ function loadingMark(ignore: Element): Element | undefined {
 }
 
 /**
- * Whether a control is only partly on the screen: in sight, but cut off by its
- * top or bottom edge, like a form's last button half under the foot of a
- * phone's screen. The snapshot calls a control out of view only when none of
- * it shows, and the guide scrolls that to the middle of the screen. A control
- * cut off is brought there too, so the visitor sees all of it, with room for
- * the pointer and its sentence. One taller than the screen is left as it is.
+ * Whether a control the snapshot did not call out of view is still not all in
+ * sight. The snapshot calls a control out of view when it is above or below
+ * the window, and the guide scrolls that to the middle of the screen. On a
+ * phone less than the window can be seen (see view.ts), so a control is
+ * brought there too when it is:
+ *  - cut off by the top or bottom of the screen, like a form's last button
+ *    half under the foot of a phone's screen, so the visitor sees all of it,
+ *    with room for the pointer and its sentence. One taller than the screen is
+ *    left as it is.
+ *  - out of sight altogether though in the window: off the side of a page
+ *    zoomed in, below it, or under the keyboard. One out of the window is the
+ *    snapshot's to call: one it does not, like a link parked off the page
+ *    until the keyboard reaches it, stays where it is.
  */
-function cutOff(el: Element): boolean {
+function outOfSight(el: Element): boolean {
   const rect = el.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) return false;
   const view = inSight();
-  if (rect.height === 0 || rect.height > view.height - 40) return false;
-  const showing = rect.bottom > view.top && rect.top < view.bottom;
-  return showing && (rect.top < view.top - 1 || rect.bottom > view.bottom + 1);
+  const showing = rect.bottom > view.top && rect.top < view.bottom && rect.right > view.left && rect.left < view.right;
+  if (!showing) {
+    const frame = wholeWindow(view);
+    return rect.bottom > frame.top && rect.top < frame.bottom && rect.right > frame.left && rect.left < frame.right;
+  }
+  if (rect.height > view.height - 40) return false;
+  return rect.top < view.top - 1 || rect.bottom > view.bottom + 1;
 }
 
 /**

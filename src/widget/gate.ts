@@ -2,6 +2,7 @@ import { ASKED_CLASSES, checkAction, CLASS_DOES, classAsked, fold, grounded, isD
 import { actingAllowedAt, actionsAllowed, ACTING_LIMITS, describeElement, type Act, type ActingSettings, type Refusal, type SnapElement, type Snapshot, type TurnReply } from "../shared/types.ts";
 import { SAYS } from "./says.ts";
 import { currentPath, findOpenModal } from "./snapshot.ts";
+import { inSight } from "./view.ts";
 
 // The DOM half of acting's safety gate (DESIGN section 4). It decides, on the
 // live element at the moment of acting, whether Haptic may do a step itself,
@@ -1101,10 +1102,13 @@ function shownLabel(el: Element): Element | undefined {
 /**
  * Rule 0, run by the engine right before each press, once the control is on
  * screen and still: the point a person would press (the middle, or another of
- * eight spots), and the element a press there would really reach. That
- * element and every ancestor up to the body (the activation chain) pass the
- * gate's rules again: a span inside a submit button is that button, a label
- * is its control. Covered, or refused on the chain: a visitor step.
+ * eight spots), and the element a press there would really reach. The point is
+ * one the visitor can see: on a phone zoomed in, or with its keyboard up, less
+ * than the window is in sight (see view.ts), and a control the engine could
+ * not bring into sight is not pressed. That element and every ancestor up to
+ * the body (the activation chain) pass the gate's rules again: a span inside a
+ * submit button is that button, a label is its control. Covered, out of sight,
+ * or refused on the chain: a visitor step.
  */
 export function reachable(el: Element, plan: ActPlan, session: GateSession, config: GateConfig): Reach {
   try {
@@ -1117,7 +1121,9 @@ export function reachable(el: Element, plan: ActPlan, session: GateSession, conf
     const frame = el.closest(OWN_PARTS) ?? label;
     const own = (hit: Element | null): hit is Element =>
       !!hit && (within(el, hit) || (!!label && within(label, hit)) || (!!frame && frame !== el && within(frame, hit) && !isControlOtherThan(hit, el, frame)));
-    const inWindow = (x: number, y: number) => x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight;
+    const view = inSight();
+    const inWindow = (x: number, y: number) =>
+      x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight && x >= view.left && y >= view.top && x < view.right && y < view.bottom;
     const spots: [number, number][] = [[0.5, 0.5], [0.15, 0.5], [0.85, 0.5], [0.5, 0.2], [0.5, 0.8], [0.15, 0.2], [0.85, 0.2], [0.15, 0.8], [0.85, 0.8]];
     for (const [fx, fy] of spots) {
       const x = box.left + box.width * fx;
