@@ -31,6 +31,10 @@ const TICK_PATH = "M20 6 9 17l-5-5";
 const PRESS_MS = 240;
 /** What the chat says while the pointer shows a step, in a guide Haptic is not doing itself. */
 export const SHOWING = "Showing you how";
+/** Under the ask box, when Send is pressed with nothing typed. */
+export const EMPTY_SEND = "Type what you want to do first, then send it.";
+/** Under the ask box, when Do it is pressed with nothing typed. */
+export const EMPTY_DOIT = "Type what you want Haptic to do first, then press Do it.";
 
 // The thinking glow. It is on the page only while Haptic waits for the model.
 // A soft band the width of the page comes in at the top edge and falls
@@ -57,6 +61,14 @@ const GLOW_OUT_MS = 450;
 // only joins its stops with straight lines, so the curve is spelled out.
 const BELL = [0.62, 0.605, 0.56, 0.49, 0.405, 0.31, 0.215, 0.13, 0.06, 0.015, 0].map((alpha, i) => `rgba(0,0,0,${alpha}) ${i * 10}%`).join(", ");
 
+/**
+ * The glow's three colours, the same on every site, whatever its accent: Haptic's blue, #1E6EF4, and its neighbours
+ * on either side, as the home page draws them. Worked out in OKLCH from that blue (lightness .82, .68 and .6; chroma
+ * half, .85 and .95 of the blue's; hue 28 degrees less, the same, and 30 more) and written down, so no browser works
+ * them out again. Taken from each site's accent, the glow was green on a site with a green one.
+ */
+export const GLOW = ["#77d0fe", "#5294ff", "#8460ee"] as const;
+
 // The glow's own element. It covers the page under the chat and the pointer,
 // takes no clicks, and is not displayed at all unless a glow is on. How it is
 // blended into the page is set when a glow starts (see Ui.glowOn).
@@ -68,12 +80,7 @@ const BELL = [0.62, 0.605, 0.56, 0.49, 0.405, 0.31, 0.215, 0.13, 0.06, 0.015, 0]
 // transform and the opacity of what holds it change.
 const VEIL_CSS = `
 :host { all: initial; display: none; position: fixed; inset: 0; z-index: 2147483646; overflow: hidden; pointer-events: none;
-  --glow-a: #77d0fe; --glow-b: #5294ff; --glow-c: #8460ee; }
-/* The glow is the site's accent with its neighbours on either side, so it suits whatever colour the pointer is. */
-@supports (color: oklch(from red l c h)) {
-  :host { --glow-a: oklch(from var(--accent) .82 calc(c * .5) calc(h - 28)); --glow-b: oklch(from var(--accent) .68 calc(c * .85) h);
-    --glow-c: oklch(from var(--accent) .6 calc(c * .95) calc(h + 30)); }
-}
+  --glow-a: ${GLOW[0]}; --glow-b: ${GLOW[1]}; --glow-c: ${GLOW[2]}; }
 .glow { position: absolute; inset: 0; animation: arrive ${GLOW_IN_MS}ms ease-out; transition: opacity ${GLOW_OUT_MS}ms ease-in; }
 .glow.fade { opacity: 0; }
 /* Without a mask the band would be a hard block of colour, so a browser with none shows no glow. */
@@ -152,6 +159,7 @@ button { font: inherit; cursor: pointer; }
 .panel.working .send, .panel.working .doit { display: none; }
 .panel.nudged .doit { background: var(--accent); border-color: var(--accent); color: #fff; }
 .first { display: flex; align-items: center; gap: 10px; padding: 8px 4px 4px 12px; color: #44403c; font-size: 13px; line-height: 18px; }
+.empty { margin: 0; padding: 8px 12px 0; color: #44403c; font-size: 13px; line-height: 18px; }
 .first .go { flex: none; height: 28px; border: 0; border-radius: 999px; padding: 0 14px; background: #1c1917; color: #fafaf9; font-size: 13px; }
 /* One line under the bubbles says what Haptic is doing: thinking, showing a step, or done. */
 .status, .done { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 2px 8px 8px; }
@@ -450,6 +458,8 @@ export class Ui {
   /** What each of our buttons does, by its class. */
   private buttons!: Record<"launcher" | "hide" | "send" | "stop" | "close" | "doit" | "go" | "resume", () => void>;
   private readonly first: HTMLElement;
+  /** The line under the ask box that says what to do when Send or Do it is pressed with nothing typed. */
+  private readonly empty: HTMLElement;
   private readonly note: HTMLElement;
   private readonly did: HTMLElement;
   /** Set when the site has acting on and the page allows it: the Do it button shows. */
@@ -559,7 +569,7 @@ export class Ui {
           make(
             "form",
             { class: "ask" },
-            make("input", { type: "text", placeholder: "What do you want to do", "aria-label": "Ask a question", maxlength: "300" }),
+            make("input", { type: "text", placeholder: "What do you want to do", "aria-label": "Ask a question", "aria-describedby": "haptic-empty", maxlength: "300" }),
             make(
               "div",
               { class: "row" },
@@ -568,6 +578,7 @@ export class Ui {
               make("button", { class: "stop", type: "button", "aria-label": "Stop" }, icon(SQUARE_PATH, { "aria-hidden": "true" })),
             ),
           ),
+          make("p", { class: "empty", id: "haptic-empty", "aria-live": "polite", ...hidden }),
           make("div", { class: "first", ...hidden }, make("span"), make("button", { class: "go", type: "button" }, "Go")),
           make("p", { class: "about" }, "Haptic ", make("a", { href: ABOUT_URL, target: "_blank", rel: "noopener noreferrer" }, "is an AI guide and can be wrong.")),
         ),
@@ -594,6 +605,7 @@ export class Ui {
     this.helped = pick(".helped");
     this.dock = pick(".dock");
     this.first = pick(".first");
+    this.empty = pick(".empty");
     this.note = pick(".note");
     this.did = pick(".did");
     this.asked = pick(".asked");
@@ -603,7 +615,6 @@ export class Ui {
     // The glow's element. Nothing in it is for the page's scripts, a screen reader or Haptic's own reading of the page.
     // It is put in the page once, here, and never moved: what is drawn in it is its own business and the page sees none of it.
     this.veil = document.createElement("haptic-veil");
-    this.veil.style.setProperty("--accent", this.present ? strongAccent(appearance.accent) : appearance.accent);
     for (const [name, value] of Object.entries({ "aria-hidden": "true", "data-haptic-ignore": "", popover: "manual" })) this.veil.setAttribute(name, value);
     this.glass = this.veil.attachShadow({ mode: "open" });
     this.blend = adoptVeil(this.glass, VEIL_CSS);
@@ -683,6 +694,7 @@ export class Ui {
       const question = this.input.value.trim();
       this.first.hidden = true;
       if (question) this.send(handlers, question, false);
+      else this.askFirst(EMPTY_SEND);
     });
     // Ctrl or Cmd and Enter is Do it. The visitor's own words only colour the button.
     this.input.addEventListener("keydown", (event) => {
@@ -693,6 +705,7 @@ export class Ui {
     this.input.addEventListener("input", () => {
       this.panel.classList.toggle("nudged", !!this.acting && asksToDo(this.input.value));
       this.first.hidden = true;
+      this.askFirst("");
     });
 
     // Typing in the ask box mustn't trigger the page's keyboard shortcuts or
@@ -1206,7 +1219,7 @@ export class Ui {
   private doIt(handlers: UiHandlers) {
     const question = this.input.value.trim();
     if (!this.acting || !this.panel.classList.contains("acts")) return;
-    if (!question) return this.input.focus();
+    if (!question) return this.askFirst(EMPTY_DOIT);
     if (this.acting.confirmFirst && !remembered(this.acting)) {
       this.first.hidden = false;
       this.keepPlaced();
@@ -1215,8 +1228,21 @@ export class Ui {
     this.send(handlers, question, true);
   }
 
+  /**
+   * Says under the ask box what to do when Send or Do it was pressed with nothing typed, and puts the keyboard in the
+   * box, so a press that did nothing is never left unexplained. "" takes the line away, as typing does.
+   */
+  private askFirst(text: string) {
+    const shown = !this.empty.hidden;
+    if (this.empty.textContent !== text) this.empty.textContent = text;
+    this.empty.hidden = text === "";
+    if (text) this.input.focus();
+    if (shown !== !this.empty.hidden) this.keepPlaced();
+  }
+
   /** Sends a question. It shows as a bubble in the chat from here on, so the ask box is emptied for the next one. */
   private send(handlers: UiHandlers, question: string, act: boolean) {
+    this.askFirst("");
     this.input.value = "";
     this.panel.classList.remove("nudged");
     // The ask box gives up the keyboard as the question goes: what the visitor does next, they do on the page. With the

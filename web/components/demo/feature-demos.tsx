@@ -54,7 +54,8 @@ async function ask({ wait, set, alive }: ScriptIO<ChatScene>, text: string) {
   }
   await wait(350);
   set({ sent: true, status: "thinking" });
-  await wait(900);
+  // As long as the hero's first think, so the glow crosses the mock page before the pointer comes.
+  await wait(1700);
 }
 
 // 1. Any question ------------------------------------------------------------
