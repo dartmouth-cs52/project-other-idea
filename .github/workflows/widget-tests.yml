@@ -1,0 +1,61 @@
+# Runs the widget's browser tests: small local pages with the real widget on
+# them and a scripted model, and small local pages read the way the widget
+# reads them. Nothing is billed and nothing leaves the runner.
+#
+# They are kept out of `npm test` because they need browsers, which `npm ci`
+# does not download. This workflow downloads them for the run: Chromium for
+# everything, and Firefox and WebKit for the tests in test/browser that run the
+# widget in all three (test/browser/harness.ts).
+
+name: Widget tests
+
+on:
+  pull_request:
+    paths:
+      - "src/widget/**"
+      - "src/shared/**"
+      - "test/widget/**"
+      - "test/browser/**"
+      - "eval/browser.ts"
+      - "package.json"
+  push:
+    branches: [main]
+    paths:
+      - "src/widget/**"
+      - "src/shared/**"
+      - "test/widget/**"
+      - "test/browser/**"
+      - "eval/browser.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  widget:
+    name: Widget in a browser
+    runs-on: ubuntu-latest
+    # The widget suite alone takes about fifteen minutes on a runner.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The acting engine's tests also run on pages built from the real React,
+      # Radix and cmdk (test/widget/act/fixtures). They are not dependencies of
+      # the project, so they are added for the run. Playwright is one, at the
+      # version in package-lock.json, and its browsers are downloaded for it.
+      - name: Install the browsers, and the libraries some test pages are built from
+        run: |
+          npm install --no-save react@19 react-dom@19 radix-ui@1 cmdk@1
+          npx playwright install --with-deps chromium firefox webkit
+
+      - run: npm run test:widget
+
+      - run: npm run test:browser

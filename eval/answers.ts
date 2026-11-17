@@ -127,7 +127,8 @@ const fileName = (path: string) => path.split(/[\\/]/).pop() ?? path;
 export function scoreAnswer(file: AnswerFile, item: AnswerCase, reply: TurnReply, cited: string[]): AnswerScore {
   const { expect, kind } = item;
   const why: string[] = [];
-  const mode = reply.mode ?? "guide";
+  // An act reply is never asked for here; it is scored as the guide step it is.
+  const mode = reply.mode === undefined || reply.mode === "act" ? "guide" : reply.mode;
 
   let routed = expect.mode.includes(mode);
   if (!routed) why.push(`replied with ${mode}, wanted ${expect.mode.join(" or ")}`);

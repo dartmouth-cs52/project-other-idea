@@ -166,11 +166,14 @@ const PRESS = { duration: 0.24, times: [0, 0.4, 1], ease: "easeOut" as const };
  */
 export function Stage({
   pointing,
+  status,
   layoutKey,
   className,
   children,
 }: {
   pointing: Pointing;
+  /** What the chat says Haptic is doing. The glow over the page follows it. */
+  status?: ChatView["status"];
   /** Changes whenever the mock's layout changes, so positions are measured again. */
   layoutKey: string | number;
   className?: string;
@@ -182,6 +185,14 @@ export function Stage({
   const [resized, setResized] = useState(0);
   const lastTip = useRef<{ x: number; y: number } | null>(null);
   const press = useAnimationControls();
+  // Each spell of thinking starts the glow's band again from the top of the page.
+  const thinking = status === "thinking";
+  const [wasThinking, setWasThinking] = useState(thinking);
+  const [spell, setSpell] = useState(0);
+  if (thinking !== wasThinking) {
+    setWasThinking(thinking);
+    if (thinking) setSpell(spell + 1);
+  }
 
   useEffect(() => {
     if (pointing.pulse > 0) void press.start("press");
@@ -242,10 +253,26 @@ export function Stage({
   const mark = pointing.marked ? geometry?.mark : null;
 
   return (
-    <div ref={root} className={cn("relative overflow-hidden", className)}>
+    // isolate keeps the glow's blending inside the mock page.
+    <div ref={root} className={cn("relative isolate overflow-hidden", className)}>
       {children}
 
       {/* Everything below is Haptic, drawn on top of the customer's app. */}
+      {/* The thinking glow. It is on the page only while Haptic thinks: a soft band comes in at the top and falls towards
+          the bottom, slower the longer the wait, and goes the rest of the way and off the page the moment the reply
+          arrives. It is the widget's own glow (src/widget/ui.ts), with its timings, styled in globals.css. It is over
+          the page and under the chat, which sits at z-15. */}
+      <div className="thinking-glow" data-on={thinking}>
+        {spell > 0 && (
+          <motion.i
+            key={spell}
+            initial={{ y: "-90%" }}
+            animate={{ y: thinking ? "40%" : "100%" }}
+            transition={thinking ? { duration: 8, ease: [0.14, 1, 0.3, 1] } : { duration: 0.45, ease: "easeIn" }}
+          />
+        )}
+      </div>
+
       <AnimatePresence>
         {mark && (
           <motion.div
@@ -520,7 +547,7 @@ export function Chat({ view, compact, className }: { view: ChatView; compact?: b
             </Marker>
           )}
           {view.status === "thinking" && (
-            // No icon. A lighter shade sweeps across the word while Haptic works.
+            // No icon. A lighter shade sweeps across the word while Haptic works, and the glow falls down the page.
             <Marker>
               <MarkerContent className="shimmer">Thinking</MarkerContent>
             </Marker>

@@ -44,6 +44,18 @@ for (const name of BROWSERS) {
       assert.deepEqual(labels, ["View"]);
     });
 
+    test("keeps a link that wraps onto a second line, with the line it starts on scrolled away", async () => {
+      // The fifth link starts at the end of the first line and ends at the start of the second. With the first line
+      // scrolled above the window, what is left of its box is the whole width of the second line, and it is only at
+      // the start of it. Each line the link is drawn on is looked at, so it is not taken for covered.
+      // The space after each link is inside it, so every point of a line is on one link or another.
+      const links = Array.from({ length: 12 }, (_, at) => `<a href="/page/${at + 1}">Page ${at + 1} of part 2 </a>`).join("");
+      const body = `<div style="height:1000px"></div><p id="wrap" style="width:78ch;margin:0;font:16px/20px monospace">${links}</p><div style="height:1000px"></div>`;
+      const labels = await labelsOf(tab, body, `window.scrollTo(0, document.getElementById("wrap").offsetTop + 21)`);
+      assert.ok(labels.includes("Page 5 of part 2"), `the wrapped link is missing from: ${labels.join(", ")}`);
+      assert.equal(await tab.evaluate(() => document.querySelector("a[href='/page/5']")!.getClientRects().length), 2, "the link does not wrap here");
+    });
+
     test("keeps a button under a sticky header, since scrolling it to the middle shows it", async () => {
       const labels = await labelsOf(
         tab,

@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { AlertCircleIcon, ArrowRight } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ArrowRight } from "lucide-react";
+import { Field, FormAlert } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { STEP_FIELDS, checkRequest, cleanRequest, type AccessErrors, type AccessField, type AccessRequest } from "@/lib/access-request";
 import { accessEndpoint, site } from "@/lib/site";
@@ -136,12 +135,12 @@ export function AccessForm() {
       <h2 className="text-2xl font-medium tracking-[-0.02em] text-balance">Request access to Haptic</h2>
       {step === 1 ? (
         <form onSubmit={next} noValidate className="mt-6 flex flex-col gap-5">
-          <Row name="email" label="Work email" required error={errors.email}>
+          <Field id={ID.email} label="Work email" required error={errors.email}>
             <Input type="email" required autoComplete="email" placeholder="name@company.com" className={FIELD} {...bind("email")} />
-          </Row>
-          <Row name="company" label="Company" required error={errors.company}>
+          </Field>
+          <Field id={ID.company} label="Company" required error={errors.company}>
             <Input type="text" required autoComplete="organization" placeholder="Company name" className={FIELD} {...bind("company")} />
-          </Row>
+          </Field>
           <Button type="submit" size="xl" className="self-start">
             Continue
             <ArrowRight data-icon="inline-end" />
@@ -150,14 +149,14 @@ export function AccessForm() {
       ) : (
         <form onSubmit={submit} noValidate className="mt-6 flex flex-col gap-5">
           <div className="grid items-start gap-5 sm:grid-cols-2 sm:gap-4">
-            <Row name="firstName" label="First name" required error={errors.firstName}>
+            <Field id={ID.firstName} label="First name" required error={errors.firstName}>
               <Input type="text" required autoFocus autoComplete="given-name" className={FIELD} {...bind("firstName")} />
-            </Row>
-            <Row name="lastName" label="Last name" required error={errors.lastName}>
+            </Field>
+            <Field id={ID.lastName} label="Last name" required error={errors.lastName}>
               <Input type="text" required autoComplete="family-name" className={FIELD} {...bind("lastName")} />
-            </Row>
+            </Field>
           </div>
-          <Row name="details" label="Additional details">
+          <Field id={ID.details} label="Additional details" error={errors.details}>
             <Textarea
               rows={4}
               maxLength={2000}
@@ -165,7 +164,7 @@ export function AccessForm() {
               className="min-h-28 bg-card px-3.5 py-3 md:text-base"
               {...bind("details")}
             />
-          </Row>
+          </Field>
           {/* Left empty by people, who never see it. Programs that fill in every field give themselves away. */}
           <div aria-hidden className="absolute -left-[9999px] size-px overflow-hidden">
             <label htmlFor="access-fax">Fax</label>
@@ -179,15 +178,6 @@ export function AccessForm() {
               onChange={(event) => setFields((current) => ({ ...current, fax: event.target.value }))}
             />
           </div>
-          {(status === "busy" || status === "failed") && (
-            <Alert variant="destructive" className="px-3.5 py-3">
-              <AlertCircleIcon />
-              <AlertTitle>{status === "busy" ? "Too many tries" : "That did not go through"}</AlertTitle>
-              <AlertDescription>
-                {status === "busy" ? "Wait a minute, then send it again." : `Email ${site.email} and we will set you up.`}
-              </AlertDescription>
-            </Alert>
-          )}
           <div className="flex flex-wrap gap-3">
             <Button type="button" variant="secondary" size="xl" onClick={back} disabled={status === "sending"}>
               Back
@@ -197,29 +187,16 @@ export function AccessForm() {
               <ArrowRight data-icon="inline-end" />
             </Button>
           </div>
+          <FormAlert
+            failure={
+              status === "busy"
+                ? { title: "Too many tries", detail: "Wait a minute, then send it again." }
+                : status === "failed"
+                  ? { title: "That did not go through", detail: `Email ${site.email} and we will set you up.` }
+                  : null
+            }
+          />
         </form>
-      )}
-    </div>
-  );
-}
-
-/** One field: its label, a red star if it is required, the control, and what is wrong with it, if anything. */
-function Row({ name, label, required, error, children }: { name: AccessField; label: string; required?: boolean; error?: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor={ID[name]} className="gap-0.5">
-        {label}
-        {required && (
-          <span aria-hidden className="text-destructive">
-            *
-          </span>
-        )}
-      </Label>
-      {children}
-      {error && (
-        <p id={`${ID[name]}-error`} className="text-[13px] leading-5 text-destructive">
-          {error}
-        </p>
       )}
     </div>
   );

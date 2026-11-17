@@ -7,6 +7,9 @@ import { proxyAuth } from "./auth";
 import { database } from "./db";
 import { sendHealthAlerts } from "./health";
 import { HOOK_PATH, neonHook, type HookEnv } from "./neon-hook";
+import { forgetOldEmails } from "./setup-api";
+import { isPlaybookPath, playbook } from "./playbook";
+import { forgetOldTeaching } from "./teach";
 
 export interface Assets {
   fetch(request: Request): Promise<Response> | Response;
@@ -37,6 +40,10 @@ export async function daily(env: Env): Promise<void> {
   } catch (error) {
     console.error("Guide health check failed:", error);
   }
+  // Each install email sent deletes the records older than a day. This catches a site that sends no more.
+  await forgetOldEmails(database(env.DATABASE_URL)).catch((error: Error) => console.error("Could not delete old install email records:", error.message));
+  // Teach sessions nobody saved, a week on, and any steps a saved or closed one still holds.
+  await forgetOldTeaching(database(env.DATABASE_URL)).catch((error: Error) => console.error("Could not delete old teach sessions:", error.message));
 }
 
 export async function handle(request: Request, env: Env, assets: Assets): Promise<Response> {
@@ -62,6 +69,8 @@ export async function handle(request: Request, env: Env, assets: Assets): Promis
     return proxyAuth(request, env);
   }
   if (url.pathname.startsWith("/api/app/")) return appApi(request, env, url);
+  // The install steps a coding agent fetches, /install/<site>.md. The install page itself is static.
+  if (isPlaybookPath(url.pathname)) return playbook(request, env, url);
 
   const response = await assets.fetch(request);
   // Anything that is not the real domain is a preview, and search engines should skip it.

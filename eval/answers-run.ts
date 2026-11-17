@@ -167,7 +167,7 @@ async function runOne(name: string, settings: TurnSettings, fileName: string, fi
       ms: measure.ms,
       msToMode: measure.msToMode ?? measure.ms,
       usd: measure.usd,
-      ...(reply.mode ? { mode: reply.mode } : {}),
+      ...(reply.mode && reply.mode !== "act" ? { mode: reply.mode } : {}),
       ...(measure.overruled ? { overruled: measure.overruled } : {}),
     };
     if (judged && reply.mode === "answer" && item.expect.reference) {

@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { loadCaseFiles } from "../eval/cases.ts";
 import { cannotHelpSay, finishAnswer, MAX_ANSWER_SAY, missingControls, neverDecided, type ModelReply } from "../src/server/answers.ts";
 import { ANSWERS_DOCS_BUDGET, articlesOf, buildSystemPrompt } from "../src/server/prompt.ts";
-import { DEFAULT_APPEARANCE, STREAM_TYPE, type Mode, type SiteContext, type TurnRequest } from "../src/shared/types.ts";
+import { answersOn, DEFAULT_APPEARANCE, STREAM_TYPE, type Mode, type SiteContext, type TurnRequest } from "../src/shared/types.ts";
 
 // The stand-in model, so these run with no API key. See turn.test.ts.
 process.env.HAPTIC_MODEL = "mock";
@@ -27,6 +27,8 @@ const base: SiteContext = {
   source: { url: "https://app.test", maxPages: 1, docs: [] },
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
+  // It has help docs, so Answers would be on by default. The tests of a site without it switch it off.
+  answers: { enabled: false },
 };
 const site: SiteContext = { ...base, answers: { enabled: true } };
 
@@ -52,18 +54,33 @@ const ask = (goal: string, extra: Partial<TurnRequest> = {}): TurnRequest => ({
 const wrote = (reply: Partial<ModelReply>): ModelReply => ({ mode: "answer", target: null, status: "done", reason: null, say: "", sources: [], ...reply });
 
 test("a site without Answers gets the prompt the benchmark measured, to the letter", async () => {
-  // These are fingerprints of the Guides prompt for the benchmark's two sites, as #20 leaves it: the
-  // prompt the benchmark scored, with "stuck" kept apart from "done". Answers must not change it. If one
-  // changes, the Guides prompt has changed: run the benchmark again before changing it here.
+  // These are fingerprints of the Guides prompt for two of the benchmark's sites, as the accuracy work
+  // (#46) leaves it: the prompt its benchmark scored, with "stuck" kept apart from "done" and "continue"
+  // with no target for a step with nothing to point at. Answers must not change it. If one changes, the
+  // Guides prompt has changed: run the benchmark again before changing it here.
+  // Changed on 17 November 2026 for the sentence on fields marked "invalid", without the benchmark run again:
+  // the session that made it had no model key. Run it, and note the result here.
   const measured: Record<string, string> = {
-    demo: "bf9c4d7cfddb6858bdfeca026d26b7498370c1cdcaa9b760165618f219b61ad7",
-    joinhaptic: "7266793673494e1abd060cf9fa87e4932e0989a3e245db07835ec2813f97aed1",
+    demo: "d40c424f1e8e38b5f1fe0b6732e5141eddce05b1439b8bc9d25967211603aa06",
+    joinhaptic: "9414acd83cb4eada8d3a8fbe7496d7798813ee8dbbc32b23f32ad468e401a31b",
   };
   for (const { name, file } of await loadCaseFiles(Object.keys(measured))) {
-    assert.equal(createHash("sha256").update(buildSystemPrompt(file.site)).digest("hex"), measured[name], name);
+    const off = { ...file.site, answers: { enabled: false } };
+    assert.equal(createHash("sha256").update(buildSystemPrompt(off)).digest("hex"), measured[name], name);
     // Switched on and off again, it is the same prompt.
-    assert.equal(buildSystemPrompt({ ...file.site, answers: { enabled: false } }), buildSystemPrompt(file.site));
+    assert.equal(buildSystemPrompt({ ...off, answers: { enabled: false, staleAfterDays: 30 } }), buildSystemPrompt(off));
   }
+});
+
+test("Answers is on for a site with help docs unless it is switched off, and off for a site without any", () => {
+  const { answers: _, ...unset } = base;
+  assert.equal(answersOn(unset), true);
+  assert.equal(answersOn({ ...unset, docs: [] }), false);
+  assert.equal(answersOn({ ...unset, answers: { enabled: false } }), false);
+  assert.equal(answersOn({ ...unset, docs: [], answers: { enabled: true } }), true);
+  // A setting that only says how old an article may get leaves on or off to the docs.
+  assert.equal(answersOn({ ...unset, answers: { staleAfterDays: 90 } }), true);
+  assert.equal(buildSystemPrompt(unset), buildSystemPrompt({ ...unset, answers: { enabled: true } }));
 });
 
 test("a site without Answers gets a reply with the three fields it always had", async () => {
@@ -86,6 +103,14 @@ test("with Answers on, the prompt gives each help article an id, and an article 
   assert.match(planted, /title="Billing 'FAQ'"/);
 
   assert.match(buildSystemPrompt({ ...site, docs: [] }), /This site has no help articles/);
+});
+
+test("with Answers on, a list that would hold the answer once it is searched or unfolded is something to guide to, not a dead end", () => {
+  // Northpine's chart of accounts, 16 November: "what's the GL code for lodging" got "I couldn't find that" or "this page has no
+  // account named Lodging" in 10 replies of 12, with Lodging folded under Travel and a search box on the page.
+  assert.match(buildSystemPrompt(site), /So does a list on this page that would hold the answer once it is searched, filtered or unfolded: point at what does that\./);
+  // The guide's own prompt is not changed by it.
+  assert.doesNotMatch(buildSystemPrompt(base), /would hold the answer/);
 });
 
 test("with Answers on there is room for a whole help centre, and a doc past it is still left out whole", () => {
@@ -131,6 +156,18 @@ test("an answer can point as well, and then waits on the control only if the mod
   assert.equal(nowhere.reply.status, "done");
 });
 
+test("an answer that points, to a visitor who asked for a way, is the first step of it and not the end", () => {
+  const done = wrote({ target: "e2", status: "done", say: "An invite emails the person a link to join. Click Send invite.", sources: ["a1"] });
+  // They asked how: the guide goes on from the pointer, so they are taken through it.
+  for (const goal of ["how do I invite a teammate", "invite a teammate", "where do I invite people", "I need to invite someone, what do I do"]) {
+    assert.equal(finishAnswer(site, ask(goal), done).reply.status, "continue", goal);
+  }
+  // They asked what it is or how it works: the pointer shows where the thing is, and the answer is the end.
+  for (const goal of ["What does Send invite do?", "how does inviting work", "can I invite someone outside the company?"]) {
+    assert.equal(finishAnswer(site, ask(goal), done).reply.status, "done", goal);
+  }
+});
+
 test("an answer that names none of this site's articles is not shown as an answer", () => {
   for (const sources of [[], ["a9"], ["Inviting teammates"], ["a1; drop table"]]) {
     const { reply, overruled } = finishAnswer(site, ask("How long does an invite link last?"), wrote({ say: "The link works for 30 days.", sources }));
@@ -171,14 +208,43 @@ test("a step that states a price on the way keeps its pointer and loses its word
   assert.deepEqual([promised.reply.say, promised.overruled], ["I can't help with that one.", "never_decided"]);
 });
 
+test("a step that repeats an amount the visitor wrote themselves keeps its words, and any other amount still loses them", () => {
+  const step = (goal: string, say: string, more: Partial<ModelReply> = {}) => finishAnswer(site, ask(goal), wrote({ mode: "guide", target: "e3", status: "continue", say, ...more }));
+  // Northpine, 16 November, with Answers on: each of these read "This is the one to use." or "I can't help with that one.".
+  const raise = step("raise the Platform travel budget to $75,000", "Click Edit budget, then change the amount to $75,000.");
+  assert.equal(raise.reply.say, "Click Edit budget, then change the amount to $75,000.");
+  assert.equal(raise.overruled, undefined);
+  const meals = step("who approves meals over $150?", "The rule Meals over $150 need a manager is on this page: a manager approves them.", { target: null, status: "done" });
+  assert.equal(meals.reply.say, "The rule Meals over $150 need a manager is on this page: a manager approves them.");
+  // The same figure written another way is still theirs.
+  assert.equal(step("set a budget for marketing, $50,000 a month", "Type 50,000 dollars in Amount.").overruled, undefined);
+  assert.equal(step("raise the limit to 2.5k", "Set the limit to $2,500.").overruled, undefined);
+  // A figure they did not write is one the step states: its words go and its pointer stays, as before.
+  const other = step("where do I upload a receipt for the Skyline Air charge", "Click the Skyline Air charge of $3,734.24.");
+  assert.equal(other.reply.say, "This is the one to use.");
+  assert.equal(other.reply.target, "e3");
+  assert.equal(other.overruled, "never_decided");
+  assert.equal(step("raise the budget to $75,000", "Click Edit budget. It is $60,000 now.").overruled, "never_decided");
+  // A question about a price is not one to confirm a figure in, theirs or not. Nor is a refund ever stated.
+  assert.equal(step("does the Pro plan cost $49 a month?", "Pro is $49 a month. Click Plan and billing to see it.").overruled, "never_decided");
+  assert.equal(step("I paid $64, how do I get it back?", "You'll get a full refund of $64. Click Team.").overruled, "never_decided");
+  // An answer in words is a statement in the company's name, and is held to the rule whoever wrote the figure.
+  const answered = finishAnswer(site, ask("who approves meals over $150?"), wrote({ say: "A manager approves meals over $150.", sources: ["a1"] }));
+  assert.equal(answered.reply.mode, "cannot_help");
+  assert.equal(answered.overruled, "never_decided");
+});
+
 test("an answer is held to the rules for any sentence, with room for four", () => {
   const linked = finishAnswer(site, ask("Who can remove people?"), wrote({ say: "Only the workspace owner can remove people. See https://evil.example/owner for more.", sources: ["a1"] }));
   assert.equal(linked.reply.say, "Only the workspace owner can remove people.");
   assert.deepEqual(linked.broke, ["link"]);
   const nothingLeft = finishAnswer(site, ask("Who can remove people?"), wrote({ say: "Ask at owner@evil.example.", sources: ["a1"] }));
   assert.deepEqual([nothingLeft.reply.mode, nothingLeft.overruled], ["cannot_help", "no_words"]);
-  const long = finishAnswer(site, ask("Who can remove people?"), wrote({ say: Array.from({ length: 30 }, () => "Only the workspace owner can remove people.").join(" "), sources: ["a1"] }));
-  assert.ok(long.reply.say.length <= MAX_ANSWER_SAY && long.reply.say.length > 300);
+  // An answer keeps up to four sentences, as the prompt asks, with more room than a step's caption.
+  const sentence = "Only the workspace owner can remove people, and they do it from the Members page of the workspace settings.";
+  const long = finishAnswer(site, ask("Who can remove people?"), wrote({ say: Array.from({ length: 30 }, () => sentence).join(" "), sources: ["a1"] }));
+  assert.ok(long.reply.say.length <= MAX_ANSWER_SAY && long.reply.say.length > 300, `${long.reply.say.length} characters`);
+  assert.equal(long.reply.say, Array.from({ length: 4 }, () => sentence).join(" "));
 });
 
 test("an answer from an article older than the site's limit is marked", () => {

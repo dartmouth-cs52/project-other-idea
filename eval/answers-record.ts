@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { loadSite } from "../src/server/sites.ts";
-import type { Snapshot, TurnRequest } from "../src/shared/types.ts";
+import { answersOn, type Snapshot, type TurnRequest } from "../src/shared/types.ts";
 import { ANSWERS_DIR, type AnswerFile } from "./answers.ts";
 
 // Refreshes what an Answers case file knows about its site: the site's context
@@ -34,7 +34,7 @@ async function main() {
   if (!set) throw new Error(`Say which file to refresh: ${Object.keys(SITES).join(", ")}.`);
   const site = await loadSite(set.siteId);
   if (!site) throw new Error(`There is no ${set.siteId} in data/sites yet. Build it first with npm run tag.`);
-  if (!site.answers?.enabled) throw new Error(`${set.siteId} doesn't have Answers on. Build it again with --answers on.`);
+  if (!answersOn(site)) throw new Error(`${set.siteId} doesn't have Answers on. Build it again with --answers on.`);
 
   let chromium;
   try {
