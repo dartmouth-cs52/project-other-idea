@@ -467,7 +467,7 @@ function FilterChip({ filter, open, onOpenChange, onChange, onRemove }: { filter
       <Popover
         open={open}
         onOpenChange={onOpenChange}
-        className="w-72 p-0"
+        className="w-72 max-w-[calc(100vw-1rem)] p-0"
         trigger={
           <button type="button" className="h-full cursor-pointer rounded-l-md pr-1.5 pl-2.5 hover:bg-sunken">
             <span className="text-ink-3">{def.label}:</span> <span className={cn("font-medium", !filter.values.length && "text-warn")}>{summary}</span>

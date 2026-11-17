@@ -125,7 +125,7 @@ function TransferOwnership() {
           <p>
             The owner is {ownerId === ME_ID ? "you" : fullName(index.get(ownerId))}. The new owner gets billing and can delete the workspace. You stay an admin.
           </p>
-          <Gate>{(ok) => <Combobox aria-label="New owner" className="w-72" disabled={!ok} value={to} onChange={setTo} options={options} placeholder="Pick a person" searchPlaceholder="Search people…" />}</Gate>
+          <Gate>{(ok) => <Combobox aria-label="New owner" className="w-full sm:w-72" disabled={!ok} value={to} onChange={setTo} options={options} placeholder="Pick a person" searchPlaceholder="Search people…" />}</Gate>
         </div>
       }
       action={

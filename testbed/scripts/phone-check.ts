@@ -14,12 +14,13 @@
 //   npm run dev                      # or npm run preview, after npm run build
 //   npm run phone:check              # every page
 //   npm run phone:check -- /cards    # pages whose path starts with /cards
+//   WIDTHS=296,320 npm run phone:check   # other widths. A little under 320 shows what wider fonts would push over
 
 import { chromium, devices, type Page } from "playwright";
 
 const BASE = process.env.TESTBED_URL ?? "http://localhost:4200";
 const only = process.argv[2];
-const WIDTHS = [320, 390];
+const WIDTHS = (process.env.WIDTHS ?? "320,390").split(",").map(Number);
 
 const PAGES = [
   "/",
@@ -95,6 +96,11 @@ const STATES: { name: string; path: string; then: (page: Page) => Promise<void>;
     name: "the New menu",
     path: "/",
     then: (page) => page.getByRole("button", { name: "Create new" }).click(),
+  },
+  {
+    name: "the notifications",
+    path: "/",
+    then: (page) => page.getByRole("button", { name: "Notifications" }).click(),
   },
   {
     name: "each step of issuing a physical card",

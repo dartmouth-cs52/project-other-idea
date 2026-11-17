@@ -280,7 +280,7 @@ function Notifications() {
       open={open}
       onOpenChange={setOpen}
       align="end"
-      className="w-80 p-0"
+      className="w-80 max-w-[calc(100vw-1rem)] p-0"
       trigger={
         <span className="relative">
           <IconButton icon={<Bell />} label={t("Notifications")} />

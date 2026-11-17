@@ -172,8 +172,13 @@ export function DataTable<T>({
           </div>
         ))}
         {rowActions ? (
-          // Visible only on hover, like most dashboards. Still in the DOM and focusable.
-          <div role="cell" className="absolute inset-y-0 right-0 flex items-center gap-1 bg-gradient-to-l from-panel via-panel to-transparent pr-2 pl-8 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100" onClick={(e) => e.stopPropagation()}>
+          // Visible only on hover, like most dashboards. Still in the DOM and focusable. A touch screen has no hover, so
+          // there they always show. Only the buttons take a press: the fade behind them lets a tap through to the row.
+          <div
+            role="cell"
+            className="pointer-events-none absolute inset-y-0 right-0 flex items-center gap-1 bg-gradient-to-l from-panel via-panel to-transparent pr-2 pl-8 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [&>*]:pointer-events-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             {rowActions(row.original)}
           </div>
         ) : null}

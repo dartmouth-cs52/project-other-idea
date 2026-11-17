@@ -220,7 +220,7 @@ function BillsBody() {
           onRowClick={(b) => navigate(`/bills/${b.id}`)}
           toolbar={
             <>
-              <Input aria-label="Search bills" placeholder="Search vendor or bill number" className="w-64" value={q} onChange={(e) => setParam("q", e.target.value)} />
+              <Input aria-label="Search bills" placeholder="Search vendor or bill number" className="w-full sm:w-64" value={q} onChange={(e) => setParam("q", e.target.value)} />
               <Select
                 aria-label="Vendor"
                 className="w-48"

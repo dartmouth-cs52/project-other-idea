@@ -61,7 +61,7 @@ function VendorDetail({ vendor }: { vendor: Vendor }) {
         title={
           manage.allowed ? (
             // Click-to-edit title, on purpose: the name only becomes an input after a click.
-            <InlineEdit value={vendor.name} label="vendor name" className="-ml-1 min-w-max text-[22px] font-semibold" onSave={(v) => v.trim() && act(() => patch("vendors", vendor.id, { name: v.trim() }), { success: "Vendor renamed" })} />
+            <InlineEdit value={vendor.name} label="vendor name" className="-ml-1 text-[22px] font-semibold sm:min-w-max" onSave={(v) => v.trim() && act(() => patch("vendors", vendor.id, { name: v.trim() }), { success: "Vendor renamed" })} />
           ) : (
             vendor.name
           )

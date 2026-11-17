@@ -35,7 +35,7 @@ export function ChatBubble() {
   return (
     <div className="fixed right-5 bottom-5 z-40 flex flex-col items-end gap-3">
       {open ? (
-        <div className="flex h-[420px] w-80 flex-col overflow-hidden rounded-xl border border-line bg-panel shadow-2xl">
+        <div className="flex h-[420px] w-80 max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-xl border border-line bg-panel shadow-2xl">
           <div className="flex items-center justify-between bg-[#3b2bb3] px-4 py-3 text-white">
             <span className="text-[14px] font-semibold">Chat with Support</span>
             <button type="button" aria-label="Close chat" onClick={() => setOpen(false)} className="cursor-pointer">

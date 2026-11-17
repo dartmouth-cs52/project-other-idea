@@ -95,7 +95,7 @@ function ChartBody({ onAdd }: { onAdd: (parentId: string) => void }) {
   return (
     <Card bodyClassName="p-0">
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-        <Input aria-label="Search accounts" placeholder="Search by code or name" className="w-64" value={q} onChange={(e) => setQ(e.target.value)} />
+        <Input aria-label="Search accounts" placeholder="Search by code or name" className="w-full sm:w-64" value={q} onChange={(e) => setQ(e.target.value)} />
         <Button size="sm" variant="ghost" onClick={() => setExpanded(new Set(accounts.map((a) => a.id)))}>
           Expand all
         </Button>

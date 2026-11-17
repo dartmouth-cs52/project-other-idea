@@ -378,8 +378,9 @@ function ExpensesBody({ rows }: { rows: Transaction[] }) {
 
 function MiniStat({ label, value, tone }: { label: string; value: ReactNode; tone?: "warn" }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 rounded-lg border border-line bg-panel px-4 py-3 shadow-xs">
-      <span className="text-[12.5px] text-ink-3">{label}</span>
+    // The number goes under its label when the two don't fit side by side, as on the narrowest phones.
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 rounded-lg border border-line bg-panel px-4 py-3 shadow-xs">
+      <span className="min-w-0 text-[12.5px] text-ink-3">{label}</span>
       <span className={cn("tabular text-[17px] font-semibold", tone === "warn" && "text-warn")}>{value}</span>
     </div>
   );
@@ -418,7 +419,7 @@ function Toolbar({ filters, update, people }: { filters: ExpenseFilters; update:
   return (
     <div className="flex w-full flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-64">
+        <div className="relative w-full sm:w-64">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-ink-3" />
           <Input aria-label="Search expenses" placeholder="Search merchant, memo, person…" value={q} onChange={(e) => setQ(e.target.value)} className="h-7 pl-8" />
         </div>
@@ -547,7 +548,7 @@ function BulkActions({ ids, clear }: { ids: string[]; clear: () => void }) {
       <Popover
         open={catOpen}
         onOpenChange={setCatOpen}
-        className="w-64 p-0"
+        className="w-64 max-w-[calc(100vw-1rem)] p-0"
         trigger={
           <Button size="sm">
             <Tags /> Categorize
