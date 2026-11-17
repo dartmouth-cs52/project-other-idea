@@ -2093,14 +2093,17 @@ export function outAcross(rect: DOMRect): boolean {
 
 /**
  * Whether a visitor can scroll across to an element: a box around it scrolls
- * across, or the page does. A page that hides what overflows it across, as
- * one with a menu parked past its side does, cannot be scrolled across by the
- * visitor, though a script could still shove it aside.
+ * across, or the page does. A box counts only where it is in the window
+ * itself, or can be scrolled into it the same way: a strip of tabs that
+ * scrolls, inside a menu parked past the side of the page, brings nothing
+ * into the window. A page that hides what overflows it across, as one with
+ * such a menu does, cannot be scrolled across by the visitor, though a script
+ * could still shove it aside.
  */
 export function scrollsAcrossTo(el: Element): boolean {
   for (let at = parentOf(el); at && at !== document.body && at !== document.documentElement; at = parentOf(at)) {
     const overflow = getComputedStyle(at).overflowX;
-    if ((overflow === "auto" || overflow === "scroll") && at.scrollWidth > at.clientWidth + 1) return true;
+    if ((overflow === "auto" || overflow === "scroll") && at.scrollWidth > at.clientWidth + 1) return !outAcross(at.getBoundingClientRect()) || scrollsAcrossTo(at);
   }
   const page = document.scrollingElement ?? document.documentElement;
   if (page.scrollWidth <= page.clientWidth + 1) return false;

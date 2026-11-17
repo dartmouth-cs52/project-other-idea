@@ -400,3 +400,28 @@ test("boxes that clip nothing of the control, like a card's or a run of text's, 
     await session.close();
   }
 });
+
+test("a box that scrolls across, parked past the side of a page that cannot, does not count as a way to what is in it", async () => {
+  // The same menu that slides in, holding a strip of tabs that scrolls across inside it. Scrolling the strip cannot
+  // bring the menu into the window, so Haptic scrolls nothing and offers no way back.
+  const page = `<style>html, body { overflow-x: hidden }</style>
+    <nav style="position:absolute;top:80px;left:calc(100vw + 40px);width:240px">
+      <div id="tabs" style="width:240px;overflow-x:auto;white-space:nowrap">
+        <a id="billing" href="#billing">Billing</a><span style="display:inline-block;width:600px"></span><a href="#usage">Usage</a>
+      </div>
+    </nav>
+    <button id="menu" type="button">Menu</button><h1>Dashboard</h1>`;
+  const session = await start(page, (request, index) => (index === 0 ? point(request, "Billing", "Click Billing in the menu.") : words("Done.")));
+  try {
+    await session.ask("go to billing");
+    await session.untilState("pointing");
+    await session.page.waitForTimeout(2000);
+    assert.equal(await session.page.evaluate(() => (document.scrollingElement ?? document.documentElement).scrollLeft), 0, "the page was scrolled across");
+    const shown = await drawn(session);
+    assert.equal(shown.pointer, undefined, "the pointer is drawn outside the window");
+    assert.equal(shown.way, undefined, "a way back is offered that cannot bring the menu into the window");
+    assert.ok(shown.caption, "the sentence went away");
+  } finally {
+    await session.close();
+  }
+});
