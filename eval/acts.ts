@@ -56,6 +56,9 @@ import type { Act, Guide, GuideSet, Step } from "./guide.ts";
 //   HAPTIC_SERVER_GAP_MS=700 npm run eval:acts -- cards-issue-virtual --server https://haptic-widget-staging.joinhaptic.workers.dev \
 //     --question "Can you issue Malika Cummerata a virtual card called Ads with a $500 monthly limit?" --expect "Card name=Ads" --runs 3 --ledger calls.jsonl
 //
+// ACTS_SET names another set of Northpine's guides to take the tasks from, like
+// northpine-teach (eval/guides/northpine-teach.ts) for Teach Haptic's checks.
+//
 // --naive answers the commit with "do: click" and "commits": false, as a model
 // that misses it would. The widget must still not press it: the run then ends
 // with the visitor pointed at the commit instead of the hand-over.
@@ -939,7 +942,8 @@ async function main() {
   const { grounded } = await import("../src/shared/act-rules.ts");
   let set: GuideSet;
   try {
-    set = (await import("./guides/northpine.ts")).default as GuideSet;
+    // Northpine's tasks, or another set built on them, like northpine-teach for Teach Haptic: ACTS_SET=northpine-teach.
+    set = (await import(`./guides/${process.env.ACTS_SET ?? "northpine"}.ts`)).default as GuideSet;
   } catch (error) {
     console.error(`Northpine's tasks could not be loaded: ${(error as Error).message}`);
     process.exit(1);
