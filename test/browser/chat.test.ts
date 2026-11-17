@@ -9,8 +9,8 @@ import { ask, BROWSERS, done, idOf, launch, markAround, page, point, reachable, 
 // under it says what Haptic is doing, and the ask box's button stops the
 // guide. A click on the control is answered with a press, a guide followed to
 // the end finishes with the green tick. Thinking shows on the page, not in the
-// chat: colour gathers along the page's top edge, and falls to the bottom as a
-// band when the reply arrives.
+// chat: a soft band of colour falls from the page's top to its bottom, only
+// while Haptic thinks, and fades the moment the reply arrives.
 
 const PAGE = page(`
   <main style="font:14px system-ui;padding:40px">
@@ -213,9 +213,9 @@ for (const name of BROWSERS) {
       assert.deepEqual(reports(harness).map((report) => report.outcome).filter(Boolean), ["shown"]);
     });
 
-    test("thinking gathers colour along the top of the page, which falls to the bottom when the reply arrives and is then gone", async () => {
+    test("a band of colour falls down the page only while Haptic thinks, and is gone by the time the pointer lands", async () => {
       harness.script = async (request) => {
-        await sleep(300);
+        await sleep(900);
         return point(idOf(request, "Invite teammate"), "Click Invite teammate.");
       };
       await part(tab, ".launcher").click();
@@ -225,50 +225,61 @@ for (const name of BROWSERS) {
       await part(tab, ".ask input").press("Enter");
       const glow = tab.locator("haptic-veil .glow");
       await glow.waitFor({ state: "attached" });
-      assert.equal(await tab.locator("haptic-veil .glow.sweep").count(), 0, "it only gathers while Haptic thinks");
+      assert.equal(await stateOf(tab), "thinking: Thinking");
 
       // It is on the page: the whole of it, under the chat and the pointer, multiplied in so the page's words stay sharp.
       assert.deepEqual(await veil(tab), { display: "block", blend: "multiply", clicks: "none", covers: true, underOurs: true });
       assert.equal(await part(tab, ".panel .glow").count(), 0, "and not in the chat");
-      // It gathers along the top edge: the layer that shows is centred within a few percent of it.
-      const centre = await glow.locator(".a").evaluate((el) => {
-        const box = el.getBoundingClientRect();
-        return (box.top + box.height / 2) / window.innerHeight;
-      });
-      assert.ok(centre > -0.12 && centre < 0.1, `gathers at the top edge: ${centre}`);
       // The page under it still takes a click.
       await tab.locator("#send").click({ trial: true, timeout: 1000 });
 
-      await tab.locator("haptic-veil .glow.sweep").waitFor({ state: "attached", timeout: 3000 });
-      // The reply took 300ms. The glow still gathers for its full 600ms before it breaks away, and the pointer does not wait for it.
-      const classes = await seen(tab);
-      assert.ok(classes.indexOf("state pointing") < classes.indexOf("glow sweep"), `the pointer set off first: ${classes.join(", ")}`);
-      // It falls: a second and a half on, the band is past the middle of the page.
-      await sleep(1500);
-      const fallen = await glow.locator(".b").evaluate((el) => {
-        const box = el.getBoundingClientRect();
-        return (box.top + box.height / 2) / window.innerHeight;
-      });
-      assert.ok(fallen > 0.5, `the band is on its way down: ${fallen}`);
-      await glow.waitFor({ state: "detached", timeout: 3000 });
+      // It comes in at the top and falls: the band's middle starts above the page's top edge, and is lower each time it is looked at.
+      const middle = () =>
+        glow.locator("i").evaluate((el) => {
+          const box = el.getBoundingClientRect();
+          return (box.top + box.height / 2) / window.innerHeight;
+        });
+      const first = await middle();
+      await sleep(300);
+      const second = await middle();
+      assert.ok(first < 0.2, `it starts at the top of the page: ${first}`);
+      assert.ok(second > first + 0.15, `and falls: ${first} then ${second}`);
+
+      // The reply arrives. The glow fades at once, and is off the page before the mark has landed.
+      assert.ok(await markAround(tab, "#invite"));
+      assert.equal(await glow.count(), 0, "it is gone once the pointer has landed");
       assert.equal((await veil(tab)).display, "none", "and nothing is left over the page");
+      assert.ok((await seen(tab)).includes("glow fade"), "it faded, and was not cut off");
     });
 
-    test("a reply that says Haptic is resting fades the glow where it is, and it does not fall", async () => {
+    test("the glow comes back for each spell of thinking, and not while the pointer shows a step", async () => {
+      harness.script = async (request, index) => {
+        await sleep(500);
+        return point(idOf(request, index === 0 ? "Invite teammate" : "Send invite"), "Click it.");
+      };
+      await ask(tab, "invite someone");
+      const glow = tab.locator("haptic-veil .glow");
+      assert.ok(await markAround(tab, "#invite"));
+      await sleep(500);
+      assert.equal(await glow.count(), 0, "nothing is over the page while the visitor reads the step");
+      await tab.click("#invite");
+      await glow.waitFor({ state: "attached", timeout: 1000 });
+      assert.equal(await stateOf(tab), "thinking: Thinking");
+      assert.ok(await markAround(tab, "#send"));
+      assert.equal(await glow.count(), 0);
+    });
+
+    test("a reply that says Haptic is resting ends the glow the same way", async () => {
       harness.script = async () => {
-        await sleep(200);
+        await sleep(300);
         return { reply: { target: null, status: "stuck", say: "Haptic is resting for a while.", paused: true } };
       };
-      await part(tab, ".launcher").click();
-      await watchClasses(tab);
-      await part(tab, ".ask input").fill("invite someone");
-      await part(tab, ".ask input").press("Enter");
+      await ask(tab, "invite someone");
+      await tab.locator("haptic-veil .glow").waitFor({ state: "attached" });
       await part(tab, ".reply").waitFor();
       assert.equal(await part(tab, ".reply p").first().textContent(), "Haptic is resting for a while.");
       await tab.locator("haptic-veil .glow").waitFor({ state: "detached", timeout: 2000 });
-      const classes = await seen(tab);
-      assert.ok(classes.includes("glow fade"), `it faded: ${classes.join(", ")}`);
-      assert.ok(!classes.includes("glow sweep"), "and did not fall");
+      assert.equal((await veil(tab)).display, "none");
       assert.equal(await stateOf(tab), "");
     });
 

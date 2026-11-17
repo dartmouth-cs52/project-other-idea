@@ -220,8 +220,8 @@ The look is quiet and exact. Soft black on off-white, set in Geist, with no
 decoration. The pointer is the product, so it is the only thing on any screen
 that has colour and the only thing that moves with intent. Everything else stays
 still and grey so the pointer reads instantly. The one exception is the glow
-that passes over the page while Haptic thinks, which hands over to the pointer
-the moment the reply arrives.
+that falls down the page while Haptic thinks. It is gone the moment the reply
+arrives, so it and the pointer are never on the page together for long.
 
 The system sits on shadcn/ui and Tailwind's default scale. Sizes, radii and
 spacing come from those scales, never from one-off values, so anything built
@@ -239,8 +239,8 @@ mouse.
 ## Colors
 
 Two neutrals carry the whole interface. One colour belongs to the pointer, and
-one marks a finished task. The thinking glow starts in the pointer's colour and
-is the only place another hue is seen.
+one marks a finished task. The thinking glow is the pointer's colour with its
+two neighbours, and is the only place another hue is seen.
 Neutrals are Tailwind's stone scale, which has a slight warmth so the page never
 looks stark.
 
@@ -253,13 +253,20 @@ looks stark.
 - **Muted text (#78716C):** Sub-copy and secondary labels. 4.6 to 1 on Paper.
 - **Border (#E7E5E4):** Hairlines and the secondary button.
 - **Pointer blue (#1E6EF4):** The pointer, the mark around its target, the
-  keyboard focus ring and the start of the thinking glow. Nothing else.
-- **Thinking glow (#668CF7, #A953FB, #F69BEB):** Three soft layers over the
-  page while Haptic thinks: a lighter Pointer blue, then violet, then pink. They are
-  worked out from the pointer's colour by turning its hue 4, 44 and 74 degrees
-  in OKLCH, so a customer's own accent gets a glow that suits it. The three hex
+  keyboard focus ring and the heart of the thinking glow. Nothing else.
+- **Thinking glow (#77D0FE, #5294FF, #8460EE):** One soft band over the page
+  while Haptic thinks: sky at its trailing edge, a lighter Pointer blue through
+  its middle, indigo at its leading edge. The three are the pointer's colour
+  and its neighbours 28 degrees to one side and 30 to the other in OKLCH,
+  mixed in OKLCH so they melt into each other with no seam. Staying that close
+  to the pointer's hue is what keeps it Haptic's and not a general AI rainbow,
+  and it means a customer's own accent gets a glow of its own neighbours: an
+  orange pointer glows peach to amber, a green one lime to teal. The three hex
   values are what Pointer blue gives, and what a browser without relative
-  colours falls back to. Never used flat, and never outside the glow.
+  colours falls back to. Violet and pink were tried first and turned down:
+  they are furthest from the pointer, they are what every other AI product
+  uses, and violet is the darkest of them over a page. Never used flat, and
+  never outside the glow.
 - **Done green (#008932):** The small round tick that says a task is finished.
   Blue means in progress and green means done, so the two never share a screen.
   Not for buttons, text or bubbles.
@@ -444,19 +451,20 @@ Components are shadcn/ui, restyled only through tokens and variants.
   with a lighter shade sweeping across it, shadcn's `shimmer`, with no icon.
   While it points it reads "Showing you how". When it finishes it is the green
   tick and "Done". The chat itself never glows.
-- **Thinking glow:** Soft colour over the page, from its top to its bottom. It
-  is not in the chat, and the chat, the pointer, the mark and the caption are
-  drawn over it and are never tinted. While Haptic waits for the model, Pointer
-  blue gathers along the top edge of the page over 0.6 seconds and laps there.
-  When the reply arrives it breaks away as a band the width of the page, about
-  a third of the page thick, and falls to the bottom in 2.45 seconds, quick at
-  first and slowing as it fades, turning violet and then pink on the way. It is
-  multiplied into a light page, so the page's words stay dark and sharp through
-  it, and screened into a dark one. The glow always finishes gathering before
-  it breaks away, and nothing waits for it: the pointer and the reply go
-  ahead. A reply that failed, and a guide that was stopped, fade it where it
-  is, and it does not fall. It takes no clicks, and it is gone from the page
-  the moment it ends.
+- **Thinking glow:** Soft colour over the page, from its top to its bottom,
+  and only while Haptic is thinking. It is not in the chat, and the chat, the
+  pointer, the mark and the caption are drawn over it and are never tinted. A
+  band the width of the page comes in at the top edge and falls to the bottom
+  in 1.6 seconds, at one steady speed, and another follows for as long as the
+  wait lasts. A typical wait is about one pass. The moment the reply arrives
+  the glow fades over a third of a second, still falling, so the page is clear
+  by the time the pointer lands. A reply that failed and a guide that was
+  stopped end it the same way. It is smooth before anything else: one band,
+  about a third of the page thick, whose strength is a bell with no flat top
+  and no edge, a touch thicker in the middle of the page than at its sides,
+  at about six tenths of full strength at its heart. It is multiplied into a
+  light page, so the page's words stay dark and sharp through it, and screened
+  into a dark one. It takes no clicks.
 - **Form:** Labels above 44px inputs and one primary button. A required field
   has an Error red star after its label, and a field with no star may be left
   empty. A step that has a way back puts a secondary Back button to the left of
@@ -478,8 +486,7 @@ Components are shadcn/ui, restyled only through tokens and variants.
 eases out with `cubic-bezier(.2, .8, .2, 1)`, quick to leave and slow to land,
 and takes 400 to 700ms depending on how far it travels. It and the thinking
 glow are the two movements allowed to run longer than 300ms: the eye has to
-follow the glide, and the glow has to last as long as the wait and then cross
-the page. Everything
+follow the glide, and the glow lasts exactly as long as the wait. Everything
 else is a fade, a small scale or a height change of 150 to 250ms that eases
 out. Nothing grows from nothing: things arrive from within a few percent of
 their final size. A click is acknowledged like a pressed button, with the mark
@@ -500,8 +507,8 @@ page's demo.
 Signed off: Haptic sits in the bottom right, in the place of support chat,
 because it is meant to replace it. The chat stays open once a question is
 asked. Thinking is a shimmer across the word in the chat, and the thinking
-glow on the page, from its top to its bottom. A click on the control is
-answered with a press. A finished
+glow on the page, from its top to its bottom, smooth, and there only while
+Haptic is thinking. A click on the control is answered with a press. A finished
 guide ends with the green tick and "Done". The line that says Haptic is an AI
 stays. The rest below is proposed.
 
@@ -511,8 +518,8 @@ stays. The rest below is proposed.
   page is never dimmed or blurred, because the person may need to read it, and
   the edge of the window never glows as a frame, because that is how agents
   signal that an AI has taken control. The thinking glow is the one thing that
-  crosses the page. It passes and is gone, and the page's words stay readable
-  under it.
+  crosses the page. It is there only while Haptic thinks, and the page's words
+  stay readable under it.
 - **Motion arrives, then stops.** The glide leads the eye. The mark draws in
   from slightly larger as the pointer lands, then holds still. Between steps
   the mark and the caption go and the pointer waits where it is, so the next
@@ -589,8 +596,10 @@ stays. The rest below is proposed.
 - Don't add another colour, a gradient, an illustration or artwork. Paintings
   behind the demos were tried and turned down. The window dots on the demo
   frame and the thinking glow are the two exceptions.
-- Don't put the thinking glow on the chat, loop it as decoration, leave it
-  standing on the page, or play it for anything but Haptic working on a reply.
+- Don't put the thinking glow on the chat, leave it on the page once the
+  reply has arrived, or play it for anything but Haptic working on a reply.
+- Don't give the glow an edge, a stripe or a second band. If it can be seen
+  where it starts or stops, it is not smooth enough.
 - Don't use Bold, italics for emphasis, or text smaller than 12px.
 - Don't show logos, quotes or numbers that are not real.
 - Don't use punctuation beyond commas and periods in marketing copy.

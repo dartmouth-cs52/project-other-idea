@@ -376,8 +376,7 @@ export class Guide {
     if (inPanel) {
       // Earlier questions go to the model with the next one, so they are masked like it.
       this.thread = [...this.thread, { role: "user" as const, text: this.asked }, { role: "assistant" as const, text: reply.say }].slice(-MAX_THREAD);
-      // Saying it can't help is not something to mark with colour.
-      ui.showAnswer(reply, reply.mode === "answer");
+      ui.showAnswer(reply);
     } else ui.clearAnswer();
 
     if (inPanel && (!el || !el.isConnected)) {
@@ -529,8 +528,7 @@ export class Guide {
     this.stopWaiting = undefined;
     forget();
     this.ui.clear();
-    // A sentence that says it went wrong, or got nowhere, is not marked with colour.
-    this.ui.say(text, outcome === "finished" || outcome === "shown");
+    this.ui.say(text);
     if (outcome === "finished") this.ui.showDone();
     else this.ui.setBusy("");
     this.end(outcome);
@@ -547,7 +545,7 @@ export class Guide {
     this.stopWaiting = undefined;
     forget();
     this.ui.clear();
-    this.ui.say(text, false);
+    this.ui.say(text);
     this.ui.setBusy("");
     this.end("error");
   }

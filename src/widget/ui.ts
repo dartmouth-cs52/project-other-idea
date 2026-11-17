@@ -26,52 +26,50 @@ const PRESS_MS = 240;
 /** How long the mark, the caption and the pointer take to fade when they go. */
 const LEAVE_MS = 150;
 
-// The thinking glow. While Haptic waits for the model, the accent colour
-// gathers along the top edge of the page. When the reply arrives it breaks
-// away as a soft band the width of the page, and falls to the bottom turning
-// violet and then pink, and is gone. The timings and the path are measured
-// from the animation it is modelled on: 0.6s to gather, then 2.45s to cross
-// the page, quick at first and slowing as it fades.
-const GATHER_MS = 600;
-const SWEEP_MS = 2450;
-const FADE_MS = 250;
+// The thinking glow. It is on the page only while Haptic waits for the model.
+// A soft band the width of the page comes in at the top edge and falls to the
+// bottom, one pass after another for as long as the wait lasts. The moment the
+// reply arrives it fades, so by the time the pointer lands the page is clear.
+/** How long one pass from the top of the page to the bottom takes. A typical wait is about one pass. */
+const FALL_MS = 1600;
+/** How long the glow takes to come in, and to fade once the reply has arrived. */
+const GLOW_IN_MS = 300;
+const GLOW_OUT_MS = 350;
+
+// The band's strength across its thickness: a bell with no flat top and no
+// edge, which is what makes it read as light and not as a stripe. A gradient
+// only joins its stops with straight lines, so the curve is spelled out.
+const BELL = [0.62, 0.605, 0.56, 0.49, 0.405, 0.31, 0.215, 0.13, 0.06, 0.015, 0].map((alpha, i) => `rgba(0,0,0,${alpha}) ${i * 10}%`).join(", ");
 
 // The glow's own element. It covers the page under the chat and the pointer,
 // takes no clicks, and is not displayed at all unless a glow is on. How it is
-// blended into the page is set when a glow starts (see Ui.gather).
+// blended into the page is set when a glow starts (see Ui.glowOn).
 //
-// Three soft layers, each an ellipse wider than the page so it reads as a band
-// that is a little thicker in the middle: the accent trailing, violet in the
-// middle and pink leading. They start centred on the page's top edge, and the
-// element that holds them carries them down.
+// The band is one element, as tall as the page. Its colour runs from the
+// trailing edge to the leading one in a single gradient, mixed in OKLCH so
+// the hues melt into each other, and a mask gives it the bell: an ellipse far
+// wider than the page, so it is a touch thicker in the middle. Only its
+// transform and the opacity of what holds it are animated.
 const VEIL_CSS = `
 :host { all: initial; display: none; position: fixed; inset: 0; z-index: 2147483646; overflow: hidden; pointer-events: none;
-  --glow-a: #668cf7; --glow-b: #a953fb; --glow-c: #f69beb; }
-/* The glow starts in the site's accent and turns from there, so it suits whatever colour the pointer is. */
+  --glow-a: #77d0fe; --glow-b: #5294ff; --glow-c: #8460ee; }
+/* The glow is the site's accent with its neighbours on either side, so it suits whatever colour the pointer is. */
 @supports (color: oklch(from red l c h)) {
-  :host { --glow-a: oklch(from var(--accent) .66 calc(c * .8) calc(h + 4)); --glow-b: oklch(from var(--accent) .62 calc(c * 1.25) calc(h + 44));
-    --glow-c: oklch(from var(--accent) .8 calc(c * .72) calc(h + 74)); }
+  :host { --glow-a: oklch(from var(--accent) .82 calc(c * .5) calc(h - 28)); --glow-b: oklch(from var(--accent) .68 calc(c * .85) h);
+    --glow-c: oklch(from var(--accent) .6 calc(c * .95) calc(h + 30)); }
 }
-.glow { position: absolute; inset: 0; }
-.glow i { position: absolute; left: -150%; width: 400%; height: 100%; opacity: 0;
-  background: radial-gradient(50% 37% at 50% 50%, var(--c), color-mix(in srgb, var(--c) 78%, transparent) 30%, color-mix(in srgb, var(--c) 34%, transparent) 62%,
-    color-mix(in srgb, var(--c) 9%, transparent) 84%, transparent); }
-.glow .a { --c: var(--glow-a); top: -59%; animation: pool ${GATHER_MS}ms ease-out forwards, lap 1.8s ease-in-out ${GATHER_MS}ms infinite alternate; }
-.glow .b { --c: var(--glow-b); top: -50%; }
-.glow .c { --c: var(--glow-c); top: -41%; }
-.glow.sweep { animation: fall ${SWEEP_MS}ms linear forwards; }
-.glow.sweep .a { animation: sweep-a ${SWEEP_MS}ms forwards; }
-.glow.sweep .b { animation: sweep-b ${SWEEP_MS}ms forwards; }
-.glow.sweep .c { animation: sweep-c ${SWEEP_MS}ms forwards; }
-.glow.fade { opacity: 0; transition: opacity ${FADE_MS}ms ease-out; }
-@keyframes pool { from { opacity: 0; transform: none; } to { opacity: .45; transform: translateY(12%); } }
-@keyframes lap { from { opacity: .45; transform: translateY(12%); } to { opacity: .58; transform: translateY(15%); } }
-@keyframes fall { 0% { transform: none; } 8% { transform: translateY(8%); } 16% { transform: translateY(20%); } 24% { transform: translateY(36%); } 41% { transform: translateY(55.5%); }
-  53% { transform: translateY(66.5%); } 69% { transform: translateY(79%); } 86% { transform: translateY(90%); } 100% { transform: translateY(98%); } }
-@keyframes sweep-a { 0% { opacity: .45; transform: translateY(12%); } 10% { opacity: .9; transform: translateY(8%); } 25% { opacity: .9; transform: none; } 40% { opacity: .55; }
-  55% { opacity: .15; } 65%, 100% { opacity: 0; transform: none; } }
-@keyframes sweep-b { 0% { opacity: 0; } 8% { opacity: .35; } 18% { opacity: .8; } 28% { opacity: 1; } 45% { opacity: .95; } 60% { opacity: .7; } 75% { opacity: .4; } 90% { opacity: .12; } 100% { opacity: 0; } }
-@keyframes sweep-c { 0% { opacity: 0; } 20% { opacity: .2; } 35% { opacity: .5; } 50% { opacity: .85; } 65% { opacity: .9; } 80% { opacity: .7; } 92% { opacity: .35; } 100% { opacity: 0; } }
+.glow { position: absolute; inset: 0; animation: arrive ${GLOW_IN_MS}ms ease-out; transition: opacity ${GLOW_OUT_MS}ms ease-out; }
+.glow.fade { opacity: 0; }
+/* Without a mask the band would be a hard block of colour, so a browser with none shows no glow. */
+.glow i { display: none; }
+@supports (mask-image: linear-gradient(#000, #000)) or (-webkit-mask-image: linear-gradient(#000, #000)) {
+  .glow i { display: block; position: absolute; inset: 0; transform: translateY(-90%); animation: fall ${FALL_MS}ms linear infinite;
+    background: linear-gradient(to bottom, var(--glow-a), var(--glow-b) 50%, var(--glow-c));
+    background: linear-gradient(to bottom in oklch, var(--glow-a), var(--glow-b) 50%, var(--glow-c));
+    -webkit-mask-image: radial-gradient(200% 50% at 50% 50%, ${BELL}); mask-image: radial-gradient(200% 50% at 50% 50%, ${BELL}); }
+}
+@keyframes fall { from { transform: translateY(-90%); } to { transform: translateY(100%); } }
+@keyframes arrive { from { opacity: 0; } }
 `;
 
 const CSS = `
@@ -289,8 +287,8 @@ export class Ui {
   private asideFor?: Element;
   /** The visitor closed the chat themselves. It stays closed until there is something to read in it. */
   private shut = false;
-  /** The glow gathering at the top of the page while Haptic thinks, and when it started. */
-  private pool?: { el: HTMLElement; since: number };
+  /** The glow that is on the page while Haptic thinks. */
+  private glow?: HTMLElement;
   private readonly fading = new Map<HTMLElement, Animation>();
 
   constructor(appearance: Appearance, handlers: UiHandlers) {
@@ -542,12 +540,11 @@ export class Ui {
   /** Shows Haptic thinking, with a word for what it is doing. With no text, it goes back to waiting for a question. */
   setBusy(text: string) {
     if (!text) {
-      // Nothing came of the thinking, so the glow fades where it is.
-      this.release(false);
+      this.glowOff();
       return this.setState("idle");
     }
     this.setState("thinking", text);
-    this.gather();
+    this.glowOn();
     this.hideHelped();
     this.hideHandoff();
     this.open(true);
@@ -555,7 +552,7 @@ export class Ui {
 
   /** The guide is finished: the green tick and "Done". */
   showDone() {
-    this.release(true);
+    this.glowOff();
     this.setState("done");
     this.open();
   }
@@ -572,10 +569,9 @@ export class Ui {
    * Shows a reply in the chat, under the question: an answer from the help
    * docs with the articles it rests on, or the sentence that says Haptic can't
    * help. Every word is set as text, and a link is only made for an http or
-   * https address. `arrived` is false for a reply that says something went
-   * wrong, which is not something to mark with colour.
+   * https address.
    */
-  showAnswer(reply: Pick<TurnReply, "say" | "sources" | "missing">, arrived = true) {
+  showAnswer(reply: Pick<TurnReply, "say" | "sources" | "missing">) {
     const [text, list, missing] = ["p", ".sources", ".missing"].map((selector) => this.reply.querySelector(selector) as HTMLElement);
     text!.textContent = reply.say;
     const sources = reply.sources ?? [];
@@ -586,7 +582,8 @@ export class Ui {
     const gone = (reply.missing ?? []).slice(0, 2).map((label) => `"${label}"`);
     missing!.textContent = gone.length ? `I can't see ${gone.join(" or ")} on this page or the others I know, so this may no longer be right.` : "";
     missing!.hidden = gone.length === 0;
-    this.release(arrived);
+    // The thinking is over.
+    this.glowOff();
     this.asked.hidden = this.asked.textContent === "";
     this.reply.hidden = false;
     this.thread.hidden = false;
@@ -595,8 +592,8 @@ export class Ui {
   }
 
   /** Says one sentence in the chat, as a reply to the question. */
-  say(text: string, arrived = true) {
-    this.showAnswer({ say: text }, arrived);
+  say(text: string) {
+    this.showAnswer({ say: text });
   }
 
   clearAnswer() {
@@ -660,8 +657,8 @@ export class Ui {
     const fresh = el !== this.target;
     this.target = el;
     this.captionText.textContent = text;
-    // The reply has arrived, so the glow breaks away as the pointer sets off.
-    this.release(true);
+    // The reply has arrived. The glow fades as the pointer sets off, so the page is clear when it lands.
+    this.glowOff();
     this.setState("pointing");
     if (fresh) {
       clearTimeout(this.landing);
@@ -792,17 +789,16 @@ export class Ui {
   }
 
   /**
-   * Starts the glow: the accent gathers along the top edge of the page, and
-   * laps there for as long as Haptic thinks. With reduced motion on there is
-   * no glow at all.
+   * Starts the glow: a band of colour comes in at the top of the page and
+   * falls to the bottom, again and again while Haptic thinks. With reduced
+   * motion on there is no glow at all.
    */
-  private gather() {
-    if (this.pool || this.still) return;
+  private glowOn() {
+    if (this.glow || this.still) return;
     const el = document.createElement("div");
     el.className = "glow";
-    // Painted pink, violet, accent, so the accent is on top where they overlap.
-    el.append(...["c", "b", "a"].map((layer) => Object.assign(document.createElement("i"), { className: layer })));
-    // One falling and one gathering is the most there is to see at once.
+    el.append(document.createElement("i"));
+    // One fading and one new is the most there is to see at once.
     const glows = this.glass.querySelectorAll(".glow");
     for (let i = 0; i < glows.length - 1; i++) glows[i]?.remove();
     this.glass.append(el);
@@ -810,37 +806,23 @@ export class Ui {
     // a dark one, where multiplying would lose the colour. Set in the element's own stylesheet and not on the element,
     // so the page sees nothing change.
     this.veilMode.textContent = `:host { display: block; mix-blend-mode: ${pageIsDark() ? "screen" : "multiply"}; }`;
-    this.pool = { el, since: performance.now() };
+    this.glow = el;
   }
 
   /**
-   * Ends the gathering. When the reply has arrived the glow breaks away and
-   * falls down the page. Otherwise it fades where it is: a guide that was
-   * stopped, or a reply that failed, is not marked with colour. The glow
-   * always finishes gathering first, however fast the reply was. That holds
-   * nothing up, since the pointer and the reply have already gone ahead.
+   * Ends the glow, the moment the thinking is over, however it ended. It fades
+   * where it is, still falling, and is then off the page altogether.
    */
-  private release(arrived: boolean) {
-    const pool = this.pool;
-    if (!pool) return;
-    this.pool = undefined;
-    const { el } = pool;
-    const gone = () => {
+  private glowOff() {
+    const el = this.glow;
+    if (!el) return;
+    this.glow = undefined;
+    el.classList.add("fade");
+    setTimeout(() => {
       el.remove();
       // With no glow left, the element is not displayed, and the page is not blended with anything.
       if (!this.glass.querySelector(".glow")) this.veilMode.textContent = "";
-    };
-    if (!arrived) {
-      el.classList.add("fade");
-      return void setTimeout(gone, FADE_MS);
-    }
-    setTimeout(
-      () => {
-        el.classList.add("sweep");
-        setTimeout(gone, SWEEP_MS);
-      },
-      Math.max(0, GATHER_MS - (performance.now() - pool.since)),
-    );
+    }, GLOW_OUT_MS);
   }
 
   /**
