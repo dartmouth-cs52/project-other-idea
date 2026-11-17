@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ApiError, api, type Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
+import { siteAt } from "@/lib/dashboard";
 import { accessHref } from "@/lib/site";
 import { SITES_HREF, viewFrom } from "./nav";
 import { Card, FailedCard, leaveFor } from "./parts";
@@ -16,8 +17,9 @@ type State = { kind: "loading" } | { kind: "failed"; message: string } | { kind:
 
 /**
  * Everything behind sign-in, on one page. The address chooses what it shows:
- * a site and one of its pages, or the list of sites. A company with a single
- * site lands straight in it, and one with none is sent to the setup screens.
+ * a site and one of its pages when it names the site, and the list of sites
+ * when it names none, which is where sign-in lands. A company with no site
+ * yet is sent to the setup screens.
  */
 export function Dashboard() {
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -81,8 +83,8 @@ export function Dashboard() {
     );
   }
 
-  // One site is where a company with one site wants to be. The list is for choosing between several, and is always a click away.
-  const current = view === "sites" ? undefined : (sites.find((site) => site.id === params.get("site")) ?? (sites.length === 1 ? sites[0] : undefined));
+  // A site opens only when the address names it. Everything else is the list, for a company with one site as for one with several.
+  const current = siteAt(sites, params);
   if (!current) {
     return (
       <Plain me={me} wide>

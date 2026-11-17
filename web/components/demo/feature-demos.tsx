@@ -108,7 +108,7 @@ export function AnyQuestionDemo() {
       className="text-sm leading-5"
     >
       <MockWindow compact address={`${APP_DOMAIN}/team`}>
-        <Stage pointing={scene} layoutKey="team" className="h-[464px]">
+        <Stage pointing={scene} status={scene.status} layoutKey="team" className="h-[464px]">
           <AppHeader compact active="Team" />
           <div className="flex flex-col gap-2 p-4">
             <div className="mb-1 flex h-8 items-center justify-between gap-2">
@@ -133,7 +133,7 @@ export function AnyQuestionDemo() {
               </div>
             ))}
           </div>
-          <div className="absolute right-3 bottom-3 z-10 w-60 max-w-[calc(100%-1.5rem)]">
+          <div className="absolute right-3 bottom-3 z-15 w-60 max-w-[calc(100%-1.5rem)]">
             <Chat compact view={chatView(scene, QUESTIONS[scene.question]!.ask)} />
           </div>
         </Stage>
@@ -184,7 +184,7 @@ export function DocsDemo() {
       className="text-sm leading-5"
     >
       <MockWindow compact address={`${APP_DOMAIN}/team`}>
-        <Stage pointing={scene} layoutKey="invite" className="h-[464px]">
+        <Stage pointing={scene} status={scene.status} layoutKey="invite" className="h-[464px]">
           <AppHeader compact active="Team" />
           <div className="flex flex-col gap-3 p-4">
             <h4 className="flex h-6 items-center text-base font-medium tracking-tight">Invite</h4>
@@ -197,7 +197,7 @@ export function DocsDemo() {
               </MockButton>
             </div>
           </div>
-          <div className="absolute right-3 bottom-3 z-10 w-60 max-w-[calc(100%-1.5rem)]">
+          <div className="absolute right-3 bottom-3 z-15 w-60 max-w-[calc(100%-1.5rem)]">
             <Chat compact view={chatView(scene, DOCS_ASK, DOCS_SOURCE)} />
           </div>
         </Stage>

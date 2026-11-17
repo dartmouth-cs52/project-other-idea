@@ -44,7 +44,7 @@ A company installs Haptic with one script tag. It reads the page on every step, 
 |---|---|
 | **Accurate** | Points at the right control on 97% of steps on Haptic's own sites, 85% on twelve real apps, and 86% on three apps held out of all tuning. [Method, results for each app and caveats.](eval/README.md#results) |
 | **Fast** | Replies are streamed, so the pointer moves as soon as the model names the control, about 0.8 s into a step. |
-| **Small** | One script, 57 KB gzipped, with no dependencies, isolated in a shadow root. The code for Do it with me and for teach mode loads only where it is used. |
+| **Small** | One script, 60 KB gzipped, with no dependencies, isolated in a shadow root. The code for Do it with me and for teach mode loads only where it is used. |
 | **Safe on pages it has never seen** | Put into 107 public websites, it mounted on all 90 that could be tested and disturbed none of them while idle. It threw no errors, moved no elements and left the focus order as it was. [The same run lists what it still gets wrong.](eval/README.md#does-the-tag-work-on-any-website) |
 | **Private by construction** | What a user types is never sent. Email addresses and long numbers are masked in the browser, and again on the server before anything is stored. [Exactly what, and the exceptions.](docs/privacy.md) |
 | **Tested** | 77 test files, about 21,000 lines of tests for about 21,000 lines of widget and server code, including red-team pages and browser suites in Chromium, Firefox and WebKit. |

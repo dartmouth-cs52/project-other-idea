@@ -10,6 +10,7 @@
 
 import { createAuthClient } from "@neon/auth";
 import { BetterAuthVanillaAdapter } from "@neon/auth/vanilla/adapters";
+import { signedInUrl } from "./dashboard";
 
 function make() {
   return createAuthClient(`${window.location.origin}/api/auth`, { adapter: BetterAuthVanillaAdapter() });
@@ -22,7 +23,7 @@ export function auth() {
   return client;
 }
 
-/** Where people land once signed in. Absolute, because the emailed link is opened from Neon's domain. */
+/** Where people land once signed in: the list of sites, on this site's own address. */
 export function dashboardUrl(): string {
-  return `${window.location.origin}/dashboard/`;
+  return signedInUrl(window.location.origin);
 }

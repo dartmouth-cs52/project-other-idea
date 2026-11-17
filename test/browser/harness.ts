@@ -155,8 +155,10 @@ export function page(body: string, head = ""): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Fixture</title>${head}</head><body>${body}<script src="/widget.js" data-site="site_test" async></script></body></html>`;
 }
 
+/** CHROMIUM_PATH runs Chromium from a browser already on the machine, where Playwright's own download isn't there. */
 export async function launch(name: string): Promise<Browser> {
-  return ENGINES[name]!.launch();
+  const executablePath = name === "chromium" ? process.env.CHROMIUM_PATH : undefined;
+  return ENGINES[name]!.launch(executablePath ? { executablePath } : {});
 }
 
 /** Opens the panel, types the question and sends it. */
