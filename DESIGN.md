@@ -563,9 +563,11 @@ is a menu of the company's sites, with All sites and Add a site under them. Who
 is signed in is on the right, in a menu that names their company and holds Sign
 out. Inside a site its pages run down a 224px column on the left. Each is a
 32px row with a 16px icon. The page you are on is Border grey with Ink text,
-and the others are Muted text. The column is fixed to the window, so it and
-the line beside it stay where they are however far the page scrolls. Below
-1024px the column becomes a row under the bar that scrolls sideways. Content
+and the others are Muted text. The bar and the column are both fixed to the
+window, so they and their lines stay where they are however far the page
+scrolls, and when a Mac's trackpad pulls the page past its top or foot only the
+page moves under them. Below 1024px the column becomes a row under the bar that
+scrolls sideways, and the bar and the row stick to the top together. Content
 is up to 1152px wide (`max-w-6xl`).
 
 **Pages.** A site has five, in this order, and no more are added without a
@@ -755,9 +757,14 @@ stays. The rest below is proposed.
   Once anything is in the chat, a turning arrow on the far side of the ask
   box's row starts over: it calls off a guide that is running and clears the
   chat back to an empty ask box with the keyboard.
-- **Never cover the control.** When the chat would sit on the control being
-  pointed at, or on its caption, it moves to the other side of the window
-  while the pointer is there, and comes back when it has gone.
+- **Never cover the control, and don't move for anything less.** When the
+  chat would sit on the control being pointed at, it moves up the right side
+  of the window to just above it while the pointer is there, and comes back
+  down when it has gone. The caption gives way to the chat, not the other way
+  round: a caption that would run under the chat in its corner moves left,
+  still under its control, so the chat doesn't jump up for one step and drop
+  back on the next. The chat moves for a caption only when the caption has
+  nowhere else to go.
 - **A wrong click is not an error, and Haptic says so.** The ask box shows
   "Finding the way from here" at once. The next caption opens with "Not that
   one." and names the step that gets the person back. It is plain text in the

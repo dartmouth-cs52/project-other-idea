@@ -90,6 +90,137 @@ test("a field the browser or the page will not accept is marked invalid, and one
   assert.ok(!JSON.stringify(snapshot).includes("charlie"), "what was typed was sent");
 });
 
+test("an email address with no dot in its domain is marked invalid, though the browser takes it (Northpine: the guide pointed at \"Send invite\" after \"theochain@dad\")", { skip }, async () => {
+  const typed: Record<string, string> = {
+    "#no-dot": "theochain@dad",
+    "#short": "theochain@dad.c",
+    "#digits": "theochain@dad.123",
+    "#whole": "theochain@dad.example",
+    "#several": "ana@northpine.example, theochain@dad",
+    "#all": "ana@northpine.example, theochain@dad.example",
+    "#sign-in": "charlie",
+  };
+  const snapshot = await read(
+    `<form>
+      <label>No dot <input id="no-dot" type="email"></label>
+      <label>One letter ending <input id="short" type="email"></label>
+      <label>Digits ending <input id="digits" type="email"></label>
+      <label>Whole <input id="whole" type="email"></label>
+      <label>Several, one without a dot <input id="several" type="email" multiple></label>
+      <label>Several, all whole <input id="all" type="email" multiple></label>
+      <label>Email or user name <input id="sign-in" type="text" autocomplete="email"></label>
+      <label>Still empty <input type="email"></label>
+      <label>Locked <input type="email" value="theochain@dad" readonly></label>
+      <button>Send</button>
+    </form>`,
+    {
+      before: async (page) => {
+        for (const [field, value] of Object.entries(typed)) await page.fill(field, value);
+      },
+    },
+  );
+  const states = Object.fromEntries(snapshot.elements.map((element) => [element.label, element.state ?? []]));
+  for (const label of ["No dot", "One letter ending", "Digits ending", "Several, one without a dot"]) assert.ok(states[label]?.includes("invalid"), `${label}: ${JSON.stringify(states)}`);
+  // Only a field typed as email is checked. A text field whose autocomplete says email may take a user name too, as many sign-in forms do.
+  for (const label of ["Whole", "Several, all whole", "Email or user name", "Still empty", "Locked"]) assert.ok(!states[label]?.includes("invalid"), `${label}: ${JSON.stringify(states)}`);
+  // Only the mark is sent, never what was typed.
+  for (const secret of ["theochain", "charlie"]) assert.ok(!JSON.stringify(snapshot).includes(secret), `"${secret}" was sent`);
+});
+
+test("a form that marks only its optional fields has the others listed as required (Northpine: the guide called Department optional, and the invite asked for one)", { skip }, async () => {
+  const snapshot = await read(
+    `<form>
+      <label for="email">Email address</label><input id="email" type="email">
+      <label for="role">Role</label><select id="role"><option>Admin</option><option selected>Employee</option></select>
+      <label for="team">Team</label><select id="team"><option value="">Choose a team</option><option value="t1">Sales</option></select>
+      <label for="dept">Department</label><button type="button" id="dept" role="combobox" aria-label="Department" aria-expanded="false">Choose a department</button>
+      <label for="seats">Seats</label><input id="seats" type="number">
+      <label for="workspace">Workspace</label><input id="workspace" value="northpine" readonly>
+      <label for="region">Region</label><input id="region" disabled>
+      <label><input type="checkbox"> Send me a copy</label>
+      <label for="note">Personal note<span style="margin-left:4px">(optional)</span></label><textarea id="note"></textarea>
+      <button>Send invite</button>
+    </form>
+    <form>
+      <label for="name">Name *</label><input id="name">
+      <label for="company">Company</label><input id="company">
+      <label for="phone">Phone (optional)</label><input id="phone">
+      <button>Save contact</button>
+    </form>
+    <form>
+      <label for="city">City</label><input id="city">
+      <label><input type="checkbox"> Gift wrap (optional)</label>
+      <button>Save address</button>
+    </form>`,
+  );
+  const states = Object.fromEntries(snapshot.elements.map((element) => [element.label, element.state ?? []]));
+  assert.deepEqual(states["Email address"], ["required"]);
+  assert.deepEqual(states["Department"], ["required", "collapsed"]);
+  // A dropdown can be left empty only when it offers an empty choice. One that cannot always has a choice made.
+  assert.deepEqual(states["Team"], ["required"]);
+  assert.deepEqual(states["Role"], []);
+  assert.deepEqual(states["Seats"], ["required"]);
+  // What the visitor cannot change is not theirs to fill in, and a tick box is left as the page says.
+  assert.deepEqual(states["Workspace"], []);
+  assert.deepEqual(states["Region"], ["disabled"]);
+  assert.deepEqual(states["Send me a copy"], []);
+  assert.deepEqual(states["Personal note(optional)"], []);
+  // A form that marks what it requires has said which fields it requires, and the rest are not guessed at.
+  assert.deepEqual(states["Name *"], ["required"]);
+  assert.deepEqual(states["Company"], []);
+  assert.deepEqual(states["Phone (optional)"], []);
+  // A tick box marked optional says nothing of the fields around it.
+  assert.deepEqual(states["City"], []);
+});
+
+test("in a dialog with no form, the fields not marked optional are required, and nothing outside it is (Northpine's invite)", { skip }, async () => {
+  const snapshot = await read(
+    `<label for="search">Search people</label><input id="search">
+    <div role="dialog" aria-modal="true" aria-labelledby="invite-title" style="position:fixed;inset:40px;background:#fff;border:1px solid #999">
+      <h2 id="invite-title">Invite people</h2>
+      <input type="email" aria-label="Email address 1">
+      <label for="dept">Department</label><button type="button" id="dept" role="combobox" aria-label="Department" aria-expanded="false">Choose a department</button>
+      <label for="note">Personal note<span>(optional)</span></label><textarea id="note"></textarea>
+      <button>Cancel</button><button>Send invite</button>
+    </div>`,
+  );
+  assert.equal(snapshot.dialog, "Invite people");
+  const states = Object.fromEntries(snapshot.elements.map((element) => [element.label, element.state ?? []]));
+  assert.deepEqual(states["Email address 1"], ["required"]);
+  assert.deepEqual(states["Department"], ["required", "collapsed"]);
+  assert.deepEqual(states["Personal note(optional)"], []);
+});
+
+test("after the visitor types an address with no dot in its domain and pauses, the next step is asked for with the field marked invalid (Northpine's invite)", { skip }, async () => {
+  const shown = await browser!.widget(
+    `<div role="dialog" aria-modal="true" aria-labelledby="invite-title" style="position:fixed;inset:40px;background:#fff;border:1px solid #999;padding:16px">
+      <h2 id="invite-title">Invite people</h2>
+      <input id="email" type="email" aria-label="Email address 1" aria-invalid="false">
+      <label for="dept">Department</label><button type="button" id="dept" role="combobox" aria-label="Department" aria-expanded="false">Choose a department</button>
+      <label for="note">Personal note<span>(optional)</span></label><textarea id="note"></textarea>
+      <button>Cancel</button><button>Send invite</button>
+    </div>`,
+    (request, index) => {
+      const email = request.snapshot.elements.find((element) => element.label === "Email address 1");
+      return index === 0 ? { target: email?.id ?? null, status: "continue", say: "Type their email address." } : { target: null, status: "done", say: "That is all." };
+    },
+  );
+  try {
+    await shown.ask("invite theo");
+    await shown.page.locator("#email").click();
+    await shown.page.keyboard.type("theochain@dad");
+    await shown.waitFor(2);
+    const request = JSON.parse(shown.sent[1] ?? "{}") as { event?: string; snapshot: { elements: { label: string; state?: string[] }[] } };
+    const states = Object.fromEntries(request.snapshot.elements.map((element) => [element.label, element.state ?? []]));
+    assert.match(request.event ?? "", /filled in/);
+    assert.deepEqual(states["Email address 1"], ["required", "invalid"]);
+    assert.deepEqual(states["Department"], ["required", "collapsed"]);
+    for (const body of shown.sent) assert.ok(!body.includes("theochain"), "what was typed was sent");
+  } finally {
+    await shown.close();
+  }
+});
+
 test("an editor is listed once, by the name its page gives it, and nothing inside it is listed", { skip }, async () => {
   const snapshot = await read(`<h1>Notes</h1>
     <div contenteditable="true" aria-label="Message body">Dear Dana, <a href="/secret">this link</a> <button contenteditable="false">Mention: Priya</button></div>
@@ -654,6 +785,79 @@ test("a dialog is not named by a button in its title bar, and a select is named 
     'clickable "x" [dialog › Results]',
     'combobox "Owner" [dialog › Results]',
     'clickable "part of Sales chart" [dialog › Sales chart]',
+  ]);
+});
+
+// Options in a list a combobox opened ----------------------------------------------------
+
+/** One of cmdk's options, as cmdk 1.x draws it: what it says of being selected is that the keys are on it. */
+const cmdkItem = (id: string, name: string, hint: string, on: boolean) =>
+  `<div cmdk-item="" id="${id}" role="option" aria-disabled="false" aria-selected="${on}" data-disabled="false" data-selected="${on}" style="display:flex;gap:8px"><svg width="14" height="14" style="opacity:0"><path d="M2 7l3 3 7-7"/></svg><span>${name}</span><span>${hint}</span></div>`;
+
+/** Northpine's Owner field on /budgets/new, opened: a Radix popover with cmdk in it. The field still shows its placeholder. */
+const OWNER = `<main><h1>New budget</h1><form>
+  <label for="owner">Owner</label>
+  <button type="button" id="owner" role="combobox" aria-haspopup="dialog" aria-expanded="true" aria-controls="radix-r1" data-state="open"><span>Choose a person</span></button>
+</form></main>
+<div id="radix-r1" role="dialog" data-state="open" style="position:absolute;top:120px;left:20px;width:280px;background:#fff">
+  <div cmdk-root="" tabindex="-1">
+    <label cmdk-label="" for="cmdk-input" id="cmdk-label" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)"></label>
+    <input cmdk-input="" id="cmdk-input" role="combobox" type="text" placeholder="Search…" aria-autocomplete="list" aria-expanded="true" aria-controls="cmdk-list" aria-labelledby="cmdk-label" aria-activedescendant="cmdk-item-1">
+    <div cmdk-list="" id="cmdk-list" role="listbox" tabindex="-1" aria-label="Suggestions"><div cmdk-list-sizer=""><div cmdk-group="" role="presentation"><div cmdk-group-items="" role="group">
+      ${cmdkItem("cmdk-item-1", "Avery Stone", "Controller", true)}
+      ${cmdkItem("cmdk-item-2", "Blake Ito", "Analyst", false)}
+    </div></div></div></div>
+  </div>
+</div>`;
+
+test("an option cmdk highlights is not said to be selected (Northpine: \"Avery Stone is already selected as Owner\" while Owner showed \"Choose a person\")", { skip }, async () => {
+  assert.deepEqual(lines(await read(OWNER)), [
+    'combobox "Owner" (expanded) [form]',
+    'combobox "Search…" (expanded)',
+    'option "Avery Stone Controller" [list › Suggestions]',
+    'option "Blake Ito Analyst" [list › Suggestions]',
+  ]);
+  // A command menu of its own, opened by no field: cmdk is all there is to go by.
+  const palette = await read(`<div cmdk-root="">
+    <input cmdk-input="" role="combobox" aria-expanded="true" aria-controls="palette" aria-activedescendant="go-budgets" placeholder="Type a command…">
+    <div cmdk-list="" id="palette" role="listbox" aria-label="Suggestions">${cmdkItem("go-budgets", "Go to", "Budgets", true)}${cmdkItem("go-bills", "Go to", "Bills", false)}</div>
+  </div>`);
+  assert.deepEqual(lines(palette), ['combobox "Type a command…" (expanded)', 'option "Go to Budgets" [list › Suggestions]', 'option "Go to Bills" [list › Suggestions]']);
+});
+
+test("an option a combobox's list says is selected is not the chosen one when the combobox shows other words", { skip }, async () => {
+  // As the ARIA practices' combobox examples do it: aria-selected goes with aria-activedescendant, the option the keys are on.
+  // The class name that marks the same option does not make it the current one either.
+  const snapshot = await read(`<label id="owner-label">Owner</label>
+    <div role="combobox" tabindex="0" aria-labelledby="owner-label" aria-expanded="true" aria-controls="people" aria-activedescendant="p1">Choose a person</div>
+    <ul role="listbox" id="people" aria-labelledby="owner-label"><li role="option" id="p1" class="option option-current" aria-selected="true">Avery Stone</li><li role="option" id="p2" class="option" aria-selected="false">Blake Ito</li></ul>`);
+  assert.deepEqual(lines(snapshot), ['combobox "Owner" (expanded)', 'option "Avery Stone" [list › Owner]', 'option "Blake Ito" [list › Owner]']);
+});
+
+test("an option that is chosen is still selected: one its combobox shows, one of several chosen, one in a list of its own, a tab and a grid's cell", { skip }, async () => {
+  const snapshot = await read(`<div style="display:flex;gap:40px">
+    <div><button type="button" role="combobox" aria-label="Approver" aria-expanded="true" aria-controls="approvers"><span>Avery Stone</span></button>
+      <div role="listbox" id="approvers"><div role="option" aria-selected="true" style="display:flex;gap:8px"><span>Avery Stone</span><small>Controller</small></div><div role="option" aria-selected="false" style="display:flex;gap:8px"><span>Blake Ito</span><small>Analyst</small></div></div></div>
+    <div><button type="button" role="combobox" aria-label="Tags" aria-expanded="true" aria-controls="tags">Add tags</button>
+      <div role="listbox" id="tags" aria-multiselectable="true"><div role="option" aria-selected="true">Travel</div><div role="option" aria-selected="true">Meals</div><div role="option" aria-selected="false">Software</div></div></div>
+    <div role="listbox" aria-label="Currency" tabindex="0" aria-activedescendant="eur"><div role="option" id="usd" aria-selected="false">USD</div><div role="option" id="eur" aria-selected="true">EUR</div></div>
+    <div role="tablist" aria-label="Budget"><button role="tab" aria-selected="true">Overview</button><button role="tab" aria-selected="false">History</button></div>
+    <div role="grid" aria-label="March"><div role="row"><div role="gridcell" tabindex="0" aria-selected="true">14</div><div role="gridcell" tabindex="-1" aria-selected="false">15</div></div></div>
+  </div>`);
+  assert.deepEqual(lines(snapshot), [
+    'combobox "Approver" (expanded)',
+    // The option says more than the combobox shows of it.
+    'option "Avery Stone Controller" (selected) [list]',
+    'option "Blake Ito Analyst" [list]',
+    'combobox "Tags" (expanded)',
+    'option "Travel" (selected) [list]',
+    'option "Meals" (selected) [list]',
+    'option "Software" [list]',
+    'option "USD" [list › Currency]',
+    'option "EUR" (selected) [list › Currency]',
+    'tab "Overview" (selected) [tabs › Budget]',
+    'tab "History" [tabs › Budget]',
+    'clickable "14" (selected)',
   ]);
 });
 
