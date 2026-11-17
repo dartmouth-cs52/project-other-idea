@@ -519,7 +519,14 @@ Components are shadcn/ui, restyled only through tokens and variants.
   a bell with no flat top and no edge, a touch thicker in the middle of the
   page than at its sides, at about six tenths of full strength at its heart.
   It is multiplied into a light page, so the page's words stay dark and sharp
-  through it, and screened into a dark one. It takes no clicks.
+  through it, and screened into a dark one. It takes no clicks. It is for a
+  visitor who is waiting on Haptic, never over one who is using the page: a
+  press or a key of theirs on the page while Haptic thinks sends it off the
+  page the way the reply does, and it does not come back in that wait. A wait
+  that begins with them filling in a field or choosing from a dropdown has no
+  glow at all, so a form is never tinted while it is being filled in. The
+  thinking goes on either way, and the chat still says so. While Haptic acts,
+  it is the one in the fields, and its waits glow.
 - **Form:** Labels above 44px inputs and one primary button. A required field
   has an Error red star after its label, and a field with no star may be left
   empty. A step that has a way back puts a secondary Back button to the left of
@@ -541,7 +548,7 @@ Components are shadcn/ui, restyled only through tokens and variants.
 eases out with `cubic-bezier(.2, .8, .2, 1)`, quick to leave and slow to land,
 and takes 400 to 700ms depending on how far it travels. It and the thinking
 glow are the two movements allowed to run longer than 300ms: the eye has to
-follow the glide, and the glow lasts exactly as long as the wait. Everything
+follow the glide, and the glow lasts no longer than the wait. Everything
 else is a fade, a small scale or a height change of 150 to 250ms that eases
 out. Nothing grows from nothing: things arrive from within a few percent of
 their final size. A click is acknowledged like a pressed button, with the mark
@@ -843,6 +850,9 @@ stays. The rest below is proposed.
   frame and the thinking glow are the two exceptions.
 - Don't put the thinking glow on the chat, leave it on the page once the
   reply has arrived, or play it for anything but Haptic working on a reply.
+- Don't draw the glow over a visitor who is using the page: a press or a key
+  on it sends the glow away, and a wait that begins with them filling in a
+  field has none.
 - Don't give the glow an edge, a stripe or a second band. If it can be seen
   where it starts or stops, it is not smooth enough.
 - Don't use Bold, italics for emphasis, or text smaller than 12px.
