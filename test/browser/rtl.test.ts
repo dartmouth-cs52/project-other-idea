@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, afterEach, before, describe, test } from "node:test";
 import type { Browser, BrowserContext, Page } from "playwright";
-import { ask, BROWSERS, idOf, launch, page, point, startHarness, type Harness } from "./harness.ts";
+import { ask, BROWSERS, ends, idOf, launch, page, point, startHarness, type Harness } from "./harness.ts";
 
 // The widget on a page written right to left. The `all: initial` on its host
 // leaves `direction` alone, so without a direction of its own the widget would
@@ -36,25 +36,6 @@ const layout = (tab: Page) =>
       }),
     );
   }, PARTS);
-
-/** Where the first and the last letter of the words in this part are drawn, across the line. */
-const ends = (tab: Page, selector: string) =>
-  part(tab, selector).evaluate((el) => {
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-    const texts: Text[] = [];
-    while (walker.nextNode()) if ((walker.currentNode as Text).data.trim()) texts.push(walker.currentNode as Text);
-    const first = texts[0]!;
-    const last = texts[texts.length - 1]!;
-    // Written out in one piece: a named helper in here would not survive the trip into the page.
-    const [start, end] = ([[first, first.data.search(/\S/)], [last, last.data.trimEnd().length - 1]] as [Text, number][]).map(([node, at]) => {
-      const range = document.createRange();
-      range.setStart(node, at);
-      range.setEnd(node, at + 1);
-      const box = range.getBoundingClientRect();
-      return { char: node.data[at], left: box.left, right: box.right };
-    });
-    return { first: start!, last: end! };
-  });
 
 const box = async (tab: Page, selector: string) => (await part(tab, selector).boundingBox())!;
 
@@ -114,7 +95,7 @@ for (const name of BROWSERS) {
       assert.ok(askBox.x + askBox.width - (send.x + send.width) <= 12 && send.x > askBox.x + askBox.width / 2, JSON.stringify({ askBox, send }));
       assert.equal(await direction(tab, ".ask input"), "ltr");
       // The line about AI ends with its full stop.
-      const about = await ends(tab, ".about");
+      const about = await ends(part(tab, ".about"));
       assert.equal(about.first.char, "H");
       assert.equal(about.last.char, ".");
       assert.ok(about.last.left >= about.first.right, JSON.stringify(about));
@@ -143,7 +124,7 @@ for (const name of BROWSERS) {
       assert.equal(await direction(tab, ".question"), "rtl");
       assert.equal(await direction(tab, ".reply p:not(.missing)"), "rtl");
       // The answer's full stop is at its left end, where an Arabic sentence ends.
-      const answer = await ends(tab, ".reply p:not(.missing)");
+      const answer = await ends(part(tab, ".reply p:not(.missing)"));
       assert.equal(answer.last.char, ".");
       assert.ok(answer.last.right <= answer.first.left, JSON.stringify(answer));
       // The question is on the right of the chat and the answer on its left, as on any page.
@@ -165,7 +146,7 @@ for (const name of BROWSERS) {
       assert.equal(await direction(tab, ".caption"), "ltr");
       const [words, close] = [await box(tab, ".caption span"), await box(tab, ".caption .close")];
       assert.ok(words.x + words.width <= close.x, JSON.stringify({ words, close }));
-      const step = await ends(tab, ".caption span");
+      const step = await ends(part(tab, ".caption span"));
       assert.ok(step.last.right <= step.first.left, JSON.stringify(step));
     });
   });

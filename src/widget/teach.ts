@@ -147,7 +147,9 @@ function refusal(answer: { status: number; data: Record<string, unknown> } | und
 }
 
 const BAR_CSS = `
-:host { all: initial; position: fixed; left: 50%; transform: translateX(-50%); z-index: 2147483647; margin: 0; padding: 0; border: 0; inset: auto auto 16px 50%;
+/* Left to right on every page, as the chat is: 'all' leaves direction alone, and the bar's words are English. The
+   question it was opened for is the site's, so it reads in its own direction (dir="auto"). */
+:host { all: initial; direction: ltr; position: fixed; left: 50%; transform: translateX(-50%); z-index: 2147483647; margin: 0; padding: 0; border: 0; inset: auto auto 16px 50%;
   background: transparent; overflow: visible; font: 14px/20px system-ui, -apple-system, "Segoe UI", sans-serif; color: #fafaf9; }
 :host(.top) { inset: 16px auto auto 50%; }
 * { box-sizing: border-box; }
@@ -209,7 +211,7 @@ export class Teacher {
     this.words = make(
       "div",
       { class: "words" },
-      make("p", { class: "title" }, make("span", { class: "dot", "aria-hidden": "true" }), `Teaching Haptic: ${sentence(teaching.question)}`),
+      make("p", { class: "title" }, make("span", { class: "dot", "aria-hidden": "true" }), "Teaching Haptic: ", make("span", { dir: "auto" }, sentence(teaching.question))),
       make("p", { class: "how" }, "Do the task as a visitor would. Haptic records which controls you use, not what you type."),
       this.last,
     );
