@@ -33,14 +33,24 @@ const PRESS_MS = 240;
 export const SHOWING = "Showing you how";
 
 // The thinking glow. It is on the page only while Haptic waits for the model.
-// A soft band the width of the page comes in at the top edge and falls to the
-// bottom, one pass after another for as long as the wait lasts. The moment the
-// reply arrives it fades, so by the time the pointer lands the page is clear.
-/** How long one pass from the top of the page to the bottom takes. A typical wait is about one pass. */
-const FALL_MS = 1600;
-/** How long the glow takes to come in, and to fade once the reply has arrived. */
+// A soft band the width of the page comes in at the top edge and falls
+// towards the bottom, once for each wait. How long the wait will be is not
+// known, so the band is paced to it: quick at first and slower the longer the
+// wait goes on, always on its way down and never at the bottom before the
+// reply. The moment the reply arrives it goes the rest of the way and off the
+// page, fading, so every wait is one pass from top to bottom and the page is
+// clear by the time the pointer lands.
+/**
+ * How long the band takes to slow to a stop, near the foot of the page, if no
+ * reply comes. With FALL_EASE its middle is at the top edge after 0.4s,
+ * halfway down after 1.2s, which is a typical wait, two thirds down after 2s
+ * and four fifths after 3s.
+ */
+const FALL_MS = 8000;
+const FALL_EASE = "cubic-bezier(.14, 1, .3, 1)";
+/** How long the glow takes to come in, and to leave by the bottom once the reply has arrived. */
 const GLOW_IN_MS = 300;
-const GLOW_OUT_MS = 350;
+const GLOW_OUT_MS = 450;
 
 // The band's strength across its thickness: a bell with no flat top and no
 // edge, which is what makes it read as light and not as a stripe. A gradient
@@ -55,7 +65,7 @@ const BELL = [0.62, 0.605, 0.56, 0.49, 0.405, 0.31, 0.215, 0.13, 0.06, 0.015, 0]
 // trailing edge to the leading one in a single gradient, mixed in OKLCH so
 // the hues melt into each other, and a mask gives it the bell: an ellipse far
 // wider than the page, so it is a touch thicker in the middle. Only its
-// transform and the opacity of what holds it are animated.
+// transform and the opacity of what holds it change.
 const VEIL_CSS = `
 :host { all: initial; display: none; position: fixed; inset: 0; z-index: 2147483646; overflow: hidden; pointer-events: none;
   --glow-a: #77d0fe; --glow-b: #5294ff; --glow-c: #8460ee; }
@@ -64,17 +74,20 @@ const VEIL_CSS = `
   :host { --glow-a: oklch(from var(--accent) .82 calc(c * .5) calc(h - 28)); --glow-b: oklch(from var(--accent) .68 calc(c * .85) h);
     --glow-c: oklch(from var(--accent) .6 calc(c * .95) calc(h + 30)); }
 }
-.glow { position: absolute; inset: 0; animation: arrive ${GLOW_IN_MS}ms ease-out; transition: opacity ${GLOW_OUT_MS}ms ease-out; }
+.glow { position: absolute; inset: 0; animation: arrive ${GLOW_IN_MS}ms ease-out; transition: opacity ${GLOW_OUT_MS}ms ease-in; }
 .glow.fade { opacity: 0; }
 /* Without a mask the band would be a hard block of colour, so a browser with none shows no glow. */
 .glow i { display: none; }
 @supports (mask-image: linear-gradient(#000, #000)) or (-webkit-mask-image: linear-gradient(#000, #000)) {
-  .glow i { display: block; position: absolute; inset: 0; transform: translateY(-90%); animation: fall ${FALL_MS}ms linear infinite;
+  .glow i { display: block; position: absolute; inset: 0; transform: translateY(-90%);
     background: linear-gradient(to bottom, var(--glow-a), var(--glow-b) 50%, var(--glow-c));
     background: linear-gradient(to bottom in oklch, var(--glow-a), var(--glow-b) 50%, var(--glow-c));
     -webkit-mask-image: radial-gradient(200% 50% at 50% 50%, ${BELL}); mask-image: radial-gradient(200% 50% at 50% 50%, ${BELL}); }
+  /* Falling: towards the foot of the page, slower all the time. These are transitions, so each starts from wherever the band is. */
+  .glow i.falling { transform: translateY(40%); transition: transform ${FALL_MS}ms ${FALL_EASE}; }
+  /* The reply has arrived: on to the bottom and off the page. */
+  .glow.fade i { transform: translateY(100%); transition: transform ${GLOW_OUT_MS}ms ease-in; }
 }
-@keyframes fall { from { transform: translateY(-90%); } to { transform: translateY(100%); } }
 @keyframes arrive { from { opacity: 0; } }
 `;
 
@@ -1500,7 +1513,7 @@ export class Ui {
 
   /**
    * Starts the glow: a band of colour comes in at the top of the page and
-   * falls to the bottom, again and again while Haptic thinks. With reduced
+   * falls towards the bottom, slower the longer Haptic thinks. With reduced
    * motion on there is no glow at all.
    */
   private glowOn() {
@@ -1511,14 +1524,18 @@ export class Ui {
         document.documentElement.append(this.veil);
         this.raise(true);
       }
-      const el = make("div", { class: "glow" }, make("i"));
-      // One fading and one new is the most there is to see at once.
+      const band = make("i");
+      const el = make("div", { class: "glow" }, band);
+      // One leaving and one new is the most there is to see at once.
       const glows = this.glass.querySelectorAll(".glow");
       for (let i = 0; i < glows.length - 1; i++) glows[i]?.remove();
-      this.glass.append(el);
       // The glow is multiplied into a light page, so the page's words stay dark and sharp through it, and screened
       // into a dark one, where multiplying would lose the colour.
       this.blend(`:host { display: block; mix-blend-mode: ${pageIsDark() ? "screen" : "multiply"}; }`);
+      this.glass.append(el);
+      // Drawn once above the page's top edge, so the fall has somewhere to start from.
+      void band.offsetWidth;
+      band.classList.add("falling");
       this.glow = el;
     } catch (error) {
       console.warn("[Haptic]", error);
@@ -1526,8 +1543,9 @@ export class Ui {
   }
 
   /**
-   * Ends the glow, the moment the thinking is over, however it ended. It fades
-   * where it is, still falling, and is then off the page altogether.
+   * Ends the glow, the moment the thinking is over, however it ended. From
+   * wherever the band is, it goes on to the bottom and off the page, fading
+   * as it goes, and its element is then not displayed at all.
    */
   private glowOff() {
     const el = this.glow;

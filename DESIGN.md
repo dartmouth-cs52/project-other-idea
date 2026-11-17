@@ -476,17 +476,20 @@ Components are shadcn/ui, restyled only through tokens and variants.
 - **Thinking glow:** Soft colour over the page, from its top to its bottom,
   and only while Haptic is thinking. It is not in the chat, and the chat, the
   pointer, the mark and the caption are drawn over it and are never tinted. A
-  band the width of the page comes in at the top edge and falls to the bottom
-  in 1.6 seconds, at one steady speed, and another follows for as long as the
-  wait lasts. A typical wait is about one pass. The moment the reply arrives
-  the glow fades over a third of a second, still falling, so the page is clear
-  by the time the pointer lands. A reply that failed and a guide that was
-  stopped end it the same way. It is smooth before anything else: one band,
-  about a third of the page thick, whose strength is a bell with no flat top
-  and no edge, a touch thicker in the middle of the page than at its sides,
-  at about six tenths of full strength at its heart. It is multiplied into a
-  light page, so the page's words stay dark and sharp through it, and screened
-  into a dark one. It takes no clicks.
+  band the width of the page comes in at the top edge and falls towards the
+  bottom, once for each wait. Nobody knows how long a wait will be, so the
+  band is paced to it: quick at first and slower the longer the wait goes on,
+  halfway down after 1.2 seconds, which is a typical wait, two thirds after 2
+  and four fifths after 3, always on its way and never at the bottom before
+  the reply. The moment the reply arrives it goes the rest of the way and off
+  the page in under half a second, fading, so every wait is one pass from top
+  to bottom and the page is clear by the time the pointer lands. A reply that
+  failed and a guide that was stopped end it the same way. It is smooth before
+  anything else: one band, about a third of the page thick, whose strength is
+  a bell with no flat top and no edge, a touch thicker in the middle of the
+  page than at its sides, at about six tenths of full strength at its heart.
+  It is multiplied into a light page, so the page's words stay dark and sharp
+  through it, and screened into a dark one. It takes no clicks.
 - **Form:** Labels above 44px inputs and one primary button. A required field
   has an Error red star after its label, and a field with no star may be left
   empty. A step that has a way back puts a secondary Back button to the left of

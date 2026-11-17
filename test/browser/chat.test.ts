@@ -241,7 +241,7 @@ for (const name of BROWSERS) {
       // The page under it still takes a click.
       await tab.locator("#send").click({ trial: true, timeout: 1000 });
 
-      // It comes in at the top and falls: the band's middle starts above the page's top edge, and is lower each time it is looked at.
+      // It comes in at the top and falls, slower as the wait goes on: the band's middle starts above the page's top edge, and is lower each time it is looked at.
       const middle = () =>
         glow.locator("i").evaluate((el) => {
           const box = el.getBoundingClientRect();
@@ -253,7 +253,11 @@ for (const name of BROWSERS) {
       assert.ok(first < 0.2, `it starts at the top of the page: ${first}`);
       assert.ok(second > first + 0.15, `and falls: ${first} then ${second}`);
 
-      // The reply arrives. The glow fades at once, and is off the page by the time the ring has landed.
+      // It is paced to a wait it cannot know the length of, so it is never at the bottom before the reply.
+      await sleep(350);
+      assert.ok((await middle()) < 0.9, "it has not got to the bottom while Haptic still thinks");
+
+      // The reply arrives. The glow goes on to the bottom and off the page, and is gone by the time the ring has landed.
       assert.ok(await ringAround(tab, "#invite"));
       await glow.waitFor({ state: "detached", timeout: 1000 });
       assert.equal((await veil(tab)).display, "none", "and nothing is left over the page");
