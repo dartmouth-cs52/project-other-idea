@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 import { api, type Outcome, type Site, type TaughtRoute, type TaughtStep, type TeachSession } from "@/lib/app-api";
 import { StepMark, when } from "./parts";
 
@@ -466,44 +467,49 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
                         Delete
                       </Button>
                     </div>
-                    {step.unnamed && (
-                      <div className="flex flex-col gap-2">
-                        <Label htmlFor={`name-${item.n}`} className="text-destructive">
-                          Haptic couldn&apos;t read a name for this control. Type the words on it, or delete the step.
-                        </Label>
-                        <Input id={`name-${item.n}`} value={item.name} maxLength={80} onChange={(event) => update(index, { name: event.target.value })} placeholder="The words on the control" className="h-10 bg-card" />
-                      </div>
-                    )}
-                    {item.noting ? (
-                      <Input
-                        value={item.note}
-                        maxLength={140}
-                        autoFocus
-                        onChange={(event) => update(index, { note: event.target.value })}
-                        placeholder="A one-line note, like: pick the department the budget is for"
-                        aria-label={`Note on step ${index + 1}`}
-                        className="h-10 bg-card"
-                      />
-                    ) : (
-                      <Button variant="ghost" size="sm" className="self-start" onClick={() => update(index, { noting: true })}>
-                        Add a note
-                      </Button>
-                    )}
-                    {last && (
-                      <label className="flex items-start gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5 size-4 accent-foreground"
-                          checked={leaveLast || step.commits === true}
-                          disabled={step.commits === true}
-                          onChange={(event) => setLeaveLast(event.target.checked)}
+                    {/* What the person adds to a step sits under the step's words, past its number. */}
+                    <div className="flex flex-col gap-3 pl-8">
+                      {step.unnamed && (
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor={`name-${item.n}`} className="text-destructive">
+                            Haptic couldn&apos;t read a name for this control. Type the words on it, or delete the step.
+                          </Label>
+                          <Input id={`name-${item.n}`} value={item.name} maxLength={80} onChange={(event) => update(index, { name: event.target.value })} placeholder="The words on the control" className="h-10 bg-card" />
+                        </div>
+                      )}
+                      {item.noting ? (
+                        // It wraps, so the whole note can be read back; it is still one line, so Enter adds none.
+                        <Textarea
+                          value={item.note}
+                          maxLength={140}
+                          rows={1}
+                          autoFocus
+                          onChange={(event) => update(index, { note: event.target.value.replace(/\r?\n/g, " ") })}
+                          placeholder="A short note, like: pick the department the budget is for"
+                          aria-label={`Note on step ${index + 1}`}
+                          className="min-h-10 resize-none bg-card px-3 py-2"
                         />
-                        <span>
-                          Leave this click for the visitor
-                          <span className="block text-muted-foreground">In Do it with me, Haptic does the steps before it and points at this one for the visitor to click.</span>
-                        </span>
-                      </label>
-                    )}
+                      ) : (
+                        <Button variant="ghost" size="sm" className="-ml-3 self-start" onClick={() => update(index, { noting: true })}>
+                          Add a note
+                        </Button>
+                      )}
+                      {last && (
+                        <label className="flex items-start gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 size-4 accent-foreground"
+                            checked={leaveLast || step.commits === true}
+                            disabled={step.commits === true}
+                            onChange={(event) => setLeaveLast(event.target.checked)}
+                          />
+                          <span>
+                            Leave this click for the visitor
+                            <span className="block text-muted-foreground">In Do it with me, Haptic does the steps before it and points at this one for the visitor to click.</span>
+                          </span>
+                        </label>
+                      )}
+                    </div>
                   </li>
                 );
               })}
