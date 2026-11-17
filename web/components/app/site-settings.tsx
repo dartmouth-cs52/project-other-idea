@@ -16,35 +16,116 @@ const HEX = /^#[0-9a-f]{6}$/i;
 const POINTER_PATH =
   "M3.271 4.871A1.678 1.678 0 0 1 5.604 2.907L19.822 9.597A1.678 1.678 0 0 1 19.705 12.684L13.956 14.875A.622.622 0 0 0 13.643 15.139L10.506 20.431A1.678 1.678 0 0 1 7.444 20.021Z";
 
+const INK = "#1C1917";
+const HAPTIC_BLUE = "#1E6EF4";
+
+/** Paper or Ink, whichever is easier to read on a button of this colour. The widget chooses the same way (inkOn in src/widget/ui.ts). */
+function inkOn(hex: string): string {
+  const light = (channel: number) => {
+    const value = channel / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = (colour: string) => {
+    const [r, g, b] = [1, 3, 5].map((at) => parseInt(colour.slice(at, at + 2), 16)) as [number, number, number];
+    return 0.2126 * light(r) + 0.7152 * light(g) + 0.0722 * light(b);
+  };
+  const fill = luminance(hex);
+  return (luminance("#fafaf9") + 0.05) / (fill + 0.05) >= (fill + 0.05) / (luminance("#1c1917") + 0.05) ? "#fafaf9" : "#1c1917";
+}
+
+/** What this site is called in the dashboard. A new site is named after its company, so two sites start with the same name. */
+export function SiteName({ site, onChange, onRenamed }: { site: Site; onChange: (site: Site) => void; onRenamed: () => void }) {
+  const [name, setName] = useState(site.name);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const fields = useFieldErrors({ name: "site-name" });
+  const changed = name.trim() !== site.name;
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setFailure(null);
+    if (fields.show({ name: name.trim() ? undefined : "Give the site a name." })) return;
+    setStatus("saving");
+    try {
+      onChange(await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { name } }));
+      setStatus("saved");
+      // The bar and the menu of sites take their names from sign-in, so they are asked for again.
+      onRenamed();
+    } catch (failure) {
+      if (!fields.showRefusal(failure)) setFailure(failureFrom("Couldn't rename the site", failure));
+      setStatus("idle");
+    }
+  }
+
+  return (
+    <form onSubmit={save} noValidate>
+      <Card>
+        <CardTitle>Name</CardTitle>
+        <FieldWithButton
+          id="site-name"
+          label="Site name"
+          required
+          error={fields.errors.name}
+          hint={status === "saved" && !changed ? "Saved." : "What this site is called in the dashboard."}
+          button={
+            <Button type="submit" variant="secondary" size="xl" disabled={!changed || status === "saving"}>
+              {status === "saving" ? "Saving" : "Rename"}
+            </Button>
+          }
+        >
+          <Input
+            {...fields.control("name", { hint: true })}
+            required
+            value={name}
+            maxLength={80}
+            onChange={(event) => {
+              setName(event.target.value);
+              fields.clear("name");
+            }}
+            className={FIELD}
+          />
+        </FieldWithButton>
+        <FormAlert failure={failure} />
+      </Card>
+    </form>
+  );
+}
+
 /**
- * The pointer's colour. It can be typed, picked, or matched to the site: one
- * press reads the site's own colour from its first page and saves it. The
- * launcher always sits bottom right, where support chat usually lives, and
- * keeps the word it has.
+ * The widget's two colours. The Ask button is the part that should look like
+ * it belongs on the site, so it is the one "Match website" sets: one press
+ * reads the site's own colour from its first page and saves it. The pointer is
+ * the part that has to be seen against the site, so it stays Haptic's blue
+ * unless the company changes it. The launcher always sits bottom right, where
+ * support chat usually lives, and keeps the word it has.
  */
 export function WidgetLook({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
+  const saved = { launcher: (site.appearance.launcher ?? INK).toUpperCase(), accent: site.appearance.accent.toUpperCase() };
+  const [launcher, setLauncher] = useState(saved.launcher);
   const [accent, setAccent] = useState(site.appearance.accent);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "matching">("idle");
   // What the last press of Match found, or didn't, in words.
   const [matched, setMatched] = useState<string | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
-  const fields = useFieldErrors({ accent: "accent" });
-  const changed = accent.toUpperCase() !== site.appearance.accent.toUpperCase();
+  const fields = useFieldErrors({ launcher: "launcher", accent: "accent" });
+  const changed = launcher.toUpperCase() !== saved.launcher || accent.toUpperCase() !== saved.accent;
   const busy = status === "saving" || status === "matching";
 
-  /** Saves a colour. The corner goes with it, so a site set to the left before that choice went comes back to the right. */
-  async function keep(colour: string) {
-    onChange(await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { appearance: { accent: colour, position: "bottom-right" } } }));
+  /** Saves the look. Ink is the launcher's own colour, so it is saved as no colour at all. The corner goes with it, so a site set to the left before that choice went comes back to the right. */
+  async function keep(look: { launcher: string; accent?: string }) {
+    const body = { ...(look.accent ? { accent: look.accent } : {}), launcher: look.launcher.toUpperCase() === INK ? null : look.launcher, position: "bottom-right" };
+    onChange(await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { appearance: body } }));
   }
 
   async function save(event: FormEvent) {
     event.preventDefault();
     setFailure(null);
     setMatched(null);
-    if (fields.show({ accent: HEX.test(accent) ? undefined : "The colour must be a hex value like #1E6EF4." })) return;
+    const wrong = "The colour must be a hex value like #1E6EF4.";
+    if (fields.show({ launcher: HEX.test(launcher) ? undefined : wrong, accent: HEX.test(accent) ? undefined : wrong })) return;
     setStatus("saving");
     try {
-      await keep(accent);
+      await keep({ launcher, accent });
       setStatus("saved");
     } catch (failure) {
       if (!fields.showRefusal(failure)) setFailure(failureFrom("Couldn't save your changes", failure));
@@ -55,7 +136,7 @@ export function WidgetLook({ site, onChange }: { site: Site; onChange: (site: Si
   async function match() {
     setFailure(null);
     setMatched(null);
-    fields.clear("accent");
+    fields.clear("launcher");
     setStatus("matching");
     try {
       const brand = await api<Brand>(`/sites/${site.id}/brand`);
@@ -64,8 +145,8 @@ export function WidgetLook({ site, onChange }: { site: Site; onChange: (site: Si
         setStatus("idle");
         return;
       }
-      setAccent(brand.colour);
-      await keep(brand.colour);
+      setLauncher(brand.colour);
+      await keep({ launcher: brand.colour });
       setMatched(`Matched to ${brand.colour}, your website's colour. The widget picks it up within a minute.`);
       setStatus("idle");
     } catch (failure) {
@@ -74,33 +155,34 @@ export function WidgetLook({ site, onChange }: { site: Site; onChange: (site: Si
     }
   }
 
+  const swatch = "h-11 w-14 shrink-0 cursor-pointer rounded-lg border bg-card p-1";
   return (
     <form onSubmit={save} noValidate>
       <Card>
         <CardTitle>How the widget looks</CardTitle>
         <div className="grid gap-6 md:grid-cols-2">
           <div className="flex flex-col gap-5">
-            <Field id="accent" label="Pointer colour" required error={fields.errors.accent} hint="The pointer and the mark around what it points at.">
+            <Field id="launcher" label="Ask button colour" required error={fields.errors.launcher} hint="The button people press to ask. Match it to your website so it looks like part of it.">
               <div className="flex flex-wrap gap-2">
                 <input
                   type="color"
-                  aria-label="Pick a colour"
-                  value={HEX.test(accent) ? accent : "#1E6EF4"}
+                  aria-label="Pick the Ask button's colour"
+                  value={HEX.test(launcher) ? launcher : INK}
                   onChange={(event) => {
-                    setAccent(event.target.value.toUpperCase());
+                    setLauncher(event.target.value.toUpperCase());
                     setMatched(null);
-                    fields.clear("accent");
+                    fields.clear("launcher");
                   }}
-                  className="h-11 w-14 shrink-0 cursor-pointer rounded-lg border bg-card p-1"
+                  className={swatch}
                 />
                 <Input
-                  {...fields.control("accent", { hint: true })}
+                  {...fields.control("launcher", { hint: true })}
                   required
-                  value={accent}
+                  value={launcher}
                   onChange={(event) => {
-                    setAccent(event.target.value.trim());
+                    setLauncher(event.target.value.trim());
                     setMatched(null);
-                    fields.clear("accent");
+                    fields.clear("launcher");
                   }}
                   className={cn(FIELD, "min-w-32 flex-1")}
                 />
@@ -108,6 +190,43 @@ export function WidgetLook({ site, onChange }: { site: Site; onChange: (site: Si
                   <Pipette />
                   {status === "matching" ? "Looking" : "Match website"}
                 </Button>
+              </div>
+            </Field>
+            <Field id="accent" label="Pointer colour" required error={fields.errors.accent} hint="The pointer and the mark around what it points at. Blue stands out on most pages, which is what a pointer is for.">
+              <div className="flex flex-wrap gap-2">
+                <input
+                  type="color"
+                  aria-label="Pick the pointer's colour"
+                  value={HEX.test(accent) ? accent : HAPTIC_BLUE}
+                  onChange={(event) => {
+                    setAccent(event.target.value.toUpperCase());
+                    fields.clear("accent");
+                  }}
+                  className={swatch}
+                />
+                <Input
+                  {...fields.control("accent", { hint: true })}
+                  required
+                  value={accent}
+                  onChange={(event) => {
+                    setAccent(event.target.value.trim());
+                    fields.clear("accent");
+                  }}
+                  className={cn(FIELD, "min-w-32 flex-1")}
+                />
+                {accent.toUpperCase() !== HAPTIC_BLUE && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="xl"
+                    onClick={() => {
+                      setAccent(HAPTIC_BLUE);
+                      fields.clear("accent");
+                    }}
+                  >
+                    Use Haptic blue
+                  </Button>
+                )}
               </div>
             </Field>
             <div className="flex flex-wrap items-center gap-4">
@@ -120,7 +239,7 @@ export function WidgetLook({ site, onChange }: { site: Site; onChange: (site: Si
             </div>
             <FormAlert failure={failure} />
           </div>
-          <Preview accent={HEX.test(accent) ? accent : site.appearance.accent} position="bottom-right" label={site.appearance.launcherLabel || "Ask"} />
+          <Preview accent={HEX.test(accent) ? accent : site.appearance.accent} launcher={HEX.test(launcher) ? launcher : INK} label={site.appearance.launcherLabel || "Ask"} />
         </div>
       </Card>
     </form>
@@ -185,7 +304,7 @@ export function Notes({ site, onChange }: { site: Site; onChange: (site: Site) =
 }
 
 /** A small window showing the launcher in its corner and the pointer in the chosen colour. */
-function Preview({ accent, position, label }: { accent: string; position: Site["appearance"]["position"]; label: string }) {
+function Preview({ accent, launcher, label }: { accent: string; launcher: string; label: string }) {
   return (
     <div className="relative min-h-56 overflow-hidden rounded-xl border bg-card" aria-label="Preview" role="img">
       <div className="absolute top-8 left-8 flex h-8 items-center rounded-lg border px-3 text-sm" style={{ outline: `2px solid ${accent}`, outlineOffset: 3 }}>
@@ -194,8 +313,8 @@ function Preview({ accent, position, label }: { accent: string; position: Site["
       <svg viewBox="0 0 24 24" className="pointer-shadow absolute top-[60px] left-[92px] size-6" aria-hidden>
         <path d={POINTER_PATH} fill={accent} stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke" />
       </svg>
-      <div className={cn("absolute bottom-4 flex", position === "bottom-right" ? "right-4" : "left-4")}>
-        <span className="inline-flex h-10 items-center gap-2 rounded-full bg-[#1c1917] pr-4 pl-3.5 text-sm font-medium text-[#fafaf9] shadow-md">
+      <div className="absolute right-4 bottom-4 flex">
+        <span className="inline-flex h-10 items-center gap-2 rounded-full pr-4 pl-3.5 text-sm font-medium shadow-md" style={{ background: launcher, color: inkOn(launcher) }}>
           <svg viewBox="0 0 24 24" className="size-4" aria-hidden>
             <path d={POINTER_PATH} fill="currentColor" />
           </svg>

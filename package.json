@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "test:browser": "tsx --test --test-concurrency=1 test/browser/*.test.ts",
+    "test:dashboard": "tsx --test --test-concurrency=1 test/browser/dashboard.test.ts",
     "eval": "tsx --env-file-if-exists=.env eval/run.ts",
     "eval:record": "tsx eval/record.ts",
     "eval:look": "tsx eval/look.ts",
