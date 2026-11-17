@@ -494,7 +494,8 @@ for (const [what, extra] of [
 
 for (const present of [false, true]) {
   test(`${present ? "in presentation mode, " : ""}a sentence that does not say to move over the row is told so by the caption, which keeps off the row, and nothing is clicked or focused`, async () => {
-    const page = `${ROW_STYLES}<main><h1>Cards</h1><div role="table" aria-label="Cards" style="margin-top:260px">
+    // Rows as wide as the page, low on it, as a list of cards is: the row's action is at its far end, in the launcher's corner.
+    const page = `${ROW_STYLES}<style>.row { width: auto }</style><main><h1>Cards</h1><div role="table" aria-label="Cards" style="margin-top:500px">
       ${row("Travel", "Avery Stone", '<button type="button" aria-label="Freeze card">*</button>')}
       ${row("Team offsite", "Avery Stone", '<button id="freeze" type="button" aria-label="Freeze card">*</button>')}
       ${row("Malika's card", "Malika Cummerata", '<button type="button" aria-label="Freeze card">*</button>')}
@@ -525,6 +526,11 @@ for (const present of [false, true]) {
       assert.ok(surrounds(drawn.ring, rowBox), `the ring ${JSON.stringify(drawn.ring)} is not round the row ${JSON.stringify(rowBox)}`);
       assert.ok(drawn.tip.x >= freeze.x && drawn.tip.x <= freeze.x + freeze.width && drawn.tip.y >= freeze.y && drawn.tip.y <= freeze.y + freeze.height, JSON.stringify({ tip: drawn.tip, freeze }));
       assert.ok(!crosses(drawn.caption, rowBox), `the caption ${JSON.stringify(drawn.caption)} covers the row ${JSON.stringify(rowBox)}`);
+      // The chat, open through the guide, keeps off where Freeze card will show, the pointer on it, and the caption.
+      const chat = (await session.page.locator("haptic-root .panel").boundingBox())!;
+      assert.ok(!crosses(chat, freeze), `the chat ${JSON.stringify(chat)} covers where Freeze card shows ${JSON.stringify(freeze)}`);
+      assert.ok(!crosses(chat, { x: drawn.tip.x - 2, y: drawn.tip.y - 2, width: 4, height: 4 }), `the chat covers the pointer's tip ${JSON.stringify(drawn.tip)}`);
+      assert.ok(!crosses(chat, drawn.caption), `the chat covers the caption ${JSON.stringify(drawn.caption)}`);
       assert.deepEqual(await session.page.evaluate(() => [(window as unknown as { pressed: number }).pressed, document.activeElement?.tagName ?? ""]), [0, "BODY"]);
       assert.equal(await session.page.evaluate(() => getComputedStyle(document.getElementById("freeze")!.parentElement!).opacity), "0");
     } finally {
