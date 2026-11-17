@@ -125,20 +125,20 @@
   filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.3)) drop-shadow(0 5px 9px rgb(0 0 0 / 0.26));
 }
 
-/* The thinking glow in Haptic's chat, the same one the widget draws (src/widget/ui.ts). While Haptic thinks, a pool
-   of Pointer blue gathers along the bottom of the chat. When the reply arrives it breaks away: it swells into a dome,
-   rises through the chat turning violet and then pink, and is gone. It is multiplied into the chat, so words and
-   buttons stay sharp through it. Three soft layers, each two lobes wide, reach below the chat's bottom edge so no
-   edge shows as they rise. */
+/* The thinking glow, the same one the widget draws over a customer's page (src/widget/ui.ts). In a demo it is
+   drawn over the mock page, under the chat. While Haptic thinks, Pointer blue gathers along the top edge of the page.
+   When the reply arrives it breaks away as a soft band the width of the page and falls to the bottom, turning violet
+   and then pink, and is gone. It is multiplied into the page, so words and buttons stay sharp through it. Three soft
+   layers, each an ellipse far wider than the page so it reads as a band: blue trailing, violet in the middle and
+   pink leading. They start centred on the page's top edge, and the element that holds them carries them down. */
 .thinking-glow {
   --glow-a: #668cf7;
   --glow-b: #a953fb;
   --glow-c: #f69beb;
   position: absolute;
   inset: 0;
-  z-index: 10;
+  z-index: 12;
   overflow: hidden;
-  border-radius: inherit;
   pointer-events: none;
   mix-blend-mode: multiply;
 }
@@ -150,7 +150,7 @@
     --glow-c: oklch(from var(--pointer) 0.8 calc(c * 0.72) calc(h + 74));
   }
 }
-/* On a dark chat, multiplying would lose the colour, so it is screened in. */
+/* On a dark page, multiplying would lose the colour, so it is screened in. */
 @media (prefers-color-scheme: dark) {
   .thinking-glow {
     mix-blend-mode: screen;
@@ -161,88 +161,94 @@
   inset: 0;
 }
 .thinking-glow i {
-  --fall: var(--c), color-mix(in srgb, var(--c) 78%, transparent) 30%, color-mix(in srgb, var(--c) 34%, transparent) 62%,
-    color-mix(in srgb, var(--c) 9%, transparent) 84%, transparent;
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 160%;
+  left: -150%;
+  width: 400%;
+  height: 100%;
   opacity: 0;
-  transform-origin: 50% 62.5%;
-  background: radial-gradient(37% 25% at var(--l) var(--y), var(--fall)), radial-gradient(37% 25% at var(--r) var(--y), var(--fall));
+  background: radial-gradient(
+    50% 37% at 50% 50%,
+    var(--c),
+    color-mix(in srgb, var(--c) 78%, transparent) 30%,
+    color-mix(in srgb, var(--c) 34%, transparent) 62%,
+    color-mix(in srgb, var(--c) 9%, transparent) 84%,
+    transparent
+  );
 }
 .thinking-glow .a {
   --c: var(--glow-a);
-  --l: 34%;
-  --r: 62%;
-  --y: 62.5%;
+  top: -59%;
 }
 .thinking-glow .b {
   --c: var(--glow-b);
-  --l: 38%;
-  --r: 66%;
-  --y: 50%;
+  top: -50%;
 }
 .thinking-glow .c {
   --c: var(--glow-c);
-  --l: 36%;
-  --r: 64%;
-  --y: 37.5%;
+  top: -41%;
 }
 .thinking-glow[data-phase="gather"] .a {
   animation: glow-pool 0.6s ease-out forwards, glow-lap 1.8s ease-in-out 0.6s infinite alternate;
 }
-.thinking-glow[data-phase="bloom"] > div {
-  animation: glow-rise 1.6s forwards;
+.thinking-glow[data-phase="sweep"] > div {
+  animation: glow-fall 2.45s linear forwards;
 }
-.thinking-glow[data-phase="bloom"] .a {
-  animation: glow-bloom-a 1.6s forwards;
+.thinking-glow[data-phase="sweep"] .a {
+  animation: glow-sweep-a 2.45s forwards;
 }
-.thinking-glow[data-phase="bloom"] .b {
-  animation: glow-bloom-b 1.6s forwards;
+.thinking-glow[data-phase="sweep"] .b {
+  animation: glow-sweep-b 2.45s forwards;
 }
-.thinking-glow[data-phase="bloom"] .c {
-  animation: glow-bloom-c 1.6s forwards;
+.thinking-glow[data-phase="sweep"] .c {
+  animation: glow-sweep-c 2.45s forwards;
 }
 @keyframes glow-pool {
-  from { opacity: 0; transform: scale(0.75, 0.1); }
-  to { opacity: 0.6; transform: scale(0.9, 0.8); }
+  from { opacity: 0; transform: none; }
+  to { opacity: 0.45; transform: translateY(12%); }
 }
 @keyframes glow-lap {
-  from { opacity: 0.6; transform: scale(0.9, 0.8); }
-  to { opacity: 0.72; transform: scale(0.96, 0.9); }
+  from { opacity: 0.45; transform: translateY(12%); }
+  to { opacity: 0.58; transform: translateY(15%); }
 }
-@keyframes glow-rise {
-  0% { transform: none; animation-timing-function: ease-in; }
-  38% { transform: translateY(-8%); animation-timing-function: linear; }
-  100% { transform: translateY(-40%); }
+@keyframes glow-fall {
+  0% { transform: none; }
+  8% { transform: translateY(8%); }
+  16% { transform: translateY(20%); }
+  24% { transform: translateY(36%); }
+  41% { transform: translateY(55.5%); }
+  53% { transform: translateY(66.5%); }
+  69% { transform: translateY(79%); }
+  86% { transform: translateY(90%); }
+  100% { transform: translateY(98%); }
 }
-@keyframes glow-bloom-a {
-  0% { opacity: 0.6; transform: scale(0.9, 0.8); }
-  12% { opacity: 0.92; transform: scale(1, 0.9); }
-  25% { opacity: 0.9; }
-  38% { opacity: 0.6; transform: none; }
-  50% { opacity: 0.2; }
-  58%, 100% { opacity: 0; transform: none; }
+@keyframes glow-sweep-a {
+  0% { opacity: 0.45; transform: translateY(12%); }
+  10% { opacity: 0.9; transform: translateY(8%); }
+  25% { opacity: 0.9; transform: none; }
+  40% { opacity: 0.55; }
+  55% { opacity: 0.15; }
+  65%, 100% { opacity: 0; transform: none; }
 }
-@keyframes glow-bloom-b {
-  0% { opacity: 0; transform: scale(0.9, 0.5); }
-  12% { opacity: 0.35; }
-  25% { opacity: 0.75; }
-  38% { opacity: 1; transform: none; }
-  55% { opacity: 0.8; }
-  68% { opacity: 0.35; }
-  82%, 100% { opacity: 0; transform: none; }
+@keyframes glow-sweep-b {
+  0% { opacity: 0; }
+  8% { opacity: 0.35; }
+  18% { opacity: 0.8; }
+  28% { opacity: 1; }
+  45% { opacity: 0.95; }
+  60% { opacity: 0.7; }
+  75% { opacity: 0.4; }
+  90% { opacity: 0.12; }
+  100% { opacity: 0; }
 }
-@keyframes glow-bloom-c {
-  0% { opacity: 0; transform: scale(0.9, 0.6); }
-  25% { opacity: 0.25; }
-  38% { opacity: 0.55; transform: none; }
-  55% { opacity: 0.9; }
-  70% { opacity: 0.85; }
-  85% { opacity: 0.5; }
-  100% { opacity: 0; transform: scale(1.05); }
+@keyframes glow-sweep-c {
+  0% { opacity: 0; }
+  20% { opacity: 0.2; }
+  35% { opacity: 0.5; }
+  50% { opacity: 0.85; }
+  65% { opacity: 0.9; }
+  80% { opacity: 0.7; }
+  92% { opacity: 0.35; }
+  100% { opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .thinking-glow {
