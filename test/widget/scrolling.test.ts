@@ -425,3 +425,60 @@ test("a box that scrolls across, parked past the side of a page that cannot, doe
     await session.close();
   }
 });
+
+// Northpine's Invite people dialog: a Department button that opens a list of
+// departments in a popover over the dialog, drawn in its own layer at the end
+// of the page (fixed, and placed by a transform, as Radix places it), with a
+// search box at its top and the list scrolling under it.
+const PICKER = `<div role="dialog" aria-label="Invite people" style="position:fixed;top:60px;left:50%;transform:translateX(-50%);width:600px;padding:20px;background:#fff;border:1px solid #ccc">
+    <label for="email">Email address</label><input id="email" type="email" style="display:block;width:100%;height:32px">
+    <button id="another" type="button" style="display:block;margin:8px 0">Add another</button>
+    <button id="department" type="button" role="combobox" aria-expanded="true" aria-label="Department" style="display:block;width:300px;height:32px">Choose a department</button>
+    <div style="height:280px"></div>
+  </div>
+  <div style="position:fixed;left:0;top:0;transform:translate(220px,220px);z-index:70">
+    <div role="dialog" style="width:300px;background:#fff;border:1px solid #ccc">
+      <input id="search" placeholder="Search departments…" style="display:block;width:100%;height:36px;box-sizing:border-box">
+      <div id="list" role="listbox" style="max-height:256px;overflow-y:auto;padding:4px">
+        ${["Executive", "Engineering", "Platform", "Mobile", "Data", "Sales", "Enterprise Sales", "Sales Development", "Marketing", "Brand", "Finance", "People", "Customer Success", "Legal"]
+          .map((name) => `<div role="option" aria-selected="false" id="${name.toLowerCase().replace(/ /g, "-")}" style="height:32px;line-height:32px;padding:0 8px">${name}</div>`)
+          .join("")}
+      </div>
+    </div>
+  </div>`;
+
+test("an option scrolled out of a list in a popover over a dialog takes the ring and pointer with it, not onto the dialog's fields", async () => {
+  const session = await start(PICKER, (request, index) => (index === 0 ? point(request, "Executive", "Choose Executive.") : words("Done.")));
+  try {
+    await session.ask("invite someone to the executive department");
+    await session.untilState("pointing");
+    await session.until(async () => !!(await drawn(session)).ring, "the ring to go round Executive", 3000);
+    await session.page.waitForTimeout(300);
+    const list = await inside(session, "#list");
+
+    // The visitor scrolls the list down a little, then a lot. Executive goes up out of the list, past the search box,
+    // and lies over the Department button, then over Add another and the email field, all still in the window.
+    for (const by of [60, 160]) {
+      await session.page.evaluate((top: number) => (document.getElementById("list")!.scrollTop = top), by);
+      await session.page.waitForTimeout(300);
+      const executive = await box(session, "#executive");
+      assert.ok(executive.bottom <= list.top && executive.top >= 0, `Executive is not above the list inside the window: ${JSON.stringify(executive)}`);
+      const away = await drawn(session);
+      assert.equal(away.ring, undefined, `scrolled ${by}px, the ring is drawn over the dialog at ${JSON.stringify(away.ring)}`);
+      assert.equal(away.pointer, undefined, `scrolled ${by}px, the pointer is drawn over the dialog`);
+      assert.ok(away.caption, "the sentence went away");
+      assert.equal(away.way, "Scroll up to it");
+      assert.ok(away.caption.bottom <= list.top + 2 && away.caption.bottom >= list.top - 20, `the sentence is not just above the list: it ends at ${away.caption.bottom}, the list starts at ${list.top}`);
+    }
+
+    // Scrolled back, the ring and pointer are round Executive again, inside the list.
+    await session.page.evaluate(() => (document.getElementById("list")!.scrollTop = 0));
+    await session.until(async () => !!(await drawn(session)).ring, "the ring to come back round Executive", 3000);
+    const back = await drawn(session);
+    const executive = await box(session, "#executive");
+    assert.ok(back.ring && back.ring.top <= executive.top && back.ring.bottom >= executive.bottom, `the ring is not round Executive: ${JSON.stringify(back.ring)}`);
+    assert.ok(back.pointer, "the pointer did not come back");
+  } finally {
+    await session.close();
+  }
+});
