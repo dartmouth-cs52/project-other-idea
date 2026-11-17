@@ -850,4 +850,73 @@ test('in act mode, "Click Issue card" on the commit with do null and commits fal
   assert.deepEqual([asClick.withheld, asClick.reply.do, asClick.reply.removed], ["words", null, "click"]);
 });
 
+// What visitors read on Northpine on 17 November 2026, in nine sessions with the live server and widget. Each reply
+// below is as the server sent it. The pages are Cards and the first page of the card form, as the widget listed them.
+
+const cards: Snapshot = {
+  path: "/cards",
+  title: "Northpine",
+  headings: ["Cards"],
+  text: ["Northpine Inc.", "Every Northpine card in your company, virtual and physical. Freeze a card the moment something looks wrong."],
+  truncated: false,
+  elements: [
+    { id: "e4", role: "link", label: "Cards", icon: "credit-card", state: ["current"], href: "/cards", context: "nav" },
+    { id: "e27", role: "button", label: "Export", icon: "download", context: "main › Cards" },
+    { id: "e28", role: "link", label: "Issue card", icon: "plus", href: "/cards/new", context: "main › Cards" },
+    { id: "e29", role: "tab", label: "My cards 3", href: "/cards?view=mine", context: "tabs" },
+    { id: "e30", role: "tab", label: "All cards 311", state: ["selected"], href: "/cards?view=all", context: "tabs" },
+    { id: "e34", role: "textbox", label: "Search cards", context: "main › Cards" },
+    { id: "e35", role: "button", label: "Filter", icon: "funnel", state: ["opens a dialog", "collapsed"], context: "main › Cards" },
+    { id: "e39", role: "checkbox", label: "Select all", context: "main › Cards" },
+    { id: "e41", role: "button", label: "Cardholder", context: "main › Cards" },
+    { id: "e59", role: "link", label: "Team offsite", href: "/cards/:id", context: "main › Cards" },
+    { id: "e61", role: "button", label: "Freeze card", icon: "snowflake", state: ["shows on hover"], context: "main › Cards › row: 8774 Physical •••• 8774 Active $5.70…" },
+    { id: "e66", role: "link", label: "Malika Cummerata Paralegal", href: "/people/emp_0006b", context: "main › Cards" },
+  ],
+};
+const cardholder: Snapshot = {
+  ...cardType,
+  headings: ["Issue a card", "Cardholder"],
+  elements: [
+    { id: "e28", role: "radio", label: "For myself Avery Stone, Controller", state: ["checked"], context: "main › Cardholder" },
+    { id: "e29", role: "radio", label: "For someone else A teammate, contractor or new hire", context: "main › Cardholder" },
+    { id: "e30", role: "textbox", label: "Card name", context: "main › Cardholder" },
+    { id: "e31", role: "link", label: "Cancel", href: "/cards", context: "footer" },
+    { id: "e32", role: "button", label: "Back", state: ["disabled"], context: "footer" },
+    { id: "e33", role: "button", label: "Next", context: "footer" },
+  ],
+};
+/** The question as the visitor typed it in those sessions. */
+const asked = "Issue Malika Cummerata a virtual card called Ads with a $500 monthly limit.";
+const firstOnCards: TurnRequest = { site: actingSite.id, version: 3, mode: "act", goal: asked, step: 0, history: [], snapshot: cards };
+const onCardholder: TurnRequest = { ...actStep(cardholder, 1, 'You clicked link "Issue card". It is no longer on the page.'), goal: asked };
+
+test("the reply's own closing, written into its sentence, is taken off where the reply is read, and what the model wrote is kept beside it", async () => {
+  // The first step Haptic did, in one session of seven: the caption read "…for Malika.} ```".
+  const wrote = "Clicking Issue card at the top of the page to start a new card for Malika.} ```";
+  const sentence = "Clicking Issue card at the top of the page to start a new card for Malika.";
+  const first = use([{ streams: '{"target":"e28"', reply: act({ target: "e28", do: "click", status: "continue", say: wrote }) }], "ask");
+  const measure = await measureTurn(actingSite, firstOnCards);
+  assert.equal(first.sent.length, 1);
+  assert.deepEqual(measure.reply, { target: "e28", do: "click", enter: null, commits: false, status: "continue", say: sentence, mode: "act" });
+  assert.equal(measure.wrote, wrote);
+  assert.deepEqual(measure.broke, []);
+  // As another session's visitor read it: an opening bracket.
+  use([{ reply: act({ target: "e28", do: "click", status: "continue", say: "Clicking Issue card at the top of the Cards page to start a new card for Malika.[" }) }], "ask");
+  assert.equal((await measureTurn(actingSite, firstOnCards)).reply.say, "Clicking Issue card at the top of the Cards page to start a new card for Malika.");
+  // The step after, in the session whose caption read "Selecting For someone else so the card goes to…" (test/turn.test.ts has how that came about).
+  use([{ reply: act({ target: "e29", do: "click", status: "continue", say: `Selecting For someone else so the card goes to Malika.${"}".repeat(260)}` }) }], "ask");
+  assert.equal((await measureTurn(actingSite, onCardholder)).reply.say, "Selecting For someone else so the card goes to Malika.");
+  // A guide's step is read the same way.
+  use([{ reply: { target: "e3", status: "continue", say: 'Click FAQ in the top bar."}\n```' } }], "ask");
+  assert.equal((await measureTurn(site, request)).reply.say, "Click FAQ in the top bar.");
+
+  // A reply the model is asked about again is shown to it as the sentence it was, without the closing it wrote into it.
+  const again = use([{ reply: act({ target: null, status: "continue", say: `${skipsVirtual.say}} \`\`\`` }) }, { reply: clicksNext }], "ask");
+  const second = await measureTurn(actingSite, onCardType);
+  assert.equal(again.sent.length, 2);
+  assert.equal((JSON.parse(again.sent[1]!.messages.at(-2)!.content as string) as TurnReply).say, skipsVirtual.say);
+  assert.deepEqual(second.reply, { ...clicksNext, mode: "act" });
+});
+
 test.after(() => configure({ HAPTIC_MODEL: "mock" }));

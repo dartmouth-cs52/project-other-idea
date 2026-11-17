@@ -348,6 +348,17 @@ const SEEN: [what: string, wrote: string, shown: string][] = [
     "Open the From account # dropdown and choose 12456.  Then pick 13344 in the To account dropdown.  ✓ Amount is done.  ✓ Next up is the account choice.  ✓ Last is the Transfer button.  ✓ Go on.  ✓ Choose the account.  ✓ Thanks.  ✓ Great.  ✓ Fine.  ✓ Continue.  ✓ Okay.  ✓ Done.  ✓ Yes.  ✓ Right.  ✓ Sure.  ✓ Good.  ✓ Alright.  ✓ Ready.",
     "Open the From account # dropdown and choose 12456. Then pick 13344 in the To account dropdown. Amount is done. Next up is the account choice.",
   ],
+  [
+    // The two below were read by visitors on Northpine on 17 November 2026, on the first step Haptic did itself. The first is the server's sentence as it sent it.
+    "the reply's own closing brace and the end of a code fence",
+    "Clicking Issue card at the top of the page to start a new card for Malika.} ```",
+    "Clicking Issue card at the top of the page to start a new card for Malika.",
+  ],
+  [
+    "an opening bracket after the last full stop",
+    "Clicking Issue card at the top of the Cards page to start a new card for Malika.[",
+    "Clicking Issue card at the top of the Cards page to start a new card for Malika.",
+  ],
 ];
 
 // These were written by the same model in the same runs and were fine. Each has something in it that a careless cleanup would damage.
@@ -426,6 +437,55 @@ test("a sentence is cut at a sentence end when it is too long to show", async ()
   // Short forms with full stops in them do not count as sentence ends.
   const short = "Pick a format, e.g. the CSV one. It opens in Excel, i.e. as a spreadsheet. Then save it.";
   assert.equal(tidySay(short), short);
+});
+
+// A visitor read "Selecting For someone else so the card goes to…" on Northpine on 17 November 2026, and that step took
+// twice as long as the ones beside it. No token limit cut it: a reply that runs out of tokens is not valid JSON, and
+// the step fails with no caption at all. The server's own limit did. What the model wrote is not on record, only what
+// the server sent, and this is the shortest thing that gives it: a whole sentence, then the reply's own closing run on
+// with no space in it until the grammar let the string end. No sentence end was found in reach, since nothing but a
+// space was taken to follow one, so the sentence was cut at the last space before the limit: just before "Malika."
+const RAN_ON = `Selecting For someone else so the card goes to Malika.${"}".repeat(260)}`;
+
+test("a sentence followed by a long run of the reply's own closing is shown whole, not cut where the run starts", async () => {
+  const { tidySay } = await import("../src/server/model.ts");
+  assert.equal(tidySay(RAN_ON), "Selecting For someone else so the card goes to Malika.");
+  // The same with other things the run can be made of, and with a second reply begun inside the first.
+  for (const run of ["```".repeat(90), `"}\n\`\`\`\n${"}".repeat(260)}`, `}{"target":"e29","do":"click","enter":null,"commits":false,"status":"continue","say":"${"Selecting For someone else. ".repeat(12)}`, `]${"[]".repeat(140)}`]) {
+    assert.equal(tidySay(`Selecting For someone else so the card goes to Malika.${run}`), "Selecting For someone else so the card goes to Malika.", run.slice(0, 40));
+  }
+});
+
+test("a tail of brackets, braces or a code fence after the last sentence is taken off, whatever it is made of", async () => {
+  const { tidySay } = await import("../src/server/model.ts");
+  const sentences = [
+    "Clicking Next to go to the Review step.",
+    "Click Save to keep your changes. Then close the panel.",
+    'The page now shows the confirmation "Payment method updated."',
+    "Cliquez sur « Enregistrer ».",
+    "点击保存。",
+  ];
+  const tails = ["}", "]", "[", "{", "} ```", "}```", "```", "\n```", "\n```\n", "`", "``", '"}', '"}\n```', "”}", "}}", "} }", "}]", "]}", "[{", '{"', "<", "</", "/", "\\", "|", "(", " [", " ]", "}.", "].", "```.", "} ```json", '} ```json {"target":"e36"}', "…"];
+  for (const sentence of sentences) {
+    for (const tail of tails) {
+      assert.equal(tidySay(sentence + tail), sentence, JSON.stringify(sentence + tail));
+    }
+  }
+  // What only looks like such a tail stays: brackets and braces with their partners, code marks in pairs, and a slash that ends an address.
+  for (const kept of [
+    "Type {name} where the greeting goes.",
+    "Use {first. Last} as the format.",
+    "Click the [3] citation marker. It jumps to the reference [see the list.]",
+    "Open a terminal. `npm start` runs it.",
+    "Open a terminal and run `npm start`",
+    "Run `npm start.`",
+    "Go to /settings/",
+    "Press <Enter>",
+    "Click “Save.”",
+    "It costs more (see Billing.)",
+  ]) {
+    assert.equal(tidySay(kept), kept);
+  }
 });
 
 test("rules added in round 2 with no measured benefit are not in the instructions", () => {

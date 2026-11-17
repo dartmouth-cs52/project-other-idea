@@ -619,6 +619,16 @@ export const SAY_MAX_CHARS = 300;
 // last full stop: a line-break tag, the reply's own closing quote mark and
 // brace written with the wrong characters, a character with no width, a stray
 // word. The tests hold every kind that was seen, as it was written.
+//
+// Why the reply's own closing can be in the sentence at all: the reply's shape
+// is held by the provider's grammar, and the sentence is its last string. The
+// grammar ends that string only at a plain quote mark. A model that closes the
+// reply its own way first, with a brace, a bracket or the end of a code fence,
+// has written those inside the string, and everything it writes until the
+// quote mark comes is in the string too. Seen in visitors' sessions on 17
+// November 2026: "…to start a new card for Malika.} ```", "…for Malika.[",
+// and once a run of it long enough that the length limit then cut the sentence
+// itself, which was shown as "Selecting For someone else so the card goes to…".
 
 /** What ends a sentence. */
 const STOP = ".!?…。！？";
@@ -656,10 +666,47 @@ const OPENS: Record<string, string> = { "}": "{", "]": "[", ")": "(" };
 
 const count = (text: string, chars: string) => [...text].filter((char) => chars.includes(char)).length;
 
+/**
+ * Where the reply's own ending may start inside the sentence: straight after a sentence's stop and the marks that
+ * close with it, a brace or a square bracket that closes, a code fence, or a brace or square bracket that opens
+ * with nothing but more of the same after it or with the start of another reply ('{"target"').
+ */
+const REPLY_END = /(?<=[.!?…。！？]["'“”‘’»«)\]]*\s*)(?:[}\]]|`{3,}|[[{](?=["'“”‘’»«`[\]{}\s]*$|\s*["[{]))/gu;
+
+/**
+ * The sentence up to where the model ended the reply itself: everything from there on is the reply's closing and
+ * what was written after it, never words for the visitor. A brace or a bracket that closes one opened earlier in
+ * the sentence is part of it and stays: "Use {first. Last} as the format."
+ */
+export function withoutReplyEnd(say: string): string {
+  for (const found of say.matchAll(REPLY_END)) {
+    const before = say.slice(0, found.index);
+    const opener = OPENS[found[0]];
+    if (opener && count(before, opener) > count(before, found[0])) continue;
+    return before.trimEnd();
+  }
+  return say;
+}
+
+/**
+ * Marks that end nothing once the last sentence has stopped: an opening bracket, what is left of a tag, a slash or
+ * a bar. A code mark is one too when it has no partner or stands doubled, as what is left of a code fence does.
+ * The marks that dress words (asterisks, underscores) are not: they come in pairs, and the check takes those off.
+ */
+const STRAY_MARKS = "[{(<|\\/^#=+";
+/** The last sentence's stop and the marks that close with it, then only marks, with a stray one among them: "saved." ```", "saved.[". */
+const STRAY_TAIL = new RegExp(`^(.*[${STOP}])([^\\p{L}\\p{N}${STOP}]*)$`, "su");
+
 /** Takes off what follows the last sentence and is not part of it. */
 function withoutLeftovers(text: string): string {
   for (;;) {
     const before = (text = text.trimEnd());
+    // After the last stop come only marks, and one of them ends nothing: they go from the first such mark on.
+    const tail = STRAY_TAIL.exec(text);
+    const marks = [...(tail?.[2] ?? "")];
+    const loneTick = count(text, "`") % 2 === 1;
+    const stray = marks.findIndex((mark, at) => STRAY_MARKS.includes(mark) || (mark === "`" && (loneTick || marks[at + 1] === "`")));
+    if (tail && stray >= 0) text = (tail[1]! + marks.slice(0, stray).join("")).trimEnd();
     const last = text.at(-1) ?? "";
     const rest = text.slice(0, -1);
     // A bracket that closes nothing: most often the brace that ends the reply itself.
@@ -671,6 +718,8 @@ function withoutLeftovers(text: string): string {
     else if ("'’".includes(last) && STOP.includes(rest.at(-1) ?? " ") && !/(?:^|[\s(])['‘’]\S/.test(rest)) text = rest;
     // A comma, colon or semicolon after the last stop and any marks that close with it ends nothing: it is the reply's own JSON, written as text.
     else if (",;:".includes(last) && PROPER_END.test(rest)) text = rest;
+    // An ellipsis straight after a stop says the sentence went on when it had ended.
+    else if (last === "…" && rest.at(-1) !== "…" && PROPER_END.test(rest)) text = rest;
     else if (!PROPER_END.test(text)) {
       // The last run of characters holds a full stop with more stuck to it.
       const word = /\S+$/.exec(text)?.[0] ?? "";
@@ -724,7 +773,9 @@ export function tidySay(say: string, maxChars = SAY_MAX_CHARS): string {
     .replace(/[ \t]{2,}/g, " ")
     .replace(NO_SPACE_AFTER_STOP, "$1 ")
     .trim();
-  return capped(withoutLeftovers(prose), maxChars);
+  const shown = capped(withoutLeftovers(withoutReplyEnd(prose)), maxChars);
+  // Marks with no word or number among them are nothing to read: a code fence, a brace.
+  return /[\p{L}\p{N}]/u.test(shown) ? shown : "";
 }
 
 /** What a visitor reads when every sentence of a step had to be dropped. The pointer, if there is one, still says where to go. */
