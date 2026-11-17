@@ -70,10 +70,16 @@ export interface SiteSource {
 }
 
 export interface Appearance {
-  /** Hex color for the pointer and its highlight. */
+  /** Hex color for the pointer and its highlight. Blue unless the company changes it, so it stands out on any page. */
   accent: string;
   position: "bottom-right" | "bottom-left";
   launcherLabel: string;
+  /**
+   * Hex color for the launcher, the button people press to ask. Not set means Ink.
+   * This is the part of the widget a company matches to its own site: the launcher
+   * should look like it belongs there, and the pointer should not.
+   */
+  launcher?: string;
 }
 
 export const DEFAULT_APPEARANCE: Appearance = { accent: "#1E6EF4", position: "bottom-right", launcherLabel: "Ask" };
