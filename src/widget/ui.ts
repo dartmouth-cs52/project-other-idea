@@ -1844,7 +1844,8 @@ export class Ui {
     const size = { w: dock.width, h: dock.height };
     const captioned = !this.caption.hidden;
     const open = this.present ? openLayers(this.host, this.target) : undefined;
-    const place = (avoid: Box[]) => (open ? this.presentedCaption(rect, pad, box, pointer, open, avoid) : this.plainCaption(rect, box, avoid));
+    const place = (avoid: Box[], keepOffOpened = true) =>
+      open ? this.presentedCaption(rect, pad, box, pointer, keepOffOpened ? open : { boxes: [] }, avoid, keepOffOpened) : this.plainCaption(rect, box, avoid);
     const boxOf = (at: { left: number; top: number }): Box => ({ left: at.left, top: at.top, right: at.left + box.width, bottom: at.top + box.height });
     const onControl = (spot: Spot) => overlaps(boxAt(spot, size), rect, 8) || overlaps(boxAt(spot, size), pointer, 0);
     const usual = place([]);
@@ -1852,14 +1853,19 @@ export class Ui {
     if (!covers(this.home)) return { ...usual, spot: this.home };
     if (!covers(this.away)) return { ...usual, spot: this.away };
     if (captioned) {
-      for (const spot of [this.home, this.away]) {
-        if (onControl(spot)) continue;
-        const dockBox = boxAt(spot, size);
-        const clear = place([{ left: dockBox.left - 4, top: dockBox.top - 4, right: dockBox.right + 4, bottom: dockBox.bottom + 4 }]);
-        if (clear.free) return { ...clear, spot };
+      // First clear of the dock and of whatever the page has opened. Failing that, clear of the dock at least: Haptic's
+      // own panel over its own caption is worse than the caption over a list it has kept off till now.
+      for (const keepOffOpened of [true, false]) {
+        for (const spot of [this.home, this.away]) {
+          if (onControl(spot)) continue;
+          const dockBox = boxAt(spot, size);
+          const clear = place([{ left: dockBox.left - 4, top: dockBox.top - 4, right: dockBox.right + 4, bottom: dockBox.bottom + 4 }], keepOffOpened);
+          if (clear.free) return { ...clear, spot };
+        }
       }
     }
-    return { ...usual, spot: this.home };
+    // Nothing keeps them apart. The dock still keeps off the control and the pointer if either of its places does.
+    return { ...usual, spot: onControl(this.home) && !onControl(this.away) ? this.away : this.home };
   }
 
   /** Where the caption goes outside presentation mode: below the control, or above it when there is no room below or when something opened below. */
@@ -1893,7 +1899,15 @@ export class Ui {
    * Above comes first because what a control opens, a list, a menu or a
    * calendar, opens below it, and in a form the next field is below it too.
    */
-  private presentedCaption(rect: DOMRect, pad: number, box: DOMRect, pointer: Box, open: { boxes: Box[]; around?: Box }, more: Box[] = []): { left: number; top: number; free: boolean } {
+  private presentedCaption(
+    rect: DOMRect,
+    pad: number,
+    box: DOMRect,
+    pointer: Box,
+    open: { boxes: Box[]; around?: Box },
+    more: Box[] = [],
+    keepOffOpened = true,
+  ): { left: number; top: number; free: boolean } {
     const gap = 14;
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -1918,7 +1932,7 @@ export class Ui {
       );
     }
     const fits = (place: { left: number; top: number }) => place.left >= 12 && place.top >= 12 && place.left + box.width <= width - 12 && place.top + box.height <= height - 12;
-    const avoid = [ring, pointer, ...this.captionAvoid, ...open.boxes, ...more];
+    const avoid = [ring, pointer, ...(keepOffOpened ? this.captionAvoid : []), ...open.boxes, ...more];
     const free = (place: { left: number; top: number }) =>
       !avoid.some((other) => overlaps({ left: place.left, top: place.top, right: place.left + box.width, bottom: place.top + box.height }, other, 0));
     const clear = places.find((place) => fits(place) && free(place));

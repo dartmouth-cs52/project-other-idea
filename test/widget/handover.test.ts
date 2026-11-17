@@ -79,10 +79,15 @@ const CARD = (space: number) => `<style>
 const typing = (request: Asked, label: string, enter: string): TurnReply => ({ target: idOf(request, label), do: "type", enter, commits: false, status: "continue", say: `Typing ${enter} in ${label}.`, mode: "act" });
 
 /** Runs the form to its hand-over in a window of this size, keeping every frame from the moment the hand-over is on its way, and gives the frames back a second after it. */
-async function toHandOver(size: { width: number; height: number }, present: boolean, space: number): Promise<{ session: Session; frames: Frame[]; before: Box }> {
+async function toHandOver(
+  size: { width: number; height: number },
+  present: boolean,
+  space: number,
+  page: { body?: string; then?: string } = {},
+): Promise<{ session: Session; frames: Frame[]; before: Box }> {
   let before: Box = [0, 0, 0, 0];
   const session: Session = await start(
-    CARD(space),
+    page.body ?? CARD(space),
     async (request, index) => {
       if (index === 0) return typing(request, "Cardholder", "Malika");
       if (index === 1) return typing(request, "Card name", "Ads");
@@ -90,6 +95,7 @@ async function toHandOver(size: { width: number; height: number }, present: bool
       if (index === 3) return typing(request, "Purpose", "marketing");
       if (index === 4) {
         await session.page.evaluate(RECORD);
+        if (page.then) await session.page.evaluate(page.then);
         // Where the button is as the hand-over is sent, before the widget has it.
         before = (await session.page.evaluate(`(() => { const r = document.getElementById('issue').getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); })()`)) as Box;
         return { target: idOf(request, "Issue card"), do: null, commits: true, status: "done", say: READY, mode: "act" };
@@ -183,6 +189,46 @@ test("in a short window the button is brought into view before the hand-over, th
     });
     assert.ok(small.top >= 0 && small.bottom <= 420, `What I did does not fit a window 420 px high: ${JSON.stringify(small)}`);
     assert.deepEqual([small.scrolls, small.overflow], [true, "auto"]);
+  } finally {
+    await session.close();
+  }
+});
+
+/**
+ * The card form beside a sidebar pinned to the window's left, with links all the way down it as Northpine's has: the
+ * launcher's other corner is beside the sidebar, where a caption as wide as presentation mode's reaches it too.
+ */
+const WITH_SIDEBAR = (space: number) =>
+  CARD(space)
+    .replace("main { width: 1160px }", "main { width: 590px; margin-left: 260px } nav a { display: block; width: 216px; padding: 8px; color: #fff }")
+    .replace(
+      "<main>",
+      `<nav style="position:fixed;left:0;top:0;bottom:0;width:240px;background:#123;padding:12px;box-sizing:border-box">
+        <div style="position:absolute;left:12px;top:12px;bottom:12px;display:flex;flex-direction:column;justify-content:space-between">
+        ${["Home", "Cards", "Expenses", "Reimbursements", "Approvals", "Bills", "Vendors", "Accounting", "Reports", "Budgets", "Policies", "People", "Settings", "Help center", "API docs", "Collapse sidebar"].map((name) => `<a href="#${name.toLowerCase().replace(/ /g, "-")}">${name}</a>`).join("")}</div></nav><main>`,
+    );
+
+/** A while after the hand-over is sent, the page draws a box of its own across where the caption first goes, as a page finishing its own drawing does. */
+const COMES_UP = `setTimeout(() => {
+  const issue = document.getElementById('issue').getBoundingClientRect();
+  const box = Object.assign(document.createElement('div'), { id: 'late' });
+  box.style.cssText = 'position:absolute;left:260px;right:0;height:150px;background:#eef2ff;top:' + Math.round(issue.top + scrollY - 190) + 'px';
+  document.body.append(box);
+}, 300)`;
+
+test("in a short window beside a sidebar, when the page draws over the caption's first place, the caption moves, and What I did never covers it", async () => {
+  const { session, frames } = await toHandOver({ width: 1280, height: 720 }, true, -70, { body: WITH_SIDEBAR(-70), then: COMES_UP });
+  try {
+    assert.equal(await session.page.evaluate(() => !!document.getElementById("late")), true, "the page did not draw its box");
+    const shown = ofHandOver(frames);
+    assert.ok(shown.length > 20, `only ${shown.length} frames of the hand-over were kept`);
+    // Once the page's box has come up and the caption has had time to move off it.
+    const settled = shown.slice(Math.round(shown.length * 0.6));
+    for (const [at, frame] of settled.entries()) {
+      assert.ok(frame.caption && frame.panel && !overlap(frame.panel, frame.caption), `frame ${at}: What I did covers the caption: ${JSON.stringify(frame)}`);
+      assert.ok(!overlap(frame.caption!, frame.issue) && !overlap(frame.panel!, frame.issue), `frame ${at}: the button is covered: ${JSON.stringify(frame)}`);
+    }
+    assert.equal(await session.pointed(), "issue");
   } finally {
     await session.close();
   }
