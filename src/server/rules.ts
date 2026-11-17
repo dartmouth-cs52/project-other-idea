@@ -372,6 +372,17 @@ const CALL_JUST_BEFORE = new RegExp(
  */
 const OTHER_SENSES = /\b(?:tel(?:le)?s?\s+que|(?:api|webhook|function|method|rpc|sdk|ajax|http|tool)\s+call(?:s|ing|ed)?|llamad[oa]s?(?=\s+\d)|chiamat[oa](?=\s+\d)|appel\s+d['’]offres?|tel\s+(?=de\s+rijen)|rufen\s+sie(?=(?:(?!rufen\b)[^.!?]){0,80}\bauf\b))/giu;
 /**
+ * "Called" where it means "named": straight before a name, which has a capital, with or without quote marks. Asked
+ * for "a virtual card called Ads with a $500 monthly limit", a step that says "The card called Ads now has a 500.00
+ * monthly limit, so I'm clicking Next" is not telling anyone to ring 500.00, and it lost its words to that reading.
+ * It is blanked like the other senses above. Not before a day, a month, or a word that goes with ringing ("called
+ * Monday to Friday on", "called Free on"): that is when or how to ring. The capital has to be one, so this is read
+ * apart from the senses above, which are read in any case.
+ */
+const CALLED_A_NAME =
+  /\b[Cc]alled(?=\s+["“'‘]?(?!(?:Mon|Tues?|Wed|Thur?s?|Fri|Sat|Sun|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sept?|Oct|Nov|Dec|Today|Tomorrow|Tonight|Now|Free|Toll|Direct|Back|Anytime|Us|Me|On|At)\p{L}*(?![\p{L}\p{N}]))\p{Lu})/gu;
+
+/**
  * Words for getting hold of someone that are too common to count alone: with
  * one, a number has to be written in groups, the way one to dial is. "Number"
  * and "line" are not here: they sit beside every order and invoice. So
@@ -473,7 +484,7 @@ const UNIT_AFTER =
   /^\s*(?:ms|s|secs?|seconds?|mins?|minutes?|hours?|hrs?|h|days?|weeks?|months?|years?|rows?|records?|items?|messages?|mensajes|nachrichten|characters?|caracteres|zeichen|chars?|tokens?|calls?|llamadas|anrufe|requests?|events?|subscribers?|contacts?|contactos|users?|usuarios|people|recipients?|credits?|units?|per\s+(?:hour|day|week|month|year|minute|second|request|user|file|call|page)|a\s+(?:day|week|month|year)|kb|mb|gb|tb|bytes?|sms|mms|%|x|times|minutos|segundos|horas|minuten|sekunden|stunden|minuti|secondi|ore|secondes?|heures?)(?![\p{L}\p{N}])/iu;
 
 function hasPhone(folded: string): boolean {
-  const said = folded.replace(OTHER_SENSES, " ~ ");
+  const said = folded.replace(OTHER_SENSES, " ~ ").replace(CALLED_A_NAME, " ~ ");
   if (hasInternational(said) || THREE_THREE_FOUR.test(said) || hasShortCode(said)) return true;
   const called = CALL.test(said);
   const asked = called || REACH.test(said);

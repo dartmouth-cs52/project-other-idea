@@ -890,6 +890,7 @@ const cardholder: Snapshot = {
 const asked = "Issue Malika Cummerata a virtual card called Ads with a $500 monthly limit.";
 const firstOnCards: TurnRequest = { site: actingSite.id, version: 3, mode: "act", goal: asked, step: 0, history: [], snapshot: cards };
 const onCardholder: TurnRequest = { ...actStep(cardholder, 1, 'You clicked link "Issue card". It is no longer on the page.'), goal: asked };
+const onLimitsSet: TurnRequest = { ...step8, goal: asked };
 
 test("the reply's own closing, written into its sentence, is taken off where the reply is read, and what the model wrote is kept beside it", async () => {
   // The first step Haptic did, in one session of seven: the caption read "…for Malika.} ```".
@@ -917,6 +918,32 @@ test("the reply's own closing, written into its sentence, is taken off where the
   assert.equal(again.sent.length, 2);
   assert.equal((JSON.parse(again.sent[1]!.messages.at(-2)!.content as string) as TurnReply).say, skipsVirtual.say);
   assert.deepEqual(second.reply, { ...clicksNext, mode: "act" });
+});
+
+test("the visitor's own word for a card's name, \"called\", before an amount is not an instruction to ring it, and the step keeps its words", async () => {
+  const { checkSay } = await import("../src/server/rules.ts");
+  // The step that clicks Next to reach Review read "This is the one to use." in one session: the server's sentence for a
+  // step whose own words all broke a rule. What the model wrote there is not on record. Of the sentences that step can
+  // carry, built from the visitor's question and what the page shows, these are the ones the rules emptied.
+  const wrote = "The card called Ads now has a 500.00 monthly limit, so I'm clicking Next to go to Review.";
+  for (const say of [wrote, "The card called Ads has a limit of 500.00.", 'The card called "Ads" has a 50000 monthly limit.']) assert.deepEqual(checkSay(say), { say, broke: [] });
+  use([{ reply: act({ target: "e36", do: "click", status: "continue", say: wrote }) }], "ask");
+  const measure = await measureTurn(actingSite, onLimitsSet);
+  assert.deepEqual(measure.reply, { target: "e36", do: "click", enter: null, commits: false, status: "continue", say: wrote, mode: "act" });
+  assert.deepEqual(measure.broke, []);
+  // A number to ring is still one, with that word and without it.
+  for (const say of [
+    "The card called Ads is blocked: call 0800123456.",
+    "Ring 87070 about the card called Ads.",
+    "It is called Ads. Call 87070 to activate it.",
+    "The fraud desk can be called on 87070.",
+    "Our desk can be called Monday to Friday on 87070.",
+    "The team can be called Free on 87070.",
+    "The helpline called Care is on 87070.",
+    "They called 87070 for you.",
+  ]) {
+    assert.deepEqual(checkSay(say), { say: "", broke: ["phone"] }, say);
+  }
 });
 
 test.after(() => configure({ HAPTIC_MODEL: "mock" }));
