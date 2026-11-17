@@ -2,6 +2,10 @@
 // still works against the current UI. It doesn't involve Haptic: it only
 // proves the tasks are playable, so a failed run means a task or a page broke.
 //
+// With WITH_HAPTIC=1 the widget stays on, so the walk is a visit like any
+// other: the widget learns the pages and menus it sees, which is the
+// quickest way to teach a local Haptic server the whole app.
+//
 //   npm run dev                       # in another terminal
 //   npm run tasks:replay              # every task
 //   npm run tasks:replay -- cards     # tasks whose id contains "cards"
@@ -50,18 +54,21 @@ for (const task of tasks) {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   const url = new URL(task.start, BASE);
-  const lab = { widget: "0", latency: "none", role: "admin", plan: "growth", nav: "classic", locale: "en", ...task.lab };
+  const withHaptic = process.env.WITH_HAPTIC === "1";
+  // The widget sends a page once it has been still for a moment, so with it on each page is given time to.
+  const dwell = withHaptic ? 2000 : 0;
+  const lab = { widget: withHaptic ? "1" : "0", latency: "none", role: "admin", plan: "growth", nav: "classic", locale: "en", ...task.lab };
   for (const [k, v] of Object.entries(lab)) url.searchParams.set(`lab.${k}`, String(v));
   let ok = true;
   try {
     await page.goto(url.toString(), { waitUntil: "load" });
     await page.waitForSelector("h1", { timeout: 20000 });
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(Math.max(500, dwell));
     for (const [i, step] of task.steps.entries()) {
       if (!step.act) continue;
       try {
         await perform(page, step.act);
-        await page.waitForTimeout(250);
+        await page.waitForTimeout(Math.max(250, dwell));
       } catch (e) {
         ok = false;
         console.log(`FAIL ${task.id} step ${i + 1}: ${(e as Error).message.split("\n")[0]}`);

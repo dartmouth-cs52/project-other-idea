@@ -209,14 +209,15 @@ test("the page's words that repeat what a field holds are not sent as page text"
   assert.deepEqual(snapshot.text, ["Card name", "Amount", "Preview", "Cards are issued at once."]);
 });
 
-test("a heading and a dialog's title that say what a field holds are still sent: a form that edits a record holds its name", { skip }, async () => {
+test("a heading and a dialog's title that say what a field holds have it left out too: what a field holds may be typed, even in a form that edits a record", { skip }, async () => {
+  // A form that edits a record holds its name, and its heading says it too. Nothing tells a name the page put in the field
+  // from one the visitor typed there, so the heading and the title are sent with it left out, and the rest of their words kept.
   const snapshot = await read(`<main><h1>Team offsite</h1><label for="nick">Nickname</label><input id="nick" value="Team offsite"><p>Team offsite</p></main>
     <div role="dialog" aria-modal="true" aria-labelledby="t" style="position:fixed;inset:0;background:white"><h2 id="t">Cancel Team offsite?</h2><button>Cancel card</button></div>`);
-  assert.equal(snapshot.dialog, "Cancel Team offsite?");
-  assert.deepEqual(lines(snapshot), ['button "Cancel card" [dialog › Cancel Team offsite?]']);
-  assert.deepEqual(snapshot.headings, ["Team offsite", "Cancel Team offsite?"]);
-  // A piece of page text that says it is left out, as the visitor may have typed it.
-  assert.ok(!snapshot.text.includes("Team offsite"), JSON.stringify(snapshot.text));
+  assert.equal(snapshot.dialog, "Cancel [typed]?");
+  assert.deepEqual(lines(snapshot), ['button "Cancel card" [dialog › Cancel [typed]?]']);
+  assert.deepEqual(snapshot.headings, ["[typed]", "Cancel [typed]?"]);
+  assert.ok(!JSON.stringify(snapshot).includes("Team offsite"), JSON.stringify(snapshot));
 });
 
 test("a value of fewer than three characters is too common to leave out the words that hold it", { skip }, async () => {

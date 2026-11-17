@@ -31,6 +31,13 @@ export default function Privacy() {
         things. We do not sign in to anything and we do not send forms.
       </p>
       <p>
+        If you ask us to email the install steps to your developer, we send them one email through Resend, from
+        install@joinhaptic.com, with your email address so they can reply to you. Resend gets their address
+        and the email, and nothing else. We do not keep their address. So that no address gets more than a few of
+        these emails, and no one can keep trying to send them, we keep a scrambled form of it with the site, your company, who sent it and when, and delete
+        that record once it is a day old, always within two days.
+      </p>
+      <p>
         Haptic runs on this website too, so you can try it. If you ask it something here, it works as the next part
         of this page describes, and we are the company that sees your questions.
       </p>
@@ -44,22 +51,29 @@ export default function Privacy() {
         changed on the page.
       </p>
       <p>
-        Haptic does not read what people type into fields, or anything inside an area the page marks as one they
-        write in, and it takes no pictures of the page. Two kinds of page can still show it typed words. A product may
-        show what someone typed somewhere else, such as in a preview, a confirmation or the page title, and Haptic
-        reads it there. And some code editors draw what is typed as ordinary text beside a hidden field, which Haptic
-        cannot tell from the rest of the page.
+        Haptic does not send what people type into fields, or anything inside an area the page marks as one they
+        write in, and it takes no pictures of the page. It looks at what fields hold only inside the browser, to leave
+        it out wherever the page repeats it while it is there, in the page&apos;s text, headings, title, buttons, links
+        and lists. The one exception is words a person also wrote in their question to Haptic. The question is sent as
+        they wrote it, so where the page repeats those same words, as a list of search results does with a name they
+        asked about, Haptic can read them. Three kinds of page can still show it typed words. A product may show what someone typed on a later
+        page, such as in a confirmation, and Haptic reads it there. A page may write a search into an address, its own or a
+        link&apos;s, which Haptic sends with ids and numbers masked. And some code editors draw what is typed as
+        ordinary text beside a hidden field, which Haptic cannot tell from the rest of the page.
       </p>
       <p>
         Before anything leaves the browser, in what it reads, in the page&apos;s address and in the question itself,
         Haptic masks anything that looks like an email address, any run of five or more digits, such as an account or
         order number, and any eight or more digits written in groups with spaces, dashes, dots or brackets between
         them, such as a phone or card number. Digits that follow straight after a letter, like the model number I9100,
-        count as part of that word. Our server masks the same again.
+        count as part of that word, unless more of a number follows them, as in SSN123-45-6789: then the whole
+        number is masked. Our server masks the same again before it stores anything.
       </p>
       <p>
-        Haptic does not mask dates written in figures, such as 07.03.1984 or 2026-11-16. Questions like &ldquo;my
-        latest invoice&rdquo; need them, and a date says no more about a person than the names a page already shows.
+        Haptic does not mask real dates written in figures, such as 07.03.1984 or 2026-11-16, with a month from 1 to
+        12 and a day from 1 to 31. Digits written like a date that is not one, such as 12.34.5678, are masked.
+        Questions like &ldquo;my latest invoice&rdquo; need dates, and a date says no more about a person than the
+        names a page already shows.
         But a date on the page can be a date of birth, and it is read and sent like any other text. Nor does Haptic
         mask shorter numbers, such as prices and quantities, or names and other words, so text that shows on the page
         can still hold personal details.
@@ -110,7 +124,8 @@ export default function Privacy() {
         page of the product it loads on, once per page in each browser tab, whether or not anyone asks it anything.
         The outline is the page&apos;s title and headings, the names of its links and buttons, and where each link
         leads. When a click leads straight to another page, it also sends the name of what was clicked and where it
-        led. It never includes what people type, what is inside a table&apos;s cells, or the rest of the text on the
+        led. When someone opens a menu, a tab or a section that unfolds, it sends the names of what appeared, with the
+        name of what opened it. Nothing a text box suggests is sent. It never includes what people type, what is inside a table&apos;s cells, or the rest of the text on the
         page. A name that holds anything that looks like an email address, a phone number or a long number is left
         out whole.
       </p>
@@ -157,7 +172,8 @@ export default function Privacy() {
       </p>
       <p>
         Progress through a guide, and which pages have been outlined, is kept in the browser for that tab, and is
-        cleared when the tab closes. The random id stays in the browser until its storage for that product is cleared.
+        cleared when the tab closes. The random id stays in the browser until its storage for that product is cleared, and so
+        does a note that you put the launcher away, if you did. That note is never sent to us.
       </p>
 
       <h2>Contact</h2>

@@ -1,9 +1,9 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, normalize } from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { buildWidget, WIDGET_FILE } from "../widget/build.ts";
+import { ACTING_FILE, buildWidget, WIDGET_FILE } from "../widget/build.ts";
 import { createApp } from "./app.ts";
 import { describeAlert, MemoryBudget } from "./budget.ts";
 import { Store } from "./db.ts";
@@ -41,6 +41,25 @@ function overLimit(key: string): boolean {
 const threshold = labelThreshold(process.env);
 const store = process.env.DATABASE_URL ? new Store(process.env.DATABASE_URL, threshold) : undefined;
 const learned = new MemoryLearned();
+// Without a database, what was learned is kept in data/learned.json, so a restart doesn't forget the site.
+const LEARNED_FILE = fileURLToPath(new URL("../../data/learned.json", import.meta.url));
+let saving: ReturnType<typeof setTimeout> | undefined;
+if (!store) {
+  try {
+    learned.restore(JSON.parse(await readFile(LEARNED_FILE, "utf8")));
+  } catch {
+    // Nothing learned yet, or a file from an older version. Learning starts again.
+  }
+}
+function learn(siteId: string, visitor: string, outline: Parameters<MemoryLearned["record"]>[2]) {
+  learned.record(siteId, visitor, outline);
+  clearTimeout(saving);
+  saving = setTimeout(() => {
+    mkdir(fileURLToPath(new URL("../../data/", import.meta.url)), { recursive: true })
+      .then(() => writeFile(LEARNED_FILE, JSON.stringify(learned.save())))
+      .catch((error) => console.warn("Couldn't keep what was learned:", error instanceof Error ? error.message : error));
+  }, 1000);
+}
 // Teach sessions are in Neon when there is one, where the dashboard makes them. Otherwise in memory, for trying teach
 // mode on this machine without the dashboard: GET /dev/teach?site=…&question=… makes one and answers with its token,
 // and GET /dev/teach/steps?token=… shows what the tab sent. Only when NODE_ENV is not production.
@@ -51,9 +70,10 @@ const app = createApp({
     const fromStore = await store?.loadSite(id);
     if (fromStore) return fromStore;
     const site = await loadSite(id);
-    return site && withLearned(site, learned.labels(id), threshold);
+    return site && withLearned(site, learned.labels(id), threshold, learned.openings(id));
   },
   widget: () => readFile(WIDGET_FILE, "utf8"),
+  widgetActing: () => readFile(ACTING_FILE, "utf8"),
   widgetMaxAge: process.env.NODE_ENV === "production" ? 300 : 0,
   overLimit,
   teach,
@@ -66,7 +86,7 @@ const app = createApp({
     void store?.recordStep(request, measure, origin);
   },
   onCancel: (request) => void store?.cancelStep(request),
-  onOutline: (site, visitor, outline) => (store ? void store.recordOutline(site, visitor, outline) : learned.record(site.id, visitor, outline)),
+  onOutline: (site, visitor, outline) => (store ? void store.recordOutline(site, visitor, outline) : learn(site.id, visitor, outline)),
   onSeen: (site, origin, allowed) => void store?.seenAt(site, origin, allowed),
   onAsk: (request, _site, origin) => void store?.startGuide(request, origin),
   onReport: (site, guide, report) => void store?.report(site, guide, report),
@@ -140,5 +160,6 @@ function json(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
-console.log(`Built the widget (${((await buildWidget()) / 1024).toFixed(1)} KB)`);
+const sizes = await buildWidget();
+console.log(`Built the widget (${(sizes.widget / 1024).toFixed(1)} KB, and ${(sizes.acting / 1024).toFixed(1)} KB for acting)`);
 server.listen(PORT, () => console.log(`Haptic is running on http://localhost:${PORT} with model ${SETTINGS.model}. Demo: http://localhost:${PORT}/demo/`));

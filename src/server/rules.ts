@@ -632,6 +632,11 @@ const PROPER_END = new RegExp(`[${STOP}]["'”’»«)\\]]*$`);
 const BREAK_TAG = /<\/?(?:br|p|div)\s*\/?>/gi;
 /** Tags that only dress the words between them. */
 const DRESS_TAG = /<\/?(?:b|i|em|strong|u|code|span)\s*\/?>/gi;
+/**
+ * A tag named after a field of the reply itself ("enter" is left out: "<Enter>" is a key). Seen on Northpine's staging
+ * on 16 November, shown to the visitor: "…then open it to add the receipt.</say>".
+ */
+const FIELD_TAG = /<\/?(?:say|target|status|reply)\s*\/?>/gi;
 /** Characters that take no room and mean nothing here. */
 const NO_WIDTH = /[\u200B\u2060\uFEFF]/g;
 /** The two joiners are part of how some languages are written, but only between letters, never beside a space or at an end. */
@@ -711,6 +716,7 @@ export function tidySay(say: string, maxChars = SAY_MAX_CHARS): string {
   const prose = say
     .replace(BREAK_TAG, " ")
     .replace(DRESS_TAG, "")
+    .replace(FIELD_TAG, "")
     .replace(NO_WIDTH, "")
     .replace(LOOSE_JOINER, "")
     .replace(SIGN_AFTER_STOP, " ")
@@ -722,6 +728,30 @@ export function tidySay(say: string, maxChars = SAY_MAX_CHARS): string {
 }
 
 /** What a visitor reads when every sentence of a step had to be dropped. The pointer, if there is one, still says where to go. */
+/**
+ * The widget's own words for a visitor who used another control, or went to another page, in place of the step they
+ * were shown: 'The user clicked "Team" instead of link "Billing".', 'The user went to /team without using link "Billing".'
+ */
+const USED_SOMETHING_ELSE = /\binstead of\b|\bwent to \S+ without using\b/;
+
+/**
+ * A step's sentence without the opening "Not that one.", unless the visitor did use something other than the step
+ * they were shown, which `event`, what the widget heard them do, says in the words above.
+ *
+ * That opening is for a wrong click or a wrong turn, as the instructions have it. Written to a visitor who used the
+ * very control pointed at, it blames them for the model's own wrong pointer. On Northpine's Bills the model pointed at
+ * the Vendor column's button, the visitor clicked it, and the next step read "Not that one. Click the Vendor filter
+ * dropdown above the table…". In the measurement of 16 November it was said 3 times in 596 steps, and all 3
+ * were to a visitor who had done the step shown. It is as wrong for one who closed a dialog without using the control
+ * in it: there was no other one. The step that follows the opening is the right one, so only the opening goes.
+ */
+export function withoutBlame(say: string, event: string | undefined): string {
+  if (USED_SOMETHING_ELSE.test(event ?? "")) return say;
+  const rest = say.replace(/^\s*not that one\s*[.!,:;]?\s*/i, "");
+  if (!rest || rest === say) return say;
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
 export const SAY_WITHOUT_WORDS = {
   pointing: "This is the one to use.",
   nothing: "I can't help with that one.",

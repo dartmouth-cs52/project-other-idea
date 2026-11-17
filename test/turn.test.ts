@@ -184,6 +184,10 @@ test("what the visitor reads is tidied, whatever the model wrote", async () => {
   assert.equal(tidySay("Type your last name.\n\n"), "Type your last name.");
   assert.equal(tidySay("Click Component to switch the kind.</br>"), "Click Component to switch the kind.");
   assert.equal(tidySay("  Click Save.\n}\n"), "Click Save.");
+  // The reply's own field as a tag (Northpine, staging, 16 November). A key in angle brackets is not one.
+  assert.equal(tidySay("Type Skyline Air to find it, then open it to add the receipt.</say>"), "Type Skyline Air to find it, then open it to add the receipt.");
+  assert.equal(tidySay("<say>Click Save.</say>"), "Click Save.");
+  assert.equal(tidySay("Press <Enter> to search."), "Press <Enter> to search.");
   // A digit stuck to the last full stop, as the model wrote once on staging. A number of its own stays.
   assert.equal(tidySay("Type your teammate's email address in the Email address field.2"), "Type your teammate's email address in the Email address field.");
   assert.equal(tidySay("See section 4.2"), "See section 4.2");

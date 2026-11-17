@@ -28,6 +28,7 @@ function makeApp(limit = false, extra: Partial<AppParts> = {}, sites: SiteContex
   const app = createApp({
     loadSite: async (id) => sites.find((known) => known.id === id),
     widget: async () => "/* widget */",
+    widgetActing: async () => "/* acting */",
     widgetMaxAge: 300,
     overLimit: () => limit,
     onTurn: (request) => void turns.push(request.goal),
@@ -53,6 +54,14 @@ test("the widget file is served as a script that browsers may keep for a while",
   assert.match(response?.headers.get("Content-Type") ?? "", /javascript/);
   assert.equal(response?.headers.get("Cache-Control"), "public, max-age=300");
   assert.equal(await response?.text(), "/* widget */");
+});
+
+test("the code that acts is served beside the widget, from the same host, kept as long", async () => {
+  const response = await makeApp().app(new Request("https://widget.test/widget-act.js?v=0123456789ab"), "1.1.1.1");
+  assert.equal(response?.status, 200);
+  assert.match(response?.headers.get("Content-Type") ?? "", /javascript/);
+  assert.equal(response?.headers.get("Cache-Control"), "public, max-age=300");
+  assert.equal(await response?.text(), "/* acting */");
 });
 
 test("a site's settings go only to the origins it lists", async () => {
@@ -476,4 +485,23 @@ test("each step is counted for the server's log with nothing from the visitor or
   assert.equal(oddRole?.role, "other");
   assert.deepEqual([handover?.do, handover?.commits, handover?.handover], ["none", true, true]);
   assert.deepEqual([capped?.capped, capped?.model, capped?.withheld], [true, "none", "cap"]);
+});
+
+test("a step the server pointed at itself, because the sentence named the control, is counted as that in the log", () => {
+  const request = parseTurn(JSON.parse(stepBody({ step: 2, event: 'The user clicked link "Team".' })))!;
+  const measure = (recheck?: { named: string; asked: boolean; verdict?: "point" | "aside" | "ask"; pointed?: true }) => ({
+    reply: { target: "e1", status: "continue" as const, say: "Click Team." },
+    model: "claude-test",
+    ms: 1,
+    msToTarget: 1,
+    cited: [],
+    wrote: "",
+    broke: [],
+    usd: 0,
+    ...(recheck ? { recheck } : {}),
+  });
+  assert.equal(turnCounts(request, measure()).recheck, "none");
+  assert.equal(turnCounts(request, measure({ named: "e1", asked: false, verdict: "point", pointed: true })).recheck, "pointed");
+  assert.equal(turnCounts(request, measure({ named: "e1", asked: true, verdict: "ask" })).recheck, "asked");
+  assert.equal(turnCounts(request, measure({ named: "e1", asked: false, verdict: "aside" })).recheck, "logged");
 });

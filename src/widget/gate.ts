@@ -1,5 +1,6 @@
-import { ASKED_CLASSES, checkAction, CLASS_DOES, classAsked, fold, grounded, isDismissName, isForwardName, isSearchName, isSecretField, isTypeToConfirm, namesADay, opensByName, readName, type CommitClass } from "../shared/act-rules.ts";
+import { ASKED_CLASSES, checkAction, CLASS_DOES, classAsked, fold, grounded, isDismissName, isForwardName, isSearchName, isSecretField, isTypeToConfirm, namesADay, opensAFormPage, opensByName, readAddress, readName, type CommitClass } from "../shared/act-rules.ts";
 import { actingAllowedAt, actionsAllowed, ACTING_LIMITS, describeElement, type Act, type ActingSettings, type Refusal, type SnapElement, type Snapshot, type TurnReply } from "../shared/types.ts";
+import { SAYS } from "./says.ts";
 import { currentPath, findOpenModal } from "./snapshot.ts";
 
 // The DOM half of acting's safety gate (DESIGN section 4). It decides, on the
@@ -17,15 +18,23 @@ import { currentPath, findOpenModal } from "./snapshot.ts";
 //  2. Fields never typed into: passwords, payment details, codes, secrets,
 //     files, "type DELETE to confirm".
 //  3. Leaving: another origin, another tab, a download, a non-web address.
+//     A "javascript:" address is a script on this page, judged as a button.
 //  4. Writes the page declares: a native submit, `data-method`, `hx-post`, ...
 //  5. A confirmation dialog is open: acting stops.
-//  6. Commit words, by class (act-rules.ts).
+//  6. Commit words, by class (act-rules.ts), on links as on buttons, and
+//     the words of a link's address: "/expenses/7/approve" approves. One
+//     exception: a visit to a page that plainly holds a form ("/cards/new",
+//     `visitsAFormPage`) is stopped by its words only as a choice is, since
+//     "Issue card" there names what the form will do.
 //  7. Destructive styling: red, or a toolkit's danger class.
-//  8. Safe by what it is: a same-origin link, a control that opens something,
+//  8. Safe by what it is: a link that visits another page of the site
+//     (`visitsAnotherPage`), pressed with the tripwire armed, a control that opens something,
 //     a tab, a choice in a list Haptic opened or the visitor opened from a
 //     field, a staged field, Enter in a search box. Also a button outside any
 //     form whose name says it opens something ("Edit limits", "New budget"),
-//     pressed with the tripwire armed.
+//     pressed with the tripwire armed. Any other link ("#", "javascript:",
+//     role="link", one a script answers) is judged as a button, and pressed
+//     with the tripwire armed.
 //  9. Safe by its words: "Next", "Back", "Cancel", ...
 // 10. Anything else is not acted on.
 
@@ -70,7 +79,7 @@ export interface GateConfig {
 
 /**
  * How the engine should treat a control it may act on:
- * - "link": a same-origin link, pressed to navigate.
+ * - "link": a link that visits another page of the site (`visitsAnotherPage`), pressed to navigate.
  * - "button": a button or menu entry, pressed.
  * - "tab": a tab, pressed.
  * - "option": an option, menu entry or tree item in a list Haptic opened, pressed.
@@ -156,32 +165,8 @@ export interface Tripwire {
   armed: number;
 }
 
-/** The widget's own sentences while acting. English in this version. `name` is the control as the visitor sees it. */
-export const SAYS = {
-  secret: "I don't type passwords, payment details or confirmations. Fill this in and I'll carry on.",
-  leaves: (name: string) => `This opens somewhere else, so I'll leave it to you. Click ${name} and I'll carry on.`,
-  unknown: (name: string) => `I can't tell what ${name} does, so I'll leave it to you. Click it and I'll carry on.`,
-  commits: (name: string, does: string) => `I'll leave ${name} to you: it ${does}. Click it and I'll carry on.`,
-  writes: (name: string) => `I'll leave ${name} to you: it sends something to the site. Click it and I'll carry on.`,
-  styled: (name: string) => `I'll leave ${name} to you: the page marks it as dangerous. Click it and I'll carry on.`,
-  live: (name: string) => `This may save as soon as it changes, so I'll leave it to you. Set ${name} and I'll carry on.`,
-  ungrounded: "You'll need to fill this one in: I only enter what you told me.",
-  covered: (name: string) => `Something is in the way, so I'll leave this one to you. Click ${name} and I'll carry on.`,
-  off: (name: string) => `I'll leave this one to you. Use ${name} and I'll carry on.`,
-  unfit: (name: string) => `I can't do this one myself. Use ${name} and I'll carry on.`,
-  date: (name: string) => `I don't pick dates yet, so I'll leave this one to you. Pick ${name} and I'll carry on.`,
-  confirmation: "The page is asking you to confirm. Read it and choose.",
-  class: (name: string, does: string) => `I stopped before ${name}: it ${does}, and you didn't ask for that.`,
-  cap: "That's as far as I'll go on my own. Here's what I did.",
-  tripwire: "That may have been saved straight away. Check it before going on.",
-  pressSent: (name: string) => `Pressing ${name} sent something to the site, so I've stopped. Check that nothing was saved before going on.`,
-  failed: (name: string) => `I couldn't do this one. Click ${name} yourself and I'll carry on.`,
-  handover: (name: string) => `Click ${name} when it looks right.`,
-  actingOff: "I'll show you the way instead.",
-  moved: "You moved to another page, so I stopped doing it. Ask again to carry on.",
-  tookOver: "You took over, so I've paused.",
-  answered: "You answered the page's question, so I've stopped.",
-} as const;
+/** The widget's own sentences while acting, in their own file: the guide shows some of them without loading the code that acts. */
+export { SAYS };
 
 // Reading a control ----------------------------------------------------------
 
@@ -306,6 +291,80 @@ function wordsAround(field: Element): string {
 
 /** A link or something that behaves as one. */
 const isAnchor = (el: Element) => (el instanceof HTMLAnchorElement || el instanceof HTMLAreaElement) && el.hasAttribute("href");
+/** Drawn or announced as a link, whatever it does: an address, or `role="link"`. Its press is watched (the tripwire). */
+const isLinkLike = (el: Element) => isAnchor(el) || roleOf(el) === "link";
+
+/** Attributes through which a page's script answers a click, so a link that has one may not go where its address says. */
+const CLICK_HANDLER = /^(?:on(?:click|auxclick|mousedown|mouseup|pointerdown|pointerup|touchstart|touchend)|ng-click|v-on:click|@click|x-on:click|wire:click|phx-click|data-action)(?:[.:].*)?$/i;
+
+/**
+ * Whether a click handler set on an element does nothing at all: a function with an empty body. React sets one on
+ * every element it gives a click handler (`node.onclick = noop`, for a Safari bug) and listens at the root instead,
+ * so every link a React router draws carries it: on Northpine each reads "function Sn(){}". Taken for a script that
+ * answers the click, it made every link of a React app a button, pressed only when its words were known to be safe.
+ */
+function doesNothing(handler: unknown): boolean {
+  if (typeof handler !== "function") return false;
+  try {
+    return /^(?:async\s+)?(?:function\b[^(]*\([^)]*\)|\([^)]*\)\s*=>)\s*\{\s*\}$/.test(Function.prototype.toString.call(handler).trim());
+  } catch {
+    return false;
+  }
+}
+
+/** A link's address, or undefined when it cannot be read. */
+function addressOf(el: Element): URL | undefined {
+  try {
+    return new URL((el as HTMLAnchorElement).href, location.href);
+  } catch {
+    return undefined;
+  }
+}
+
+/** A route after "#/" or "#!/", which is a page of an app that keeps its place there. Any other "#" is a place on this page. */
+const routeOf = (hash: string) => (/^#!?\//.test(hash) ? hash : "");
+
+/**
+ * Whether a press on `el` is a visit to another page of this site: the one
+ * kind of link pressed for what it is (rule 8). An `<a href>` or `<area
+ * href>` with no role but link, no click handler written on it (one that
+ * does nothing, as React leaves on its links, is none), and an address on
+ * this site whose path, query or "#/" route differ from this page's. "#", "#top", "javascript:", `role="link"` without an address, and
+ * a link a script answers are not visits: each is judged as a button.
+ */
+function visitsAnotherPage(el: Element): boolean {
+  if (!isAnchor(el)) return false;
+  const role = roleOf(el);
+  if (role && role !== "link") return false;
+  const handler = (el as HTMLElement).onclick;
+  if ((handler && !doesNothing(handler)) || Array.from(el.attributes).some((attribute) => CLICK_HANDLER.test(attribute.name))) return false;
+  const url = addressOf(el);
+  if (!url || (url.protocol !== "http:" && url.protocol !== "https:") || url.origin !== location.origin) return false;
+  return url.pathname !== location.pathname || url.search !== location.search || routeOf(url.hash) !== routeOf(location.hash);
+}
+
+/** A visit's address as it is read: its path, its query and a route after "#/". */
+const visitedAddress = (url: URL) => url.pathname + url.search + routeOf(url.hash);
+
+/**
+ * Whether a press on `el` is a visit to a page that plainly holds a form to
+ * fill in: a real visit (`visitsAnotherPage`) whose address ends in "new",
+ * "edit" or the like and carries no commit word (act-rules.ts,
+ * opensAFormPage). Such a link is named for what its form will do, "Issue
+ * card" to "/cards/new", so its words stop it only as a choice's would. A
+ * link a script answers, "#", "javascript:" and `role="link"` are never one.
+ */
+function visitsAFormPage(el: Element, config: GateConfig): boolean {
+  if (!visitsAnotherPage(el)) return false;
+  return opensAFormPage(visitedAddress(addressOf(el)!), config.acting?.commitWords);
+}
+
+/** What a visit to another page says it does, by the words of its address. Undefined for a link that is not a visit, or that visits a form page. */
+function addressCommits(el: Element, config: GateConfig): Refused | undefined {
+  if (!visitsAnotherPage(el) || visitsAFormPage(el, config)) return undefined;
+  const verdict = readAddress(visitedAddress(addressOf(el)!), config.acting?.commitWords);
+  return verdict.commit ? { reason: verdict.marked ? "marked" : "words", commit: verdict.commit, at: el } : undefined;
+}
 
 /** A native field a visitor fills in or picks from. */
 function isNativeField(el: Element): boolean {
@@ -453,20 +512,19 @@ interface Refused {
 function judgeChainPart(el: Element, session: GateSession, config: GateConfig, self: boolean): Refused | undefined {
   if (el.hasAttribute("data-haptic-commit")) return { reason: "marked", at: el };
   if ((el.getAttribute("data-haptic-act") ?? "").toLowerCase() === "off") return { reason: "off", at: el };
-  // Rule 3: leaving the page or the tab.
-  if (isAnchor(el)) {
+  // Rule 3: leaving the page or the tab. A "javascript:" address runs a script on this page, as a button's click does.
+  const url = isAnchor(el) ? addressOf(el) : undefined;
+  if (isAnchor(el) && url?.protocol !== "javascript:") {
     const anchor = el as HTMLAnchorElement;
-    let url: URL | undefined;
-    try {
-      url = new URL(anchor.href, location.href);
-    } catch {
-      return { reason: "leaves", at: el };
-    }
+    if (!url) return { reason: "leaves", at: el };
     if (url.protocol !== "http:" && url.protocol !== "https:") return { reason: "leaves", at: el };
     if (url.origin !== location.origin) return { reason: "leaves", at: el };
     const target = (anchor.getAttribute("target") ?? document.querySelector("base[target]")?.getAttribute("target") ?? "").trim().toLowerCase();
     if (target && target !== "_self") return { reason: "leaves", at: el };
     if (anchor.hasAttribute("download")) return { reason: "leaves", at: el };
+    // Rule 6 on where a visit leads: "/expenses/7/approve".
+    const address = addressCommits(el, config);
+    if (address) return address;
   }
   // Rule 4: a write the page declares before the click.
   const submitter = submitterOf(el);
@@ -493,7 +551,7 @@ function judgeChainPart(el: Element, session: GateSession, config: GateConfig, s
   }
   // The target's own words and look were judged for its kind. Every other control the click passes through is judged as a press.
   if (self || !isControl(el)) return undefined;
-  const verdict = readName(liveName(el), { link: isAnchor(el) || roleOf(el) === "link", dialog: inDialog(el, session.host), opener: isOpener(el), extra: config.acting?.commitWords });
+  const verdict = readName(liveName(el), { dialog: inDialog(el, session.host), opener: isOpener(el), extra: config.acting?.commitWords });
   if (verdict.commit) return { reason: verdict.marked ? "marked" : "words", commit: verdict.commit, at: el };
   if (styledDestructive(el)) return { reason: "styled", at: el };
   return undefined;
@@ -544,7 +602,8 @@ function kindOf(el: Element, act: Act, session: GateSession): { control: Control
   if (opensList) return { control: "combobox" };
   if (CHOICE_ROLES.has(role)) return { control: "option" };
   if (role === "tab") return { control: "tab" };
-  if (isAnchor(el) || role === "link") return { control: "link" };
+  // Only a visit to another page is pressed as a link. "#", "javascript:", role="link" and a link a script answers are pressed as buttons.
+  if (visitsAnotherPage(el)) return { control: "link" };
   if (el.closest("iframe, canvas")) return { unfit: true };
   return { control: "button" };
 }
@@ -781,10 +840,10 @@ function classStop(el: Element, listed: SnapElement | undefined, commit: CommitC
   return { kind: "stop", reason: "class", el, say: SAYS.class(name, CLASS_DOES[commit]), event: `You stopped before ${describeFor(el, listed)}: it ${CLASS_DOES[commit]}, and the visitor did not ask for that.` };
 }
 
-/** The commit class of a control's own words, read as a button: what the hand-over check asks about. */
+/** The commit class of a control's own words, read as a button, or else of where a visit leads: what the hand-over check asks about. */
 function commitClassOf(el: Element, listed: SnapElement | undefined, session: GateSession, config: GateConfig): CommitClass | undefined {
   const name = [listed?.label ?? "", liveName(el)].join(" ");
-  return readName(name, { dialog: inDialog(el, session.host), extra: config.acting?.commitWords }).commit;
+  return readName(name, { dialog: inDialog(el, session.host), extra: config.acting?.commitWords }).commit ?? addressCommits(el, config)?.commit;
 }
 
 /** Whether a class of commit needs asking for, and was not: the hand-over check (4.5). */
@@ -797,11 +856,10 @@ function unasked(commit: CommitClass | undefined, session: GateSession): commit 
  * rules 1, 4, 6 or 7 on the control and its chain. What the hand-over needs.
  */
 function judgeCommit(el: Element, listed: SnapElement | undefined, session: GateSession, config: GateConfig): Refused | undefined {
-  const link = isAnchor(el) || roleOf(el) === "link" || listed?.role === "link";
   const name = [listed?.label ?? "", liveName(el)].join(" ");
   if (el.closest("[data-haptic-commit]")) return { reason: "marked", at: el };
   // A field's label says what it holds, not what it does: "Lock to one merchant" locks nothing until its form is sent.
-  const verdict = isFieldLike(el) ? { safe: false } : readName(name, { link, dialog: inDialog(el, session.host), opener: isOpener(el), extra: config.acting?.commitWords });
+  const verdict = isFieldLike(el) ? { safe: false } : readName(name, { dialog: inDialog(el, session.host), opener: isOpener(el), extra: config.acting?.commitWords });
   if (verdict.commit) return { reason: verdict.marked ? "marked" : "words", commit: verdict.commit, at: el };
   for (const part of ancestry(el)) {
     if (within(session.host, part)) continue;
@@ -817,7 +875,8 @@ function stillListed(el: Element, listed: SnapElement): boolean {
   if (!listed.label || !["button", "link", "tab", "menuitem"].includes(listed.role) || el.hasAttribute("aria-label") || el.hasAttribute("aria-labelledby")) return true;
   const own = wordsIn(el, 200);
   if (!own) return true;
-  const was = new Set((fold(listed.label).match(/[\p{L}\p{N}]+/gu) ?? []).filter((word) => word.length > 1));
+  // What the reading masked, or took out as typed, says nothing of the words it stood for.
+  const was = new Set((fold(listed.label.replace(/\[(?:typed|number|email)\]/g, " ")).match(/[\p{L}\p{N}]+/gu) ?? []).filter((word) => word.length > 1));
   const now = fold(own).match(/[\p{L}\p{N}]+/gu) ?? [];
   if (!was.size || !now.length) return true;
   return now.some((word) => was.has(word));
@@ -904,7 +963,8 @@ function decide(reply: TurnReply, target: Element | undefined, listed: SnapEleme
   if (!field) {
     const pressed = judgePress(el, control, listed?.label ?? "", session, config);
     if (pressed.refused) return refuse(pressed.refused.reason, el, pressed.refused.commit);
-    if (control === "link") return actPlan(el, act, control, name, { navigates: true });
+    // A visit is watched too: a page whose script answers the click and sends something stops acting at once (act.ts).
+    if (control === "link") return actPlan(el, act, control, name, { navigates: true, tripwire: true });
     if (control === "option") {
       const opened = openedHolding(el, session);
       if (!opened) return refuse("unknown");
@@ -916,7 +976,7 @@ function decide(reply: TurnReply, target: Element | undefined, listed: SnapEleme
       if (fromField && !isStaged(opened!.from, session, config)) return refuse("live");
       return actPlan(el, act, control, name, { tripwire: fromField });
     }
-    return actPlan(el, act, control, name, { tripwire: !!pressed.opens });
+    return actPlan(el, act, control, name, { tripwire: !!pressed.opens || isLinkLike(el) });
   }
 
   // Fields: Enter only in a search box or a list Haptic opened.
@@ -947,12 +1007,14 @@ function judgePress(el: Element, control: ControlKind, listedName: string, sessi
   const link = control === "link";
   const choice = control === "option";
   const name = [listedName, liveName(el)].join(" ");
-  const verdict = readName(name, { link: link || choice, dialog: inDialog(el, session.host), opener: isOpener(el), extra: config.acting?.commitWords });
+  // A link is read as a button is: only a choice in a list is read as the page's value, and a visit to a page that
+  // plainly holds a form, whose words name what the form will do ("Issue card" to "/cards/new").
+  const verdict = readName(name, { choice: choice || (link && visitsAFormPage(el, config)), dialog: inDialog(el, session.host), opener: isOpener(el), extra: config.acting?.commitWords });
   if (verdict.commit) return { refused: { reason: verdict.marked ? "marked" : "words", commit: verdict.commit, at: el } };
   const asks = dialogAsks(el, session);
   if (asks) return { refused: { reason: "words", commit: asks, at: el } };
   if (styledDestructive(el)) return { refused: { reason: "styled", at: el } };
-  // Rule 8: safe because of what it is. A choice is judged further where it is planned.
+  // Rule 8: safe because of what it is: a visit whose words and address commit nothing (its address is judged on its chain). A choice is judged further where it is planned.
   if (link || choice || control === "tab" || control === "combobox" || isOpener(el)) return {};
   // Rule 9: safe because of its words.
   if (verdict.safe) return {};
@@ -1064,7 +1126,7 @@ function isControlOtherThan(hit: Element, el: Element, frame: Element): boolean 
 /**
  * Whether the engine may press an option it found in a list it opened for a
  * "choose": inside what Haptic opened, not disabled, its own words grounded in
- * the visitor's, and no commit words of a class that stops a link. The engine
+ * the visitor's, and no commit words of a class that stops a choice. The engine
  * then calls `reachable` on it as for any press.
  */
 export function planPick(option: Element, plan: ActPlan, session: GateSession, config: GateConfig): ActPlan | VisitorPlan | StopPlan {
@@ -1081,7 +1143,7 @@ export function planPick(option: Element, plan: ActPlan, session: GateSession, c
       if ((part.getAttribute("data-haptic-act") ?? "").toLowerCase() === "off") return refuse("off");
     }
     if (!words || !(grounded(words, session.words) || namesOption(plan.value, words, session.words))) return refuse("ungrounded");
-    const verdict = readName(words, { link: true, extra: config.acting?.commitWords });
+    const verdict = readName(words, { choice: true, extra: config.acting?.commitWords });
     if (verdict.commit) {
       if (unasked(verdict.commit, session)) return classStop(option, undefined, verdict.commit);
       return refuse(verdict.marked ? "marked" : "words", verdict.commit);

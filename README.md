@@ -39,7 +39,7 @@ Haptic reads the live page on every step, so it follows whatever the product loo
 
 - **Accurate.** In our [benchmark](eval/README.md#results) of 565 frozen guide steps, it points at the right control on 97% of the steps on Haptic's own sites, about 85% on twelve real apps, and 86% on apps it was never tuned on.
 - **Fast.** Replies are streamed, so the pointer starts moving as soon as the model names the control, about 0.8 s into a step in the benchmark run.
-- **Private by construction.** It never reads what users type. Email addresses, long numbers and phone and card numbers are masked in the browser, and again on the server. [Exactly what is masked, and what is not.](#privacy)
+- **Private by construction.** It never sends what users type, and leaves it out wherever the page repeats it, unless they wrote the same words in their question. Email addresses, long numbers and phone and card numbers are masked in the browser, and again on the server before anything is stored. [Exactly what is masked, and what is not.](#privacy)
 - **Safe to put in front of customers.** Spend is capped per site, every sentence is checked against fixed rules on the server, and page content is treated as untrusted input.
 - **In production.** The widget server runs on Cloudflare Workers with Postgres on Neon, behind an invite-only dashboard at [joinhaptic.com](https://joinhaptic.com).
 
@@ -63,7 +63,7 @@ sequenceDiagram
     end
 ```
 
-1. **Snapshot.** The widget (about 265 KB, 90 KB gzipped, no dependencies, isolated in a shadow root) lists every interactive control on the page with a short id, its role, label, state and position (`nav`, `main › Billing`). When a dialog is open, only the dialog is listed.
+1. **Snapshot.** The widget (about 162 KB, 56 KB gzipped, no dependencies, isolated in a shadow root; the code for Do it with me, another 96 KB, 34 KB gzipped, loads only on a site with it on) lists every interactive control on the page with a short id, its role, label, state and position (`nav`, `main › Billing`). When a dialog is open, only the dialog is listed.
 2. **Decide.** The server sends the snapshot, the goal and the progress so far to Claude. The site's knowledge is a cached prompt, so each step pays full price only for what changed. The reply has a strict schema, and a target that isn't on the page is dropped, so Haptic can only point at what the user can actually see.
 3. **Point.** The pointer moves the moment the target id arrives, before the caption has finished streaming.
 4. **Observe.** Once the user acts, the widget waits for the page to settle and reports what changed. If they click something else, Haptic notices and gives them the step that gets them back.
@@ -71,11 +71,11 @@ sequenceDiagram
 
 ### What Haptic knows about a site
 
-A crawl turns the site into a **graph**. Each page's title, headings, buttons and field labels make a node, and the links between pages are the edges. The intake CLI reads server-rendered HTML, and the dashboard's reader uses a headless browser. That reader also opens each menu, tab and accordion and records what it showed, so the map knows which control a link sits behind. Real visits fill in what a crawl can't reach: the widget sends the labels on each page it loads on, and a label joins the map once three different visitors have seen it ([how](docs/widget.md#learning-the-site-from-visits)). Together with the company's notes and help docs, this gives the model a map it can plan routes through, to pages the user hasn't reached yet.
+A crawl turns the site into a **graph**. Each page's title, headings, buttons and field labels make a node, and the links between pages are the edges. The intake CLI reads server-rendered HTML, and the dashboard's reader uses a headless browser. That reader also opens each menu, tab and accordion and records what it showed, so the map knows which control a link sits behind. Real visits fill in what a crawl can't reach: the widget sends the labels on each page it loads on, and what each menu, tab and accordion shows when a visitor opens it, and a label joins the map once three different visitors have seen it ([how](docs/widget.md#learning-the-site-from-visits)). Together with the company's notes and help docs, this gives the model a map it can plan routes through, to pages the user hasn't reached yet.
 
 ### Beyond pointing
 
-- **[Answers](docs/answers.md)** (opt-in): replies in words to questions like "what does this do?", drawn from the site's own help articles, with citations. The server, not the prompt, enforces the rules that matter. An answer must cite a real article. Prices, refunds, legal matters and account specifics are never stated. A button an article names is checked against the live page, so out-of-date docs get flagged instead of repeated.
+- **[Answers](docs/answers.md)** (on for a site with help docs): replies in words to questions like "what does this do?", drawn from the site's own help articles, with citations. The server, not the prompt, enforces the rules that matter. An answer must cite a real article. Prices, refunds, legal matters and account specifics are never stated. A button an article names is checked against the live page, so out-of-date docs get flagged instead of repeated.
 - **[What people can't find](docs/corrections.md#what-people-cant-find-and-guide-health)**: the dashboard leads with the questions people gave up on, counted by person, and flags a common question whose guides stopped finishing, which is what a change to the product looks like. The company's team gets an email about it.
 - **[Teach Haptic](docs/corrections.md#teach-haptic)**: when Haptic got a question wrong, someone at the company presses "Teach Haptic the right way", their app opens in a new tab with a one-time link, and they do the task as a visitor would. The script already on the page records which controls they used, never what they typed, with the same masking as everything it reads. They review the steps in plain words, add notes, and leave the last click for the visitor; from then on a question like it carries that route into the prompt as the company's own instructions, and the model still checks each step against the live page.
 - **[Corrections](docs/corrections.md#point-here-instead)**: when Haptic points at the wrong thing, the company picks the right control on that step in the dashboard, and the fix applies to similar questions from then on. A company can also list controls Haptic must never point at, which the server and the widget both enforce.
@@ -84,13 +84,13 @@ A crawl turns the site into a **graph**. Each page's title, headings, buttons an
 
 ### Privacy
 
-The widget reads the names of controls, never what anyone types into a field or anything inside an area they write in. Before anything leaves the browser, in what it reads, in the page's address and in the question, it masks:
+The widget sends the names of controls, never what anyone types into a field or anything inside an area they write in. It looks at what fields hold only inside the browser, to leave it out wherever the page repeats it: a block of page text that repeats it is dropped, and in a heading, the title, a control's name or an option it is replaced by `[typed]` ("Save [typed]"). The one exception is words the person also wrote, whole, in their own question, which is sent anyway: asked to "make Roma Johnston a manager", they type Roma in the search box, and the row "Roma Johnston" stays readable so it can be pointed at. Anything else they type is left out as before. Addresses, the page's own and its links', are sent with ids and numbers masked, so a page that writes a search into an address sends it there. Before anything leaves the browser, in what it reads, in the page's address and in the question, it masks:
 
 - anything that looks like an email address,
 - any run of five or more digits, like an account or order number,
-- any eight or more digits written in groups with spaces, dashes, dots or brackets, like a phone or card number. Digits that follow straight after a letter belong to the word, like the model number I9100, and are not counted.
+- any eight or more digits written in groups with spaces, dashes, dots or brackets, like a phone or card number. Digits that follow straight after a letter belong to the word, like the model number I9100, and are not counted, unless more of a number follows them, as in SSN123-45-6789 or Card4111 1111 1111 1111: then the whole number is masked.
 
-The server masks the same again, with the same function (`cleanText` in `src/shared/types.ts`). It does not mask dates written in figures, like 2026-03-07 or 07.03.2026: a question like "my latest invoice" needs them, and they say no more about a person than the names a page already shows. Nor does it mask shorter numbers, like prices and quantities, or names and other words, so text on the page can still hold personal details, a date of birth among them.
+The server masks the same again before it stores anything, with the same function (`cleanText` in `src/shared/types.ts`). What reaches the model is what the widget sent, already masked. Neither masks real dates written in figures, like 2026-03-07 or 07.03.2026, with a month from 1 to 12 and a day from 1 to 31 (12.34.5678 is masked): a question like "my latest invoice" needs them, and they say no more about a person than the names a page already shows. Nor do they mask shorter numbers, like prices and quantities, or names and other words, so text on the page can still hold personal details, a date of birth among them.
 
 One exception, so Haptic can find the order or account someone asked about: an email address, or a number of five or more digits, that the user wrote in their own question is left readable wherever exactly that value stands on its own on the page. In the question itself it is left readable only when the page shows it standing on its own like that, and is masked otherwise (`namedIn`). With each question the widget also sends the user's own date, not their time zone or location, so the model knows what day it is. What is kept is listed in [operations](docs/operations.md#what-is-recorded-about-visitors), and the public [privacy page](web/app/privacy/page.tsx) says the same.
 
@@ -98,7 +98,7 @@ One exception, so Haptic can find the order or account someone asked about: an e
 
 | Area | How |
 |---|---|
-| **Privacy** | Reads labels, never field values or anything inside an area the user writes in. Email addresses, long numbers and phone and card numbers are masked twice, in the browser and on the server ([what exactly](#privacy)). Exactly what is stored is [documented](docs/operations.md#what-is-recorded-about-visitors), and the public privacy page is kept in line with the code. |
+| **Privacy** | Sends labels, never field values or anything inside an area the user writes in, and leaves what fields hold out of every heading, label and option that repeats it, except words the user also wrote in their question. Email addresses, long numbers and phone and card numbers are masked in the browser, and again on the server before anything is stored ([what exactly](#privacy)). Exactly what is stored is [documented](docs/operations.md#what-is-recorded-about-visitors), and the public privacy page is kept in line with the code. |
 | **Safety** | Page content is fenced off in the prompt as untrusted data. Every outgoing sentence passes server-side rules: no links, contact details, payment details or requests for secrets. The Answers benchmark includes 100 adversarial cases, from prompt injection to mixed harmless and hostile requests. |
 | **Cost control** | Per-site knowledge is prompt-cached. Each site has hourly and daily dollar budgets, enforced per step by reserving the step's maximum cost up front. Optional per-visitor limits count against a daily-salted hash of the visitor's address. A kill switch takes Haptic off one site or all of them without a deploy. |
 | **Auditable billing** | Pricing charges only for finished guides. "Finished" has one definition shared by the widget, the database and the dashboard, which lists every billable guide with a download. |
@@ -170,7 +170,7 @@ To build a context for any site, run `npm run tag -- --url https://app.example.c
 ```bash
 npm test                          # unit tests (node:test)
 npm run typecheck                 # tsc, strict
-npm run build                     # bundle the widget to dist/widget.js
+npm run build                     # bundle the widget to dist/widget.js, and the code that acts to dist/widget-act.js
 npm run eval -- --models mock     # the guide benchmark, no API key needed
 npm run eval:guides -- demo       # whole guides in a browser (needs the local server running)
 npm run test:browser              # page reading in Chromium, and the widget in Chromium, Firefox and WebKit
@@ -186,7 +186,7 @@ The browser tests need Playwright's browsers once: `npx playwright install chrom
 | Doc | Covers |
 |---|---|
 | [Operations](docs/operations.md) | Deploying, the database, what is recorded about visitors, what Teach Haptic keeps, billing outcomes, the kill switch, spend limits and step costs |
-| [The widget on a live page](docs/widget.md) | Modal dialogs, covered controls, route changes, teach mode, learning the site from visits, and the browser tests |
+| [The widget on a live page](docs/widget.md) | Modal dialogs, covered controls, route changes, teach mode, learning the site from visits, putting the launcher away, and the browser tests |
 | [Correcting Haptic](docs/corrections.md) | What people can't find, guide health and its emails, "Point here instead", Teach Haptic, and controls Haptic must never point at |
 | [Answers and hand-off](docs/answers.md) | Answering from help docs, the server-side rules, and hand-off to a person |
 | [Benchmark](eval/README.md) | How cases work, how to run them, and results |
@@ -200,7 +200,7 @@ Haptic is in early access. Known limits:
 
 - The command-line crawler reads server-rendered HTML, so pages drawn by JavaScript or behind a login come back thin. The widget still reads every page live, so those sites lean more on notes and docs.
 - Nothing inside a rich-text editor can be pointed at. This is deliberate: the widget reads nothing inside an area the user writes in.
-- Answers is off by default and hasn't yet been benchmarked against a real model.
+- Answers is on for any site with help docs. It has been run against a real model on one app, Northpine: whole guides and a few questions of fact, not its own benchmark of answers (`npm run eval:answers`). A how-to question is guided to the end there as on a site without it ([how](docs/answers.md)).
 - Do it with me is off by default. It does not pick dates yet: a date field is handed to the user.
 - Real apps the prompt and widget were never tuned on score below the ones they were (86% of single steps against 97% on Haptic's own sites), and about half the whole guides on real apps get there.
 

@@ -190,6 +190,8 @@ interface Reveal {
   shown: string;
   /** The part of the selector that picks the box the mouse has to be over. */
   box: string;
+  /** The mouse has to be over the hidden thing itself, as `.actions:hover { opacity: 1 }` says. Only something see-through takes the mouse. */
+  self?: boolean;
   visibility: boolean;
   opacity: boolean;
 }
@@ -203,6 +205,14 @@ const MAX_RULES_READ = 20_000;
 const MAX_HIDDEN_CHECKED = 200;
 /** The state such a control is listed with. */
 const SHOWS_ON_HOVER = "shows on hover";
+
+/**
+ * A control's states that it changes into, leaving out those that say how it is drawn: "shows on hover" and "shows on
+ * focus" come and go as the mouse crosses its row or the keyboard passes through it, and are not the control changing.
+ */
+export function statesOf(element: Pick<SnapElement, "state">): string[] {
+  return (element.state ?? []).filter((state) => state !== SHOWS_ON_HOVER && state !== SHOWS_ON_FOCUS);
+}
 
 /** A selector list cut at its commas, leaving alone the commas inside brackets. */
 function selectorParts(list: string): string[] {
@@ -223,11 +233,29 @@ function selectorParts(list: string): string[] {
 }
 
 /**
- * Reads one selector such as ".panel:hover .menu" as "the mouse over .panel
- * shows .menu". Nothing is returned when the mouse would have to be over the
- * hidden thing itself, or over something beside it and not around it.
+ * A selector that is wholly one `:is(…)` or `:where(…)`, as Tailwind 4 writes
+ * `group-hover:` (`:is(:where(.group):hover .x)`), read as what it wraps.
  */
-function readReveal(part: string): Pick<Reveal, "shown" | "box"> | undefined {
+function unwrapped(part: string): string[] {
+  const trimmed = part.trim();
+  const opening = /^:(?:is|where|matches|-webkit-any)\(/.exec(trimmed);
+  if (!opening || !trimmed.endsWith(")")) return [trimmed];
+  let depth = 0;
+  for (let i = opening[0].length - 1; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (ch === "(" || ch === "[") depth++;
+    else if ((ch === ")" || ch === "]") && --depth === 0 && i !== trimmed.length - 1) return [trimmed];
+  }
+  return selectorParts(trimmed.slice(opening[0].length, -1)).flatMap(unwrapped);
+}
+
+/**
+ * Reads one selector such as ".panel:hover .menu" as "the mouse over .panel
+ * shows .menu". Nothing is returned when the mouse would have to be over
+ * something beside it and not around it. One that asks for the mouse over the
+ * hidden thing itself, ".actions:hover", is returned as `self`.
+ */
+function readReveal(part: string): Pick<Reveal, "shown" | "box" | "self"> | undefined {
   let end = -1;
   for (const match of part.matchAll(OVER)) {
     let depth = 0;
@@ -246,7 +274,11 @@ function readReveal(part: string): Pick<Reveal, "shown" | "box"> | undefined {
     else if (depth === 0 && /[\s>+~]/.test(ch)) break;
   }
   const rest = part.slice(cut);
-  if (!rest.trim()) return undefined;
+  if (!rest.trim()) {
+    // The mouse over the thing itself: only the mouse, since the keyboard inside a see-through box is not the visitor seeing it.
+    const self = part.replace(OVER, "").trim();
+    return self && /:hover(?![\w-])/.test(part) && !/:focus-within(?![\w-])/.test(part) ? { shown: self, box: self, self: true } : undefined;
+  }
   depth = 0;
   for (const ch of rest) {
     if (ch === "(" || ch === "[") depth++;
@@ -286,7 +318,7 @@ function revealsIn(root: Document | ShadowRoot): Reveal[] {
         const visibility = rule.style.visibility === "visible";
         const opacity = rule.style.opacity !== "" && Number(rule.style.opacity) > 0;
         if (!visibility && !opacity) continue;
-        for (const part of selectorParts(selector)) {
+        for (const part of selectorParts(selector).flatMap(unwrapped)) {
           const reveal = readReveal(part);
           if (reveal) found.push({ ...reveal, visibility, opacity });
         }
@@ -320,8 +352,10 @@ function shownWhenOver(el: Element, hiddenByVisibility: boolean, seeThrough: boo
   let opacity = false;
   for (const rule of revealsIn(root)) {
     try {
+      // Something hidden takes no mouse, so only a see-through box can be shown by the mouse over it.
+      if (rule.self && (hiddenByVisibility || !seeThrough)) continue;
       if (!el.matches(rule.shown)) continue;
-      const over = el.parentElement?.closest(rule.box);
+      const over = rule.self ? el : el.parentElement?.closest(rule.box);
       if (!over) continue;
       box ??= over;
       visibility ||= rule.visibility;
@@ -607,6 +641,19 @@ let choiceBoxes: WeakSet<Element> = new WeakSet();
  * and is never sent or kept: see `echoesTyping`.
  */
 let typed: string[] = [];
+/**
+ * The visitor's own question, as one lower-case line, for as long as one page
+ * is being read. Words of it are theirs to send, and the server has them: a
+ * field that holds some of them repeats nothing new (see `typedValues`).
+ */
+let asked = "";
+
+/** Whether `line` holds `value` whole, with no letter or digit run on to it: "settings" does not hold "set". Both lower case. */
+function holdsWhole(line: string, value: string): boolean {
+  const runsOn = (at: number) => at >= 0 && at < line.length && /[\p{L}\p{N}]/u.test(line[at] ?? "");
+  for (let at = line.indexOf(value); at >= 0; at = line.indexOf(value, at + 1)) if (!runsOn(at - 1) && !runsOn(at + value.length)) return true;
+  return false;
+}
 
 /** Input types a visitor writes in. A tick box, a button, a file or a hidden field holds nothing typed. */
 const NOT_TYPED_IN = new Set(["checkbox", "radio", "button", "submit", "reset", "image", "file", "hidden", "color", "range"]);
@@ -640,7 +687,17 @@ function documentsOfPage(): Document[] {
 /** The documents being read: the page's, and its frames' from its own origin. Set for one reading. */
 let pageDocuments: Document[] = [];
 
-/** What the fields and editors on the page hold now, each as one lower-case line of words. */
+/**
+ * What the fields and editors on the page hold now, each as one lower-case
+ * line of words. Not what the visitor also wrote, whole, in their own
+ * question: asked to "make Roma Johnston a manager", they type Roma in the
+ * search box, and the row to point at is "Roma Johnston". Their question is
+ * sent as it is, so that name tells the server nothing it was not told. With
+ * it left out, the row read "[typed] Johnston", an option "[typed]
+ * Cummerata", and a card's own page "[typed]" for its heading. Everything
+ * else a field holds is left out as before, and an email or a long number is
+ * still masked by its own rule (`own`).
+ */
 function typedValues(): string[] {
   const values: string[] = [];
   const fields = pageDocuments.flatMap((doc) => Array.from(doc.querySelectorAll("input, textarea, [contenteditable]")));
@@ -650,7 +707,7 @@ function typedValues(): string[] {
     else if (isTag(field, "textarea")) value = field.value;
     else if ((field as HTMLElement).isContentEditable && !insideEditor(field.parentElement ?? field.ownerDocument.body)) value = field.textContent ?? "";
     value = value.replace(/\s+/g, " ").trim().toLowerCase();
-    if (value.length >= MIN_ECHO) values.push(value);
+    if (value.length >= MIN_ECHO && !holdsWhole(asked, value)) values.push(value);
     if (values.length >= MAX_TYPED_FIELDS) break;
   }
   return values;
@@ -659,20 +716,16 @@ function typedValues(): string[] {
 /**
  * Whether words of the page repeat what a field holds: a card's preview that
  * shows the name being typed for it, or a total that shows the amount. They
- * are what the visitor typed, so they are not sent as page text. Headings and
- * titles are not held to this: a form that edits a record holds its name, and
- * the page's heading and its dialogs' titles say it too. The value has to stand
+ * are what the visitor typed, so they are not sent as page text. Everything
+ * else a reading sends, every heading, title, name, option and button's
+ * words, has them taken out instead (`withoutTyping`). The value has to stand
  * whole, with no letter or digit run on to it: "Settings" does not repeat a
  * search for "set".
  */
 function echoesTyping(words: string): boolean {
   if (!typed.length || words.length < MIN_ECHO) return false;
   const line = words.replace(/\s+/g, " ").toLowerCase();
-  const runsOn = (at: number) => at >= 0 && at < line.length && /[\p{L}\p{N}]/u.test(line[at] ?? "");
-  return typed.some((value) => {
-    for (let at = line.indexOf(value); at >= 0; at = line.indexOf(value, at + 1)) if (!runsOn(at - 1) && !runsOn(at + value.length)) return true;
-    return false;
-  });
+  return typed.some((value) => holdsWhole(line, value));
 }
 
 /** Fields that open a list and show what was picked from it beside themselves, not in themselves. */
@@ -695,7 +748,27 @@ function choiceBoxesOf(): WeakSet<Element> {
   }
   return boxes;
 }
-const cleanText = (text: string, max = 80): string => maskAndTrim(text, max, own);
+
+/** What stands where a heading, a title, a name, an option or a button's words repeat what a field holds. */
+const TYPED = "[typed]";
+let typedPattern: { of: string[]; pattern?: RegExp } = { of: [] };
+/**
+ * Words with every place that repeats what a field holds put as `TYPED`, by
+ * `echoesTyping`'s rule: "Hello, Zebulon Quackenbush" while a field holds
+ * that name is "Hello, [typed]", and a list's "Search for “divorce lawyer”"
+ * while the search box holds it is "Search for “[typed]”". Every piece of text
+ * a reading sends passes through it (`cleanText` below), so what the visitor
+ * typed is never sent, wherever the page shows it again.
+ */
+function withoutTyping(text: string): string {
+  if (!typed.length || text.length < MIN_ECHO) return text;
+  if (typedPattern.of !== typed) {
+    const escaped = [...typed].sort((a, b) => b.length - a.length).map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+"));
+    typedPattern = { of: typed, pattern: new RegExp(`(?<![\\p{L}\\p{N}])(?:${escaped.join("|")})(?![\\p{L}\\p{N}])`, "giu") };
+  }
+  return text.replace(typedPattern.pattern!, TYPED);
+}
+const cleanText = (text: string, max = 80): string => maskAndTrim(withoutTyping(text), max, own);
 
 /**
  * Reads the page. `ignore` is Haptic's own element. `question` is what the
@@ -709,6 +782,7 @@ const cleanText = (text: string, max = 80): string => maskAndTrim(text, max, own
  */
 export function takeSnapshot(ignore: Element, question = "", near = (ignore as Element & { pointedAt?: Element }).pointedAt): PageSnapshot {
   own = namedIn(question);
+  asked = question.replace(/\s+/g, " ").trim().toLowerCase();
   pageDocuments = documentsOfPage();
   untiedLabels = pageDocuments.some((doc) => Array.from(doc.querySelectorAll("label")).some((label) => !label.hasAttribute("for") && !(label as HTMLLabelElement).control));
   choiceBoxes = choiceBoxesOf();
@@ -719,6 +793,8 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   const viewportHeight = window.innerHeight;
   let visited = 0;
   let hiddenChecked = 0;
+  /** The box the mouse shows each see-through box in, as read once for this reading: a table's rows share one rule. */
+  const shownOver = new Map<Element, DOMRect | undefined>();
   /** Elements whose words were read as part of a sentence around them. */
   const taken = new WeakSet<Element>();
   let order = 0;
@@ -894,8 +970,15 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
         if (unnamedMenu && !added.label) added.spot = spotOf(inPageWindow(rect, frame), viewportHeight);
         const state = stateOf(el, role);
         if (state.includes("disabled")) giveReason(added, reasonOf(el));
-        // Fully transparent controls have always been listed: row actions that fade in. One that a stylesheet shows on hover says so.
-        const fades = !hoverBox && hiddenChecked < MAX_HIDDEN_CHECKED && getComputedStyle(el).opacity === "0" && ++hiddenChecked > 0 && shownWhenOver(el, false, true);
+        // Fully transparent controls have always been listed: row actions that fade in. One that a stylesheet shows on hover says so,
+        // whether the control is see-through itself or a box around it is, as a row's cell of actions often is.
+        // Each see-through box is looked up once: a long table's row actions share one cell each, and do not use up the budget.
+        const clear = !hoverBox && seeThroughNow(el) ? seeThroughBox(el) : undefined;
+        if (clear && !shownOver.has(clear) && hiddenChecked < MAX_HIDDEN_CHECKED) {
+          hiddenChecked++;
+          shownOver.set(clear, shownWhenOver(clear, false, true));
+        }
+        const fades = clear && shownOver.get(clear);
         if (hoverBox || (fades && liesInside(rect, fades))) state.push(SHOWS_ON_HOVER);
         if (state.length) added.state = state;
         const href = hrefOf(el);
@@ -1110,8 +1193,9 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   if (modal) snapshot.dialog = dialogLabel(modal);
   else if (reach.layer) snapshot.dialog = layerLabel(reach.layer);
   uncut.set(snapshot, { elements: everything.elements.map(strip), text: everything.text, headings: everything.headings });
-  // What the fields held is let go with the reading.
+  // What the fields held is let go with the reading, and the question with it.
   typed = [];
+  asked = "";
   return { snapshot, elements };
 }
 
@@ -1235,8 +1319,8 @@ function stateChanges(before: SnapElement[], after: SnapElement[]): string[] {
   for (const [key, element] of unique(after)) {
     const old = was.get(key);
     if (!element || !old) continue;
-    const gained = (element.state ?? []).filter((state) => !old.state?.includes(state));
-    const lost = (old.state ?? []).filter((state) => !element.state?.includes(state));
+    const gained = statesOf(element).filter((state) => !statesOf(old).includes(state));
+    const lost = statesOf(old).filter((state) => !statesOf(element).includes(state));
     if (!gained.length && !lost.length) continue;
     const parts: string[] = [];
     if (gained.length) parts.push(`is now ${gained.join(", ")}`);
@@ -1798,6 +1882,12 @@ function scrollBoxOf(el: Element, facts: Map<Element, BoxFacts>): Element | unde
     if (scrollsBy(factsOf(node, facts).overflowY) && node.scrollHeight > node.clientHeight + 1) return node;
   }
   return undefined;
+}
+
+/** Whether an element is drawn fully see-through, by itself or by a box around it, though it is in the page and laid out. */
+function seeThroughNow(el: Element): boolean {
+  if (typeof el.checkVisibility === "function") return el.checkVisibility({ visibilityProperty: true }) && !el.checkVisibility({ opacityProperty: true });
+  return getComputedStyle(el).opacity === "0";
 }
 
 /** The box in an element's ancestry, itself included, that draws it fully see-through, if one does. */
@@ -2934,7 +3024,7 @@ function whichPage(params: URLSearchParams): string {
   const kept: string[] = [];
   for (const [key, value] of params) {
     if (kept.length === 2) break;
-    if (!/^[A-Za-z][\w-]{0,15}$/.test(key) || !/^[A-Za-z][A-Za-z_:.-]{0,29}$/.test(value)) continue;
+    if (!/^[A-Za-z][\w-]{0,15}$/.test(key) || !/^[A-Za-z][A-Za-z_:.-]{0,29}$/.test(value) || echoesTyping(value)) continue;
     kept.push(`${key}=${value}`);
   }
   return kept.length ? `?${kept.join("&")}` : "";

@@ -1,17 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { AlertCircleIcon, Mail } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { FieldWithButton, FormAlert, failureFrom, useFieldErrors, type Failure } from "@/components/form";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { api, type Reading, type Site } from "@/lib/app-api";
 import { InstallOptions } from "./install-options";
+import { CopyLink } from "./agent-pill";
+import { DeveloperEmail } from "./developer-email";
+import { SetupGate } from "./setup/setup-gate";
 import { GuidingRules } from "./guiding-rules";
 import { InsightsView } from "./insights-view";
 import { SiteSettings } from "./site-settings";
-import { Card, CardTitle, CopyButton, DoneMark, StepMark, when } from "./parts";
+import { Card, CardTitle, DoneMark, FailedCard, StepMark, when } from "./parts";
 
 /** How often the page asks whether the script has been seen, while waiting for it. */
 const WAITING_MS = 5_000;
@@ -50,7 +51,7 @@ export function SiteView({ siteId, onDeleted }: { siteId: string; onDeleted: () 
 
   const pages = useReading(site);
 
-  if (error && !site) return <Card><p className="text-base text-muted-foreground">{error}</p></Card>;
+  if (error && !site) return <FailedCard title="Couldn't load your site" message={error} retry={() => void load()} />;
   if (!site) return <Card><p className="text-base text-muted-foreground">Loading your site</p></Card>;
 
   return (
@@ -87,12 +88,15 @@ export function SiteView({ siteId, onDeleted }: { siteId: string; onDeleted: () 
         <SiteSettings site={site} onChange={setSite} onDeleted={onDeleted} />
       ) : site.connected ? (
         <>
-          <InsightsView siteId={site.id} refreshKey={refreshKey} onCorrected={(corrections) => setSite({ ...site, corrections })} />
+          <InsightsView siteId={site.id} origin={site.origin} refreshKey={refreshKey} onCorrected={(corrections) => setSite({ ...site, corrections })} />
           <GuidingRules site={site} onChange={setSite} />
           <InstallHealth site={site} reading={pages.reading} onChange={setSite} />
         </>
       ) : (
-        <Setup site={site} pages={pages} onChange={setSite} />
+        <>
+          <SetupGate site={site} />
+          <Setup site={site} pages={pages} onChange={setSite} />
+        </>
       )}
     </div>
   );
@@ -143,9 +147,6 @@ type Pages = ReturnType<typeof useReading>;
 
 function Setup({ site, pages, onChange }: { site: Site; pages: Pages; onChange: (site: Site) => void }) {
   const developerLink = typeof window === "undefined" ? "" : `${window.location.origin}/install/?site=${site.id}`;
-  const mail = `mailto:?subject=${encodeURIComponent("Please add Haptic to our site")}&body=${encodeURIComponent(
-    `Hi,\n\nCould you add Haptic to ${site.origin}? It is one script tag on every page, including pages behind the login. Everything you need, for each kind of stack, is here.\n\n${developerLink}\n\nThanks`,
-  )}`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -159,14 +160,9 @@ function Setup({ site, pages, onChange }: { site: Site; pages: Pages; onChange: 
         <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
           One tag on every page, including the pages behind your login. If someone else looks after your code, send them the install page.
         </p>
-        <div className="flex flex-wrap gap-2">
-          <CopyButton text={developerLink} label="Copy link for my developer" />
-          <a href={mail} className={buttonVariants({ variant: "secondary" })}>
-            <Mail />
-            Email it to them
-          </a>
-        </div>
-        <InstallOptions scriptUrl={site.scriptUrl} siteId={site.id} />
+        <InstallOptions scriptUrl={site.scriptUrl} siteId={site.id} live={site} />
+        <CopyLink link={developerLink} />
+        <DeveloperEmail siteId={site.id} installLink={developerLink} />
       </Card>
 
       <Connection site={site} onChange={onChange} />
@@ -234,6 +230,7 @@ function ReadPages({ pages }: { pages: Pages }) {
 /** Step 3. Waits for the first call from an allowed origin, and says plainly when the script is running somewhere not on the list. */
 function Connection({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
   const refused = site.origins.filter((row) => !row.allowed);
+  const [failure, setFailure] = useState<Failure | null>(null);
   return (
     <Card>
       <div className="flex items-center gap-3">
@@ -248,9 +245,10 @@ function Connection({ site, onChange }: { site: Site; onChange: (site: Site) => 
           </p>
           <ul className="flex flex-col divide-y rounded-lg border bg-card">
             {refused.map((row) => (
-              <RefusedOrigin key={row.origin} site={site} origin={row.origin} lastSeen={row.last_seen_at} onChange={onChange} />
+              <RefusedOrigin key={row.origin} site={site} origin={row.origin} lastSeen={row.last_seen_at} onChange={onChange} onFailure={setFailure} />
             ))}
           </ul>
+          <FormAlert failure={failure} />
         </div>
       ) : (
         <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
@@ -262,12 +260,27 @@ function Connection({ site, onChange }: { site: Site; onChange: (site: Site) => 
   );
 }
 
-function RefusedOrigin({ site, origin, lastSeen, onChange }: { site: Site; origin: string; lastSeen: string; onChange: (site: Site) => void }) {
+function RefusedOrigin({
+  site,
+  origin,
+  lastSeen,
+  onChange,
+  onFailure,
+}: {
+  site: Site;
+  origin: string;
+  lastSeen: string;
+  onChange: (site: Site) => void;
+  onFailure: (failure: Failure | null) => void;
+}) {
   const [busy, setBusy] = useState(false);
   async function allow() {
     setBusy(true);
+    onFailure(null);
     try {
       onChange(await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { allowedOrigins: [...site.allowedOrigins, origin] } }));
+    } catch (failure) {
+      onFailure(failureFrom(`Couldn't allow ${origin}`, failure));
     } finally {
       setBusy(false);
     }
@@ -288,24 +301,30 @@ function RefusedOrigin({ site, origin, lastSeen, onChange }: { site: Site; origi
 /** The list of addresses the widget may run on, such as production, staging and localhost. */
 function AllowedOrigins({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
   const [adding, setAdding] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  async function save(origins: string[]) {
-    setError(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
+  // Named as the server names it, so a refusal of the new address shows under the field.
+  const fields = useFieldErrors({ allowedOrigins: `origin-${site.id}` });
+  async function remove(origin: string) {
+    setFailure(null);
     try {
-      onChange(await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { allowedOrigins: origins } }));
-      return true;
+      onChange(await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { allowedOrigins: site.allowedOrigins.filter((item) => item !== origin) } }));
     } catch (failure) {
-      setError((failure as Error).message);
-      return false;
+      setFailure(failureFrom(`Couldn't remove ${origin}`, failure));
     }
   }
   async function add(event: FormEvent) {
     event.preventDefault();
+    setFailure(null);
     let text = adding.trim().replace(/\/+$/, "");
-    if (!text) return;
+    if (fields.show({ allowedOrigins: text ? undefined : "Enter an address, like https://staging.example.com." })) return;
     if (!/^https?:\/\//.test(text)) text = `https://${text}`;
     const origin = URL.canParse(text) ? new URL(text).origin : text;
-    if (await save([...site.allowedOrigins, origin])) setAdding("");
+    try {
+      onChange(await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { allowedOrigins: [...site.allowedOrigins, origin] } }));
+      setAdding("");
+    } catch (failure) {
+      if (!fields.showRefusal(failure)) setFailure(failureFrom("Couldn't add the address", failure));
+    }
   }
   return (
     <div className="flex flex-col gap-3">
@@ -315,34 +334,39 @@ function AllowedOrigins({ site, onChange }: { site: Site; onChange: (site: Site)
           <li key={origin} className="flex items-center justify-between gap-4 px-4 py-2 text-sm">
             <span>{origin}</span>
             {site.allowedOrigins.length > 1 && (
-              <Button variant="ghost" size="sm" onClick={() => save(site.allowedOrigins.filter((item) => item !== origin))}>
+              <Button variant="ghost" size="sm" onClick={() => remove(origin)}>
                 Remove
               </Button>
             )}
           </li>
         ))}
       </ul>
-      <form onSubmit={add} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <div className="flex flex-1 flex-col gap-2">
-          <Label htmlFor={`origin-${site.id}`}>Add an address, such as staging or localhost</Label>
+      <form onSubmit={add} noValidate>
+        <FieldWithButton
+          id={`origin-${site.id}`}
+          label="Add an address, such as staging or localhost"
+          required
+          error={fields.errors.allowedOrigins}
+          button={
+            <Button type="submit" variant="secondary" size="xl">
+              Add
+            </Button>
+          }
+        >
           <Input
-            id={`origin-${site.id}`}
+            {...fields.control("allowedOrigins")}
+            required
             value={adding}
-            onChange={(event) => setAdding(event.target.value)}
+            onChange={(event) => {
+              setAdding(event.target.value);
+              fields.clear("allowedOrigins");
+            }}
             placeholder="https://staging.example.com"
             className="h-11 bg-card px-3.5 md:text-base"
           />
-        </div>
-        <Button type="submit" variant="secondary" size="xl">
-          Add
-        </Button>
+        </FieldWithButton>
       </form>
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircleIcon />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      <FormAlert failure={failure} />
     </div>
   );
 }
@@ -374,7 +398,7 @@ function InstallHealth({ site, reading, onChange }: { site: Site; reading: Readi
       <details className="rounded-lg border bg-card px-4 py-3">
         <summary className="cursor-pointer text-sm font-medium">Script tag and install options</summary>
         <div className="mt-4">
-          <InstallOptions scriptUrl={site.scriptUrl} siteId={site.id} />
+          <InstallOptions scriptUrl={site.scriptUrl} siteId={site.id} live={site} />
         </div>
       </details>
     </Card>

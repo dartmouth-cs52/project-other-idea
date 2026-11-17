@@ -65,7 +65,7 @@ export function stepsToKeep(input: unknown): TaughtStep[] {
     const { commits: _fromPage, ...rest } = step;
     const pressed = rest.kind === "press" || rest.kind === "check" || rest.kind === "uncheck";
     const name = rest.label.replace(/^icon:/, "");
-    const verdict = pressed && name ? readName(name, { link: rest.role === "link", dialog: !!rest.dialog }) : undefined;
+    const verdict = pressed && name ? readName(name, { dialog: !!rest.dialog }) : undefined;
     return verdict?.commit ? { ...rest, commits: true as const } : rest;
   });
 }
@@ -139,7 +139,7 @@ interface SessionRow {
 
 const info = (row: SessionRow): TeachSessionInfo => ({ question: row.question, expiresAt: new Date(row.expires_at).toISOString() });
 
-/** Teach sessions in the teach_sessions table (db/migrations/0012), which the dashboard writes. */
+/** Teach sessions in the teach_sessions table (db/migrations/0014), which the dashboard writes. */
 export class NeonTeachStore implements TeachStore {
   private readonly sql: NeonQueryFunction<false, false>;
 

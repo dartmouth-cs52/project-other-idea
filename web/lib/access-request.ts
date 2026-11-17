@@ -27,6 +27,12 @@ const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 /** A web address in a name is a sign of spam, not of a person. */
 const LINK = /:\/\/|www\./i;
 
+/** What is wrong with an email address, if anything. The sign-in page uses it too, so both forms say the same thing. */
+export function emailProblem(email: string): string | null {
+  if (!email) return "Enter your work email.";
+  return EMAIL.test(email) ? null : "Enter a full email address, like name@company.com.";
+}
+
 /** Trims every field and cuts it to length. Anything that is not text counts as empty. */
 export function cleanRequest(input: { [Name in AccessField]?: unknown }): AccessRequest {
   const text = (name: AccessField) => {
@@ -40,7 +46,7 @@ export function cleanRequest(input: { [Name in AccessField]?: unknown }): Access
 export function checkRequest(request: AccessRequest, only?: AccessField[]): AccessErrors {
   const errors: AccessErrors = {};
   const checks: Record<AccessField, () => string | null> = {
-    email: () => (!request.email ? "Enter your work email." : EMAIL.test(request.email) ? null : "Enter a full email address, like name@company.com."),
+    email: () => emailProblem(request.email),
     company: () => (!request.company ? "Enter your company." : LETTER_OR_DIGIT.test(request.company) && request.company.length >= 2 ? null : "Enter your company's name."),
     firstName: () => (!request.firstName ? "Enter your first name." : LETTER.test(request.firstName) && !LINK.test(request.firstName) ? null : "Enter your first name, in letters."),
     lastName: () => (!request.lastName ? "Enter your last name." : LETTER.test(request.lastName) && !LINK.test(request.lastName) ? null : "Enter your last name, in letters."),

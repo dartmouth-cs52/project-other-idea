@@ -14,15 +14,23 @@ export const CONTROL_ROLES = ["button", "link", "tab", "menuitem", "textbox", "s
 /** How many visitors must have seen a learned label before it is offered here, as it is before the prompt gets it. */
 const LEARNED_SHOWN_AT = 3;
 
-export class Invalid extends Error {}
+/** A correction or list turned away. `field` names the one input at fault, as Refusal's does in app-api.ts. */
+export class Invalid extends Error {
+  constructor(
+    message: string,
+    readonly field?: string,
+  ) {
+    super(message);
+  }
+}
 
 function control(input: unknown): ControlName {
   const raw = (input ?? {}) as Record<string, unknown>;
   const label = typeof raw.label === "string" ? raw.label.replace(/\s+/g, " ").trim() : "";
-  if (!label) throw new Invalid("Name the control by the words on it.");
-  if (label.length > 80) throw new Invalid("That label is too long. Use the words on the control.");
+  if (!label) throw new Invalid("Name the control by the words on it.", "label");
+  if (label.length > 80) throw new Invalid("That label is too long. Use the words on the control.", "label");
   const role = typeof raw.role === "string" && raw.role ? raw.role : undefined;
-  if (role && !CONTROL_ROLES.includes(role)) throw new Invalid(`"${role.slice(0, 20)}" isn't a kind of control.`);
+  if (role && !CONTROL_ROLES.includes(role)) throw new Invalid(`"${role.slice(0, 20)}" isn't a kind of control.`, "role");
   return role ? { role, label } : { label };
 }
 

@@ -89,7 +89,7 @@ export function CopyButton({ text, label = "Copy", variant = "secondary" }: { te
 export function CodeBlock({ code, label }: { code: string; label?: string }) {
   return (
     <div className="relative rounded-lg border bg-card">
-      <pre className="overflow-x-auto p-4 pr-28 text-sm leading-6">
+      <pre className="overflow-x-auto p-4 pr-28 text-sm leading-6 break-all whitespace-pre-wrap">
         <code>{code}</code>
       </pre>
       <div className="absolute top-2 right-2">
@@ -102,6 +102,26 @@ export function CodeBlock({ code, label }: { code: string; label?: string }) {
 /** The surface every block on a page sits in: Muted, 1px border, 14px corners. */
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return <section className={cn("flex flex-col gap-4 rounded-xl border bg-muted p-6", className)}>{children}</section>;
+}
+
+/**
+ * A page, or part of one, that could not load: a title that says what did not
+ * happen, the reason in Muted text, and Try again when trying again could help.
+ * Error red is for forms, so there is none here.
+ */
+export function FailedCard({ title, message, retry, level = 1, className }: { title: string; message: string; retry?: () => void; level?: 1 | 2; className?: string }) {
+  const Heading = level === 1 ? "h1" : "h2";
+  return (
+    <Card className={className}>
+      <Heading className="text-2xl font-medium tracking-[-0.02em]">{title}</Heading>
+      <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">{message}</p>
+      {retry && (
+        <Button variant="secondary" className="self-start" onClick={retry}>
+          Try again
+        </Button>
+      )}
+    </Card>
+  );
 }
 
 export function CardTitle({ children, aside }: { children: ReactNode; aside?: ReactNode }) {

@@ -3,24 +3,33 @@
 // The signed-in pages' calls to the site's Worker (worker/app-api.ts), and the
 // shapes it answers with.
 
+/**
+ * A call the Worker turned down, or that never reached it. The message is
+ * always one to show the person. `field` names the one input at fault, when
+ * there is one, so a form can show the message under that input.
+ */
 export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly field?: string,
   ) {
     super(message);
   }
 }
 
-export async function api<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
+export async function api<T>(path: string, init?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<T> {
   const response = await fetch(`/api/app${path}`, {
     method: init?.method ?? "GET",
     headers: init?.body === undefined ? undefined : { "content-type": "application/json" },
     body: init?.body === undefined ? undefined : JSON.stringify(init.body),
     credentials: "same-origin",
-  });
-  const data = (await response.json().catch(() => ({}))) as { error?: string };
-  if (!response.ok) throw new ApiError(response.status, data.error ?? `The server answered ${response.status}.`);
+    signal: init?.signal,
+  }).catch(() => null);
+  // The browser's own words for this differ in each browser, and none of them say what to do.
+  if (!response) throw new ApiError(0, "Haptic couldn't be reached. Check your connection and try again.");
+  const data = (await response.json().catch(() => ({}))) as { error?: string; field?: string };
+  if (!response.ok) throw new ApiError(response.status, data.error ?? "Something went wrong on our side. Try again in a moment.", data.field);
   return data as T;
 }
 
@@ -121,6 +130,8 @@ export interface Site {
     used: number;
     list: { title: string; source: string; pasted: boolean; chars: number; inPrompt: boolean }[];
   };
+  /** Answering in words from the docs. `chosen` is null while the site follows the default, which is on once it has docs. */
+  answers: { on: boolean; chosen: boolean | null };
   connected: boolean;
   origins: SeenOrigin[];
   reading: Reading | null;

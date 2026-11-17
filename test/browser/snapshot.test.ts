@@ -131,6 +131,18 @@ test("phone numbers of eight digits are masked wherever the page shows them, and
   assert.ok(snapshot.text.includes("Born 1984-03-07"), JSON.stringify(snapshot.text));
 });
 
+test("numbers written like a date that is not one, and digits glued to a word that run into a number, are masked wherever the page shows them", { skip }, async () => {
+  // From the second review: each of these reached the model in /v1/turn.
+  const snapshot = await read(`<h1>Account</h1><p>Your account 12.34.5678 and phone 12-34-5678 and ssn SSN123-45-6789</p>
+    <p>Card4111 1111 1111 1111, licence D1234-56789-01234</p><button>Galaxy S II I9100 1.249,00 EUR</button><p>Born 07.03.1984</p>`);
+  const sent = JSON.stringify(snapshot);
+  for (const secret of ["12.34.5678", "12-34-5678", "123-45-6789", "4111", "1234-56789"]) assert.ok(!sent.includes(secret), `${secret} was sent: ${sent}`);
+  assert.ok(snapshot.text.includes("Your account [number] and phone [number] and ssn SSN[number]"), JSON.stringify(snapshot.text));
+  assert.ok(snapshot.text.includes("Card[number], licence D[number]"), JSON.stringify(snapshot.text));
+  assert.ok(snapshot.elements.some((element) => element.label === "Galaxy S II I9100 1.249,00 EUR"), sent);
+  assert.ok(snapshot.text.includes("Born 07.03.1984"), JSON.stringify(snapshot.text));
+});
+
 test("a date is not masked, and a row is named by it", { skip }, async () => {
   const snapshot = await read(`<table>
     <tr><th>Date</th><th>Transaction</th></tr>
@@ -339,6 +351,46 @@ test("the rule that shows it can be in a linked stylesheet, and a stylesheet tha
     styles: { "/ours.css": HOVER_STYLES, "https://elsewhere.test/theirs.css": ".panel:hover .gone { visibility: visible; }" },
   });
   assert.deepEqual(lines(snapshot), HOVER_LINES);
+});
+
+test("a row's action that a see-through box around it hides until the mouse is over the row says so, in the way Tailwind 4 writes it", { skip }, async () => {
+  // Tailwind 4 writes `group-hover/row:opacity-100` as `:is(:where(.group\/row):hover .x)`, inside `@media (hover: hover)`
+  // and a layer. Dashboards fade in the cell that holds a row's actions, not each button in it.
+  const styles = `@layer utilities {
+    .opacity-0 { opacity: 0 }
+    .focus-within\\:opacity-100:focus-within { opacity: 1 }
+    @media (hover: hover) { :is(:where(.group\\/row):hover .group-hover\\/row\\:opacity-100) { opacity: 1 } }
+  }
+  .row { position: relative; display: flex; width: 600px; height: 36px; align-items: center }
+  .actions { position: absolute; right: 0; top: 0; bottom: 0; display: flex; gap: 4px }
+  .old .tools { opacity: 0 } .old:hover .tools { opacity: 1 }
+  .self { opacity: 0 } .self:hover { opacity: 1 }
+  .keys { opacity: 0 } .keys:focus-within { opacity: 1 }`;
+  const snapshot = await read(`<style>${styles}</style><main><h1>Bills</h1>
+    <div class="group/row"><div role="row" class="row"><span role="cell">Linden Logistics, due Friday</span>
+      <div role="cell" class="actions opacity-0 group-hover/row:opacity-100 focus-within:opacity-100"><button>Pay</button><button aria-label="More"></button></div></div></div>
+    <div class="old" style="width:400px"><span>Quarterly plan</span><span class="tools"><span><button>Pin</button></span></span></div>
+    <div class="self"><button>Zoom</button></div>
+    <div class="keys"><button>Shown only to the keyboard</button></div>
+  </main>`);
+  assert.deepEqual(lines(snapshot), [
+    'button "Pay" (shows on hover) [main › Bills]',
+    'button "More" (shows on hover) [main › Bills]',
+    'button "Pin" (shows on hover) [main › Bills]',
+    'button "Zoom" (shows on hover) [main › Bills]',
+    // The keyboard inside it shows it, and the mouse never does: it is listed as the page has it, with nothing said.
+    'button "Shown only to the keyboard" [main › Bills]',
+  ]);
+});
+
+test("every row of a long table says its actions show on hover, not only the first rows", { skip }, async () => {
+  const styles = `.row { position: relative; display: flex; width: 600px; height: 28px } .actions { position: absolute; right: 0; top: 0; opacity: 0 }
+    :is(:where(.group):hover .group-hover\\:opacity-100) { opacity: 1 }`;
+  const rows = Array.from({ length: 150 }, (_, i) => `<div class="group"><div role="row" class="row"><span>Bill ${i + 1}</span><div class="actions group-hover:opacity-100"><button>Pay</button><button>Hold</button></div></div></div>`);
+  const snapshot = await read(`<style>${styles}</style><main><h1>Bills</h1>${rows.join("")}</main>`);
+  const actions = snapshot.elements.filter((element) => element.label === "Pay" || element.label === "Hold");
+  assert.ok(actions.length >= 250, `only ${actions.length} listed`);
+  assert.deepEqual(actions.filter((element) => !element.state?.includes("shows on hover")).map((element) => element.label), []);
 });
 
 // What is on top ---------------------------------------------------------------

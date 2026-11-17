@@ -349,13 +349,13 @@ test("a value the visitor did not give is their turn: the pointer waits on the f
 
 test("a page load from Haptic's own link carries on acting on the next page; a load the visitor makes ends it and says so", async () => {
   const pages = {
-    "/": `${WATCH}<h1>Cards</h1><a id="new" href="/new">Issue card</a><form><label>Search <input id="search" type="search"></label></form>`,
+    "/": `${WATCH}<h1>Cards</h1><a id="new" href="/new">New card</a><form><label>Search <input id="search" type="search"></label></form>`,
     "/new": CARD_FORM,
   };
   const session = await start(
     pages,
     (request, index) => {
-      if (index === 0) return doing(request, "Issue card", "click", "Opening the new card form.", undefined, "link");
+      if (index === 0) return doing(request, "New card", "click", "Opening the new card form.", undefined, "link");
       if (index === 1) return doing(request, "Card name", "type", "Typing the card's name.", "Ads");
       return handOver(request, "Issue card", "Ready. Click Issue card.", "button");
     },
@@ -367,7 +367,7 @@ test("a page load from Haptic's own link carries on acting on the next page; a l
     const second = await session.untilAsked(2, 15_000);
     assert.equal(second.mode, "act", "acting did not carry on after the page load");
     assert.equal(second.snapshot.path, "/new");
-    assert.match(second.event ?? "", /^You clicked link "Issue card"\. A new page loaded: \/new\./);
+    assert.match(second.event ?? "", /^You clicked link "New card"\. A new page loaded: \/new\./);
     await session.untilAsked(3, 15_000);
     await session.untilState("pointing");
     assert.equal(await session.page.inputValue("#name"), "Ads");
@@ -456,7 +456,7 @@ test("once acting is over, by the visitor's click on the commit or by Stop, noth
     { acting: { ...ACTING_ON, confirmFirst: false } },
   );
   // What may listen while nothing is in use: the top layer and the window's size, and learning the site (presence.test.ts).
-  const idle = { calls: 0, observers: 0, listeners: ["d:click:true", "d:toggle:true", "w:hashchange:false", "w:popstate:false", "w:resize:false"] };
+  const idle = { calls: 0, observers: 0, listeners: ["d:click:true", "d:keydown:true", "d:pointerdown:true", "d:toggle:true", "w:hashchange:false", "w:popstate:false", "w:resize:false"] };
   // The ask box is put away, as a visitor done with it does. While it is open the widget is in use.
   const putAway = async () => {
     if (await session.page.locator("haptic-root .panel").isVisible()) await session.page.locator("haptic-root .launcher").click();

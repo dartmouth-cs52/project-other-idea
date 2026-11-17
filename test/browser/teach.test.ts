@@ -64,7 +64,7 @@ interface Rig {
 }
 
 async function startRig(): Promise<Rig> {
-  const widget = await widgetBundle();
+  const { widget } = await widgetBundle();
   let shift = 0;
   const store = new MemoryTeachStore(() => Date.now() + shift);
   const rig: Rig = { url: "", store, later: (ms) => (shift += ms), failDone: 0, turns: 0, close: async () => {} };

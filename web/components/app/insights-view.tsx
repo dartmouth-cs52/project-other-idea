@@ -5,22 +5,27 @@ import { cn } from "cn";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { api, OUTCOME_LABEL, type Correction, type FinishedList, type GroupGuide, type GuideDetail, type HealthGroup, type Insights } from "@/lib/app-api";
 import { PointHereInstead } from "./guiding-rules";
-import { Card, CardTitle, DoneMark, seconds, when } from "./parts";
+import { Headline } from "./headline";
+import { Card, CardTitle, DoneMark, FailedCard, seconds, when } from "./parts";
 import { teachable, TeachButton } from "./teach";
 
 const RANGES = [7, 30, 90];
 
 /**
- * What a company's users asked and how each guide went. It leads with what
- * people can't find: questions grouped by meaning, ranked by how many
- * different people asked, with how many gave up and where. Those are what the
- * company can fix. Guide health follows, for guides that stopped finishing.
+ * What a company's users asked and how each guide went. It opens with four
+ * numbers for the range and a chart of each day, then what people can't find:
+ * questions grouped by meaning, ranked by how many different people asked,
+ * with how many gave up and where. Those are what the company can fix. Guide
+ * health follows, for guides that stopped finishing, then how guides ended and
+ * every question. The finished list, for checking a bill, comes last.
  */
-export function InsightsView({ siteId, refreshKey, onCorrected }: { siteId: string; refreshKey: number; onCorrected?: (corrections: Correction[]) => void }) {
+export function InsightsView({ siteId, origin, refreshKey, onCorrected }: { siteId: string; origin?: string; refreshKey: number; onCorrected?: (corrections: Correction[]) => void }) {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<Insights | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  // Bumped by Try again, to ask once more without waiting for the next refresh.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -30,9 +35,21 @@ export function InsightsView({ siteId, refreshKey, onCorrected }: { siteId: stri
     return () => {
       live = false;
     };
-  }, [siteId, days, refreshKey]);
+  }, [siteId, days, refreshKey, attempt]);
 
-  if (error) return <Card><p className="text-base text-muted-foreground">{error}</p></Card>;
+  if (error) {
+    return (
+      <FailedCard
+        level={2}
+        title="Couldn't load the questions"
+        message={error}
+        retry={() => {
+          setError(null);
+          setAttempt((count) => count + 1);
+        }}
+      />
+    );
+  }
   if (!data) return <Card><p className="text-base text-muted-foreground">Loading questions</p></Card>;
 
   const { summary } = data;
@@ -46,11 +63,14 @@ export function InsightsView({ siteId, refreshKey, onCorrected }: { siteId: stri
     </div>
   );
 
+  const headline = <Headline siteId={siteId} origin={origin} days={days} ranges={ranges} refreshKey={refreshKey} />;
+
   if (!summary.guides) {
     return (
       <div className="flex flex-col gap-6">
+        {headline}
         <Card>
-          <CardTitle aside={ranges}>Questions</CardTitle>
+          <CardTitle>Questions</CardTitle>
           <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
             No one has asked Haptic anything on this site in the last {days} days. Once people do, every question shows up here with how its guide went.
           </p>
@@ -63,15 +83,9 @@ export function InsightsView({ siteId, refreshKey, onCorrected }: { siteId: stri
 
   return (
     <div className="flex flex-col gap-6">
-      <CantFind siteId={siteId} days={days} rows={data.cantFind} ranges={ranges} onOpen={setOpen} />
+      {headline}
+      <CantFind siteId={siteId} days={days} rows={data.cantFind} ranges={null} onOpen={setOpen} />
       <GuideHealth groups={data.health} alerts={data.alerts} />
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Guides started" value={summary.guides.toLocaleString()} />
-        <Stat label="Unanswered" value={summary.unanswered.toLocaleString()} />
-        <Stat label="Said it helped" value={summary.helped_yes + summary.helped_no ? `${summary.helped_yes} of ${summary.helped_yes + summary.helped_no}` : "No answers yet"} />
-        <Stat label="Time until the pointer moved" value={seconds(summary.median_ms_to_pointer)} note="Median, first step" />
-      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
@@ -90,6 +104,16 @@ export function InsightsView({ siteId, refreshKey, onCorrected }: { siteId: stri
           {summary.median_steps_finished !== null && (
             <p className="text-sm text-muted-foreground">A finished guide took {Number(summary.median_steps_finished).toLocaleString()} steps, at the median.</p>
           )}
+          <dl className="grid grid-cols-2 gap-4 border-t pt-4 text-sm">
+            <div className="flex flex-col gap-1">
+              <dt className="text-muted-foreground">Said it helped</dt>
+              <dd className="text-base font-medium">{summary.helped_yes + summary.helped_no ? `${summary.helped_yes} of ${summary.helped_yes + summary.helped_no}` : "No answers yet"}</dd>
+            </div>
+            <div className="flex flex-col gap-1">
+              <dt className="text-muted-foreground">Until the pointer moved</dt>
+              <dd className="text-base font-medium">{seconds(summary.median_ms_to_pointer)}, at the median</dd>
+            </div>
+          </dl>
         </Card>
         <Card>
           <h2 className="text-2xl font-medium tracking-[-0.02em]">Where people give up</h2>
@@ -132,8 +156,6 @@ export function InsightsView({ siteId, refreshKey, onCorrected }: { siteId: stri
         </Card>
       </div>
 
-      <FinishedGuides siteId={siteId} refreshKey={refreshKey} onOpen={setOpen} />
-
       <Card>
         <h2 className="text-2xl font-medium tracking-[-0.02em]">Every question</h2>
         <ul className="flex flex-col divide-y rounded-lg border bg-card">
@@ -152,6 +174,8 @@ export function InsightsView({ siteId, refreshKey, onCorrected }: { siteId: stri
           ))}
         </ul>
       </Card>
+
+      <FinishedGuides siteId={siteId} refreshKey={refreshKey} onOpen={setOpen} />
 
       {open && <GuideDrawer siteId={siteId} guideId={open} onClose={() => setOpen(null)} onCorrected={onCorrected} />}
     </div>
@@ -307,12 +331,14 @@ function CantFind({ siteId, days, rows, ranges, onOpen }: { siteId: string; days
 
 function GroupGuides({ siteId, days, groupKey, onOpen }: { siteId: string; days: number; groupKey: string; onOpen: (guide: string) => void }) {
   const [guides, setGuides] = useState<GroupGuide[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api<{ guides: GroupGuide[] }>(`/sites/${siteId}/groups?key=${encodeURIComponent(groupKey)}&days=${days}`).then(
-      (result) => setGuides(result.guides),
-      () => setGuides([]),
+      (result) => (setGuides(result.guides), setError(null)),
+      (failure: Error) => setError(failure.message),
     );
   }, [siteId, days, groupKey]);
+  if (error) return <p className="text-sm text-muted-foreground">The guides didn&apos;t load. {error}</p>;
   if (!guides) return <p className="text-sm text-muted-foreground">Loading the guides</p>;
   return (
     <ul className="flex flex-col rounded-lg border">
@@ -397,16 +423,6 @@ function GuideHealth({ groups, alerts }: { groups: HealthGroup[]; alerts: Insigh
         one is flagged, your team gets an email, at most once a fortnight for each question.
       </p>
     </Card>
-  );
-}
-
-function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
-  return (
-    <div className="flex flex-col gap-1 rounded-xl border bg-muted p-6">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-4xl font-medium tracking-[-0.03em] tabular-nums">{value}</span>
-      {note && <span className="text-xs text-muted-foreground">{note}</span>}
-    </div>
   );
 }
 

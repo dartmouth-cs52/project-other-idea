@@ -6,6 +6,7 @@ import { configure } from "../src/server/model.ts";
 import { createSiteCache } from "../src/server/site-cache.ts";
 import { NeonTeachStore } from "../src/server/teach.ts";
 import type { SiteContext } from "../src/shared/types.ts";
+import widgetActing from "../dist/widget-act.txt";
 import widget from "../dist/widget.txt";
 
 export { BudgetMeter } from "./budget.ts";
@@ -13,8 +14,8 @@ export { BudgetMeter } from "./budget.ts";
 // The Haptic server as customers' browsers reach it: a Cloudflare Worker at
 // widget.joinhaptic.com. It gives the same answers as the Node server in
 // src/server (both run app.ts). What differs is where things are kept: sites,
-// and every guide and step, are in Neon (src/server/db.ts), and the widget file
-// is packed into the Worker when it is built.
+// and every guide and step, are in Neon (src/server/db.ts), and the widget's two
+// files (widget.js, and widget-act.js for acting) are packed into the Worker when it is built.
 //
 // Without the DATABASE_URL secret it still answers, from the KV store sites
 // were kept in before Neon, and records nothing. A site missing from Neon is
@@ -76,7 +77,7 @@ const sites = createSiteCache({ keepMs: 60_000, maxStaleMs: 10 * 60_000 });
 /** One per isolate, so its note of which origins were seen lately is shared by every request. */
 let store: { url: string; store: Store } | undefined;
 let teachStore: { url: string; store: NeonTeachStore } | undefined;
-/** Teach sessions are in Neon, beside the sites (db/migrations/0012). Without the database there is no teach mode. */
+/** Teach sessions are in Neon, beside the sites (db/migrations/0014). Without the database there is no teach mode. */
 function teachFor(env: Env): NeonTeachStore | undefined {
   if (!env.DATABASE_URL) return undefined;
   if (teachStore?.url !== env.DATABASE_URL) teachStore = { url: env.DATABASE_URL, store: new NeonTeachStore(env.DATABASE_URL) };
@@ -212,6 +213,7 @@ export default {
     const app = createApp({
       loadSite: async (id, hurry) => (SITE_ID.test(id) ? sites(id, () => readSite(env, id), hurry ? (work) => ctx.waitUntil(work) : undefined) : undefined),
       widget: async () => widget,
+      widgetActing: async () => widgetActing,
       widgetMaxAge: 300,
       overLimit: async (key) => (env.TURN_LIMIT ? !(await env.TURN_LIMIT.limit({ key })).success : false),
       overTeachLimit: async (key) => {

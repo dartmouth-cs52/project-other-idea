@@ -18,8 +18,15 @@ export type CommitClass = "destroy" | "money" | "session" | "send" | "save" | "d
 export const LANGUAGES = ["en", "es", "fr", "de", "pt", "it", "nl", "ja", "zh"] as const;
 export type Language = (typeof LANGUAGES)[number];
 
-/** The classes that stop a link. A link cannot post, so a link that saves or sends is a way to a form. */
-export const LINK_STOPS: readonly CommitClass[] = ["destroy", "money", "session", "dataOut", "secret"];
+/**
+ * The classes that stop a choice picked from a list: an option, a menu radio
+ * or a tree item. Its words are the page's own value ("Approved", "Sent",
+ * "Published"), not a verb, so only words that destroy, spend, sign in or
+ * out, take data out or reveal stop it. A link is not a choice: a script can
+ * make one do anything a button does, and a page can act on the visit
+ * itself, so a link is read as a button is (`readName` without `choice`).
+ */
+export const CHOICE_STOPS: readonly CommitClass[] = ["destroy", "money", "session", "dataOut", "secret"];
 /** The classes that stop a control that says it opens a menu, list or dialog. */
 export const OPENER_STOPS: readonly CommitClass[] = ["destroy", "money", "session", "secret"];
 /** The classes a commit must be asked for in the visitor's words before Haptic hands it over (4.5). */
@@ -270,8 +277,8 @@ export function safeWordsFor(language: Language): string[] {
 
 /** How a control is used, which decides which classes stop it. */
 export interface Naming {
-  /** It is a link: only `LINK_STOPS` stop it. */
-  link?: boolean;
+  /** It is a choice picked from a list: only `CHOICE_STOPS` stop it. */
+  choice?: boolean;
   /** It is in a dialog, where "OK", "Yes", "Done" and "Continue" commit. */
   dialog?: boolean;
   /** It says it opens a menu, list or dialog: only `OPENER_STOPS` stop it. */
@@ -363,10 +370,77 @@ export function readName(name: string, how: Naming = {}): NameVerdict {
   }
   const found = classOfName(text, !!how.dialog);
   if (found) {
-    const stops = how.link ? LINK_STOPS : how.opener ? OPENER_STOPS : CLASSES;
+    const stops = how.choice ? CHOICE_STOPS : how.opener ? OPENER_STOPS : CLASSES;
     return stops.includes(found) ? { commit: found, safe: false } : { safe: false };
   }
   return { safe: wholeSafe(text) };
+}
+
+/**
+ * What a link's address says a visit does, read as a button's name is: the
+ * words of its path, its query, and a route after "#/". A page can act on
+ * the visit itself, so "/expenses/7/approve" approves as surely as a button
+ * named Approve, and "?action=delete" deletes. Ids, numbers and tokens carry
+ * no word of any class. The host is not read, only where on the site it leads.
+ */
+export function readAddress(address: string, extra?: readonly string[]): NameVerdict {
+  let text = address.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, "");
+  try {
+    text = decodeURIComponent(text);
+  } catch {
+    // Read as written.
+  }
+  // "approveExpense" and "approve_expense" are two words, as "approve-expense" is.
+  text = text.replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").replace(/[^\p{L}\p{N}]+/gu, " ");
+  return readName(text, extra ? { extra } : {});
+}
+
+// A link named for what its form will do. Northpine's "Issue card" is a plain
+// link to /cards/new, the first page of the card form. Read as a button it
+// "saves something", and the first press of "Can you issue Malika a card…"
+// went to the visitor, with a sentence that was not true of it (5 runs
+// of 5 on 16 November). Its words alone cannot tell it from "<a href='#'>Send
+// invite</a>", which a script makes send. Its address can: a real visit whose
+// last word is the one web frameworks give to the page that holds a form.
+
+/**
+ * The last word of an address that names the page holding a form, which a
+ * visit only shows: "/cards/new" and "/people/7/edit" (Rails, Phoenix,
+ * Laravel's edit), "/mail/compose".
+ */
+const FORM_PAGES = new Set(["new", "edit", "compose"]);
+/**
+ * The same, when the address carries nothing after it: "/photos/create" is
+ * Laravel's form page and "/users/add" Django's and CakePHP's. With a query,
+ * as in "/cart/add?item=5", a visit can be the act itself, so it does not count.
+ */
+const BARE_FORM_PAGES = new Set(["create", "add"]);
+
+/**
+ * Whether an address plainly opens a form to fill in: its path, or its route
+ * after "#/", ends in a word of `FORM_PAGES`, or of `BARE_FORM_PAGES` with no
+ * query, and nothing else in it carries a commit word ("/checkout/new" pays,
+ * "/posts/new?publish=1" publishes). A link to such a page, when it is a real
+ * visit (gate.ts, visitsAnotherPage), is stopped by its words only as a
+ * choice in a list is (`CHOICE_STOPS`): "Issue card" to "/cards/new" opens
+ * the card form, while "Delete project" or "Pay now" stay the visitor's
+ * wherever they lead. An address that does not end so says nothing either
+ * way: "/invites/send", "/cards/new/start", "/expenses/7/approve".
+ */
+export function opensAFormPage(address: string, extra?: readonly string[]): boolean {
+  const text = address.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, "");
+  // An app that keeps its place after "#/" has its page there. Any other "#" is a place on a page.
+  const route = /#!?(\/.*)$/.exec(text)?.[1];
+  const page = route ?? text.split("#")[0] ?? "";
+  const at = page.indexOf("?");
+  const path = at < 0 ? page : page.slice(0, at);
+  const query = at < 0 ? "" : page.slice(at + 1);
+  const segments = path.split("/").filter(Boolean);
+  const last = (segments.pop() ?? "").toLowerCase();
+  if (!(FORM_PAGES.has(last) || (BARE_FORM_PAGES.has(last) && !query))) return false;
+  // Everything but that last word is read as any address is, the path before a route included.
+  const before = route === undefined ? "" : (text.split("#")[0] ?? "");
+  return !readAddress(`${before} /${segments.join("/")} ${query}`, extra).commit;
 }
 
 /** The words of a button that moves a form on to its next part, in every shipped language. */
@@ -778,7 +852,8 @@ function fits(act: string, element: SnapElement): boolean {
  * - `do` that means the same as the act that fits the control (`actFor`):
  *   replaced by it, so "choose" on a radio or an option is a click.
  * - `do` that does not fit the control's role, or on a disabled control: removed, "unfit".
- * - `do` on a control whose words commit (link or not, `readName`): removed, "words" (or "marked").
+ * - `do` on a control whose words commit (link or not, `readName`), or on a
+ *   link whose address does (`readAddress`): removed, "words" (or "marked").
  * - `do` on a link to another site: removed, "leaves".
  * - `type` or `choose` on a field `isSecretField` names: removed, "secret".
  * - `type` whose `enter` is not grounded in the goal, or `choose` whose `enter`
@@ -821,12 +896,21 @@ export function checkAction(reply: TurnReply, request: Pick<TurnRequest, "goal" 
   if (act === "click" && !PICKED.has(element.role)) {
     // An icon names a control only when it has no words of its own: a dialog's "Close" with an X icon is not "Close x".
     const name = element.label || element.icon || "";
-    const verdict = readName(name, { link: element.role === "link", dialog: !!request.snapshot.dialog, opener: opensSomething(element), extra: acting.commitWords });
+    // A link is read as a button is: "Send invite" sends whether it is drawn as a link or not. Unless its address plainly
+    // opens a form ("Issue card" to "/cards/new"): then its words stop it only as a choice's would. Whether it is a real
+    // visit, with no script answering the click, only the widget's gate can see, and it decides again on the live link.
+    const formPage = element.role === "link" && !!element.href && opensAFormPage(element.href, acting.commitWords);
+    const verdict = readName(name, { choice: formPage, dialog: !!request.snapshot.dialog, opener: opensSomething(element), extra: acting.commitWords });
     if (verdict.commit) return withhold(verdict.marked ? "marked" : "words");
+    // And where it leads: a visit to "/expenses/:id/approve" approves.
+    if (element.role === "link" && element.href && !formPage) {
+      const address = readAddress(element.href, acting.commitWords);
+      if (address.commit) return withhold(address.marked ? "marked" : "words");
+    }
   }
   if (act === "click" && PICKED.has(element.role) && ["option", "menuitemradio", "treeitem"].includes(element.role)) {
-    // An option is the page's own choice. It stops only on words that would stop a link: "Delete", "Sign out".
-    const verdict = readName(element.label || element.icon || "", { link: true, extra: acting.commitWords });
+    // An option is the page's own choice. It stops only on words that end, spend or take something: "Delete", "Sign out".
+    const verdict = readName(element.label || element.icon || "", { choice: true, extra: acting.commitWords });
     if (verdict.commit) return withhold(verdict.marked ? "marked" : "words");
   }
 

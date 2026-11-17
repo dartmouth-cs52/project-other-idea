@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import Anthropic from "@anthropic-ai/sdk";
 import { namedButNotDone, namedButNotPointed, pressLeftToVisitor } from "../src/server/check.ts";
+import type { ModelReply } from "../src/server/answers.ts";
 import { ceilingFor, configure, measureTurn, SETTINGS } from "../src/server/model.ts";
 import { checkAction } from "../src/shared/act-rules.ts";
 import { DEFAULT_APPEARANCE, type SiteContext, type Snapshot, type TurnReply, type TurnRequest } from "../src/shared/types.ts";
@@ -49,7 +50,8 @@ interface Call {
   /** The reply's text as it streams, enough of it to name the target. */
   streams?: string;
   fails?: unknown;
-  reply?: TurnReply;
+  /** A guide's or an act reply, or a reply as it is written on a site with Answers on. */
+  reply?: TurnReply | ModelReply;
 }
 
 /** A stand-in for the model's service that answers each call from the script in turn, and keeps what it was sent. */
@@ -132,19 +134,19 @@ test("with the check asking, the model is asked once more, told what it did, and
   assert.match(told, /tells the visitor to use link "FAQ" \(e3\), but its target is null/);
   assert.deepEqual(JSON.parse(sent[1]!.messages.at(-2)!.content as string), namesFaq);
   assert.deepEqual(measure.reply, pointsAtFaq);
-  assert.deepEqual(measure.recheck, { named: "e3", asked: true });
+  assert.deepEqual(measure.recheck, { named: "e3", asked: true, verdict: "ask" });
   // The second reply's pointer goes out as soon as it is known, as a first reply's would.
   assert.deepEqual(early, ["e3"]);
 });
 
-test("after the first question, the check only logs: a control named once the goal is reached is an optional extra", async () => {
-  // jira, once the History tab was open: "use Load more newer history items for later entries". Asked again, it pointed at it.
+test("after the first question, a question about what the site has that is answered in words is left as it is", async () => {
+  // The owner's rule of 15 November: such a question can be answered in one sentence. Asked again, a model points at what it named.
   const { sent } = use([{ reply: namesFaq }, { reply: pointsAtFaq }], "ask");
   const later = { ...request, step: 2, event: 'The user clicked tab "History".' };
   const measure = await measureTurn(site, later);
   assert.equal(sent.length, 1);
   assert.equal(measure.reply.target, null);
-  assert.deepEqual(measure.recheck, { named: "e3", asked: false });
+  assert.deepEqual(measure.recheck, { named: "e3", asked: false, verdict: "aside" });
 });
 
 test("with the check only logging, the reply is sent as the model wrote it", async () => {
@@ -152,7 +154,354 @@ test("with the check only logging, the reply is sent as the model wrote it", asy
   const measure = await measureTurn(site, request);
   assert.equal(sent.length, 1);
   assert.equal(measure.reply.target, null);
-  assert.deepEqual(measure.recheck, { named: "e3", asked: false });
+  assert.deepEqual(measure.recheck, { named: "e3", asked: false, verdict: "ask" });
+});
+
+// After the first question: Northpine's owner asked to add a budget, was led to Budgets, and the guide ended there in words.
+
+const budgetsPage: Snapshot = {
+  path: "/budgets",
+  title: "Budgets, Northpine",
+  headings: ["Budgets"],
+  text: [],
+  truncated: false,
+  elements: [
+    { id: "e14", role: "link", label: "Budgets", href: "/budgets", context: "nav", state: ["current"] },
+    { id: "e17", role: "link", label: "People", href: "/people", context: "nav" },
+    { id: "e27", role: "button", label: "New budget", context: "main › Budgets" },
+    { id: "e28", role: "button", label: "Show only these", context: "main › Budgets" },
+  ],
+};
+const atBudgets: TurnRequest = {
+  site: site.id,
+  goal: "add a budget",
+  step: 1,
+  history: [],
+  event: 'The user clicked link "Budgets". It is e14 in the list now, and is now current.',
+  closing: true,
+  snapshot: budgetsPage,
+};
+/** What the owner read, word for word, with the guide ended there. */
+const ownersStop: TurnReply = { target: null, status: "done", say: "You're on the Budgets page now, where every team's budget is listed. To add one, use New budget at the top." };
+
+test("after the first question, the owner's stop is pointed at New budget with the same sentence and no second call", async () => {
+  const { sent } = use([{ reply: ownersStop }, { reply: pointsAtFaq }], "ask");
+  const early: string[] = [];
+  const { result: measure, lines } = await logging(() => measureTurn(site, atBudgets, undefined, { onTarget: (id) => early.push(id) }));
+  assert.equal(sent.length, 1);
+  assert.deepEqual(measure.reply, { target: "e27", status: "continue", say: ownersStop.say });
+  assert.deepEqual(measure.recheck, { named: "e27", asked: false, verdict: "point", pointed: true });
+  // The pointer goes out at once, and the step costs one call.
+  assert.deepEqual(early, ["e27"]);
+  assert.deepEqual(
+    lines.filter((line) => line.startsWith("recheck ")),
+    ["recheck site_test step 1: the sentence tells the visitor to use e27 and nothing is pointed at, so it is pointed at"],
+  );
+  // With the check only logging, or off, the reply goes as the model wrote it.
+  for (const recheck of ["log", "off"]) {
+    use([{ reply: ownersStop }], recheck);
+    assert.deepEqual((await measureTurn(site, atBudgets)).reply, ownersStop, recheck);
+  }
+});
+
+test("after the first question, a control named as an aside is left as it is, and one less plain is asked about once more", async () => {
+  // Written for this test: the visitor's own call, once the budget is saved.
+  const optional: TurnReply = { target: null, status: "done", say: "Your budget is saved. If you ever need another, use New budget." };
+  const aside = use([{ reply: optional }, { reply: pointsAtFaq }], "ask");
+  const left = await measureTurn(site, atBudgets);
+  assert.equal(aside.sent.length, 1);
+  assert.deepEqual(left.reply, optional);
+  assert.deepEqual(left.recheck, { named: "e27", asked: false, verdict: "aside" });
+  // The sentence says something is done, and still names the goal's control: the model decides, told what it did.
+  const opened: TurnReply = { target: null, status: "done", say: "The Budgets page is now open. To add one, use New budget at the top." };
+  const pointsAtNew: TurnReply = { target: "e27", status: "continue", say: "Click New budget at the top." };
+  const asked = use([{ reply: opened }, { reply: pointsAtNew }], "ask");
+  const again = await measureTurn(site, atBudgets);
+  assert.equal(asked.sent.length, 2);
+  assert.match(asked.sent[1]!.messages.at(-1)!.content as string, /tells the visitor to use button "New budget" \(e27\), but its target is null/);
+  assert.deepEqual(again.reply, pointsAtNew);
+  assert.deepEqual(again.recheck, { named: "e27", asked: true, verdict: "ask" });
+});
+
+test("in act mode, a later reply that ends in words naming the goal's control is asked about once more, never made a step in code", async () => {
+  const acting: SiteContext = { ...site, acting: { enabled: true } };
+  const actAt: TurnRequest = { ...atBudgets, site: acting.id, version: 3, mode: "act" };
+  delete actAt.closing;
+  const opens: TurnReply = { target: "e27", do: "click", enter: null, commits: false, status: "continue", say: "Opening New budget." };
+  const { sent } = use([{ reply: { ...ownersStop, do: null, enter: null, commits: false } }, { reply: opens }], "ask");
+  const measure = await measureTurn(acting, actAt);
+  assert.equal(sent.length, 2);
+  assert.equal(measure.reply.target, "e27");
+  assert.equal(measure.reply.do, "click");
+  assert.deepEqual(measure.recheck, { named: "e27", asked: true, verdict: "point" });
+});
+
+// The same stop on a site with Answers on, which is where the owner met it: Northpine with its help docs. Until this
+// was fixed nothing there was looked at twice, since an answer in words names controls without pointing by design.
+
+const withDocs: SiteContext = {
+  ...site,
+  id: "site_docs",
+  docs: [{ title: "Freeze or cancel a card", source: "freeze.md", text: "Freezing a card blocks new charges until you unfreeze it. Open the card and click Freeze card." }],
+};
+/** A reply as the model writes it on a site with Answers on. */
+const written = (reply: Partial<ModelReply>): ModelReply => ({ mode: "guide", target: null, status: "done", reason: null, say: "", sources: [], controls: [], ...reply });
+
+test("on a site with Answers on, the owner's stop in guide mode is pointed at New budget, with the same sentence and no second call", async () => {
+  const asked: TurnRequest = { ...atBudgets, site: withDocs.id, goal: "how do I add a budget" };
+  delete asked.closing;
+  const { sent } = use([{ reply: written({ say: ownersStop.say }) }, { reply: pointsAtFaq }], "ask");
+  const early: string[] = [];
+  const { result: measure, lines } = await logging(() => measureTurn(withDocs, asked, undefined, { onTarget: (id) => early.push(id) }));
+  assert.equal(sent.length, 1);
+  assert.deepEqual(measure.reply, { target: "e27", status: "continue", say: ownersStop.say, mode: "guide" });
+  assert.deepEqual(measure.recheck, { named: "e27", asked: false, verdict: "point", pointed: true });
+  assert.deepEqual(early, ["e27"]);
+  assert.deepEqual(
+    lines.filter((line) => line.startsWith("recheck ")),
+    ["recheck site_docs step 1: the sentence tells the visitor to use e27 and nothing is pointed at, so it is pointed at"],
+  );
+  // The closing statement after a "done", which is how the widget of this work asks it, is judged the same.
+  use([{ reply: written({ say: ownersStop.say }) }], "ask");
+  assert.equal((await measureTurn(withDocs, { ...asked, closing: true })).reply.target, "e27");
+  // With the check only logging, or off, the reply goes as the model wrote it.
+  for (const recheck of ["log", "off"]) {
+    use([{ reply: written({ say: ownersStop.say }) }], recheck);
+    assert.deepEqual((await measureTurn(withDocs, asked)).reply, { target: null, status: "done", say: ownersStop.say, mode: "guide" }, recheck);
+  }
+});
+
+test("on a site with Answers on, a guide reply that is less plain is asked about once more, and the model is shown its own reply whole", async () => {
+  const asked: TurnRequest = { ...atBudgets, site: withDocs.id, goal: "how do I add a budget" };
+  const opened = written({ say: "The Budgets page is now open. To add one, use New budget at the top." });
+  const pointsAtNew = written({ target: "e27", status: "continue", say: "Click New budget at the top." });
+  const { sent } = use([{ reply: opened }, { reply: pointsAtNew }], "ask");
+  const measure = await measureTurn(withDocs, asked);
+  assert.equal(sent.length, 2);
+  assert.deepEqual(JSON.parse(sent[1]!.messages.at(-2)!.content as string), opened);
+  assert.match(sent[1]!.messages.at(-1)!.content as string, /tells the visitor to use button "New budget" \(e27\), but its target is null/);
+  assert.deepEqual(measure.reply, { target: "e27", status: "continue", say: "Click New budget at the top.", mode: "guide" });
+  assert.deepEqual(measure.recheck, { named: "e27", asked: true, verdict: "ask" });
+  // An aside is left as it is, as on any site.
+  const aside = use([{ reply: written({ say: "Your budget is saved. If you ever need another, use New budget." }) }, { reply: pointsAtNew }], "ask");
+  const left = await measureTurn(withDocs, asked);
+  assert.equal(aside.sent.length, 1);
+  assert.equal(left.reply.target, null);
+  assert.deepEqual(left.recheck, { named: "e27", asked: false, verdict: "aside" });
+});
+
+// A card's page, where an answer from the article can name a control that is on the page.
+const cardPage: Snapshot = {
+  path: "/cards/card_1",
+  title: "Team offsite, Northpine",
+  headings: ["Team offsite"],
+  text: [],
+  truncated: false,
+  elements: [
+    { id: "e5", role: "link", label: "Cards", href: "/cards", context: "nav" },
+    { id: "e30", role: "button", label: "Freeze card", context: "main › Team offsite" },
+    { id: "e31", role: "button", label: "Edit limits", context: "main › Team offsite" },
+  ],
+};
+const freezeAnswer = written({ mode: "answer", say: "Freezing a card blocks new charges right away. Click Freeze card to do it.", sources: ["a1"], controls: ["Freeze card"] });
+
+test("on a site with Answers on, an answer in words to a question of fact or explanation stays as it is, whatever control it names", async () => {
+  for (const goal of ["what does freezing a card do?", "how does freezing work", "can I freeze a card?"]) {
+    const { sent } = use([{ reply: freezeAnswer }, { reply: pointsAtFaq }], "ask");
+    const measure = await measureTurn(withDocs, { site: withDocs.id, goal, step: 0, history: [], snapshot: cardPage });
+    assert.equal(sent.length, 1, goal);
+    assert.equal(measure.recheck, undefined, goal);
+    assert.equal(measure.reply.mode, "answer", goal);
+    assert.equal(measure.reply.target, null, goal);
+    assert.equal(measure.reply.status, "done", goal);
+    assert.equal(measure.reply.say, freezeAnswer.say, goal);
+    assert.deepEqual(measure.cited, ["freeze.md"], goal);
+  }
+  // "I can't help" is a fixed sentence, and what the model wrote under it is never looked at. (Only "not covered" to a
+  // question that asks for a way is asked about again: see the test of it below.)
+  const { sent } = use([{ reply: written({ mode: "cannot_help", reason: "sensitive", say: "Click Freeze card." }) }], "ask");
+  const cannot = await measureTurn(withDocs, { site: withDocs.id, goal: "how do I freeze this card", step: 0, history: [], snapshot: cardPage });
+  assert.equal(sent.length, 1);
+  assert.equal(cannot.reply.mode, "cannot_help");
+  assert.equal(cannot.recheck, undefined);
+});
+
+test("on a site with Answers on, an answer in words to a how-to question is not the end: the control it names is pointed at and the guide goes on", async () => {
+  const howTo: TurnRequest = { site: withDocs.id, goal: "how do I freeze this card", step: 0, history: [], snapshot: cardPage };
+  // It names the goal's control and points at nothing: the control is pointed at, the answer's words and article stay.
+  const { sent } = use([{ reply: freezeAnswer }, { reply: pointsAtFaq }], "ask");
+  const measure = await measureTurn(withDocs, howTo);
+  assert.equal(sent.length, 1);
+  assert.equal(measure.reply.mode, "answer");
+  assert.equal(measure.reply.target, "e30");
+  assert.equal(measure.reply.status, "continue");
+  assert.equal(measure.reply.say, freezeAnswer.say);
+  assert.equal(measure.reply.sources?.[0]?.title, "Freeze or cancel a card");
+  assert.deepEqual(measure.recheck, { named: "e30", asked: false, verdict: "point", pointed: true });
+  // It points at the control and calls that the end: for a how-to question the pointer is the first step.
+  use([{ reply: { ...freezeAnswer, target: "e30", status: "done" } }], "ask");
+  const pointed = await measureTurn(withDocs, howTo);
+  assert.equal(pointed.reply.target, "e30");
+  assert.equal(pointed.reply.status, "continue");
+  // For a question of fact the same reply is the end, with the pointer showing where the thing is.
+  use([{ reply: { ...freezeAnswer, target: "e30", status: "done" } }], "ask");
+  const shown = await measureTurn(withDocs, { ...howTo, goal: "what does freezing a card do?" });
+  assert.equal(shown.reply.target, "e30");
+  assert.equal(shown.reply.status, "done");
+  // It tells them to use two controls, so which comes first is the model's to say: asked once more.
+  const both = written({ mode: "answer", say: "Freezing a card blocks new charges. Open Cards, then click Freeze card on the card's page.", sources: ["a1"], controls: ["Cards", "Freeze card"] });
+  const step = written({ target: "e30", status: "continue", say: "Click Freeze card." });
+  const asked = use([{ reply: both }, { reply: step }], "ask");
+  const again = await measureTurn(withDocs, howTo);
+  assert.equal(asked.sent.length, 2);
+  assert.deepEqual(again.reply, { target: "e30", status: "continue", say: "Click Freeze card.", mode: "guide" });
+});
+
+// Haptic's demo app, which has help docs and so Answers on, in the tuned benchmark of 16 November: asked "Where do I
+// get an API key?", the guide ended on the Security tab in words that name the button and do not say to use it.
+const securityPage: Snapshot = {
+  path: "/demo/settings-security",
+  title: "Settings, Acme",
+  headings: ["Settings", "API keys"],
+  text: [],
+  truncated: false,
+  elements: [
+    { id: "e4", role: "link", label: "Security", href: "/demo/settings-security", context: "main › Settings", state: ["current"] },
+    { id: "e9", role: "checkbox", label: "Require two-factor authentication", context: "main › Security" },
+    { id: "e12", role: "button", label: "Create API key", context: "main › API keys" },
+    { id: "e13", role: "button", label: "Revoke", context: "main › API keys" },
+  ],
+};
+const demoStop = "You're on the Security tab, and the API keys section is in the main area. Existing keys are listed there, and Create API key makes a new one.";
+const atSecurity: TurnRequest = { site: site.id, goal: "Where do I get an API key?", step: 3, history: [], event: 'The user clicked link "Security". It is e4 in the list now, and is now current.', snapshot: securityPage };
+
+test("a guide that ends in words naming the goal's control, with no word that says to use it, is asked about once more, with Answers on or off", async () => {
+  const pointsAtCreate: TurnReply = { target: "e12", status: "continue", say: "Click Create API key." };
+  // On a site without Answers.
+  const plain = use([{ reply: { target: null, status: "done", say: demoStop } }, { reply: pointsAtCreate }], "ask");
+  const { result: measure, lines } = await logging(() => measureTurn(site, atSecurity));
+  assert.equal(plain.sent.length, 2);
+  assert.match(plain.sent[1]!.messages.at(-1)!.content as string, /ends the guide and names button "Create API key" \(e12\), but its target is null/);
+  assert.deepEqual(measure.reply, pointsAtCreate);
+  assert.deepEqual(measure.recheck, { named: "e12", asked: true, verdict: "ask" });
+  assert.deepEqual(
+    lines.filter((line) => line.startsWith("recheck ")),
+    ["recheck site_test step 3: the guide ends in words that name e12, a control of the goal, and nothing is pointed at, asking again"],
+  );
+  // On a site with Answers on, where it was seen.
+  const answersOn = use([{ reply: written({ say: demoStop }) }, { reply: written({ target: "e12", status: "continue", say: "Click Create API key." }) }], "ask");
+  const guided = await measureTurn(withDocs, { ...atSecurity, site: withDocs.id });
+  assert.equal(answersOn.sent.length, 2);
+  assert.deepEqual(guided.reply, { target: "e12", status: "continue", say: "Click Create API key.", mode: "guide" });
+  // The model may end as it did: its second reply stands, and nothing is pointed at in code.
+  use([{ reply: { target: null, status: "done", say: demoStop } }, { reply: { target: null, status: "done", say: "The API keys are listed on this tab." } }], "ask");
+  const stands = await measureTurn(site, atSecurity);
+  assert.deepEqual(stands.reply, { target: null, status: "done", say: "The API keys are listed on this tab." });
+  // A guide that gives up while naming the goal's control as the place to try is the same contradiction (backstage, 16 November).
+  const gaveUp = use([{ reply: { target: null, status: "stuck", say: "I can't find a way to make a key here. Try Create API key in the API keys section." } }, { reply: pointsAtCreate }], "ask");
+  assert.deepEqual((await measureTurn(site, atSecurity)).reply, pointsAtCreate);
+  assert.equal(gaveUp.sent.length, 2);
+  // With the check only logging, the reply goes as the model wrote it.
+  const logged = use([{ reply: { target: null, status: "done", say: demoStop } }], "log");
+  assert.equal((await measureTurn(site, atSecurity)).reply.target, null);
+  assert.equal(logged.sent.length, 1);
+});
+
+test("a guide that ends in words is left alone when the goal is a question of fact, the thing is done, or the control is not the goal's", async () => {
+  const left: [string, string][] = [
+    // A question of fact, answered.
+    ["which API keys do we have?", "Two keys are listed on this tab, and Create API key makes a new one."],
+    // The thing is done.
+    ["Where do I get an API key?", "Your key has been created and is shown once. Create API key makes another."],
+    ["Where do I get an API key?", "Done. The new key is listed here, and Create API key makes another."],
+    // It names a control that has nothing to do with the goal, or tells the visitor not to use the one that has.
+    ["Where do I get an API key?", "You're on the Security tab. Revoke is beside each one."],
+    ["Where do I get an API key?", "This tab lists your keys. There's no need to use Create API key for that."],
+    // It names nothing on the page by its own name.
+    ["Where do I get an API key?", "API keys are made on this tab, with the button above the list."],
+  ];
+  for (const [goal, say] of left) {
+    const { sent } = use([{ reply: { target: null, status: "done", say } }, { reply: pointsAtFaq }], "ask");
+    const measure = await measureTurn(site, { ...atSecurity, goal });
+    assert.equal(sent.length, 1, say);
+    assert.equal(measure.reply.target, null, say);
+    assert.equal(measure.recheck, undefined, say);
+  }
+});
+
+// Haptic's demo app with its help docs, 17 November: "How do I delete this workspace?" on the home page, where the way
+// is behind the account menu, was answered "I couldn't find that on Acme Console or in its help docs." in 7 replies of 12.
+const demoHome: Snapshot = {
+  path: "/demo",
+  title: "Acme Console",
+  headings: ["Projects"],
+  text: [],
+  truncated: false,
+  elements: [
+    { id: "e1", role: "link", label: "Projects", href: "/demo/projects", context: "nav" },
+    { id: "e2", role: "link", label: "Team", href: "/demo/team", context: "nav" },
+    { id: "e5", role: "button", label: "A", context: "header", state: ["collapsed"] },
+  ],
+};
+const cannotFind = written({ mode: "cannot_help", status: "done", reason: "not_covered" });
+const opensAccount = written({ target: "e5", status: "continue", say: "Click the round A button at the top right to open the account menu." });
+const deleteIt: TurnRequest = { site: withDocs.id, goal: "How do I delete this workspace?", step: 0, history: [], snapshot: demoHome };
+
+test('on a site with Answers on, "not covered" to a first question that asks for a way is asked about once more, and the second reply is the one sent', async () => {
+  const { sent } = use([{ streams: '{"mode":"cannot_help","target":null', reply: cannotFind }, { streams: '{"mode":"guide","target":"e5"', reply: opensAccount }], "ask");
+  const early: string[] = [];
+  const { result: measure, lines } = await logging(() => measureTurn(withDocs, deleteIt, undefined, { onTarget: (id) => early.push(id) }));
+  assert.equal(sent.length, 2);
+  assert.deepEqual(JSON.parse(sent[1]!.messages.at(-2)!.content as string), cannotFind);
+  assert.match(sent[1]!.messages.at(-1)!.content as string, /says you can't help because nothing covers it\. The visitor asked for a way/);
+  assert.deepEqual(measure.reply, { target: "e5", status: "continue", say: "Click the round A button at the top right to open the account menu.", mode: "guide" });
+  assert.deepEqual(measure.recheck, { named: "", asked: true, gaveUp: true });
+  // The second reply's pointer goes out as soon as it is known, though the first reply declined.
+  assert.deepEqual(early, ["e5"]);
+  assert.deepEqual(lines.filter((line) => line.startsWith("recheck ")), ['recheck site_docs step 0: "not covered" to a question that asks for a way, asking again']);
+  // The model may say it again: then the visitor reads the fixed sentence, and is offered a person as before.
+  const twice = use([{ reply: cannotFind }, { reply: cannotFind }], "ask");
+  const still = await measureTurn(withDocs, deleteIt);
+  assert.equal(twice.sent.length, 2);
+  assert.deepEqual(still.reply, { target: null, status: "stuck", say: "I couldn't find that on Test or in its help docs.", mode: "cannot_help", reason: "not_covered" });
+});
+
+test('"not covered" is left as it is for a question of fact, a question for a person, one off the subject, a later step, and when the check is not asking', async () => {
+  const once = async (reply: ModelReply, request: TurnRequest, recheck = "ask") => {
+    const { sent } = use([{ reply }, { reply: opensAccount }], recheck);
+    const measure = await measureTurn(withDocs, request);
+    return [sent.length, measure.reply.mode, measure.reply.reason];
+  };
+  assert.deepEqual(await once(cannotFind, { ...deleteIt, goal: "can a workspace be deleted?" }), [1, "cannot_help", "not_covered"]);
+  assert.deepEqual(await once({ ...cannotFind, reason: "sensitive" }, deleteIt), [1, "cannot_help", "sensitive"]);
+  assert.deepEqual(await once({ ...cannotFind, reason: "off_topic" }, deleteIt), [1, "cannot_help", "off_topic"]);
+  assert.deepEqual(await once(cannotFind, { ...deleteIt, step: 2, event: 'The user clicked link "Team".' }), [1, "cannot_help", "not_covered"]);
+  assert.deepEqual(await once(cannotFind, deleteIt, "log"), [1, "cannot_help", "not_covered"]);
+  assert.deepEqual(await once(cannotFind, deleteIt, "off"), [1, "cannot_help", "not_covered"]);
+});
+
+test('"Not that one." is said only to a visitor who used something other than the step shown', async () => {
+  // Northpine's Bills, 16 November: the model pointed at the Vendor column's button, the visitor clicked it, and was told "Not that one."
+  const blames: TurnReply = { target: "e17", status: "continue", say: "Not that one. Click People in the sidebar." };
+  const didTheStep: TurnRequest = { ...atBudgets, event: 'The user clicked link "Budgets". It is e14 in the list now, and looks unchanged.' };
+  delete didTheStep.closing;
+  use([{ reply: blames }], "ask");
+  assert.equal((await measureTurn(site, didTheStep)).reply.say, "Click People in the sidebar.");
+  // The visitor used something else, or went elsewhere, and the widget says so: the opening stays, as the instructions ask.
+  for (const event of ['The user clicked button "Show only these" instead of link "Budgets".', 'The user went to /people without using link "Budgets".']) {
+    use([{ reply: blames }], "ask");
+    assert.equal((await measureTurn(site, { ...didTheStep, offTrack: true, event })).reply.say, "Not that one. Click People in the sidebar.", event);
+  }
+  // They closed the dialog the control was in. That is off the way, and there was still no other one.
+  use([{ reply: blames }], "ask");
+  const closed = await measureTurn(site, { ...didTheStep, offTrack: true, event: 'The user clicked outside the dialog "Pay Brightdesk", which closed it without using button "Continue".' });
+  assert.equal(closed.reply.say, "Click People in the sidebar.");
+  // On a site with Answers on it is the same sentence and the same rule.
+  use([{ reply: written({ target: "e17", status: "continue", say: "Not that one. click People in the sidebar." }) }], "ask");
+  assert.equal((await measureTurn(withDocs, { ...didTheStep, site: withDocs.id })).reply.say, "Click People in the sidebar.");
+  // A sentence that is nothing but the opening is left as it is, rather than shown empty.
+  use([{ reply: { target: "e17", status: "continue", say: "Not that one." } }], "ask");
+  assert.equal((await measureTurn(site, didTheStep)).reply.say, "Not that one.");
 });
 
 test("when asking again fails, the first reply still reaches the visitor", async () => {
@@ -181,11 +530,15 @@ test("the budget sets aside two calls for a step that may ask again, and one whe
   use([], "ask");
   const first = ceilingFor(site, request);
   const later = ceilingFor(site, { ...request, step: 2, event: 'The user clicked link "FAQ".' });
+  const withAnswers = { ...site, answers: { enabled: true } };
+  const answered = ceilingFor(withAnswers, { ...request, step: 2, event: 'The user clicked link "FAQ".' });
   use([], "off");
   const unchecked = ceilingFor(site, request);
-  // The first question may be asked again; a later one in a guide is not.
+  const answeredUnchecked = ceilingFor(withAnswers, { ...request, step: 2, event: 'The user clicked link "FAQ".' });
+  // Any step of a guide may be asked again, the first or a later one, and on a site with Answers on too: its guide steps are judged the same.
   assert.ok(first.cold > unchecked.cold && first.warm > unchecked.warm);
-  assert.ok(later.warm < first.warm);
+  assert.ok(later.warm > unchecked.warm);
+  assert.ok(answered.warm > answeredUnchecked.warm && answered.cold > answeredUnchecked.cold);
   // A read of the cached prompt costs less than writing it, so the second call adds less than the first.
   assert.ok(first.cold - unchecked.cold < unchecked.cold);
   assert.equal(SETTINGS.recheck, "off");
@@ -335,23 +688,29 @@ test("in act mode, a stalled reply is only logged when the check only logs, and 
   assert.equal(off.sent.length, 1);
 });
 
-test("a guide's later step is not asked about again, the same page and words included", async () => {
+test("a guide's later step is judged as a guide's, the same page and words included", async () => {
   const guideStep: TurnRequest = { ...onCardType, mode: undefined, event: 'The user clicked button "Next".' };
   delete guideStep.mode;
   const clickNext: TurnReply = { target: null, status: "continue", say: "Virtual is already selected. Click Next to open Limits and controls." };
-  for (const [on, request, reply] of [
-    [site, guideStep, clickNext],
-    [site, guideStep, { target: null, status: "continue", say: skipsVirtual.say } as TurnReply],
+  const pointsAtNext: TurnReply = { target: "e32", status: "continue", say: "Click Next." };
+  // "Next" shares no word with the goal, so the model is asked once more, with a guide's note: never made a press.
+  for (const [on, request] of [
+    [site, guideStep],
     // The widget asked to act where the site has acting off: answered as a guide, and checked as one.
-    [site, onCardType, clickNext],
+    [site, onCardType],
   ] as const) {
-    const { sent } = use([{ reply }, { reply: { target: "e32", status: "continue", say: "Click Next." } }], "ask");
+    const { sent } = use([{ reply: clickNext }, { reply: pointsAtNext }], "ask");
     const measure = await measureTurn(on, request);
-    assert.equal(sent.length, 1, reply.say);
-    assert.equal(measure.reply.target, null);
-    assert.notEqual(measure.recheck?.asked, true);
-    assert.equal(measure.recheck?.act, undefined);
+    assert.equal(sent.length, 2);
+    assert.match(sent[1]!.messages.at(-1)!.content as string, /tells the visitor to use button "Next" \(e32\), but its target is null/);
+    assert.deepEqual(measure.reply, pointsAtNext);
+    assert.deepEqual(measure.recheck, { named: "e32", asked: true, verdict: "ask" });
   }
+  // With no word that tells the visitor to use it, a guide's sentence names nothing.
+  const { sent } = use([{ reply: { target: null, status: "continue", say: skipsVirtual.say } }, { reply: pointsAtNext }], "ask");
+  const measure = await measureTurn(site, guideStep);
+  assert.equal(sent.length, 1);
+  assert.equal(measure.recheck, undefined);
 });
 
 // Act mode: a press written as the visitor's. At the wizard's Limits page the
