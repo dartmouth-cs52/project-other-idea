@@ -1,4 +1,5 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { reportUsage } from "../shared/billing.ts";
 import { BLOCKED_SAY } from "../shared/corrections.ts";
 import { mappingAllowed } from "../shared/mapping.ts";
 import { cleanText, normalizePath, NO_MODEL, questionKey, REASONS, type GuideOutcome, type GuideReport, type PageNode, type PageOutline, type SiteContext, type TurnReply, type TurnRequest } from "../shared/types.ts";
@@ -121,6 +122,8 @@ export class Store {
   private readonly reportWaitsMs: readonly number[];
   /** How many learned labels a site keeps, and as many items behind controls. */
   private readonly maxLabels: number;
+  /** Stripe's secret key. With it, a guide kept as finished is sent to Stripe as usage straight away. */
+  private readonly stripeKey: string | undefined;
 
   /**
    * `connection` is Neon's connection string. A test hands in a stand-in for
@@ -128,17 +131,18 @@ export class Store {
    * visitors must have seen a learned label before the prompt gets it, and
    * `labelNetworks` how many different networks they must have called from,
    * the same number unless given. A test makes `reportWaitsMs` and
-   * `maxLabels` small.
+   * `maxLabels` small. `stripeKey` turns on sending finished guides to Stripe.
    */
   constructor(
     connection: string | NeonQueryFunction<false, false>,
     private readonly labelThreshold = 3,
-    options: { labelNetworks?: number; reportWaitsMs?: readonly number[]; maxLabels?: number } = {},
+    options: { labelNetworks?: number; reportWaitsMs?: readonly number[]; maxLabels?: number; stripeKey?: string } = {},
   ) {
     this.sql = typeof connection === "string" ? neon(connection) : connection;
     this.labelNetworks = options.labelNetworks ?? labelThreshold;
     this.reportWaitsMs = options.reportWaitsMs ?? REPORT_RETRIES_MS;
     this.maxLabels = options.maxLabels ?? MAX_LABELS;
+    this.stripeKey = options.stripeKey || undefined;
   }
 
   /**
@@ -541,6 +545,9 @@ export class Store {
         }
         if (outcome && found.open) {
           await this.sql`update guides set outcome = ${outcome}, ended_at = now() where id = ${guide} and site_id = ${site.id} and outcome is null`;
+          // A finished guide is billed. It goes to Stripe now if its company pays by usage, and only if the database kept it as finished.
+          // The site's hourly sweep catches any that don't get through.
+          if (outcome === "finished" && this.stripeKey) await reportUsage(this.sql, this.stripeKey, { guide });
         }
         if (report.helped !== undefined) {
           await this.sql`update guides set helped = ${report.helped} where id = ${guide} and site_id = ${site.id}`;
