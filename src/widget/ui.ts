@@ -113,7 +113,8 @@ button { font: inherit; cursor: pointer; }
   filter: drop-shadow(0 1px 1px rgba(0,0,0,.3)) drop-shadow(0 5px 9px rgba(0,0,0,.26)); will-change: transform; }
 .cursor svg { display: block; overflow: visible; }
 .cursor path { fill: var(--accent); stroke: #fff; stroke-width: 3; stroke-linejoin: round; paint-order: stroke; }
-.caption { position: fixed; display: flex; align-items: center; gap: 8px; max-width: min(320px, calc(100vw - 24px)); background: #1c1917; color: #fafaf9;
+/* As wide as its words, up to its limit, wherever it is put: a width that followed its place would change as it was placed, and it would be laid out again. */
+.caption { position: fixed; display: flex; align-items: center; gap: 8px; width: max-content; max-width: min(320px, calc(100vw - 24px)); background: #1c1917; color: #fafaf9;
   border-radius: 14px; padding: 6px 6px 6px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.22); }
 .caption .close { display: inline-flex; align-items: center; justify-content: center; flex: none; align-self: flex-start; width: 24px; height: 24px; border: 0;
   border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; pointer-events: auto; }
@@ -704,6 +705,8 @@ export class Ui {
    */
   private keepPlaced() {
     this.placeSaid();
+    // The panel has opened, closed or changed size: what is pointed at, its caption and the panel are put in their places again, now.
+    this.arrange();
     const inUse = this.inUse();
     if (inUse && this.placing === undefined) this.placing = setInterval(this.place, 500);
     else if (!inUse && this.placing !== undefined) {
@@ -1242,7 +1245,25 @@ export class Ui {
     // Paint once at the old spot so the transition has somewhere to start from.
     this.cursor.style.transform = `translate(${this.at.x - this.tipIn.x}px, ${this.at.y - this.tipIn.y}px)`;
     cancelAnimationFrame(this.frame);
+    // The ring, the caption and the panel go to their places now, before anything is drawn, and stay there. The pointer glides from the next frame.
+    this.looked = 0;
+    this.arrange();
     this.frame = requestAnimationFrame(this.track);
+  }
+
+  /**
+   * Puts the ring, the caption and the launcher with its panel where they go for what is pointed at, all in one go
+   * and before the browser draws them. Called when a pointer goes up and whenever the panel changes, so that the
+   * visitor never sees one of them drawn over another and then moved off it.
+   */
+  private arrange() {
+    const el = this.target;
+    if (!el) return;
+    try {
+      this.follow(el, true);
+    } catch (error) {
+      console.warn("[Haptic]", error);
+    }
   }
 
   /** Show text with nothing to point at, above the launcher. */
@@ -1399,7 +1420,11 @@ export class Ui {
     }
   };
 
-  private follow(el: Element) {
+  /**
+   * Draws everything round the control for this frame. `still` is the first look at a control, or one after the
+   * panel changed: everything but the pointer is put in its place, and the pointer starts its glide on the next frame.
+   */
+  private follow(el: Element, still = false) {
     // A control that has left the page, or is no longer laid out, has nothing to point at: the pointer and its sentence
     // go with it, and nothing is left floating where it was. They come back if the page puts it back.
     if (!el.isConnected || !el.getClientRects().length) {
@@ -1433,38 +1458,77 @@ export class Ui {
     this.ring.style.width = `${rect.width + pad * 2}px`;
     this.ring.style.height = `${rect.height + pad * 2}px`;
 
-    this.at = this.held ?? this.tipOn(el, rect);
-    this.cursor.style.transform = `translate(${this.at.x - this.tipIn.x}px, ${this.at.y - this.tipIn.y}px)`;
-
-    // The caption goes below the control, or above it when there is no room below or when something opened below.
-    // In presentation mode it looks for its place another way: see `presentedCaption`.
-    const box = this.caption.getBoundingClientRect();
-    let left: number;
-    let top: number;
-    if (this.present) ({ left, top } = this.presentedCaption(rect, pad, box));
-    else {
-      const fitsBelow = rect.bottom + 14 + box.height < window.innerHeight;
-      const fitsAbove = rect.top - box.height - 12 >= 8;
-      const above = this.captionAbove ? fitsAbove || !fitsBelow : !fitsBelow;
-      top = above ? Math.max(8, rect.top - box.height - 12) : rect.bottom + 14;
-      left = Math.min(Math.max(8, rect.left), window.innerWidth - box.width - 8);
+    // The tip goes where the control is, or will show. On a first look the pointer is left where it was drawn, and glides from the next frame.
+    const tip = this.held ?? this.tipOn(el, rect);
+    if (!still) {
+      this.at = tip;
+      this.cursor.style.transform = `translate(${tip.x - this.tipIn.x}px, ${tip.y - this.tipIn.y}px)`;
     }
+
+    // The caption and the launcher with its panel are placed together: neither covers the control, the pointer or the other.
+    const box = this.caption.getBoundingClientRect();
+    const { left, top, spot } = this.settle(rect, pad, box, this.pointerBox(tip));
     this.caption.style.left = `${left}px`;
     this.caption.style.top = `${top}px`;
+    this.dockAt(spot);
 
     const now = performance.now();
     if (now - this.looked < 200) return;
     this.looked = now;
     const caption = this.caption.hidden ? undefined : { left, top, right: left + box.width, bottom: top + box.height };
-    this.keepLauncherOff(rect, caption);
     if (caption) this.keepCaptionOff(el, caption);
-    if (this.present) this.showAsked([this.ring.getBoundingClientRect(), this.pointerBox()]);
+    if (this.present) this.showAsked([this.ring.getBoundingClientRect(), this.pointerBox(tip)]);
+  }
+
+  /**
+   * Where the caption and the launcher's dock go for a control at `rect`. The caption takes its usual place, and the
+   * dock stays in its own corner unless it would cover the control, the pointer or the caption there; then it goes
+   * to its other place, as it always has. When it would cover one of them in both places, as "What I did" can in a
+   * short window, the caption looks for a place clear of the dock, first with the dock at home. Only when nothing
+   * keeps them apart does one end up over another.
+   */
+  private settle(rect: DOMRect, pad: number, box: DOMRect, pointer: Box): { left: number; top: number; spot: Spot } {
+    const dock = this.dock.getBoundingClientRect();
+    const size = { w: dock.width, h: dock.height };
+    const captioned = !this.caption.hidden;
+    const open = this.present ? openLayers(this.host, this.target) : undefined;
+    const place = (avoid: Box[]) => (open ? this.presentedCaption(rect, pad, box, pointer, open, avoid) : this.plainCaption(rect, box, avoid));
+    const boxOf = (at: { left: number; top: number }): Box => ({ left: at.left, top: at.top, right: at.left + box.width, bottom: at.top + box.height });
+    const onControl = (spot: Spot) => overlaps(boxAt(spot, size), rect, 8) || overlaps(boxAt(spot, size), pointer, 0);
+    const usual = place([]);
+    const covers = (spot: Spot) => onControl(spot) || (captioned && overlaps(boxAt(spot, size), boxOf(usual), 4));
+    if (!covers(this.home)) return { ...usual, spot: this.home };
+    if (!covers(this.away)) return { ...usual, spot: this.away };
+    if (captioned) {
+      for (const spot of [this.home, this.away]) {
+        if (onControl(spot)) continue;
+        const dockBox = boxAt(spot, size);
+        const clear = place([{ left: dockBox.left - 4, top: dockBox.top - 4, right: dockBox.right + 4, bottom: dockBox.bottom + 4 }]);
+        if (clear.free) return { ...clear, spot };
+      }
+    }
+    return { ...usual, spot: this.home };
+  }
+
+  /** Where the caption goes outside presentation mode: below the control, or above it when there is no room below or when something opened below. */
+  private plainCaption(rect: DOMRect, box: DOMRect, avoid: Box[]): { left: number; top: number; free: boolean } {
+    const left = Math.min(Math.max(8, rect.left), window.innerWidth - box.width - 8);
+    const fitsBelow = rect.bottom + 14 + box.height < window.innerHeight;
+    const fitsAbove = rect.top - box.height - 12 >= 8;
+    const below = { left, top: rect.bottom + 14 };
+    const above = { left, top: Math.max(8, rect.top - box.height - 12) };
+    const first = (this.captionAbove ? fitsAbove || !fitsBelow : !fitsBelow) ? above : below;
+    const free = (at: { left: number; top: number }) => !avoid.some((other) => overlaps({ left: at.left, top: at.top, right: at.left + box.width, bottom: at.top + box.height }, other, 0));
+    if (free(first)) return { ...first, free: true };
+    const other = first === above ? below : above;
+    if ((other === above ? fitsAbove : fitsBelow) && free(other)) return { ...other, free: true };
+    return { ...first, free: false };
   }
 
   /** The box the pointer is drawn in, round its tip, at the size it is drawn. */
-  private pointerBox(): Box {
+  private pointerBox(tip: { x: number; y: number } = this.at): Box {
     const scale = this.present ? PRESENT_SCALE : 1;
-    return { left: this.at.x - 4, top: this.at.y - 4, right: this.at.x + 18 * scale, bottom: this.at.y + 20 * scale };
+    return { left: tip.x - 4, top: tip.y - 4, right: tip.x + 18 * scale, bottom: tip.y + 20 * scale };
   }
 
   /**
@@ -1477,13 +1541,11 @@ export class Ui {
    * Above comes first because what a control opens, a list, a menu or a
    * calendar, opens below it, and in a form the next field is below it too.
    */
-  private presentedCaption(rect: DOMRect, pad: number, box: DOMRect): { left: number; top: number } {
+  private presentedCaption(rect: DOMRect, pad: number, box: DOMRect, pointer: Box, open: { boxes: Box[]; around?: Box }, more: Box[] = []): { left: number; top: number; free: boolean } {
     const gap = 14;
     const width = window.innerWidth;
     const height = window.innerHeight;
     const ring = { left: rect.left - pad - 6, top: rect.top - pad - 6, right: rect.right + pad + 6, bottom: rect.bottom + pad + 6 };
-    const pointer = this.pointerBox();
-    const open = openLayers(this.host, this.target);
     // Round the control, its pointer, and the list it is a choice in, if it is in one.
     const near = [ring, pointer, ...(open.around ? [open.around] : [])];
     const all = { left: Math.min(...near.map((b) => b.left)), top: Math.min(...near.map((b) => b.top)), right: Math.max(...near.map((b) => b.right)), bottom: Math.max(...near.map((b) => b.bottom)) };
@@ -1504,10 +1566,12 @@ export class Ui {
       );
     }
     const fits = (place: { left: number; top: number }) => place.left >= 12 && place.top >= 12 && place.left + box.width <= width - 12 && place.top + box.height <= height - 12;
-    const avoid = [ring, pointer, ...this.captionAvoid, ...open.boxes];
+    const avoid = [ring, pointer, ...this.captionAvoid, ...open.boxes, ...more];
     const free = (place: { left: number; top: number }) =>
       !avoid.some((other) => overlaps({ left: place.left, top: place.top, right: place.left + box.width, bottom: place.top + box.height }, other, 0));
-    return places.find((place) => fits(place) && free(place)) ?? places.find(fits) ?? { left: clampX(rect.left), top: clampY(ring.bottom + gap) };
+    const clear = places.find((place) => fits(place) && free(place));
+    if (clear) return { ...clear, free: true };
+    return { ...(places.find(fits) ?? { left: clampX(rect.left), top: clampY(ring.bottom + gap) }), free: false };
   }
 
   /**
@@ -1567,14 +1631,6 @@ export class Ui {
     }
     this.captionAbove = !this.captionAbove;
     this.under = { els: [], moved: true };
-  }
-
-  /** Keeps the launcher off the control being pointed at and off its caption, by moving it to the other side while it would cover them. */
-  private keepLauncherOff(rect: DOMRect, caption?: { left: number; top: number; right: number; bottom: number }) {
-    const box = this.dock.getBoundingClientRect();
-    const size = { w: box.width, h: box.height };
-    const covers = (spot: Spot) => overlaps(boxAt(spot, size), rect, 8) || (!!caption && overlaps(boxAt(spot, size), caption, 4));
-    this.dockAt(covers(this.home) && !covers(this.away) ? this.away : this.home);
   }
 
   /** Puts the launcher, and the ask box above it, at a place. */
