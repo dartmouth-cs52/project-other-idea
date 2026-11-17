@@ -273,7 +273,9 @@ looks stark.
 - **Muted text (#78716C):** Sub-copy and secondary labels. 4.6 to 1 on Paper.
 - **Border (#E7E5E4):** Hairlines and the secondary button.
 - **Pointer blue (#1E6EF4):** The pointer, the mark around its target, the
-  keyboard focus ring and the heart of the thinking glow. Nothing else.
+  keyboard focus ring and the heart of the thinking glow. Nothing else. It is
+  the same on every customer's site and is not a setting: the pointer is
+  Haptic's, and it has to be seen against the site, not blend into it.
 - **Thinking glow (#77D0FE, #5294FF, #8460EE):** One soft band over the page
   while Haptic thinks: sky at its trailing edge, a lighter Pointer blue through
   its middle, indigo at its leading edge. The three are the pointer's colour
@@ -474,12 +476,17 @@ Components are shadcn/ui, restyled only through tokens and variants.
   never over the next control.
 - **Launcher:** The pill in the bottom right corner that opens the chat. It
   is on the right on every site and only ever moves up that side, to clear a
-  control of the page's, never across to the left. Ink with Paper words. A company can give it its own site's colour, so it looks
-  like part of the site, the way a support button does. Its words are then
-  Paper or Ink, whichever reads better on that colour. The pointer never takes
-  the site's colour. The two have opposite jobs: the launcher belongs to the
-  site, and the pointer has to be seen against it. A green pointer on a green
-  sidebar was tried and could hardly be found.
+  control of the page's, never across to the left. It takes the site's own
+  colour, so it looks like part of the site, the way a support button does.
+  The colour is read from the site when it is added, from what its
+  stylesheets name as theirs, and the company can match it again or pick
+  another. A colour too light to stand out on a white page is darkened, with
+  its hue kept, until it is 3 to 1 against white, what accessibility
+  guidelines ask of a control. Its words are Paper or Ink, whichever reads
+  better on it. A site with no colour of its own gets Ink with Paper words.
+  The pointer never takes the site's colour. The two have opposite jobs: the
+  launcher belongs to the site, and the pointer has to be seen against it. A
+  green pointer on a green sidebar was tried and could hardly be found.
 - **Chat:** Haptic's home, in the bottom right corner where support chat
   usually lives. A Card panel holding the conversation and the ask box. It
   stays open from the first question to the last step. A 24px × in Muted
@@ -570,9 +577,11 @@ is a menu of the company's sites, with All sites and Add a site under them. Who
 is signed in is on the right, in a menu that names their company and holds Sign
 out. Inside a site its pages run down a 224px column on the left. Each is a
 32px row with a 16px icon. The page you are on is Border grey with Ink text,
-and the others are Muted text. The column is fixed to the window, so it and
-the line beside it stay where they are however far the page scrolls. Below
-1024px the column becomes a row under the bar that scrolls sideways. Content
+and the others are Muted text. The bar and the column are both fixed to the
+window, so they and their lines stay where they are however far the page
+scrolls, and when a Mac's trackpad pulls the page past its top or foot only the
+page moves under them. Below 1024px the column becomes a row under the bar that
+scrolls sideways, and the bar and the row stick to the top together. Content
 is up to 1152px wide (`max-w-6xl`).
 
 **Pages.** A site has five, in this order, and no more are added without a
@@ -591,18 +600,21 @@ reason a customer gave.
 - **Knowledge.** What Haptic reads and what the company has corrected. Notes,
   help docs, corrections, the routes taught by doing, the controls never to
   point at, and the pages read.
-- **Settings.** Three tabs. General holds the site's name, the widget's two
-  colours and deleting the site. Install holds the script and where it runs.
+- **Settings.** Three tabs. General holds the site's name, the Ask button's
+  colour and deleting the site. Install holds the script and where it runs.
   Usage holds the finished guides, month by month, which are what billing
   counts.
 
-A company chooses two colours. The Ask button's is the one to match: a
-secondary button, "Match website", reads the site's own colour from its first
-page and saves it in one press. A grey, a near white or a near black is never
-taken. The pointer's colour is Haptic's blue, and stays so unless the company
-changes it. When it is anything else, "Use Haptic blue" puts it back. The
-launcher sits bottom right on every site, where support chat usually lives,
-and that is not a setting. Deleting a site leads back to the list of sites.
+A company chooses one colour, the Ask button's, and it starts as the site's
+own: it is read from the site when the site is added, and the field says
+"Reading your website's colour" until it is in. A secondary button, "Match
+website", reads it again and saves it in one press, and the field takes any
+other. A grey, a near white or a near black is never read as the site's
+colour. One too light for a button is saved as it is drawn, darker, and the
+field says so before it is saved. The pointer is Haptic's blue on every site,
+and the card says so in one line instead of offering a field. The launcher
+sits bottom right on every site, where support chat usually lives, and that is
+not a setting. Deleting a site leads back to the list of sites.
 
 **Sites.** The first page after sign-in is the list, one card a site, for a
 company with one site as for one with several. A site opens when its card is
@@ -762,9 +774,14 @@ stays. The rest below is proposed.
   Once anything is in the chat, a turning arrow on the far side of the ask
   box's row starts over: it calls off a guide that is running and clears the
   chat back to an empty ask box with the keyboard.
-- **Never cover the control.** When the chat would sit on the control being
-  pointed at, or on its caption, it moves to the other side of the window
-  while the pointer is there, and comes back when it has gone.
+- **Never cover the control, and don't move for anything less.** When the
+  chat would sit on the control being pointed at, it moves up the right side
+  of the window to just above it while the pointer is there, and comes back
+  down when it has gone. The caption gives way to the chat, not the other way
+  round: a caption that would run under the chat in its corner moves left,
+  still under its control, so the chat doesn't jump up for one step and drop
+  back on the next. The chat moves for a caption only when the caption has
+  nowhere else to go.
 - **A wrong click is not an error, and Haptic says so.** The ask box shows
   "Finding the way from here" at once. The next caption opens with "Not that
   one." and names the step that gets the person back. It is plain text in the

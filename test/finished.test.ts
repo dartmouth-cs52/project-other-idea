@@ -40,7 +40,10 @@ const acting: SiteContext = { ...plain, id: "site_finished03", acting: { enabled
 const ruling: SiteContext = { ...plain, id: "site_finished04", blocked: [{ label: "Home" }] };
 /** A site with Answers on: it has a help article. */
 const answers: SiteContext = { ...plain, id: "site_finished05", docs: [{ title: "Teammates", source: "help/teammates.md", text: "Who can invite teammates? Owners and admins can invite teammates from the Team page." }] };
-const sites = [plain, off, acting, ruling, answers];
+/** A site whose company pays for a plan with Stripe. */
+const paying: SiteContext = { ...plain, id: "site_finished06" };
+const PAYING_ORG = "00000000-0000-4000-8000-0000000000d1";
+const sites = [plain, off, acting, ruling, answers, paying];
 
 /** A page with a link the stand-in will point at for "open billing", and one with nothing for it. */
 const HOME: Snapshot = { path: "/", title: "Home", headings: [], text: [], truncated: false, elements: [{ id: "e1", role: "link", label: "Billing" }] };
@@ -59,13 +62,15 @@ interface Options {
   stepsLandAfterMs?: number;
   /** Steps are answered and never written, as when the database cannot be reached. */
   stepsLost?: boolean;
+  /** Stripe's key, so a guide kept as finished is sent to Stripe at once. */
+  stripeKey?: string;
 }
 
 /** The server with the store behind it, as worker/index.ts wires them, and what a widget on the site's page would send. */
 function server(options: Options = {}) {
   const sql = psqlSql(DB) as unknown as ConstructorParameters<typeof Store>[0];
   // A report looks for its guide at once, and twice more: enough for a row written a moment late, and quick to give up.
-  const store = new Store(sql, 3, { reportWaitsMs: [0, 250, 400] });
+  const store = new Store(sql, 3, { reportWaitsMs: [0, 250, 400], stripeKey: options.stripeKey });
   const elsewhere = new Store(sql, 3, { reportWaitsMs: [0, 250, 400] });
   const work: Promise<unknown>[] = [];
   const later = (write: Promise<unknown> | undefined) => void (write && work.push(write));
@@ -172,7 +177,7 @@ describe("which guides are stored as finished", { skip: TEST_DATABASE_URL ? fals
     await step(plain, words, 0, HOME);
     const said = await hearing(() => report(plain, words, { outcome: "finished" }));
     assert.deepEqual(await kept(words), { outcome: "shown", ended: true, helped: null, step_count: 1, steps: 1, models: "mock" });
-    assert.match(said, /reported finished, which its steps on record do not bear out, so it is kept as shown/);
+    assert.match(said, /reported finished, but the newest step 0 on record does not bear it out, so it is kept as shown/);
   });
 
   test("a report of finished for a guide with no recorded step is not stored as finished", async () => {
@@ -250,6 +255,38 @@ describe("which guides are stored as finished", { skip: TEST_DATABASE_URL ? fals
     assert.deepEqual(await kept(guide), { outcome: "finished", ended: true, helped: null, step_count: 1, steps: 1, models: "mock" });
   });
 
+  test("a report is judged by the step it names, so the look after the last control cannot change it", async () => {
+    // The visitor followed a step, and the last reply (step 1) pointed at what they asked for. They used it, and the widget
+    // reported finished at once, naming step 1. Then the look at what came of the click (step 2) was answered: the model
+    // found nothing more to point at. Here that look is written before the report is read, as when the report is held up.
+    const { step, report } = server();
+    const ask = async (guide: string) => {
+      await step(plain, guide, 0, HOME);
+      scriptMock({ target: "e1", status: "done", say: "This is the billing page. Home is here." });
+      await step(plain, guide, 1, BILLING, { event: 'The user clicked link "Billing".' });
+      scriptMock({ target: null, status: "stuck", say: "I don't see anything more to do here." });
+      await step(plain, guide, 2, BILLING, { event: 'The user clicked link "Home".', closing: true });
+      assert.deepEqual(await kept(guide), { outcome: null, ended: false, helped: null, step_count: 3, steps: 3, models: "mock,mock,mock" });
+    };
+    const named = newGuide();
+    await ask(named);
+    await report(plain, named, { outcome: "finished", step: 1 });
+    assert.equal((await kept(named))?.outcome, "finished");
+
+    // A widget too old to name its step is judged by the newest step on record, as before: here, the look that found nothing.
+    const unnamed = newGuide();
+    await ask(unnamed);
+    await hearing(() => report(plain, unnamed, { outcome: "finished" }));
+    assert.equal((await kept(unnamed))?.outcome, "nothing_to_point_at");
+
+    // A step that is never on record is waited for, and then the newest is what is judged.
+    const missing = newGuide();
+    await ask(missing);
+    const said = await hearing(() => report(plain, missing, { outcome: "finished", step: 7 }));
+    assert.equal((await kept(missing))?.outcome, "nothing_to_point_at");
+    assert.match(said, /but the newest step 2 on record does not bear it out/);
+  });
+
   test("in Do it with me, the click that commits finishes the guide, also when the reply that pointed at it said continue", async () => {
     const { step, report } = server();
     const act = { version: 3, mode: "act", goal: "create card" };
@@ -288,5 +325,38 @@ describe("which guides are stored as finished", { skip: TEST_DATABASE_URL ? fals
     const said = await hearing(() => report(acting, real, { outcome: "finished" }));
     assert.equal((await kept(real))?.outcome, "step_limit");
     assert.match(said, /so it is kept as step_limit/);
+  });
+  test("a finished guide on a paying company's site goes to Stripe at once, and one that isn't finished doesn't", async () => {
+    exec(
+      DB,
+      `update sites set company_id = '${PAYING_ORG}' where id = '${paying.id}';
+       insert into billing (organization_id, stripe_customer_id, stripe_subscription_id, plan, status, metered_from)
+         values ('${PAYING_ORG}', 'cus_paying', 'sub_paying', 'team', 'active', now() - interval '1 day');`,
+    );
+    const sent: URLSearchParams[] = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      assert.equal(String(input), "https://api.stripe.com/v1/billing/meter_events");
+      sent.push(new URLSearchParams(String(init?.body)));
+      return Response.json({ object: "billing.meter_event" });
+    }) as typeof fetch;
+    try {
+      const { step, report } = server({ stripeKey: "sk_test_not_a_real_key" });
+      const finished = newGuide();
+      await step(paying, finished, 0, HOME);
+      await step(paying, finished, 1, BILLING, { event: 'The user clicked link "Billing".' });
+      await report(paying, finished, { outcome: "finished" });
+      const stopped = newGuide();
+      await step(paying, stopped, 0, HOME);
+      await report(paying, stopped, { outcome: "stopped" });
+      assert.deepEqual(
+        sent.map((form) => [form.get("identifier"), form.get("payload[stripe_customer_id]"), form.get("payload[value]")]),
+        [[finished, "cus_paying", "1"]],
+      );
+      const [row] = await psqlSql(DB)`select billed_at is not null as billed from guides where id = ${finished}`;
+      assert.equal(row?.billed, true);
+    } finally {
+      globalThis.fetch = real;
+    }
   });
 });

@@ -34,7 +34,7 @@ describe("the setup screens in chromium", { skip: HAS_WEB ? false : "web/node_mo
   });
 
   describe("when saving where the setup is fails", () => {
-    test("every screen says so, with Retry, and Retry saves it", async () => {
+    test("every screen says so, with Try again, and Try again saves it", async () => {
       state = siteState();
       state.fail["PUT /sites/site_a1b2c3d4e5f6/setup"] = 500;
       const page = await openSetup(flow);
@@ -46,7 +46,8 @@ describe("the setup screens in chromium", { skip: HAS_WEB ? false : "web/node_mo
       await page.getByRole("heading", { name: "See it connect" }).waitFor();
       await alert.waitFor();
       delete state.fail["PUT /sites/site_a1b2c3d4e5f6/setup"];
-      await alert.getByRole("button", { name: "Retry" }).click();
+      // The setup's failures are shown in the dashboard's own FormAlert, whose button is Try again.
+      await alert.getByRole("button", { name: "Try again" }).click();
       await alert.waitFor({ state: "detached" });
       assert.equal(state.site.setup?.step, "connect");
       await page.close();

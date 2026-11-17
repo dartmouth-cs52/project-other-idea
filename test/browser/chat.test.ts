@@ -401,7 +401,7 @@ for (const name of BROWSERS) {
       const glow = tab.locator("haptic-veil .glow");
       await glow.waitFor({ state: "attached" });
       // The chat is ours, not the page: using it leaves the glow where it is.
-      await part(tab, ".ask input").click();
+      await part(tab, '.ask [aria-label="Ask a question"]').click();
       await sleep(100);
       assert.equal(await glow.count(), 1, "a press in the chat is not a press on the page");
       // A press on the page, on nothing the guide is waiting for.
@@ -479,7 +479,7 @@ for (const name of BROWSERS) {
       assert.ok(!(await seen(tab)).some((classes) => classes.split(" ").includes("glow")), `no glow at all while they filled in the form: ${(await seen(tab)).join(", ")}`);
     });
 
-    test("the glow is Haptic's blue on every site, whatever the site's accent", async () => {
+    test("the glow and the pointer's ring are Haptic's blue on every site, whatever colour the site saved", async () => {
       harness.script = () => new Promise(() => {});
       const band = async () => {
         await ask(tab, "invite someone");
@@ -488,12 +488,12 @@ for (const name of BROWSERS) {
       };
       const blue = await band();
       for (const colour of ["rgb(119, 208, 254)", "rgb(82, 148, 255)", "rgb(132, 96, 238)"]) assert.ok(blue.includes(colour), `${colour} in ${blue}`);
-      // A site whose accent is green: its pointer is green, and the glow is the same blue.
+      // A site that saved green for its pointer, back when that was a setting: the glow and the ring are still blue.
       harness.config = { ...harness.config, appearance: { ...harness.config.appearance, accent: "#16a34a" } };
       await tab.reload();
       await part(tab, ".launcher").waitFor();
       assert.equal(await band(), blue);
-      assert.equal(await part(tab, ".ring").evaluate((ring) => getComputedStyle(ring).borderTopColor), "rgb(22, 163, 74)");
+      assert.equal(await part(tab, ".ring").evaluate((ring) => getComputedStyle(ring).borderTopColor), "rgb(30, 110, 244)");
     });
 
     test("Send and Do it pressed with nothing typed say what to do, under the ask box, and ask nothing", async () => {
@@ -573,6 +573,39 @@ for (const name of BROWSERS) {
       await sleep(400);
       assert.equal(await dockBottom(tab), 20, "it is back in its corner for a control it does not cover");
       assert.equal(await inFromRight(tab), 20);
+    });
+
+    test("stays in its corner when only the caption would run under it: the caption moves over instead", async () => {
+      // A dialog's last button, just left of the chat's column, as on a page's "Invite people" dialog. The caption is
+      // long, so under the button's left edge it would run on under the chat. The chat used to jump up the window to
+      // clear it, and drop back on the next step, for a control it never covered.
+      harness.pages.set(
+        "/beside",
+        page(`<main style="font:14px system-ui;padding:40px"><h1>Invite people</h1>
+          <button id="beside" style="position:fixed;right:370px;bottom:200px">Send invite</button></main>`),
+      );
+      await tab.goto(`${harness.url}/beside`);
+      await part(tab, ".launcher").waitFor();
+      // Every place the dock is put, however briefly.
+      await part(tab, ".dock").evaluate((dock) => {
+        const moves = ((window as unknown as { moves: string[] }).moves = [] as string[]);
+        new MutationObserver(() => moves.push((dock as HTMLElement).style.bottom)).observe(dock, { attributes: true, attributeFilter: ["style"] });
+      });
+      const say = "Click Send invite to send the invitation. Role, Department and Entity are optional to adjust first if you need to.";
+      harness.script = (request) => point(idOf(request, "Send invite"), say);
+      await ask(tab, "lets invite him");
+      assert.ok(await ringAround(tab, "#beside"));
+      await part(tab, ".caption").waitFor();
+      // The dock is looked at again every 200ms while the pointer is up.
+      await sleep(700);
+      const moves = await tab.evaluate(() => (window as unknown as { moves: string[] }).moves);
+      assert.ok(moves.every((bottom) => parseFloat(bottom) === 20), `it never left its corner: ${JSON.stringify(moves)}`);
+      assert.equal(await dockBottom(tab), 20);
+      const [caption, panel, button] = await Promise.all([part(tab, ".caption").boundingBox(), part(tab, ".panel").boundingBox(), tab.locator("#beside").boundingBox()]);
+      assert.ok(caption!.width > 300, `the caption is long enough to have reached the chat: ${caption!.width}`);
+      assert.ok(caption!.x + caption!.width <= panel!.x, `the caption is clear of the chat: ${JSON.stringify({ caption, panel })}`);
+      assert.ok(caption!.y >= button!.y + button!.height, "it is still below the button");
+      assert.ok(caption!.x < button!.x + button!.width && caption!.x + caption!.width >= button!.x + button!.width, "and still under it, its right edge at or past the button's");
     });
 
     test("with no room for the chat above the control, tucks the chat away for the step, and the launcher brings it back", async () => {

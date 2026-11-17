@@ -25,7 +25,7 @@ import { hear, isOwn, keyName, keysAsked, nothingHeard, OUTCOME_WINDOW_MS, OWN_T
 import { onAddressChange } from "./navigation.ts";
 import { isDrawn, POPUP_ROLES, watchPopups } from "./popups.ts";
 import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, sameView, statesOf, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
-import { ACTING_WORDS, type DidShown, type Ui, SHOWING } from "./ui.ts";
+import { ACTING_WORDS, bringIn, type DidShown, type Ui, SHOWING } from "./ui.ts";
 
 // Runs one guide: ask the model for a step, point at it, wait for the visitor
 // to act, let the page settle, and go again until the model has nothing more
@@ -467,7 +467,16 @@ export class Guide {
   private sendOutcome(outcome: GuideOutcome) {
     if (!this.id || this.reported) return;
     this.reported = outcome;
-    this.report(this.id, { outcome });
+    this.report(this.id, this.ending(outcome));
+  }
+
+  /**
+   * An ending as it is reported: the outcome, and the step whose reply it rests on. That is always the last step
+   * answered, since `step` counts past each reply as it arrives. The server checks that step's record, and not
+   * whichever is newest, so the look at what using the last control did, asked straight after, cannot change it.
+   */
+  private ending(outcome: GuideOutcome): Omit<GuideReport, "site"> {
+    return this.step > 0 ? { outcome, step: this.step - 1 } : { outcome };
   }
 
   /** The visitor called the guide off: Stop, the caption's cross, or Escape while Haptic acts. What Haptic did stays listed. */
@@ -813,7 +822,7 @@ export class Guide {
       const listed = page.snapshot.elements.find((element) => element.id === id);
       // A control the site's owner ruled out gets no pointer, not even for a moment.
       if (isBlocked(listed, this.blocked)) return;
-      if (listed?.offscreen) el.scrollIntoView({ block: "center", behavior: "smooth" });
+      bringIn(el, !!listed?.offscreen);
       ui.pointAt(el, "");
       if (acting) {
         pointedEarly = el;
@@ -1065,7 +1074,7 @@ export class Guide {
     const target = el;
     if (early?.el !== target) {
       dropEarly();
-      if (listed?.offscreen) target.scrollIntoView({ block: "center", behavior: "smooth" });
+      bringIn(target, !!listed?.offscreen);
     }
     // If they have already used it, the caption would only flash. An answer's words are in the panel, so its pointer goes alone.
     if (!acted) ui.pointAt(target, inPanel ? "" : reply.say);
@@ -1651,7 +1660,7 @@ export class Guide {
     if (!id) return;
     // What the server has: a guide whose ending was sent before it was over keeps that ending.
     const ended = this.reported ?? outcome;
-    if (!this.reported) this.report(id, { outcome });
+    if (!this.reported) this.report(id, this.ending(outcome));
     this.id = "";
     this.reported = undefined;
     this.unconfirmed = undefined;

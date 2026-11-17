@@ -6,7 +6,8 @@ import { adoptStyles, make } from "./ui.ts";
 // the page whatever happens: nothing about a teaching link fails silently.
 
 const NOTICE_CSS = `
-:host { all: initial; position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2147483647; margin: 0; padding: 0; border: 0;
+/* Left to right on every page: 'all' leaves direction alone, and every notice is in English. */
+:host { all: initial; direction: ltr; position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2147483647; margin: 0; padding: 0; border: 0;
   background: transparent; overflow: visible; font: 14px/20px system-ui, -apple-system, "Segoe UI", sans-serif; color: #fafaf9; }
 * { box-sizing: border-box; }
 .notice { display: flex; align-items: center; gap: 12px; width: min(560px, calc(100vw - 32px)); padding: 12px 12px 12px 16px; border-radius: 14px;

@@ -1,3 +1,4 @@
+import { inkOn, INK, launcherColour, POINTER_BLUE } from "../shared/colour.ts";
 import type { Appearance, Source, TurnReply } from "../shared/types.ts";
 import { isField } from "./snapshot.ts";
 
@@ -7,9 +8,10 @@ import { isField } from "./snapshot.ts";
 // ours can't leak out. Model text is only ever set as textContent.
 
 // Colours, radii and motion come from DESIGN.md, and the chat is the one in
-// the website's home page demo (web/components/demo/kit.tsx). The accent
-// colours the pointer, its ring and the heart of the thinking glow.
-// Everything else is ink on white. The pointer shape is assets/pointer.svg,
+// the website's home page demo (web/components/demo/kit.tsx). Haptic's blue
+// colours the pointer and its ring on every site, whatever the site saved: it
+// is not a setting (src/shared/colour.ts says why). The launcher takes the
+// site's own colour. Everything else is ink on white. The pointer shape is assets/pointer.svg,
 // with its tip at POINTER_TIP.
 //
 // The thinking glow is the one thing drawn over the page itself. It has an
@@ -34,6 +36,12 @@ const RESTART_PATH = "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5"
 const TICK_PATH = "M20 6 9 17l-5-5";
 /** A click on the control is acknowledged like a pressed button: the ring and the pointer dip and come back. */
 const PRESS_MS = 240;
+/**
+ * How long a control pointed at while out of the window is given to come into
+ * it, as the guide scrolls it there, before its sentence is put at the edge of
+ * the window with the way to it.
+ */
+const ARRIVE_MS = 1500;
 /** What the chat says while the pointer shows a step, in a guide Haptic is not doing itself. */
 export const SHOWING = "Showing you how";
 /** Under the ask box, when Send is pressed with nothing typed. */
@@ -109,7 +117,10 @@ const VEIL_CSS = `
 `;
 
 const CSS = `
-:host { all: initial; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
+/* Left to right on every page. The widget's own words are English, and 'all' leaves direction alone, so on a page
+   written right to left the chat would take that direction from the page and come out mirrored. What the visitor or
+   the model wrote takes its own direction from its first letter (dir="auto"), inside its bubble. */
+:host { all: initial; direction: ltr; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
   font: 14px/20px system-ui, -apple-system, "Segoe UI", sans-serif; color: #1c1917; --glide: cubic-bezier(.2,.8,.2,1); }
 * { box-sizing: border-box; }
 button { font: inherit; cursor: pointer; }
@@ -234,6 +245,14 @@ button { font: inherit; cursor: pointer; }
   border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; pointer-events: auto; }
 .caption .close:hover { background: rgba(250,250,249,.25); }
 .caption .close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+/* With the control scrolled out of the window, the caption waits at that edge, led by the way back to it. */
+.caption .where { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 24px; height: 24px; margin-left: -6px; border: 0;
+  border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; pointer-events: auto; }
+.caption .where:hover { background: rgba(250,250,249,.25); }
+.caption .where svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.caption .where[data-way="down"] svg { transform: rotate(180deg); }
+.caption .where[data-way="left"] svg { transform: rotate(-90deg); }
+.caption .where[data-way="right"] svg { transform: rotate(90deg); }
 .helped { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 2px 8px 12px; }
 .helped span { margin-right: auto; color: #78716c; }
 .helped button { display: inline-flex; align-items: center; justify-content: center; height: 32px; border: 0; border-radius: 999px; padding: 0 14px;
@@ -295,8 +314,9 @@ const PRESENT_CSS = `
 .caption { animation: none; }
 .caption { max-width: min(780px, calc(100vw - 32px)); gap: 14px; border-radius: 20px; padding: 14px 14px 14px 24px; font-size: 27px; line-height: 36px;
   box-shadow: 0 0 0 3px var(--accent), 0 14px 40px rgba(0,0,0,.4); }
-.caption .close { width: 36px; height: 36px; }
-.caption .close svg { width: 16px; height: 16px; }
+.caption .close, .caption .where { width: 36px; height: 36px; }
+.caption .close svg, .caption .where svg { width: 16px; height: 16px; }
+.caption .where { margin-left: -12px; }
 .panel:has(.did:not([hidden])) { width: min(380px, calc(100vw - 40px)); }
 .did h2 { font-size: 18px; line-height: 24px; }
 .did .line { font-size: 17px; line-height: 24px; padding: 5px 8px; }
@@ -459,6 +479,14 @@ export class Ui {
   private target?: Element;
   /** Whether `target` has been chosen with the control on screen, where what lies at its middle can be seen. */
   private aimed = false;
+  /** When the guide last pointed at a new control. */
+  private pointedTime = -Infinity;
+  /** The control is out of the window, and the way to it, while the pointer is put away and its sentence waits at the window's edge. */
+  private outOfView?: "up" | "down" | "left" | "right" | "unseen";
+  /** Whether the visitor can scroll to the control out of the window, and the caption shows the way back to it. */
+  private wayBack = false;
+  /** The boxes around the target that clip it, as last looked up, and when. */
+  private clips?: { el: Element; at: number; list: Clip[] };
   /** Where in the target's box the tip went, for the box it was found for, so the page is looked at only when the box moves. */
   private tip?: { box: string; dx: number; dy: number };
   /** The caption is above the control rather than below it, because something opened where it was. */
@@ -544,11 +572,12 @@ export class Ui {
     this.tipIn = this.present ? { x: POINTER_TIP.x * PRESENT_SCALE, y: POINTER_TIP.y * PRESENT_SCALE } : POINTER_TIP;
     this.glideMs = this.present ? PRESENT_GLIDE_MS : GLIDE_MS;
     this.host = document.createElement("haptic-root");
-    this.host.style.setProperty("--accent", this.present ? strongAccent(appearance.accent) : appearance.accent);
-    // The launcher takes the site's own colour when the company chose one. Only a six-digit hex is used: a property
-    // set to anything a browser can't read would leave the launcher with no background at all.
-    const launcher = /^#[0-9a-f]{6}$/i.test(appearance.launcher ?? "") ? appearance.launcher! : undefined;
-    if (launcher) {
+    // The pointer is Haptic's blue on every site. A colour a site saved for it before is not used.
+    this.host.style.setProperty("--accent", this.present ? strongAccent(POINTER_BLUE) : POINTER_BLUE);
+    // The launcher takes the site's own colour, darkened if it is too light to see on a white page. Anything that
+    // is not a six-digit hex is Ink: a property set to something a browser can't read would leave no background at all.
+    const launcher = launcherColour(appearance.launcher);
+    if (launcher !== INK) {
       this.host.style.setProperty("--launcher", launcher);
       this.host.style.setProperty("--launcher-ink", inkOn(launcher));
     }
@@ -558,11 +587,20 @@ export class Ui {
     // element and markup set as a string, and would leave the widget unstyled or not there at all.
     adoptStyles(root, this.present ? CSS + PRESENT_CSS : CSS);
     const hidden = { hidden: "" };
+    // Words the visitor or the model wrote can be in any language, so each holder reads in the direction of its own
+    // first letter: an Arabic question right to left inside its bubble, while the widget around it stays as it is.
+    const theirs = { dir: "auto" };
     root.append(
       make("div", { class: "ring", ...hidden }),
-      make("div", { class: "caption", ...hidden }, make("span"), make("button", { class: "close", "aria-label": "Stop guide" }, icon(CROSS_PATH, { "aria-hidden": "true" }))),
+      make(
+        "div",
+        { class: "caption", ...hidden },
+        make("button", { class: "where", type: "button", ...hidden }, icon(ARROW_PATH, { "aria-hidden": "true" })),
+        make("span", theirs),
+        make("button", { class: "close", "aria-label": "Stop guide" }, icon(CROSS_PATH, { "aria-hidden": "true" })),
+      ),
       make("div", { class: "cursor", ...hidden }, icon(POINTER_PATH, { width: "24", height: "24" })),
-      make("div", { class: "asked", ...hidden }),
+      make("div", { class: "asked", ...theirs, ...hidden }),
       make(
         "div",
         { class: "dock" },
@@ -573,8 +611,8 @@ export class Ui {
           make(
             "div",
             { class: "thread", ...hidden },
-            make("p", { class: "question" }),
-            make("div", { class: "reply", ...hidden }, make("p"), make("ul", { class: "sources", ...hidden }), make("p", { class: "missing", ...hidden })),
+            make("p", { class: "question", ...theirs }),
+            make("div", { class: "reply", ...hidden }, make("p", theirs), make("ul", { class: "sources", ...hidden }), make("p", { class: "missing", ...hidden })),
           ),
           make("div", { class: "status", role: "status", ...hidden }, icon(POINTER_PATH, { class: "arrow", "aria-hidden": "true" }), make("span"), make("button", { class: "resume", type: "button" }, "Carry on")),
           make("div", { class: "done", ...hidden }, make("i", { "aria-hidden": "true" }, icon(TICK_PATH)), "Done"),
@@ -589,14 +627,15 @@ export class Ui {
               "form",
               { class: "person", ...hidden },
               make("input", { type: "email", required: "", maxlength: "200", placeholder: "Your email", "aria-label": "Your email" }),
-              make("textarea", { rows: "2", maxlength: "1000", placeholder: "Anything to add", "aria-label": "Anything to add" }),
+              make("textarea", { rows: "2", maxlength: "1000", placeholder: "Anything to add", "aria-label": "Anything to add", ...theirs }),
               make("div", { class: "offer" }, make("span"), make("button", { class: "person-cancel", type: "button" }, "Cancel"), make("button", { class: "person-send", type: "button" }, "Send")),
             ),
           ),
           make(
             "form",
             { class: "ask" },
-            make("input", { type: "text", placeholder: "What do you want to do", "aria-label": "Ask a question", "aria-describedby": "haptic-empty", maxlength: "300" }),
+            // Empty, it is left to right, so the placeholder sits on the left as on any page. It turns with the first letter typed.
+            make("input", { type: "text", placeholder: "What do you want to do", "aria-label": "Ask a question", "aria-describedby": "haptic-empty", maxlength: "300", ...theirs }),
             make(
               "div",
               { class: "row" },
@@ -1005,6 +1044,7 @@ export class Ui {
       if (button.classList.contains("person-open")) return this.onHandoff?.open();
       if (button.classList.contains("person-cancel")) return this.onHandoff?.cancel();
       if (button.classList.contains("person-send")) return this.onHandoff?.send();
+      if (button.classList.contains("where")) return this.bringBack();
       const name = (["launcher", "hide", "dismiss", "send", "stop", "close", "doit", "go", "resume", "restart"] as const).find((name) => button.classList.contains(name));
       if (name) this.buttons[name]();
     };
@@ -1173,6 +1213,8 @@ export class Ui {
       name.textContent = line.name;
       const value = document.createElement("span");
       value.className = "value";
+      // What was typed for the visitor, in their language.
+      value.dir = "auto";
       value.textContent = line.value ?? "";
       button.append(name, unseen(/[?:]$/.test(line.name) ? " " : ": "), value);
       const aside = line.partly ? ACTING_WORDS.partly : line.mine ? ACTING_WORDS.mine : "";
@@ -1233,6 +1275,7 @@ export class Ui {
   /** Between two of Haptic's steps: the caption and the ring go, and the pointer rests where it is, so the next glide starts there. */
   rest() {
     this.endPress();
+    this.backInView();
     this.pointed = undefined;
     this.pointedBox = undefined;
     this.captionAvoid = [];
@@ -1425,10 +1468,12 @@ export class Ui {
     this.caption.classList.remove("said");
     this.saying = false;
     this.lost = false;
+    this.backInView();
     if (el !== this.pointed) {
       // A control the page drew again, in the same place, is the same control: the caption stays off what it opened.
       const same = !!this.pointedBox && sameBox(this.pointedBox, el.getBoundingClientRect());
       this.pointed = el;
+      this.pointedTime = performance.now();
       this.chatWanted = false;
       this.held = undefined;
       this.tip = undefined;
@@ -1447,14 +1492,18 @@ export class Ui {
     // The ring goes round the control now, and is not left for the next frame as the pointer's glide is. On a machine
     // that draws slowly the next frame is a while off, and a guide that says it is pointing has its ring up.
     const target = this.target;
-    if (target?.isConnected && target.getClientRects().length) this.ringAt(target.getBoundingClientRect());
+    if (target?.isConnected && target.getClientRects().length) {
+      const sight = this.sight(target, target.getBoundingClientRect());
+      if ("shown" in sight) this.ringAt(sight.shown);
+      else this.ring.hidden = true;
+    }
     cancelAnimationFrame(this.frame);
     this.frame = requestAnimationFrame(this.track);
   }
 
   /** Puts the ring round a box of the page, or puts it away when the box is not in the window, and says which. */
   private ringAt(rect: DOMRect): boolean {
-    const onScreen = rect.bottom > 0 && rect.top < window.innerHeight && rect.width + rect.height > 0;
+    const onScreen = rect.bottom > 0 && rect.top < window.innerHeight && !outAcross(rect) && rect.width + rect.height > 0;
     this.ring.hidden = !onScreen;
     if (!onScreen) return false;
     // In presentation mode the ring is thicker, and stands further out so it does not cover the control's edge.
@@ -1532,6 +1581,7 @@ export class Ui {
     this.endPress();
     this.saying = false;
     this.lost = false;
+    this.backInView();
     this.pointed = undefined;
     this.pointedBox = undefined;
     this.captionAvoid = [];
@@ -1745,7 +1795,8 @@ export class Ui {
   /** Chooses what the pointer goes on for the control `el`, and says so in `pointedAt`. */
   private aim(el: Element) {
     const rect = el.getBoundingClientRect();
-    this.aimed = rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
+    // On show in the window, and in every box around it that clips it, like a list it may be scrolled out of.
+    this.aimed = "shown" in this.sight(el, rect);
     this.target = partToClick(el, this.aimed);
     this.mark(this.target);
     // The ring's corners follow the control's own, a little rounder for standing off it. Presentation mode has its own.
@@ -1780,19 +1831,31 @@ export class Ui {
       this.cursor.hidden = false;
       this.caption.hidden = this.captionText.textContent === "";
     }
-    let rect = el.getBoundingClientRect();
-    if (!this.ringAt(rect)) return;
+    let whole = el.getBoundingClientRect();
+    let sight = this.sight(el, whole);
+    // Everything below goes round the part of the control on show: a box that scrolls can hide the rest of it.
+    if (!("shown" in sight)) return this.offView(whole, sight);
+    let rect = sight.shown;
+    if (!this.ringAt(rect)) return this.offView(whole);
+    if (this.outOfView) {
+      this.backInView();
+      this.cursor.hidden = false;
+      this.caption.hidden = this.captionText.textContent === "";
+    }
     // A control pointed at while it was scrolled out of view is looked at again once it is in view.
     if (!this.aimed && this.pointed) {
       this.aim(this.pointed);
       if (this.target !== el) return;
-      rect = el.getBoundingClientRect();
+      whole = el.getBoundingClientRect();
+      sight = this.sight(el, whole);
+      if (!("shown" in sight)) return;
+      rect = sight.shown;
       this.ringAt(rect);
     }
 
     // As `ringAt` stands the ring off the control.
     const pad = this.present ? 10 : 4;
-    this.pointedBox = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+    this.pointedBox = { left: whole.left, top: whole.top, right: whole.right, bottom: whole.bottom };
 
     this.at = this.held ?? this.tipOn(el, rect);
     this.cursor.style.transform = `translate(${this.at.x - this.tipIn.x}px, ${this.at.y - this.tipIn.y}px)`;
@@ -1810,7 +1873,7 @@ export class Ui {
       const fitsAbove = rect.top - box.height - 12 >= 8;
       const above = this.captionAbove !== suggestsBelow(el) ? fitsAbove || !fitsBelow : !fitsBelow;
       top = above ? Math.max(8, rect.top - box.height - 12) : rect.bottom + 14;
-      left = Math.min(Math.max(8, rect.left), window.innerWidth - box.width - 8);
+      left = this.captionLeft(rect, box, top);
     }
     this.caption.style.left = `${left}px`;
     this.caption.style.top = `${top}px`;
@@ -1822,6 +1885,81 @@ export class Ui {
     this.keepLauncherOff(rect, caption);
     if (caption) this.keepCaptionOff(el, caption);
     if (this.present) this.showAsked([this.ring.getBoundingClientRect(), this.pointerBox()]);
+  }
+
+  /**
+   * The control is out of view: out of the window, or scrolled out of a box
+   * inside the page, like a sidebar or a list. The pointer and its caption are
+   * drawn over the window, not the page, so left where they were they would
+   * point at whatever scrolled under them. The pointer is put away, and the
+   * caption waits at the edge the control went out of, led by a button that
+   * brings it back where the visitor could scroll to it, until the control is
+   * in view again. Just after the guide pointed at a control out of view,
+   * while its own scroll brings it in, neither shows. A point Haptic is about
+   * to press, while it acts, is where it is in the window whatever the control
+   * does, and stays.
+   */
+  private offView(rect: DOMRect, away?: Away) {
+    this.ring.hidden = true;
+    if (this.held) return;
+    const way = away?.way;
+    const arriving = !this.aimed && performance.now() - this.pointedTime < ARRIVE_MS;
+    const where = this.caption.querySelector<HTMLElement>(".where")!;
+    this.cursor.hidden = true;
+    if (!way || arriving || this.captionText.textContent === "") {
+      // Not yet in, or nowhere to say it is: nothing is left floating over the page meanwhile.
+      this.outOfView = "unseen";
+      this.caption.hidden = true;
+      where.hidden = true;
+      return;
+    }
+    if (this.outOfView !== way || this.wayBack !== away!.back) {
+      this.outOfView = way;
+      const label = `Scroll ${way} to it`;
+      where.setAttribute("aria-label", label);
+      where.title = label;
+      where.dataset.way = way;
+      // Only where the visitor could scroll to it themselves: a box that only clips, like a strip of slides moved by its
+      // own arrows, or a menu parked past the side of a page that does not scroll across, gets no way back.
+      this.wayBack = away!.back;
+      // What lay under the caption beside the control says nothing about what lies under it at the edge, or once it is back.
+      if (!this.under?.moved) this.under = undefined;
+    }
+    where.hidden = !this.wayBack;
+    this.caption.hidden = false;
+    const box = this.caption.getBoundingClientRect();
+    const { left, top } = edgePlace(away!, rect, box);
+    this.caption.style.left = `${left}px`;
+    this.caption.style.top = `${top}px`;
+    const now = performance.now();
+    if (now - this.looked < 200) return;
+    this.looked = now;
+    this.keepLauncherOff(rect, { left, top, right: left + box.width, bottom: top + box.height });
+  }
+
+  /**
+   * The part of a control on show, or which way it went out of view. The
+   * boxes around it that clip it are looked up again every half second, as a
+   * page can make a box scroll once its content grows.
+   */
+  private sight(el: Element, rect: DOMRect): Sight {
+    const now = performance.now();
+    if (this.clips?.el !== el || now - this.clips.at > 500) this.clips = { el, at: now, list: clipsOf(el) };
+    return seeIn(rect, this.clips.list, el);
+  }
+
+  /** The control is in the window again, or the pointer has moved on: the caption's way back to it goes. */
+  private backInView() {
+    this.outOfView = undefined;
+    const where = this.caption.querySelector<HTMLElement>(".where");
+    if (where) where.hidden = true;
+  }
+
+  /** The caption's button: scrolls the control it is about back into the window, where the pointer and ring come back to it. */
+  private bringBack() {
+    const el = this.target;
+    if (!el?.isConnected) return;
+    scrollInto(el, !lessMotion());
   }
 
   /** The box the pointer is drawn in, round its tip, at the size it is drawn. */
@@ -1867,7 +2005,9 @@ export class Ui {
       );
     }
     const fits = (place: { left: number; top: number }) => place.left >= 12 && place.top >= 12 && place.left + box.width <= width - 12 && place.top + box.height <= height - 12;
-    const avoid = [ring, pointer, ...this.captionAvoid, ...open.boxes];
+    // The launcher and the chat in their corner too, so they never move up the window for the caption alone.
+    const dock = this.dockHome(rect);
+    const avoid = [ring, pointer, ...this.captionAvoid, ...open.boxes, ...(dock ? [dock] : [])];
     const free = (place: { left: number; top: number }) =>
       !avoid.some((other) => overlaps({ left: place.left, top: place.top, right: place.left + box.width, bottom: place.top + box.height }, other, 0));
     return places.find((place) => fits(place) && free(place)) ?? places.find(fits) ?? { left: clampX(rect.left), top: clampY(ring.bottom + gap) };
@@ -1933,16 +2073,45 @@ export class Ui {
   }
 
   /**
-   * Keeps the launcher, and the chat above it, off the control being pointed
-   * at and off its caption. They stay on the right of the window: while they
-   * would cover them they move up it, to just above, and they come back down
-   * when the step is over. When the open chat has no room above the control,
-   * it is tucked away for the step and the launcher alone goes up, unless the
-   * visitor opened it during the step. The caption's × still stops the guide,
-   * and the launcher brings the chat back.
+   * Where the caption starts across the window, below or above the control:
+   * under the control's left edge, unless that runs it under the launcher and
+   * the chat in their corner. Then it moves left, as far as it must to clear
+   * them, and no further than to end at the control's right edge, where the
+   * pointer hangs. A long caption under a button just left of the chat, like
+   * a dialog's last button, used to run on under the chat, and the chat
+   * jumped up the window for it and dropped back on the next step, for a
+   * control it never covered. When moving left can't clear them, the caption
+   * stays under the left edge and the dock moves up out of its way for the
+   * step (see `keepLauncherOff`).
    */
-  private keepLauncherOff(rect: DOMRect, caption?: Box) {
-    const inWay = [{ left: rect.left - 4, top: rect.top - 4, right: rect.right + 4, bottom: rect.bottom + 4 }, ...(caption ? [caption] : [])];
+  private captionLeft(rect: DOMRect, box: DOMRect, top: number): number {
+    const fit = (x: number) => Math.min(Math.max(8, x), window.innerWidth - box.width - 8);
+    const left = fit(rect.left);
+    const dock = this.dockHome(rect);
+    const at = (x: number): Box => ({ left: x, top, right: x + box.width, bottom: top + box.height });
+    if (!dock || !overlaps(at(left), dock, 4)) return left;
+    const over = fit(Math.min(left, Math.max(rect.right - box.width, dock.left - CLEAR - box.width)));
+    return overlaps(at(over), dock, 4) ? left : over;
+  }
+
+  /**
+   * The box the launcher and the open chat take in their own place, for the
+   * caption to keep off, so they never move up the window for the caption
+   * alone. None when the control pointed at is in it: they move for the
+   * control anyway, to above it and its caption.
+   */
+  private dockHome(rect: DOMRect): Box | undefined {
+    const home = boxAt(this.home, this.dockSizes().whole);
+    // As `keepLauncherOff` keeps them off the control: 4px round it, and 4px more.
+    return overlaps(home, rect, 8) ? undefined : home;
+  }
+
+  /**
+   * The room the launcher takes alone, and with the open chat above it. The
+   * chat's size is the last it showed, so a chat tucked away for the step
+   * keeps its room for when it comes back.
+   */
+  private dockSizes(): { alone: { w: number; h: number }; chat?: { w: number; h: number }; whole: { w: number; h: number } } {
     const launch = this.dock.querySelector(".launch")!.getBoundingClientRect();
     const alone = { w: launch.width, h: launch.height };
     if (!this.panel.hidden && !this.dock.classList.contains("tucked")) {
@@ -1950,7 +2119,23 @@ export class Ui {
       this.chatSize = { w: shown.width, h: shown.height + DOCK_GAP };
     }
     const chat = this.panel.hidden ? undefined : this.chatSize;
-    const whole = chat ? { w: Math.max(alone.w, chat.w), h: alone.h + chat.h } : alone;
+    return { alone, chat, whole: chat ? { w: Math.max(alone.w, chat.w), h: alone.h + chat.h } : alone };
+  }
+
+  /**
+   * Keeps the launcher, and the chat above it, off the control being pointed
+   * at and off its caption. They stay on the right of the window: while they
+   * would cover them they move up it, to just above, and they come back down
+   * when the step is over. The caption keeps off them where it can (see
+   * `captionLeft`), so it is nearly always the control they move for. When
+   * the open chat has no room above the control, it is tucked away for the
+   * step and the launcher alone goes up, unless the visitor opened it during
+   * the step. The caption's × still stops the guide, and the launcher brings
+   * the chat back.
+   */
+  private keepLauncherOff(rect: DOMRect, caption?: Box) {
+    const inWay = [{ left: rect.left - 4, top: rect.top - 4, right: rect.right + 4, bottom: rect.bottom + 4 }, ...(caption ? [caption] : [])];
+    const { alone, chat, whole } = this.dockSizes();
     const spot = freeUp(this.home.y, whole, inWay, window.innerHeight - whole.h - 8);
     if (spot || !chat || this.chatWanted) {
       this.tuck(false);
@@ -1982,6 +2167,197 @@ function lessMotion(): boolean {
   } catch {
     return false;
   }
+}
+
+/** How wide the window is where the page is drawn: without a scroll bar down its side, which covers what is under it. */
+function windowWidth(): number {
+  return document.documentElement.clientWidth || window.innerWidth;
+}
+
+/** Whether a box lies wholly to the left or the right of the window, as on a page wider than it. */
+export function outAcross(rect: DOMRect): boolean {
+  return rect.right <= 0 || rect.left >= windowWidth();
+}
+
+/**
+ * Whether a visitor can scroll across to an element: a box around it scrolls
+ * across, or the page does. A box counts only where it is in the window
+ * itself, or can be scrolled into it the same way: a strip of tabs that
+ * scrolls, inside a menu parked past the side of the page, brings nothing
+ * into the window. A page that hides what overflows it across, as one with
+ * such a menu does, cannot be scrolled across by the visitor, though a script
+ * could still shove it aside.
+ */
+export function scrollsAcrossTo(el: Element): boolean {
+  for (let at = parentOf(el); at && at !== document.body && at !== document.documentElement; at = parentOf(at)) {
+    const overflow = getComputedStyle(at).overflowX;
+    if ((overflow === "auto" || overflow === "scroll") && at.scrollWidth > at.clientWidth + 1) return !outAcross(at.getBoundingClientRect()) || scrollsAcrossTo(at);
+  }
+  const page = document.scrollingElement ?? document.documentElement;
+  if (page.scrollWidth <= page.clientWidth + 1) return false;
+  // The window takes the root's overflow, or the body's when the root leaves its own as it is.
+  const root = getComputedStyle(document.documentElement).overflowX;
+  const view = root === "visible" && document.body ? getComputedStyle(document.body).overflowX : root;
+  return view !== "hidden" && view !== "clip";
+}
+
+/** The element an element is drawn in: the slot it is put into, its parent, or, out of a shadow root, its host. */
+function parentOf(el: Element): Element | null {
+  return el.assignedSlot ?? el.parentElement ?? ((el.getRootNode() as Partial<ShadowRoot>).host ?? null);
+}
+
+/**
+ * Scrolls a control into the window: its middle to the window's, down, and
+ * across only as far as it takes, unless it lies wholly to one side where the
+ * visitor could scroll to it, when it goes to the middle across too, clear of
+ * both edges.
+ */
+function scrollInto(el: Element, smooth: boolean) {
+  const across = outAcross(el.getBoundingClientRect()) && scrollsAcrossTo(el);
+  el.scrollIntoView({ block: "center", inline: across ? "center" : "nearest", behavior: smooth ? "smooth" : "auto" });
+}
+
+/**
+ * As the guide points at a control, brings it into the window when it is out
+ * of it: when the page's reading listed it as above or below, or when it lies
+ * wholly to one side, which the reading does not list, where the visitor could
+ * scroll to it.
+ */
+export function bringIn(el: Element, listedAway: boolean) {
+  if (listedAway || (outAcross(el.getBoundingClientRect()) && scrollsAcrossTo(el))) scrollInto(el, true);
+}
+
+type Way = "up" | "down" | "left" | "right";
+/** Which way a control went out of view, the part of the window it went out of, and whether the visitor can scroll it back. */
+type Away = { way: Way; edge: Box; back: boolean };
+/** Where a control is as the visitor sees it: the part of it on show, or the way it went out of view. */
+type Sight = { shown: DOMRect } | Away;
+/** A box around a control that clips it, down, across or both, and whether the visitor can scroll it each way. */
+interface Clip {
+  el: Element;
+  down: boolean;
+  across: boolean;
+  scrollsDown: boolean;
+  scrollsAcross: boolean;
+}
+
+/**
+ * The boxes around an element that clip it, nearest first, up to the page's
+ * own, which is the window's. A box clips only what is laid out from it: one
+ * positioned absolutely, from a box that is positioned itself; one fixed to
+ * the window, from none but a box with a transform, a filter or containment,
+ * as the page's reading has it.
+ */
+function clipsOf(el: Element): Clip[] {
+  const clips: Clip[] = [];
+  let position = getComputedStyle(el).position;
+  for (let node = parentOf(el), depth = 0; node && depth < 100; node = parentOf(node), depth++) {
+    if (node === document.body || node === document.documentElement) break;
+    const style = getComputedStyle(node);
+    const makesBlock = style.transform !== "none" || style.filter !== "none" || /paint|layout|strict|content/.test(style.contain) || style.willChange.includes("transform");
+    if (position === "fixed" ? !makesBlock : position === "absolute" && style.position === "static" && !makesBlock) continue;
+    position = style.position;
+    // Overflow does nothing to a box that is a run of text, or not a box at all, though its style may say otherwise.
+    if (style.display === "inline" || style.display === "contents" || /^table-(row|column|header|footer)/.test(style.display)) continue;
+    const down = style.overflowY !== "visible";
+    const across = style.overflowX !== "visible";
+    if (!down && !across) continue;
+    clips.push({
+      el: node,
+      down,
+      across,
+      scrollsDown: scrollsBy(style.overflowY) && node.scrollHeight > node.clientHeight + 1,
+      scrollsAcross: scrollsBy(style.overflowX) && node.scrollWidth > node.clientWidth + 1,
+    });
+  }
+  return clips;
+}
+
+const scrollsBy = (overflow: string) => overflow === "auto" || overflow === "scroll";
+
+/** What a box shows of what is inside it: inside its borders and any scroll bar. A drawing's box is all of it. */
+function clipBox(el: Element): Box {
+  const rect = el.getBoundingClientRect();
+  if (!(el instanceof HTMLElement)) return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+  const left = rect.left + el.clientLeft;
+  const top = rect.top + el.clientTop;
+  return { left, top, right: left + el.clientWidth, bottom: top + el.clientHeight };
+}
+
+/** The way from inside a box to something wholly outside it: up or down before across. */
+function wayTo(part: Box, box: Box): Way {
+  return part.bottom <= box.top ? "up" : part.top >= box.bottom ? "down" : part.right <= box.left ? "left" : "right";
+}
+
+/** What of `part` lies in `box`, along the ways the box clips, or nothing. A side of no size, like a line's, counts where it lies. */
+function cutBy(part: Box, box: Box, down = true, across = true): Box | undefined {
+  const cut = {
+    left: across ? Math.max(part.left, box.left) : part.left,
+    top: down ? Math.max(part.top, box.top) : part.top,
+    right: across ? Math.min(part.right, box.right) : part.right,
+    bottom: down ? Math.min(part.bottom, box.bottom) : part.bottom,
+  };
+  const wide = cut.right > cut.left || (part.right === part.left && cut.right >= cut.left);
+  const tall = cut.bottom > cut.top || (part.bottom === part.top && cut.bottom >= cut.top);
+  return wide && tall ? cut : undefined;
+}
+
+/**
+ * The part of a box on show through the boxes that clip it and the window,
+ * or, when none of it is, the way to it from the first that hides it all and
+ * the part of that one on show, where its caption waits. A box that is itself
+ * out of view counts as the way to the control.
+ */
+function seeIn(rect: Box, clips: Clip[], el: Element): Sight {
+  let part = rect;
+  for (let i = 0; i < clips.length; i++) {
+    const clip = clips[i]!;
+    const box = clipBox(clip.el);
+    const cut = cutBy(part, box, clip.down, clip.across);
+    if (cut) {
+      part = cut;
+      continue;
+    }
+    const way = wayTo(part, box);
+    const back = way === "up" || way === "down" ? clip.scrollsDown : clip.scrollsAcross;
+    const outer = seeIn(box, clips.slice(i + 1), el);
+    return "shown" in outer ? { way, edge: outer.shown, back } : outer;
+  }
+  const view = { left: 0, top: 0, right: windowWidth(), bottom: window.innerHeight };
+  const shown = cutBy(part, view);
+  if (shown) return { shown: new DOMRect(shown.left, shown.top, shown.right - shown.left, shown.bottom - shown.top) };
+  const way = wayTo(part, view);
+  // Up and down the page always scrolls. Across, only a page or a box that scrolls across does.
+  return { way, edge: view, back: way === "up" || way === "down" || scrollsAcrossTo(el) };
+}
+
+/**
+ * Where a caption waits for a control out of view: at the edge of the part of
+ * the window it went out of, just outside it when there is room there, as
+ * under a list it was scrolled down out of, and inside it otherwise, as at the
+ * window's own edge. At the top or the bottom it starts where the control
+ * does across; at a side, it is level with the control.
+ */
+function edgePlace(away: Away, rect: DOMRect, caption: DOMRect): { left: number; top: number } {
+  const { way, edge } = away;
+  const margin = 12;
+  const gap = 8;
+  const width = windowWidth();
+  const height = window.innerHeight;
+  const within = (value: number, low: number, high: number) => Math.min(Math.max(low, value), high);
+  let left: number;
+  let top: number;
+  if (way === "up" || way === "down") {
+    left = within(rect.left, edge.left + margin, edge.right - caption.width - margin);
+    if (way === "up") top = edge.top - gap - caption.height >= margin ? edge.top - gap - caption.height : edge.top + margin;
+    else top = edge.bottom + gap + caption.height <= height - margin ? edge.bottom + gap : edge.bottom - caption.height - margin;
+  } else {
+    top = within(rect.top + rect.height / 2 - caption.height / 2, edge.top + margin, edge.bottom - caption.height - margin);
+    if (way === "left") left = edge.left - gap - caption.width >= margin ? edge.left - gap - caption.width : edge.left + margin;
+    else left = edge.right + gap + caption.width <= width - margin ? edge.right + gap : edge.right - caption.width - margin;
+  }
+  // Never out of the window, whatever the part it waits at.
+  return { left: within(left, margin, width - caption.width - margin), top: within(top, margin, height - caption.height - margin) };
 }
 
 /**
@@ -2235,24 +2611,6 @@ function isLayer(el: Element): boolean {
 /** Whether two boxes are the same, to the pixel. */
 function sameBox(a: Box, b: Box): boolean {
   return Math.abs(a.left - b.left) < 1 && Math.abs(a.top - b.top) < 1 && Math.abs(a.right - b.right) < 1 && Math.abs(a.bottom - b.bottom) < 1;
-}
-
-/** How bright a six-digit hex colour is, from 0 for black to 1 for white, as contrast is worked out from. */
-function luminance(hex: string): number {
-  const light = (channel: number) => {
-    const value = channel / 255;
-    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-  };
-  const [r, g, b] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)) as [number, number, number];
-  return 0.2126 * light(r) + 0.7152 * light(g) + 0.0722 * light(b);
-}
-
-/** The words and mark on a launcher of this colour: Paper or Ink, whichever is easier to read on it. */
-export function inkOn(hex: string): string {
-  const fill = luminance(hex);
-  const onPaper = (luminance("#fafaf9") + 0.05) / (fill + 0.05);
-  const onInk = (fill + 0.05) / (luminance("#1c1917") + 0.05);
-  return onPaper >= onInk ? "#fafaf9" : "#1c1917";
 }
 
 /**

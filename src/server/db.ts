@@ -1,4 +1,5 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { reportUsage } from "../shared/billing.ts";
 import { BLOCKED_SAY } from "../shared/corrections.ts";
 import { cleanText, normalizePath, NO_MODEL, questionKey, REASONS, type GuideOutcome, type GuideReport, type PageOutline, type SiteContext, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { MAX_VISITORS, openingRows, outlineRows, visitorHash, withLearned, type LearnedLabel, type LearnedOpening } from "./learned.ts";
@@ -50,7 +51,7 @@ const LABELS_READ = 1500;
 /** How long a report waits before each look for its guide's row. A Worker may keep working this long after it has answered. */
 const REPORT_RETRIES_MS = [0, 1000, 3000, 6000];
 
-/** A guide's newest step, as this server recorded it when it answered. Nothing in it is the widget's word. */
+/** The step a guide's ending rests on, as this server recorded it when it answered. Nothing in it is the widget's word. */
 export interface LastStep {
   n: number;
   status: TurnReply["status"];
@@ -119,6 +120,8 @@ export class Store {
   private readonly reportWaitsMs: readonly number[];
   /** How many learned labels a site keeps, and as many items behind controls. */
   private readonly maxLabels: number;
+  /** Stripe's secret key. With it, a guide kept as finished is sent to Stripe as usage straight away. */
+  private readonly stripeKey: string | undefined;
 
   /**
    * `connection` is Neon's connection string. A test hands in a stand-in for
@@ -126,17 +129,18 @@ export class Store {
    * visitors must have seen a learned label before the prompt gets it, and
    * `labelNetworks` how many different networks they must have called from,
    * the same number unless given. A test makes `reportWaitsMs` and
-   * `maxLabels` small.
+   * `maxLabels` small. `stripeKey` turns on sending finished guides to Stripe.
    */
   constructor(
     connection: string | NeonQueryFunction<false, false>,
     private readonly labelThreshold = 3,
-    options: { labelNetworks?: number; reportWaitsMs?: readonly number[]; maxLabels?: number } = {},
+    options: { labelNetworks?: number; reportWaitsMs?: readonly number[]; maxLabels?: number; stripeKey?: string } = {},
   ) {
     this.sql = typeof connection === "string" ? neon(connection) : connection;
     this.labelNetworks = options.labelNetworks ?? labelThreshold;
     this.reportWaitsMs = options.reportWaitsMs ?? REPORT_RETRIES_MS;
     this.maxLabels = options.maxLabels ?? MAX_LABELS;
+    this.stripeKey = options.stripeKey || undefined;
   }
 
   /**
@@ -469,6 +473,13 @@ export class Store {
    * another ending, that one is kept instead, and when they show none, nothing
    * is kept. Every other outcome is free, and is kept as the widget reports it.
    *
+   * The step checked is the one the report names: the step whose reply the
+   * ending rests on (`GuideReport.step`). A step asked after it, like the look
+   * at what using the last control did, can be written before a report that
+   * was held up, and must not change how the guide ended. A report from a
+   * widget too old to name one is checked against the newest step on record,
+   * and so is one whose step never appears.
+   *
    * A guide's last step is written after its reply has gone out, and the
    * widget reports the ending straight after that reply, as the page may be
    * about to go. So the report can arrive before the guide's row exists, or
@@ -482,29 +493,37 @@ export class Store {
       const waits = this.reportWaitsMs;
       for (const [look, wait] of waits.entries()) {
         if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
-        // The kind of reply is read through to_jsonb, so a database without its column (db/migrations/0005) still answers.
+        // The step the report names when it is on record, and otherwise the newest (`named` says which it is). The kind
+        // of reply is read through to_jsonb, so a database without its column (db/migrations/0005) still answers.
+        const named = report.step ?? null;
         const [found] = await this.sql`
-          select g.outcome is null as open, newest.n, newest.status, newest.pointed, newest.model, newest.mode, newest.reason, newest.blocked
+          select g.outcome is null as open, step.n, step.status, step.pointed, step.model, step.mode, step.reason, step.blocked, step.named
           from guides g
           left join lateral (
             select s.n, s.status, s.target_role is not null as pointed, s.model, to_jsonb(s)->>'mode' as mode, to_jsonb(s)->>'reason' as reason,
-              s.target_role is null and s.said = ${BLOCKED_SAY} as blocked
-            from steps s where s.guide_id = g.id order by s.n desc limit 1
-          ) newest on true
+              s.target_role is null and s.said = ${BLOCKED_SAY} as blocked, s.n = ${named} as named
+            from steps s where s.guide_id = g.id order by s.n = ${named} desc nulls last, s.n desc limit 1
+          ) step on true
           where g.id = ${guide} and g.site_id = ${site.id}`;
         if (!found) continue;
         let outcome = report.outcome;
         if (outcome === "finished" && found.open) {
           const { n, status, pointed, model, mode, reason, blocked } = found;
           outcome = endingFor(n === null ? undefined : { n, status, pointed: pointed === true, model, mode, reason, blocked: blocked === true });
-          // Nothing on record settles it yet, and the step that would may still be on its way here.
-          if (!outcome && look < waits.length - 1) continue;
+          // The step the report names is not on record yet, or nothing on record settles it: the step that would may
+          // still be on its way here. At the last look, what is on record is what is kept.
+          const waiting = named !== null && found.named !== true;
+          if ((waiting || !outcome) && look < waits.length - 1) continue;
           if (outcome !== "finished") {
-            console.warn(`Guide ${guide} on ${site.id} was reported finished, which its steps on record do not bear out, so ${outcome ? `it is kept as ${outcome}` : "no ending is kept"}.`);
+            const which = n === null ? "it has no step on record" : `${found.named === true ? "" : "the newest "}step ${n} on record does not bear it out`;
+            console.warn(`Guide ${guide} on ${site.id} was reported finished, but ${which}, so ${outcome ? `it is kept as ${outcome}` : "no ending is kept"}.`);
           }
         }
         if (outcome && found.open) {
           await this.sql`update guides set outcome = ${outcome}, ended_at = now() where id = ${guide} and site_id = ${site.id} and outcome is null`;
+          // A finished guide is billed. It goes to Stripe now if its company pays by usage, and only if the database kept it as finished.
+          // The site's hourly sweep catches any that don't get through.
+          if (outcome === "finished" && this.stripeKey) await reportUsage(this.sql, this.stripeKey, { guide });
         }
         if (report.helped !== undefined) {
           await this.sql`update guides set helped = ${report.helped} where id = ${guide} and site_id = ${site.id}`;

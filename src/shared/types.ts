@@ -44,6 +44,13 @@ export interface SiteContext {
   handoff?: Handoff;
   /** False stops the widget sending outlines of the pages it sees, so the site map is the crawl's alone. On unless set. */
   learn?: boolean;
+  /**
+   * The last time the launcher's colour was read from the site, and for which address. A new address is read again.
+   * `done` is false while a read is under way. Set by matchLauncher in web/worker/brand.ts.
+   */
+  launcherMatch?: { origin: string; at: string; done: boolean };
+  /** True once a person set the launcher's colour in the dashboard. It is then never read from the site on its own again. */
+  launcherChosen?: boolean;
   /** "Point here instead": steps the site's owner fixed from the dashboard. See src/shared/corrections.ts. */
   corrections?: Correction[];
   /** Controls Haptic must never point at, like "Delete workspace". Enforced by the server and the widget, not left to the prompt. */
@@ -73,7 +80,11 @@ export interface SiteSource {
 }
 
 export interface Appearance {
-  /** Hex color for the pointer and its highlight. Blue unless the company changes it, so it stands out on any page. */
+  /**
+   * Not used. The pointer and its ring are Haptic's blue on every site (POINTER_BLUE in src/shared/colour.ts), so
+   * this is no longer a setting. Kept so settings saved before still read, and the widget server sends the blue here
+   * for a widget still in a browser's cache from when it was read.
+   */
   accent: string;
   /**
    * Always bottom right: the launcher is on the right on every site, and the
@@ -84,9 +95,9 @@ export interface Appearance {
   position: "bottom-right";
   launcherLabel: string;
   /**
-   * Hex color for the launcher, the button people press to ask. Not set means Ink.
-   * This is the part of the widget a company matches to its own site: the launcher
-   * should look like it belongs there, and the pointer should not.
+   * Hex color for the launcher, the button people press to ask: the site's own colour, read from the site when it
+   * is added (web/worker/brand.ts) or chosen in the dashboard. Not set means Ink. It is drawn through
+   * launcherColour in src/shared/colour.ts, which darkens one too light to see on a white page.
    */
   launcher?: string;
 }
@@ -501,6 +512,14 @@ export function isLearnableRoute(path: string): boolean {
 export interface GuideReport {
   site: string;
   outcome?: GuideOutcome;
+  /**
+   * With an outcome: the step whose reply the ending rests on, counting from
+   * 0, which is the last step the widget had an answer to. The server checks
+   * that step, so a step asked after it, like the look at what using the last
+   * control did, cannot change how it is kept. Absent from a widget older than
+   * this, and from one whose guide ended before any answer came.
+   */
+  step?: number;
   helped?: boolean;
   /** The visitor used the way to a person. */
   handoff?: true;

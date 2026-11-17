@@ -20,9 +20,11 @@ export const accessHref = "/request-access/";
 export const accessEndpoint = process.env.NEXT_PUBLIC_ACCESS_ENDPOINT ?? "/api/request-access";
 
 /**
- * What Haptic costs. The pricing section is drawn from this, so a price is
- * changed here and nowhere else. Billing is not built yet: these are the
- * plans it will have to match.
+ * What Haptic costs. The pricing section and billing are both drawn from this,
+ * so a price is changed here and nowhere else. After changing one, run
+ * `npm run stripe:setup` with each Stripe key (test and live) to make the new
+ * price in Stripe. Until then the site's deploy stops, because Stripe would
+ * charge something else (lib/billing-plans.ts, scripts/stripe-setup.ts).
  *
  * The unit is a finished guide. `includedGuides` is how many a month the plan
  * covers and `overageUsd` is the price of each one after that. A plan with no

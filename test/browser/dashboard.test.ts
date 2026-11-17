@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import type { Locator, Page } from "playwright";
+import { launcherColour } from "../../src/shared/colour.ts";
 import { BRAND, NO_SITE_COMPANY, ONE_SITE, ONE_SITE_COMPANY, SETTING_UP, SETTING_UP_COMPANY, SITE, SKIP, WAITING, startDashboard, type Dashboard } from "./dashboard-harness.ts";
 
 // The dashboard keeping itself current, and the things about it that only show
@@ -112,24 +113,34 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     }
   });
 
-  test("the list of pages stays where it is when the page scrolls, and nothing hidden makes the page longer", async () => {
+  test("the bar across the top and the list of pages stay where they are, together, when the page scrolls, and nothing hidden makes the page longer", async () => {
     const tab = await dash.open();
     await closing(tab, async () => {
       await tab.locator('[data-metric="Guides finished"]').waitFor();
       // The page is only as long as it will be once its lists have their rows. Until then there is nothing to scroll.
       await eventually(() => tab.evaluate(() => document.scrollingElement!.scrollHeight > window.innerHeight + 200), "the overview should be long enough to scroll");
       const where = () =>
-        tab.locator("aside").evaluate((el) => {
-          const box = el.getBoundingClientRect();
-          return { top: Math.round(box.top), bottom: Math.round(box.bottom) };
-        });
+        tab.evaluate(() =>
+          ["header", "aside"].map((selector) => {
+            const el = document.querySelector(selector)!;
+            const box = el.getBoundingClientRect();
+            return { top: Math.round(box.top), bottom: Math.round(box.bottom), position: getComputedStyle(el).position };
+          }),
+        );
       const start = await where();
-      assert.equal(start.bottom, 900, "the list of pages reaches the foot of the window");
+      const [bar, list] = start;
+      assert.equal(list!.bottom, 900, "the list of pages reaches the foot of the window");
+      assert.equal(list!.top, bar!.bottom, "the list of pages starts where the bar ends");
+      // A Mac's trackpad pulls the whole page past its top or foot and lets it spring back. That moves what scrolls with
+      // the page and not what is fixed to the window: the bar, sticky, slid down over Overview and left a gap above it,
+      // while the list of pages, fixed, stayed. Fixed alike, nothing that moves the page parts them. Chromium on Linux
+      // draws no such pull, so how each is held is what can be checked here.
+      assert.deepEqual(start.map((box) => box.position), ["fixed", "fixed"], "the bar and the list of pages should both be fixed to the window");
 
       // Straight to the foot of the page, which is where the list of pages used to slide up.
       await tab.evaluate(() => window.scrollTo({ top: document.scrollingElement!.scrollHeight, behavior: "instant" }));
       await eventually(() => tab.evaluate(() => window.scrollY > 100), "the page should have scrolled");
-      assert.deepEqual(await where(), start, "the list of pages moved with the page");
+      assert.deepEqual(await where(), start, "the bar or the list of pages moved with the page");
 
       // The chart's table for screen readers once made the page 39px longer than what was on it, and far more on 90 days.
       for (const days of ["90 days", "30 days"]) {
@@ -159,16 +170,54 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     });
   });
 
-  test("Match website gives the Ask button the site's colour and leaves the pointer blue", async () => {
+  test("a site's Ask button takes its website's colour on its own, and the pointer stays blue and is not a setting", async () => {
+    // As a site added a moment ago: nothing read from it yet.
+    dash.forgetLauncher();
     const tab = await dash.open(`/dashboard/?site=${SITE}&view=settings`);
     await closing(tab, async () => {
+      const field = tab.locator("#launcher");
+      await field.waitFor();
+      // Read in the background after the page asked for the site, and shown here when it is in, with no reload.
+      await eventually(async () => (await field.inputValue()) === BRAND, `the Ask button's colour should become the website's ${BRAND}`, 15_000);
+      await tab.getByText("Matched to your website's colour when the site was added.").waitFor();
+      assert.equal(await tab.locator("#accent").count(), 0, "there is no pointer colour to set");
+      assert.equal(await tab.locator("[data-preview-launcher]").evaluate((el) => getComputedStyle(el).backgroundColor), "rgb(23, 99, 58)");
+      const { appearance, launcherMatch } = await dash.site();
+      assert.deepEqual({ launcher: appearance.launcher, accent: appearance.accent, source: launcherMatch.source }, { launcher: BRAND, accent: "#1E6EF4", source: "matched" });
+    });
+  });
+
+  test("a colour too light to see is saved darker, and Match website reads the website's again", async () => {
+    const tab = await dash.open(`/dashboard/?site=${SITE}&view=settings`);
+    await closing(tab, async () => {
+      const field = tab.locator("#launcher");
+      await field.waitFor();
+      await field.fill("#FACC15");
+      const darker = launcherColour("#FACC15");
+      await tab.getByText(`so it is drawn darker, as ${darker}`).waitFor();
+      await tab.getByRole("button", { name: "Save changes" }).click();
+      await tab.getByText("Saved.").waitFor();
+      assert.equal(await field.inputValue(), darker, "what is saved is what is drawn");
+      const chosen = await dash.site();
+      assert.deepEqual({ launcher: chosen.appearance.launcher, source: chosen.launcherMatch.source }, { launcher: darker, source: "chosen" });
+
       await tab.getByRole("button", { name: "Match website" }).click();
-      await tab.getByText(`Matched to ${BRAND}`).waitFor({ timeout: 15_000 });
-      assert.equal(await tab.locator("#launcher").inputValue(), BRAND);
-      assert.equal(await tab.locator("#accent").inputValue(), "#1E6EF4");
-      const { appearance } = await dash.site();
-      assert.equal(appearance.launcher, BRAND, "saved in the one press");
-      assert.equal(appearance.accent, "#1E6EF4", "the pointer's colour is not touched");
+      await tab.getByText(`Matched to ${BRAND}, your website's colour.`).waitFor({ timeout: 15_000 });
+      assert.equal(await field.inputValue(), BRAND);
+      assert.equal((await dash.site()).appearance.launcher, BRAND, "saved in the one press");
+    });
+  });
+
+  test("a light colour saved before colours were darkened shows as visitors see it, darker, and is not read over", async () => {
+    dash.saveOldLauncher("#FACC15");
+    const tab = await dash.open(`/dashboard/?site=${SITE}&view=settings`);
+    await closing(tab, async () => {
+      const field = tab.locator("#launcher");
+      await field.waitFor();
+      assert.equal(await field.inputValue(), launcherColour("#FACC15"), "the field shows the colour visitors see");
+      // Saved before matching existed, so it counts as a person's choice and is not read from the site.
+      await tab.waitForTimeout(2500);
+      assert.equal(await field.inputValue(), launcherColour("#FACC15"));
     });
   });
 

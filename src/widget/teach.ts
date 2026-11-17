@@ -1,4 +1,4 @@
-import { MAX_TAUGHT_STEPS, newTeachToken, sectionOf, stepText, type TaughtStep } from "../shared/teach.ts";
+import { MAX_TAUGHT_STEPS, newTeachToken, sectionOf, sentence, stepText, type TaughtStep } from "../shared/teach.ts";
 import { TEACH_KEY, TEACH_TOKEN } from "../shared/teach-link.ts";
 import { cleanText, type SnapElement } from "../shared/types.ts";
 import { currentPath, nameOf, shownWords, takeSnapshot, withoutTyping, withTyping, type PageSnapshot } from "./snapshot.ts";
@@ -147,7 +147,9 @@ function refusal(answer: { status: number; data: Record<string, unknown> } | und
 }
 
 const BAR_CSS = `
-:host { all: initial; position: fixed; left: 50%; transform: translateX(-50%); z-index: 2147483647; margin: 0; padding: 0; border: 0; inset: auto auto 16px 50%;
+/* Left to right on every page, as the chat is: 'all' leaves direction alone, and the bar's words are English. The
+   question it was opened for is the site's, so it reads in its own direction (dir="auto"). */
+:host { all: initial; direction: ltr; position: fixed; left: 50%; transform: translateX(-50%); z-index: 2147483647; margin: 0; padding: 0; border: 0; inset: auto auto 16px 50%;
   background: transparent; overflow: visible; font: 14px/20px system-ui, -apple-system, "Segoe UI", sans-serif; color: #fafaf9; }
 :host(.top) { inset: 16px auto auto 50%; }
 * { box-sizing: border-box; }
@@ -173,9 +175,6 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 [hidden] { display: none !important; }
 @media (prefers-reduced-motion: reduce) { .title .dot { animation: none; } }
 `;
-
-/** A question as it ends a sentence: with its own mark if it has one. */
-const sentence = (question: string) => (/[.?!]$/.test(question.trim()) ? question.trim() : `${question.trim()}.`);
 
 /** Teach mode in one tab: the bar, and the recording of what the person does. */
 export class Teacher {
@@ -209,7 +208,7 @@ export class Teacher {
     this.words = make(
       "div",
       { class: "words" },
-      make("p", { class: "title" }, make("span", { class: "dot", "aria-hidden": "true" }), `Teaching Haptic: ${sentence(teaching.question)}`),
+      make("p", { class: "title" }, make("span", { class: "dot", "aria-hidden": "true" }), "Teaching Haptic: ", make("span", { dir: "auto" }, sentence(teaching.question))),
       make("p", { class: "how" }, "Do the task as a visitor would. Haptic records which controls you use, not what you type."),
       this.last,
     );
@@ -287,7 +286,7 @@ export class Teacher {
     this.move.setAttribute("aria-label", this.teaching.top ? "Move this bar to the bottom" : "Move this bar to the top");
     if (!steps.length) return this.say("No steps yet. Start where a visitor would.");
     const latest = stepText(steps[steps.length - 1]!, steps[steps.length - 2]);
-    this.say(`${steps.length} ${steps.length === 1 ? "step" : "steps"}. Last: ${latest}${/[.?!]$/.test(latest) ? "" : "."}`);
+    this.say(`${steps.length} ${steps.length === 1 ? "step" : "steps"}. Last: ${sentence(latest)}`);
   }
 
   private record(step: TaughtStep, el?: Element) {
