@@ -13,6 +13,17 @@ const size = (tab: Page, selector: string) =>
     return { width: Math.round(box.width), height: Math.round(box.height) };
   });
 const settled = (tab: Page) => tab.waitForTimeout(450);
+/**
+ * Waits for the launcher to have a size, and fails with the size it has if it never gets there. Its sizes change over
+ * 300 ms, which a browser on a busy machine can take much longer to draw: on CI, WebKit was still part of the way
+ * there 450 ms after the click, in three runs of four (17 by 31 on its way to the dot, 35 by 56 on its way back).
+ * What is tested is where it ends up, so that is waited for.
+ */
+async function becomes(tab: Page, selector: string, wanted: { width: number; height: number }, ms = 4000) {
+  let seen = await size(tab, selector);
+  for (const deadline = Date.now() + ms; Date.now() < deadline && (seen.width !== wanted.width || seen.height !== wanted.height); seen = await size(tab, selector)) await tab.waitForTimeout(50);
+  assert.deepEqual(seen, wanted);
+}
 
 for (const name of BROWSERS) {
   describe(`minimizing the launcher in ${name}`, () => {
@@ -54,19 +65,16 @@ for (const name of BROWSERS) {
       await tab.locator("haptic-root .launcher").hover();
       await tab.locator("haptic-root .hide").click();
       await tab.mouse.move(10, 10);
-      await settled(tab);
-      assert.deepEqual(await size(tab, "haptic-root .launcher"), { width: 14, height: 14 });
+      await becomes(tab, "haptic-root .launcher", { width: 14, height: 14 });
       assert.equal(await tab.locator("haptic-root .launcher").getAttribute("aria-label"), "Show Ask");
       assert.equal(await tab.locator("haptic-root .panel").isHidden(), true);
 
       await tab.locator("haptic-root .launcher").hover();
-      await settled(tab);
-      assert.deepEqual(await size(tab, "haptic-root .launcher"), { width: 32, height: 32 });
+      await becomes(tab, "haptic-root .launcher", { width: 32, height: 32 });
 
       await tab.locator("haptic-root .launcher").click();
       await tab.mouse.move(10, 10);
-      await settled(tab);
-      assert.deepEqual(await size(tab, "haptic-root .launcher"), full);
+      await becomes(tab, "haptic-root .launcher", full);
       // Bringing it back doesn't open the panel as well. The next click does.
       assert.equal(await tab.locator("haptic-root .panel").isHidden(), true);
       assert.equal(await tab.locator("haptic-root .launcher").getAttribute("aria-label"), null);
@@ -75,19 +83,19 @@ for (const name of BROWSERS) {
     test("stays a small dot under the pointer that just minimized it, until the pointer leaves", async () => {
       await tab.locator("haptic-root .launcher").hover();
       await tab.locator("haptic-root .hide").click();
+      // Long enough for it to have opened up, had it been going to, and then still the dot.
       await settled(tab);
-      assert.deepEqual(await size(tab, "haptic-root .launcher"), { width: 14, height: 14 });
+      await becomes(tab, "haptic-root .launcher", { width: 14, height: 14 });
       await tab.mouse.move(10, 10);
       await tab.locator("haptic-root .launcher").hover();
-      await settled(tab);
-      assert.deepEqual(await size(tab, "haptic-root .launcher"), { width: 32, height: 32 });
+      await becomes(tab, "haptic-root .launcher", { width: 32, height: 32 });
     });
 
     test("holds still with the pointer resting on the dot's edge", async () => {
       await tab.locator("haptic-root .launcher").hover();
       await tab.locator("haptic-root .hide").click();
       await tab.mouse.move(10, 10);
-      await settled(tab);
+      await becomes(tab, "haptic-root .launcher", { width: 14, height: 14 });
       const dot = (await tab.locator("haptic-root .launcher").boundingBox())!;
       // Each edge of the small dot, and a corner of the area it grows into.
       for (const [x, y] of [[dot.x + 7, dot.y + dot.height - 0.5], [dot.x + 0.5, dot.y + 7], [dot.x + 7, dot.y + 0.5], [dot.x - 17, dot.y - 17]]) {

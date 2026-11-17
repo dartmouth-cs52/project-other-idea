@@ -442,6 +442,7 @@ test("a link named for what its form will do is pressed when it plainly visits t
     <a href="/people/7/edit" id="edit" data-watch>Update Dana</a>
     <a href="/invites/new" id="invite" data-watch>Send invite</a>
     <a href="/photos/create" id="create" data-watch>Create album</a>
+    <a href="/wishlist/42/add" id="wish" data-watch>Add to wishlist</a>
     <a href="/invites/send" id="send" data-watch>Send invite</a>
     <a href="/expenses/7/approve" id="approve" data-watch>Approve expense</a>
     <a href="#" id="hash" data-watch>Issue card</a>
@@ -456,7 +457,7 @@ test("a link named for what its form will do is pressed when it plainly visits t
     <a href="/team/cards/new" target="_blank" id="tab" data-watch>Issue card</a>
     <a href="/rooms/new" id="book" data-watch>Book a room</a></main>`);
   try {
-    for (const selector of ["#issue", "#edit", "#invite", "#create"]) {
+    for (const selector of ["#issue", "#edit", "#invite"]) {
       const plan = await page.plan(selector, { do: "click", commits: false }, CARD);
       assert.deepEqual([selector, plan.kind, plan.control, plan.navigates, plan.tripwire], [selector, "act", "link", true, true]);
     }
@@ -467,6 +468,8 @@ test("a link named for what its form will do is pressed when it plainly visits t
       ["#same", "visitor", "words"],
       // "new" is not where the address ends, a query that can make the visit the act, and an address that pays.
       ["#start", "visitor", "words"], ["#add", "visitor", "words"], ["#checkout", "visitor", "words"],
+      // An address that ends in "create" or "add" can be the act itself on a plain visit, which nothing would see: it is no form page.
+      ["#create", "visitor", "words"], ["#wish", "visitor", "words"],
       // Words that delete or pay stop a link wherever it leads: acting stops before it, since the visitor asked for neither.
       ["#delete", "stop", "class"], ["#pay", "stop", "class"],
       // So do the company's own commit words.

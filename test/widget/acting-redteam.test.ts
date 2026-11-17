@@ -507,7 +507,7 @@ test("a link named Issue card that visits /cards/new is pressed as a visit, and 
     },
   ));
 
-test("a link with such a name is never pressed when it is not a plain visit to a form page: another address, '#', role=link, a script written on it, or words that delete or pay", async () => {
+test("a link with such a name is never pressed when it is not a plain visit to a form page: another address, one that ends in add or create, '#', role=link, a script written on it, or words that delete or pay", async () => {
   const cases: [string, string, string][] = [
     [`<a href="/invites/send" id="it" data-watch>Send invite</a>`, "Send invite", "I'll leave Send invite to you: it sends something. Click it and I'll carry on."],
     [`<a href="/expenses/7/approve" id="it" data-watch>Approve expense</a>`, "Approve expense", "I'll leave Approve expense to you: it saves something. Click it and I'll carry on."],
@@ -518,10 +518,13 @@ test("a link with such a name is never pressed when it is not a plain visit to a
     // "new" is not where the address ends, or a visit there can be the act itself.
     [`<a href="/cards/new/confirm" id="it" data-watch>Issue card</a>`, "Issue card", "I'll leave Issue card to you: it saves something. Click it and I'll carry on."],
     [`<a href="/cards/create?now=1" id="it" data-watch>Issue card</a>`, "Issue card", "I'll leave Issue card to you: it saves something. Click it and I'll carry on."],
+    // An address that ends in "add" or "create" can be the act itself on a plain visit, a GET the tripwire cannot see: it is no form page.
+    [`<a href="/wishlist/42/add" id="it" data-watch>Add to wishlist</a>`, "Add to wishlist", "I'll leave Add to wishlist to you: it saves something. Click it and I'll carry on."],
+    [`<a href="/photos/create" id="it" data-watch>Create album</a>`, "Create album", "I'll leave Create album to you: it saves something. Click it and I'll carry on."],
   ];
   for (const [control, label, say] of cases) {
     await run(`${WATCH}<h1>Team</h1>${control}`, (request) => doing(request, label, "click", `Opening ${label}.`), async (session) => {
-      await session.ask("issue a card, send Dana an invite and approve expense 7", { act: true });
+      await session.ask("issue a card, send Dana an invite, approve expense 7, add this to my wishlist and create an album", { act: true });
       await session.untilState("pointing", 10_000);
       assert.equal(await session.caption(), say, control);
       await session.page.waitForTimeout(1500);
