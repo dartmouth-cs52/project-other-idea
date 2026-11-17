@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseModel } from "../eval/ask.ts";
+import { captionRow, captionStats, namesALaterStep, shownAsCaption, wordsIn } from "../eval/captions.ts";
 import { findListed, KINDS, loadCaseFiles, matches, plausibleRange, score, type Case } from "../eval/cases.ts";
 import { addressFits, saidOrWhy } from "../eval/browser.ts";
 import { DONE, faults, type Guide, type GuideSet } from "../eval/guide.ts";
@@ -338,4 +339,39 @@ test("the guides' answers in words pass the sentences seen on staging, and not w
   // What failed three times in three on staging: where the answer is, and not the answer.
   assert.notEqual(saidOrWhy(says("what-it-reads"), 'The FAQ on the home page has an answer titled "What does Haptic see on the page?". Click FAQ in the top bar to read it.', reads), "");
   assert.notEqual(saidOrWhy(says("what-it-reads"), "It reads the buttons and fields on your page and what people type.", reads), "");
+});
+
+// How long the caption beside the pointer is (eval/captions.ts). The sentences are ones the live server showed visitors
+// on 16 and 17 November 2026, before the rules for it changed, and the short ones it showed then too.
+test("a caption is counted in words, and one that also tells a later step is found", () => {
+  assert.equal(wordsIn("Click Sign out."), 3);
+  assert.equal(wordsIn("  Not that one.   Click Team. "), 5);
+  assert.equal(wordsIn(""), 0);
+  for (const later of [
+    "Click the round button with your initials at the top right to open the account menu, then choose Sign out.",
+    "Click Bills in the left sidebar to see your bills. Then open the one you want to pay and use Pay now.",
+    "Type your work email in the Work email field, then fill in Company below it. After that, click Continue.",
+    "Click People in the sidebar to open the directory, where you can invite people. Then I'll point you to the invite button.",
+    "Typing your reminder into the Memo field. Next I’ll point at Submit for approval.",
+  ]) assert.ok(namesALaterStep(later), later);
+  for (const one of ["Click Sign out.", "Open your account menu.", "Not that one. Click Team.", "Once your receipt is attached, click Submit for approval.", "Type more than the other field."]) {
+    assert.ok(!namesALaterStep(one), one);
+  }
+});
+
+test("only a sentence shown beside a pointer counts as a caption, and the counts are over those", () => {
+  assert.ok(shownAsCaption({ target: "e5", status: "continue" }));
+  assert.ok(shownAsCaption({ target: "e5", status: "done", mode: "guide" }), "a place on the page, pointed at to end");
+  assert.ok(shownAsCaption({ target: "e5", status: "continue", mode: "act" }));
+  // Read in the chat: nothing pointed at, stuck, an answer in words (its pointer has no caption) and a fixed sentence.
+  assert.ok(!shownAsCaption({ target: null, status: "done" }));
+  assert.ok(!shownAsCaption({ target: "e5", status: "stuck" }));
+  assert.ok(!shownAsCaption({ target: "e5", status: "done", mode: "answer" }));
+  assert.ok(!shownAsCaption({ target: null, status: "done", mode: "cannot_help" }));
+
+  const says = ["Click Sign out in the account menu.", "Click Sign out.", "Click the round button with your initials at the top right to open the account menu, then choose Sign out.", ""];
+  assert.deepEqual(captionStats(says), { captions: 3, typicalWords: 7, short: 1, laterStep: 1 });
+  assert.deepEqual(captionStats([]), { captions: 0, typicalWords: 0, short: 0, laterStep: 0 });
+  assert.deepEqual(captionRow(says), { captions: 3, "words, typical": 7, "6 words or fewer": "33%", "tells a later step": "33%" });
+  assert.deepEqual(captionRow([]), { captions: 0, "words, typical": 0, "6 words or fewer": "n/a", "tells a later step": "n/a" });
 });

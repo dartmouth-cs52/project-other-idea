@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import { buildUserMessage } from "../src/server/prompt.ts";
 import { describeElement, type SiteContext, type Snapshot, type TurnReply, type TurnRequest } from "../src/shared/types.ts";
 import { modelAsker, parseModel, serverAsker, type Asker } from "./ask.ts";
+import { captionRow, shownAsCaption } from "./captions.ts";
 import { ask, launch, loadGuideSet, open, reachedAnyOrWhy, reachedOrWhy, readAnswers, saysOrWhy, siteFor, type Browser, type Read } from "./browser.ts";
 import { matches, plausibleRange } from "./cases.ts";
 import type { Guide, GuideSet, Step } from "./guide.ts";
@@ -82,6 +83,8 @@ interface StepLog {
   pointed: string;
   status: string;
   say: string;
+  /** The widget shows `say` in a caption beside the pointer, not in the chat (captions.ts). */
+  captioned: boolean;
   did: string;
   ms: number;
   msToTarget: number;
@@ -241,6 +244,7 @@ export async function drive(browser: Browser, set: GuideSet, guide: Guide, site:
             pointed: pointed ? describeElement(pointed) : "nothing",
             status: got.reply.status,
             say: got.reply.say,
+            captioned: shownAsCaption(got.reply),
             did: "",
             ms: got.ms,
             msToTarget: got.msToTarget,
@@ -728,6 +732,10 @@ async function main() {
       };
     }),
   );
+
+  // How long the sentence beside the pointer is, which whether a guide got there does not see (captions.ts).
+  console.log("\nCaptions beside the pointer:");
+  console.table(groups.map(({ label, mine }) => ({ "": label, ...captionRow(mine.flatMap((run) => run.trail).filter((step) => step.captioned).map((step) => step.say)) })));
 
   // On sites other people use: requests that were not plain reads. See eval/net.ts.
   if (runs.some((run) => run.sent)) {
