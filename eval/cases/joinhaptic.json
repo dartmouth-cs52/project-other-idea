@@ -1,0 +1,2593 @@
+{
+ "about": "Haptic's own public site: a simple marketing page with an accordion and a two-step form.",
+ "site": {
+  "version": 1,
+  "id": "site_joinhaptic",
+  "name": "Haptic",
+  "origin": "https://joinhaptic.com",
+  "allowedOrigins": [
+   "https://joinhaptic.com"
+  ],
+  "appearance": {
+   "accent": "#1E6EF4",
+   "position": "bottom-right",
+   "launcherLabel": "Ask"
+  },
+  "notes": "",
+  "docs": [],
+  "pages": [
+   {
+    "path": "/",
+    "title": "Haptic, the AI guide that lives in your product",
+    "headings": [
+     "MeetHaptic",
+     "Projects",
+     "Answers what people ask.",
+     "Knows your product.",
+     "Never reads what people type.",
+     "FAQs",
+     "How is Haptic different from a chatbot or a product tour?",
+     "How do I add Haptic to my product?",
+     "Does Haptic click things for my users?",
+     "Does it work in apps behind a login?",
+     "What does Haptic see on the page?",
+     "How much does it cost?"
+    ],
+    "links": [
+     {
+      "label": "Haptic",
+      "to": "/"
+     },
+     {
+      "label": "FAQ",
+      "to": "/"
+     },
+     {
+      "label": "Request access",
+      "to": "/request-access"
+     },
+     {
+      "label": "Privacy",
+      "to": "/privacy"
+     },
+     {
+      "label": "Terms",
+      "to": "/terms"
+     }
+    ],
+    "buttons": [
+     "How is Haptic different from a chatbot or a product tour?",
+     "How do I add Haptic to my product?",
+     "Does Haptic click things for my users?",
+     "Does it work in apps behind a login?",
+     "What does Haptic see on the page?",
+     "How much does it cost?",
+     "Is Haptic ready for enterprise?"
+    ],
+    "fields": [],
+    "description": "In-app guidance for your web app. People say what they want to do, and Haptic points to exactly where to click, step by step, on the live page."
+   },
+   {
+    "path": "/privacy",
+    "title": "Privacy, Haptic",
+    "headings": [
+     "Privacy",
+     "This website",
+     "Haptic inside a product",
+     "Contact"
+    ],
+    "links": [
+     {
+      "label": "Haptic",
+      "to": "/"
+     },
+     {
+      "label": "FAQ",
+      "to": "/"
+     },
+     {
+      "label": "Request access",
+      "to": "/request-access"
+     },
+     {
+      "label": "Privacy",
+      "to": "/privacy"
+     },
+     {
+      "label": "Terms",
+      "to": "/terms"
+     }
+    ],
+    "buttons": [],
+    "fields": [],
+    "description": "In-app guidance for your web app. People say what they want to do, and Haptic points to exactly where to click, step by step, on the live page."
+   },
+   {
+    "path": "/request-access",
+    "title": "Request access, Haptic",
+    "headings": [
+     "The AI guide that lives in your product.",
+     "Request access to Haptic"
+    ],
+    "links": [
+     {
+      "label": "Haptic",
+      "to": "/"
+     },
+     {
+      "label": "FAQ",
+      "to": "/"
+     },
+     {
+      "label": "Request access",
+      "to": "/request-access"
+     },
+     {
+      "label": "Privacy",
+      "to": "/privacy"
+     },
+     {
+      "label": "Terms",
+      "to": "/terms"
+     }
+    ],
+    "buttons": [
+     "Continue"
+    ],
+    "fields": [
+     "Work email*",
+     "Company*"
+    ],
+    "description": "In-app guidance for your web app. People say what they want to do, and Haptic points to exactly where to click, step by step, on the live page."
+   },
+   {
+    "path": "/terms",
+    "title": "Terms, Haptic",
+    "headings": [
+     "Terms",
+     "Early access",
+     "Using Haptic",
+     "Your content",
+     "No warranty",
+     "Contact"
+    ],
+    "links": [
+     {
+      "label": "Haptic",
+      "to": "/"
+     },
+     {
+      "label": "FAQ",
+      "to": "/"
+     },
+     {
+      "label": "Request access",
+      "to": "/request-access"
+     },
+     {
+      "label": "Privacy",
+      "to": "/privacy"
+     },
+     {
+      "label": "Terms",
+      "to": "/terms"
+     }
+    ],
+    "buttons": [],
+    "fields": [],
+    "description": "In-app guidance for your web app. People say what they want to do, and Haptic points to exactly where to click, step by step, on the live page."
+   }
+  ],
+  "source": {
+   "url": "https://joinhaptic.com",
+   "maxPages": 30,
+   "docs": []
+  },
+  "createdAt": "2026-11-15T04:40:44.059Z",
+  "updatedAt": "2026-11-15T04:40:44.604Z"
+ },
+ "cases": [
+  {
+   "id": "request-access-1",
+   "guide": "request-access",
+   "request": {
+    "goal": "How do I request access?",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/",
+     "title": "Haptic, the AI guide that lives in your product",
+     "headings": [
+      "MeetHaptic",
+      "Answers what people ask.",
+      "Knows your product.",
+      "Never reads what people type.",
+      "FAQs",
+      "How is Haptic different from a chatbot or a product tour?",
+      "How do I add Haptic to my product?",
+      "Does Haptic click things for my users?",
+      "Does it work in apps behind a login?",
+      "What does Haptic see on the page?",
+      "How much does it cost?",
+      "Is Haptic ready for enterprise?"
+     ],
+     "text": [
+      "The AI guide that lives in your product. People say what they want to do, and Haptic points to exactly where to click, step by step.",
+      "No tours to script or maintain. Haptic reads the page as it is right now and points to the control that gets the job done.",
+      "During setup, Haptic reads your site and your help docs, so its directions match how your product really works.",
+      "Haptic reads the names of buttons and fields. What people type stays in the browser, and emails and long numbers are masked before anything is sent.",
+      "A chatbot answers in text and leaves people to find the button themselves. A product tour plays the same fixed steps for everyone. Haptic works on the live pag…",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "button",
+       "label": "How is Haptic different from a chatbot or a product tour?",
+       "icon": "plus",
+       "state": [
+        "expanded"
+       ],
+       "context": "main › How is Haptic different from a chatbot or a product tour?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "How do I add Haptic to my product?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How do I add Haptic to my product?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Does Haptic click things for my users?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Does Haptic click things for my users?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Does it work in apps behind a login?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Does it work in apps behind a login?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "What does Haptic see on the page?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › What does Haptic see on the page?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "How much does it cost?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How much does it cost?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Is Haptic ready for enterprise?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Is Haptic ready for enterprise?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e12",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e13",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav",
+       "offscreen": "below"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Request access"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "request-access-2",
+   "guide": "request-access",
+   "request": {
+    "goal": "How do I request access?",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "How do I request access?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Request access."
+     }
+    ],
+    "snapshot": {
+     "path": "/request-access",
+     "title": "Request access, Haptic",
+     "headings": [
+      "The AI guide that lives in your product.",
+      "Request access to Haptic"
+     ],
+     "text": [
+      "Request access, Haptic",
+      "Most help lives in docs and chat windows, away from the screen where people get stuck. Haptic works on the page itself. It points to the next control, waits fo…",
+      "Haptic is in early access. Tell us about your product and we will be in touch.",
+      "Work email",
+      "Company",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "textbox",
+       "label": "Work email",
+       "context": "form"
+      },
+      {
+       "id": "e5",
+       "role": "textbox",
+       "label": "Company",
+       "context": "form"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Continue",
+       "icon": "inline-end",
+       "context": "form"
+      },
+      {
+       "id": "e7",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav"
+      },
+      {
+       "id": "e8",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav"
+      },
+      {
+       "id": "e9",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked link \"Request access\".",
+    "change": "The page went from / to /request-access.\nNew text: \"The AI guide that lives in your product.\", \"Request access to Haptic\", \"Request access, Haptic\", \"Most help lives in docs and chat windows, away from the screen where people get stuck. Haptic works \", \"Haptic is in early access. Tell us about your product and we will be in touch.\"."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Work email"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "request-access-3",
+   "guide": "request-access",
+   "request": {
+    "goal": "How do I request access?",
+    "step": 2,
+    "history": [
+     {
+      "role": "user",
+      "text": "How do I request access?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Request access."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked link \"Request access\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Type your work email."
+     }
+    ],
+    "snapshot": {
+     "path": "/request-access",
+     "title": "Request access, Haptic",
+     "headings": [
+      "The AI guide that lives in your product.",
+      "Request access to Haptic"
+     ],
+     "text": [
+      "Request access, Haptic",
+      "Most help lives in docs and chat windows, away from the screen where people get stuck. Haptic works on the page itself. It points to the next control, waits fo…",
+      "Haptic is in early access. Tell us about your product and we will be in touch.",
+      "Work email",
+      "Company",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "textbox",
+       "label": "Work email",
+       "context": "form"
+      },
+      {
+       "id": "e5",
+       "role": "textbox",
+       "label": "Company",
+       "context": "form"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Continue",
+       "icon": "inline-end",
+       "context": "form"
+      },
+      {
+       "id": "e7",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav"
+      },
+      {
+       "id": "e8",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav"
+      },
+      {
+       "id": "e9",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user filled in textbox \"Work email\". You can't see what they entered.",
+    "change": "Nothing visible on the page changed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Company"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "request-access-4",
+   "guide": "request-access",
+   "request": {
+    "goal": "How do I request access?",
+    "step": 3,
+    "history": [
+     {
+      "role": "user",
+      "text": "How do I request access?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Request access."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked link \"Request access\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Type your work email."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Work email\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Type your company's name."
+     }
+    ],
+    "snapshot": {
+     "path": "/request-access",
+     "title": "Request access, Haptic",
+     "headings": [
+      "The AI guide that lives in your product.",
+      "Request access to Haptic"
+     ],
+     "text": [
+      "Request access, Haptic",
+      "Most help lives in docs and chat windows, away from the screen where people get stuck. Haptic works on the page itself. It points to the next control, waits fo…",
+      "Haptic is in early access. Tell us about your product and we will be in touch.",
+      "Work email",
+      "Company",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "textbox",
+       "label": "Work email",
+       "context": "form"
+      },
+      {
+       "id": "e5",
+       "role": "textbox",
+       "label": "Company",
+       "context": "form"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Continue",
+       "icon": "inline-end",
+       "context": "form"
+      },
+      {
+       "id": "e7",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav"
+      },
+      {
+       "id": "e8",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav"
+      },
+      {
+       "id": "e9",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user filled in textbox \"Company\". You can't see what they entered.",
+    "change": "Nothing visible on the page changed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Continue",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "request-access-5",
+   "guide": "request-access",
+   "request": {
+    "goal": "How do I request access?",
+    "step": 4,
+    "history": [
+     {
+      "role": "user",
+      "text": "How do I request access?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Request access."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked link \"Request access\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Type your work email."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Work email\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Type your company's name."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Company\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Continue."
+     }
+    ],
+    "snapshot": {
+     "path": "/request-access",
+     "title": "Request access, Haptic",
+     "headings": [
+      "The AI guide that lives in your product.",
+      "Request access to Haptic"
+     ],
+     "text": [
+      "Request access, Haptic",
+      "Most help lives in docs and chat windows, away from the screen where people get stuck. Haptic works on the page itself. It points to the next control, waits fo…",
+      "Haptic is in early access. Tell us about your product and we will be in touch.",
+      "First name",
+      "Last name",
+      "Additional details",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "textbox",
+       "label": "First name",
+       "context": "form"
+      },
+      {
+       "id": "e5",
+       "role": "textbox",
+       "label": "Last name",
+       "context": "form"
+      },
+      {
+       "id": "e6",
+       "role": "textbox",
+       "label": "Additional details",
+       "context": "form"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Back",
+       "context": "form"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Request access",
+       "icon": "inline-end",
+       "context": "form"
+      },
+      {
+       "id": "e9",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav"
+      },
+      {
+       "id": "e10",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"Continue\".",
+    "change": "New: textbox \"First name\", textbox \"Last name\", textbox \"Additional details\", button \"Back\", button \"Request access\".\nGone: textbox \"Work email\", textbox \"Company\", button \"Continue\".\nNew text: \"First name\", \"Last name\", \"Additional details\"."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "First name"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "request-access-6",
+   "guide": "request-access",
+   "request": {
+    "goal": "How do I request access?",
+    "step": 5,
+    "history": [
+     {
+      "role": "user",
+      "text": "How do I request access?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Request access."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked link \"Request access\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Type your work email."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Work email\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Type your company's name."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Company\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Continue."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"Continue\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Type your first name."
+     }
+    ],
+    "snapshot": {
+     "path": "/request-access",
+     "title": "Request access, Haptic",
+     "headings": [
+      "The AI guide that lives in your product.",
+      "Request access to Haptic"
+     ],
+     "text": [
+      "Request access, Haptic",
+      "Most help lives in docs and chat windows, away from the screen where people get stuck. Haptic works on the page itself. It points to the next control, waits fo…",
+      "Haptic is in early access. Tell us about your product and we will be in touch.",
+      "First name",
+      "Last name",
+      "Additional details",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "textbox",
+       "label": "First name",
+       "context": "form"
+      },
+      {
+       "id": "e5",
+       "role": "textbox",
+       "label": "Last name",
+       "context": "form"
+      },
+      {
+       "id": "e6",
+       "role": "textbox",
+       "label": "Additional details",
+       "context": "form"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Back",
+       "context": "form"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Request access",
+       "icon": "inline-end",
+       "context": "form"
+      },
+      {
+       "id": "e9",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav"
+      },
+      {
+       "id": "e10",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user filled in textbox \"First name\". You can't see what they entered.",
+    "change": "Nothing visible on the page changed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Last name"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "request-access-7",
+   "guide": "request-access",
+   "request": {
+    "goal": "How do I request access?",
+    "step": 6,
+    "history": [
+     {
+      "role": "user",
+      "text": "How do I request access?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Request access."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked link \"Request access\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Type your work email."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Work email\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Type your company's name."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Company\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Continue."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"Continue\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Type your first name."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"First name\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Type your last name."
+     }
+    ],
+    "snapshot": {
+     "path": "/request-access",
+     "title": "Request access, Haptic",
+     "headings": [
+      "The AI guide that lives in your product.",
+      "Request access to Haptic"
+     ],
+     "text": [
+      "Request access, Haptic",
+      "Most help lives in docs and chat windows, away from the screen where people get stuck. Haptic works on the page itself. It points to the next control, waits fo…",
+      "Haptic is in early access. Tell us about your product and we will be in touch.",
+      "First name",
+      "Last name",
+      "Additional details",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "textbox",
+       "label": "First name",
+       "context": "form"
+      },
+      {
+       "id": "e5",
+       "role": "textbox",
+       "label": "Last name",
+       "context": "form"
+      },
+      {
+       "id": "e6",
+       "role": "textbox",
+       "label": "Additional details",
+       "context": "form"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Back",
+       "context": "form"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Request access",
+       "icon": "inline-end",
+       "context": "form"
+      },
+      {
+       "id": "e9",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav"
+      },
+      {
+       "id": "e10",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user filled in textbox \"Last name\". You can't see what they entered.",
+    "change": "Nothing visible on the page changed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Request access",
+      "role": "button"
+     },
+     {
+      "label": "Additional details"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "pricing-1",
+   "guide": "pricing",
+   "request": {
+    "goal": "How much does it cost?",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/",
+     "title": "Haptic, the AI guide that lives in your product",
+     "headings": [
+      "MeetHaptic",
+      "Answers what people ask.",
+      "Knows your product.",
+      "Never reads what people type.",
+      "FAQs",
+      "How is Haptic different from a chatbot or a product tour?",
+      "How do I add Haptic to my product?",
+      "Does Haptic click things for my users?",
+      "Does it work in apps behind a login?",
+      "What does Haptic see on the page?",
+      "How much does it cost?",
+      "Is Haptic ready for enterprise?"
+     ],
+     "text": [
+      "The AI guide that lives in your product. People say what they want to do, and Haptic points to exactly where to click, step by step.",
+      "No tours to script or maintain. Haptic reads the page as it is right now and points to the control that gets the job done.",
+      "During setup, Haptic reads your site and your help docs, so its directions match how your product really works.",
+      "Haptic reads the names of buttons and fields. What people type stays in the browser, and emails and long numbers are masked before anything is sent.",
+      "A chatbot answers in text and leaves people to find the button themselves. A product tour plays the same fixed steps for everyone. Haptic works on the live pag…",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "button",
+       "label": "How is Haptic different from a chatbot or a product tour?",
+       "icon": "plus",
+       "state": [
+        "expanded"
+       ],
+       "context": "main › How is Haptic different from a chatbot or a product tour?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "How do I add Haptic to my product?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How do I add Haptic to my product?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Does Haptic click things for my users?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Does Haptic click things for my users?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Does it work in apps behind a login?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Does it work in apps behind a login?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "What does Haptic see on the page?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › What does Haptic see on the page?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "How much does it cost?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How much does it cost?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Is Haptic ready for enterprise?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Is Haptic ready for enterprise?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e12",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e13",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav",
+       "offscreen": "below"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "How much does it cost?"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "pricing-2",
+   "guide": "pricing",
+   "request": {
+    "goal": "How much does it cost?",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "How much does it cost?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click How much does it cost?."
+     }
+    ],
+    "snapshot": {
+     "path": "/",
+     "title": "Haptic, the AI guide that lives in your product",
+     "headings": [
+      "MeetHaptic",
+      "Answers what people ask.",
+      "Knows your product.",
+      "Never reads what people type.",
+      "FAQs",
+      "How is Haptic different from a chatbot or a product tour?",
+      "How do I add Haptic to my product?",
+      "Does Haptic click things for my users?",
+      "Does it work in apps behind a login?",
+      "What does Haptic see on the page?",
+      "How much does it cost?",
+      "Is Haptic ready for enterprise?"
+     ],
+     "text": [
+      "The AI guide that lives in your product. People say what they want to do, and Haptic points to exactly where to click, step by step.",
+      "No tours to script or maintain. Haptic reads the page as it is right now and points to the control that gets the job done.",
+      "During setup, Haptic reads your site and your help docs, so its directions match how your product really works.",
+      "Haptic reads the names of buttons and fields. What people type stays in the browser, and emails and long numbers are masked before anything is sent.",
+      "Haptic is in early access and pricing is not set yet. Request access and we will talk through what fits your product.",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header",
+       "offscreen": "above"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav",
+       "offscreen": "above"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav",
+       "offscreen": "above"
+      },
+      {
+       "id": "e4",
+       "role": "button",
+       "label": "How is Haptic different from a chatbot or a product tour?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How is Haptic different from a chatbot or a product tour?"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "How do I add Haptic to my product?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How do I add Haptic to my product?"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Does Haptic click things for my users?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Does Haptic click things for my users?"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Does it work in apps behind a login?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Does it work in apps behind a login?"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "What does Haptic see on the page?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › What does Haptic see on the page?"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "How much does it cost?",
+       "icon": "plus",
+       "state": [
+        "expanded"
+       ],
+       "context": "main › How much does it cost?"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Is Haptic ready for enterprise?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Is Haptic ready for enterprise?"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e12",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e13",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav",
+       "offscreen": "below"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"How much does it cost?\".",
+    "change": "button \"How is Haptic different from a chatbot or a product tour?\" is now collapsed and is no longer expanded.\nbutton \"How much does it cost?\" is now expanded and is no longer collapsed.\nNew text: \"Haptic is in early access and pricing is not set yet. Request access and we will talk through what f\"."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "what-it-reads-1",
+   "guide": "what-it-reads",
+   "request": {
+    "goal": "What does Haptic see on my page?",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/request-access",
+     "title": "Request access, Haptic",
+     "headings": [
+      "The AI guide that lives in your product.",
+      "Request access to Haptic"
+     ],
+     "text": [
+      "Most help lives in docs and chat windows, away from the screen where people get stuck. Haptic works on the page itself. It points to the next control, waits fo…",
+      "Haptic is in early access. Tell us about your product and we will be in touch.",
+      "Work email",
+      "Company",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "textbox",
+       "label": "Work email",
+       "context": "form"
+      },
+      {
+       "id": "e5",
+       "role": "textbox",
+       "label": "Company",
+       "context": "form"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Continue",
+       "icon": "inline-end",
+       "context": "form"
+      },
+      {
+       "id": "e7",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav"
+      },
+      {
+       "id": "e8",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav"
+      },
+      {
+       "id": "e9",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "FAQ"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "what-it-reads-2",
+   "guide": "what-it-reads",
+   "request": {
+    "goal": "What does Haptic see on my page?",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "What does Haptic see on my page?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click FAQ."
+     }
+    ],
+    "snapshot": {
+     "path": "/",
+     "title": "Haptic, the AI guide that lives in your product",
+     "headings": [
+      "MeetHaptic",
+      "Answers what people ask.",
+      "Knows your product.",
+      "Never reads what people type.",
+      "FAQs",
+      "How is Haptic different from a chatbot or a product tour?",
+      "How do I add Haptic to my product?",
+      "Does Haptic click things for my users?",
+      "Does it work in apps behind a login?",
+      "What does Haptic see on the page?",
+      "How much does it cost?",
+      "Is Haptic ready for enterprise?"
+     ],
+     "text": [
+      "Haptic, the AI guide that lives in your product",
+      "The AI guide that lives in your product. People say what they want to do, and Haptic points to exactly where to click, step by step.",
+      "No tours to script or maintain. Haptic reads the page as it is right now and points to the control that gets the job done.",
+      "During setup, Haptic reads your site and your help docs, so its directions match how your product really works.",
+      "Haptic reads the names of buttons and fields. What people type stays in the browser, and emails and long numbers are masked before anything is sent.",
+      "A chatbot answers in text and leaves people to find the button themselves. A product tour plays the same fixed steps for everyone. Haptic works on the live pag…",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header",
+       "offscreen": "above"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav",
+       "offscreen": "above"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav",
+       "offscreen": "above"
+      },
+      {
+       "id": "e4",
+       "role": "button",
+       "label": "How is Haptic different from a chatbot or a product tour?",
+       "icon": "plus",
+       "state": [
+        "expanded"
+       ],
+       "context": "main › How is Haptic different from a chatbot or a product tour?"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "How do I add Haptic to my product?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How do I add Haptic to my product?"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Does Haptic click things for my users?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Does Haptic click things for my users?"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Does it work in apps behind a login?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Does it work in apps behind a login?"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "What does Haptic see on the page?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › What does Haptic see on the page?"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "How much does it cost?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How much does it cost?"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Is Haptic ready for enterprise?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Is Haptic ready for enterprise?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e12",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e13",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav",
+       "offscreen": "below"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked link \"FAQ\".",
+    "change": "The page went from /request-access to /.\nNew text: \"MeetHaptic\", \"Answers what people ask.\", \"Knows your product.\", \"Never reads what people type.\", \"FAQs\"."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "What does Haptic see on the page?"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "what-it-reads-3",
+   "guide": "what-it-reads",
+   "request": {
+    "goal": "What does Haptic see on my page?",
+    "step": 2,
+    "history": [
+     {
+      "role": "user",
+      "text": "What does Haptic see on my page?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click FAQ."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked link \"FAQ\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click What does Haptic see on the page?."
+     }
+    ],
+    "snapshot": {
+     "path": "/",
+     "title": "Haptic, the AI guide that lives in your product",
+     "headings": [
+      "MeetHaptic",
+      "Answers what people ask.",
+      "Knows your product.",
+      "Never reads what people type.",
+      "FAQs",
+      "How is Haptic different from a chatbot or a product tour?",
+      "How do I add Haptic to my product?",
+      "Does Haptic click things for my users?",
+      "Does it work in apps behind a login?",
+      "What does Haptic see on the page?",
+      "How much does it cost?",
+      "Is Haptic ready for enterprise?"
+     ],
+     "text": [
+      "Haptic, the AI guide that lives in your product",
+      "The AI guide that lives in your product. People say what they want to do, and Haptic points to exactly where to click, step by step.",
+      "No tours to script or maintain. Haptic reads the page as it is right now and points to the control that gets the job done.",
+      "During setup, Haptic reads your site and your help docs, so its directions match how your product really works.",
+      "Haptic reads the names of buttons and fields. What people type stays in the browser, and emails and long numbers are masked before anything is sent.",
+      "The names of buttons, links and fields, plus short pieces of visible text, so it knows what to point at. It never reads what people type into fields, and it ma…",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header",
+       "offscreen": "above"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav",
+       "offscreen": "above"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav",
+       "offscreen": "above"
+      },
+      {
+       "id": "e4",
+       "role": "button",
+       "label": "How is Haptic different from a chatbot or a product tour?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How is Haptic different from a chatbot or a product tour?"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "How do I add Haptic to my product?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How do I add Haptic to my product?"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Does Haptic click things for my users?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Does Haptic click things for my users?"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Does it work in apps behind a login?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Does it work in apps behind a login?"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "What does Haptic see on the page?",
+       "icon": "plus",
+       "state": [
+        "expanded"
+       ],
+       "context": "main › What does Haptic see on the page?"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "How much does it cost?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How much does it cost?"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Is Haptic ready for enterprise?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Is Haptic ready for enterprise?"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav"
+      },
+      {
+       "id": "e12",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav"
+      },
+      {
+       "id": "e13",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"What does Haptic see on the page?\".",
+    "change": "button \"How is Haptic different from a chatbot or a product tour?\" is now collapsed and is no longer expanded.\nbutton \"What does Haptic see on the page?\" is now expanded and is no longer collapsed.\nNew text: \"The names of buttons, links and fields, plus short pieces of visible text, so it knows what to point\"."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "privacy-1",
+   "guide": "privacy",
+   "request": {
+    "goal": "Where is your privacy policy?",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/",
+     "title": "Haptic, the AI guide that lives in your product",
+     "headings": [
+      "MeetHaptic",
+      "Answers what people ask.",
+      "Knows your product.",
+      "Never reads what people type.",
+      "FAQs",
+      "How is Haptic different from a chatbot or a product tour?",
+      "How do I add Haptic to my product?",
+      "Does Haptic click things for my users?",
+      "Does it work in apps behind a login?",
+      "What does Haptic see on the page?",
+      "How much does it cost?",
+      "Is Haptic ready for enterprise?"
+     ],
+     "text": [
+      "The AI guide that lives in your product. People say what they want to do, and Haptic points to exactly where to click, step by step.",
+      "No tours to script or maintain. Haptic reads the page as it is right now and points to the control that gets the job done.",
+      "During setup, Haptic reads your site and your help docs, so its directions match how your product really works.",
+      "Haptic reads the names of buttons and fields. What people type stays in the browser, and emails and long numbers are masked before anything is sent.",
+      "A chatbot answers in text and leaves people to find the button themselves. A product tour plays the same fixed steps for everyone. Haptic works on the live pag…",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "button",
+       "label": "How is Haptic different from a chatbot or a product tour?",
+       "icon": "plus",
+       "state": [
+        "expanded"
+       ],
+       "context": "main › How is Haptic different from a chatbot or a product tour?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "How do I add Haptic to my product?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How do I add Haptic to my product?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Does Haptic click things for my users?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Does Haptic click things for my users?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Does it work in apps behind a login?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Does it work in apps behind a login?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "What does Haptic see on the page?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › What does Haptic see on the page?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "How much does it cost?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How much does it cost?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Is Haptic ready for enterprise?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Is Haptic ready for enterprise?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e12",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e13",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav",
+       "offscreen": "below"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Privacy"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "privacy-2",
+   "guide": "privacy",
+   "request": {
+    "goal": "Where is your privacy policy?",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "Where is your privacy policy?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Privacy."
+     }
+    ],
+    "snapshot": {
+     "path": "/privacy",
+     "title": "Privacy, Haptic",
+     "headings": [
+      "Privacy",
+      "This website",
+      "Haptic inside a product",
+      "Contact"
+     ],
+     "text": [
+      "Privacy, Haptic",
+      "Last updated November 12, 2026",
+      "Haptic Labs makes Haptic. This page says what we collect on this website, and what Haptic reads when it runs inside a product.",
+      "We do not use analytics, advertising or tracking cookies on this site.",
+      "If you request access, we keep what you put in the form so we can reply. That is your name, work email and company, and anything you add about your product. A…",
+      "When someone asks Haptic for help, it reads the page they are on. That means the names of buttons, links and fields, the page title, and short pieces of visibl…",
+      "Haptic never reads what people type into fields. It masks emails, phone numbers and long numbers in what it reads before anything leaves the browser.",
+      "To work out the next step, the question and that description of the page are sent to our server and to Anthropic, which provides the AI model. Our server does…",
+      "Progress through a guide is kept in the browser for that tab, and is cleared when the tab closes.",
+      "Questions, or want your details removed. Write to .",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "main › Contact",
+       "offscreen": "below"
+      },
+      {
+       "id": "e5",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e6",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e7",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav",
+       "offscreen": "below"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked link \"Privacy\".",
+    "change": "The page went from / to /privacy.\nNew text: \"Privacy\", \"This website\", \"Haptic inside a product\", \"Contact\", \"Privacy, Haptic\"."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "terms-1",
+   "guide": "terms",
+   "request": {
+    "goal": "terms of service",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/privacy",
+     "title": "Privacy, Haptic",
+     "headings": [
+      "Privacy",
+      "This website",
+      "Haptic inside a product",
+      "Contact"
+     ],
+     "text": [
+      "Last updated November 12, 2026",
+      "Haptic Labs makes Haptic. This page says what we collect on this website, and what Haptic reads when it runs inside a product.",
+      "We do not use analytics, advertising or tracking cookies on this site.",
+      "If you request access, we keep what you put in the form so we can reply. That is your name, work email and company, and anything you add about your product. A…",
+      "When someone asks Haptic for help, it reads the page they are on. That means the names of buttons, links and fields, the page title, and short pieces of visibl…",
+      "Haptic never reads what people type into fields. It masks emails, phone numbers and long numbers in what it reads before anything leaves the browser.",
+      "To work out the next step, the question and that description of the page are sent to our server and to Anthropic, which provides the AI model. Our server does…",
+      "Progress through a guide is kept in the browser for that tab, and is cleared when the tab closes.",
+      "Questions, or want your details removed. Write to .",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "main › Contact",
+       "offscreen": "below"
+      },
+      {
+       "id": "e5",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e6",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e7",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav",
+       "offscreen": "below"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Terms"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "terms-2",
+   "guide": "terms",
+   "request": {
+    "goal": "terms of service",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "terms of service"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Terms."
+     }
+    ],
+    "snapshot": {
+     "path": "/terms",
+     "title": "Terms, Haptic",
+     "headings": [
+      "Terms",
+      "Early access",
+      "Using Haptic",
+      "Your content",
+      "No warranty",
+      "Contact"
+     ],
+     "text": [
+      "Terms, Haptic",
+      "Last updated November 12, 2026",
+      "These terms cover this website and early access to Haptic, which is made by Haptic Labs. By using either, you agree to them.",
+      "Haptic is an early product. Features can change or be removed, and the service can be unavailable at times. We may end early access, and we will tell you first…",
+      "Add Haptic only to products you run or have permission to change. Do not use it to break the law, to harm others, or to get around the limits we set on the ser…",
+      "Your site, your help docs and your notes stay yours. You let us use them only to set up and run Haptic for you.",
+      "Haptic is provided as is, without warranties of any kind. Haptic points and suggests, and the people using your product decide what to click. To the extent the…",
+      "Write to .",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "main › Contact",
+       "offscreen": "below"
+      },
+      {
+       "id": "e5",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e6",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e7",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav",
+       "offscreen": "below"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked link \"Terms\".",
+    "change": "The page went from /privacy to /terms.\nNew text: \"Terms\", \"Early access\", \"Using Haptic\", \"Your content\", \"No warranty\"."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "no-such-feature-1",
+   "guide": "no-such-feature",
+   "request": {
+    "goal": "How do I log in to my account?",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/",
+     "title": "Haptic, the AI guide that lives in your product",
+     "headings": [
+      "MeetHaptic",
+      "Answers what people ask.",
+      "Knows your product.",
+      "Never reads what people type.",
+      "FAQs",
+      "How is Haptic different from a chatbot or a product tour?",
+      "How do I add Haptic to my product?",
+      "Does Haptic click things for my users?",
+      "Does it work in apps behind a login?",
+      "What does Haptic see on the page?",
+      "How much does it cost?",
+      "Is Haptic ready for enterprise?"
+     ],
+     "text": [
+      "The AI guide that lives in your product. People say what they want to do, and Haptic points to exactly where to click, step by step.",
+      "No tours to script or maintain. Haptic reads the page as it is right now and points to the control that gets the job done.",
+      "During setup, Haptic reads your site and your help docs, so its directions match how your product really works.",
+      "Haptic reads the names of buttons and fields. What people type stays in the browser, and emails and long numbers are masked before anything is sent.",
+      "A chatbot answers in text and leaves people to find the button themselves. A product tour plays the same fixed steps for everyone. Haptic works on the live pag…",
+      "© 2026 Haptic Labs"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Haptic",
+       "href": "/",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "FAQ",
+       "href": "/",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Request access",
+       "href": "/request-access",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "button",
+       "label": "How is Haptic different from a chatbot or a product tour?",
+       "icon": "plus",
+       "state": [
+        "expanded"
+       ],
+       "context": "main › How is Haptic different from a chatbot or a product tour?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "How do I add Haptic to my product?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How do I add Haptic to my product?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Does Haptic click things for my users?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Does Haptic click things for my users?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Does it work in apps behind a login?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Does it work in apps behind a login?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "What does Haptic see on the page?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › What does Haptic see on the page?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "How much does it cost?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › How much does it cost?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Is Haptic ready for enterprise?",
+       "icon": "plus",
+       "state": [
+        "collapsed"
+       ],
+       "context": "main › Is Haptic ready for enterprise?",
+       "offscreen": "below"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "Privacy",
+       "href": "/privacy",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e12",
+       "role": "link",
+       "label": "Terms",
+       "href": "/terms",
+       "context": "nav",
+       "offscreen": "below"
+      },
+      {
+       "id": "e13",
+       "role": "link",
+       "label": "[email]",
+       "href": "external:",
+       "context": "nav",
+       "offscreen": "below"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  }
+ ]
+}

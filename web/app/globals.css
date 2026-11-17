@@ -1,0 +1,174 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Dark mode follows the visitor's system setting. Tokens come from DESIGN.md. */
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-heading: var(--font-sans);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-pointer: var(--pointer);
+  --color-pointer-border: var(--pointer-border);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --ease-glide: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-caret: caret 1s steps(1) infinite;
+
+  @keyframes caret {
+    50% { opacity: 0; }
+  }
+}
+
+:root {
+  --background: #fafaf9;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --popover: #ffffff;
+  --popover-foreground: #1c1917;
+  --primary: #1c1917;
+  --primary-foreground: #fafaf9;
+  --secondary: #e7e5e4;
+  --secondary-foreground: #1c1917;
+  --muted: #f5f5f4;
+  --muted-foreground: #78716c;
+  --accent: #f5f5f4;
+  --accent-foreground: #1c1917;
+  --destructive: #dc2626;
+  --border: #e7e5e4;
+  --input: #e7e5e4;
+  --ring: #1e6ef4;
+  --pointer: #1e6ef4;
+  --pointer-border: #ffffff;
+  --success: #008932;
+  --success-foreground: #ffffff;
+  --radius: 0.625rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --background: #1c1917;
+    --foreground: #f5f5f4;
+    --card: #292524;
+    --card-foreground: #f5f5f4;
+    --popover: #292524;
+    --popover-foreground: #f5f5f4;
+    --primary: #f5f5f4;
+    --primary-foreground: #1c1917;
+    --secondary: #44403c;
+    --secondary-foreground: #f5f5f4;
+    --muted: #35312e;
+    --muted-foreground: #a8a29e;
+    --accent: #35312e;
+    --accent-foreground: #f5f5f4;
+    --destructive: #f87171;
+    --border: #44403c;
+    --input: #44403c;
+    --ring: #0091ff;
+    --pointer: #0091ff;
+    --pointer-border: #ffffff;
+    --success: #30d158;
+    --success-foreground: #1c1917;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans scroll-smooth;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+}
+
+/* The shadow under the pointer. It lifts the pointer off whatever it sits on. */
+@utility pointer-shadow {
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.3)) drop-shadow(0 5px 9px rgb(0 0 0 / 0.26));
+}
+
+/* The thinking glow, the same one the widget draws over a customer's page (src/widget/ui.ts). In a demo it is
+   drawn over the mock page, under the chat. It is there only while Haptic thinks: a soft band the width of the page
+   comes in at the top edge and falls towards the bottom, slower the longer the wait, and goes on off the page, fading,
+   the moment the reply arrives. The fall itself is set in the demo's code (web/components/demo/kit.tsx).
+   It is multiplied into the page, so words and buttons stay sharp through it. The band is one element as tall as
+   the page. Its colour is Pointer blue (#1E6EF4) with its neighbours on either side, written down once and the same
+   in the widget on every site (GLOW in src/widget/ui.ts), in one gradient mixed in OKLCH so the hues melt into each
+   other, and a mask gives it a bell with no flat top and no edge. */
+.thinking-glow {
+  --glow-a: #77d0fe;
+  --glow-b: #5294ff;
+  --glow-c: #8460ee;
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  overflow: hidden;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.45s ease-in, visibility 0s 0.45s;
+}
+.thinking-glow[data-on="true"] {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.3s ease-out;
+}
+/* On a dark page, multiplying would lose the colour, so it is screened in. */
+@media (prefers-color-scheme: dark) {
+  .thinking-glow {
+    mix-blend-mode: screen;
+  }
+}
+.thinking-glow i {
+  --bell: rgb(0 0 0 / 0.62) 0%, rgb(0 0 0 / 0.605) 10%, rgb(0 0 0 / 0.56) 20%, rgb(0 0 0 / 0.49) 30%, rgb(0 0 0 / 0.405) 40%, rgb(0 0 0 / 0.31) 50%,
+    rgb(0 0 0 / 0.215) 60%, rgb(0 0 0 / 0.13) 70%, rgb(0 0 0 / 0.06) 80%, rgb(0 0 0 / 0.015) 90%, rgb(0 0 0 / 0) 100%;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom in oklch, var(--glow-a), var(--glow-b) 50%, var(--glow-c));
+  -webkit-mask-image: radial-gradient(200% 50% at 50% 50%, var(--bell));
+  mask-image: radial-gradient(200% 50% at 50% 50%, var(--bell));
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinking-glow {
+    display: none;
+  }
+}

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security · Acme Console</title>
+<link rel="stylesheet" href="/demo/style.css">
+</head>
+<body>
+<header>
+  <a class="brand" href="/demo/">Acme Console</a>
+  <nav>
+    <a href="/demo/">Overview</a>
+    <a href="/demo/projects">Projects</a>
+    <a href="/demo/team">Team</a>
+  </nav>
+  <div class="account">
+    <button id="account-button" aria-expanded="false" aria-haspopup="menu">A</button>
+    <div id="account-menu" role="menu" hidden>
+      <a role="menuitem" href="/demo/settings">Settings</a>
+      <a role="menuitem" href="/demo/settings-billing">Plan and billing</a>
+      <a role="menuitem" href="/demo/">Sign out</a>
+    </div>
+  </div>
+</header>
+<main>
+<h1>Security</h1>
+<div class="tabs" role="tablist"><a role="tab" href="/demo/settings">General</a><a role="tab" href="/demo/settings-billing">Plan and billing</a><a role="tab" aria-selected="true" href="/demo/settings-security">Security</a></div>
+<label class="check"><input type="checkbox" id="two-factor"> Require two-factor authentication</label>
+<section><h2>API keys</h2><ul class="list" id="keys"><li>Production key, created in March</li></ul><button id="new-key">Create API key</button></section>
+<p id="security-result" role="status"></p>
+</main>
+<script src="/demo/app.js"></script>
+<script src="/widget.js" data-site="site_demo" async></script>
+</body>
+</html>

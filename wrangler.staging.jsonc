@@ -1,0 +1,46 @@
+{
+  // A second copy of the widget server, for trying a change to the prompt or the
+  // server against the real model before it reaches visitors. It answers at its
+  // workers.dev address only. No customer's script tag points at it.
+  //
+  //   npx wrangler deploy -c wrangler.staging.jsonc
+  //   npm run eval -- --server https://haptic-widget-staging.joinhaptic.workers.dev --yes
+  //
+  // Its model key is put there once by .github/workflows/deploy-staging.yml and
+  // stays across deploys.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "haptic-widget-staging",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-11-01",
+  // As on the live server: aborts request.signal when the caller goes away, so a step the widget hangs up on stops the model call.
+  "compatibility_flags": ["enable_request_signal"],
+  "build": { "command": "npm run build" },
+  // The same sites as the live server, read only.
+  "kv_namespaces": [{ "binding": "SITES", "id": "b481eb9c6ba24efe9889ef52a4f17e8a" }],
+  "ratelimits": [
+    // A benchmark asks faster than a visitor does, so four times the live limit
+    // for each site and caller. It is still a limit: the server spends the same
+    // model key as the live one.
+    { "name": "TURN_LIMIT", "namespace_id": "1003", "simple": { "limit": 120, "period": 60 } },
+    // Teach mode: one caller gets 20 token checks and step posts a minute, whatever the site. Tokens are 32 random
+    // bytes, so this is not what stops guessing; it keeps a caller from making the server look tokens up all day.
+    { "name": "TEACH_LIMIT", "namespace_id": "1005", "simple": { "limit": 20, "period": 60 } }
+  ],
+  // The live server's budget meter (worker/budget.ts), in a Durable Object of this Worker's own. Its address is in the
+  // repository and anyone can call it, so it is held to a small budget: see the vars below.
+  "durable_objects": { "bindings": [{ "name": "BUDGET", "class_name": "BudgetMeter" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BudgetMeter"] }],
+  "vars": {
+    // US dollars this server may spend on the model in an hour and in a day, for every site together:
+    // HAPTIC_BUDGET_SHARED puts all sites on one meter, whatever a site sets for itself (src/server/budget.ts, meterFor).
+    // Past either, every step gets the fixed "resting" sentence until the hour or the day turns (UTC).
+    // A measurement run of a few hundred steps needs more. It is deployed with the limits given on the command line,
+    // which stand until the next deploy without them, and these values are left as they are:
+    //   npx wrangler deploy -c wrangler.staging.jsonc --var HAPTIC_BUDGET_HOUR:20 --var HAPTIC_BUDGET_DAY:100
+    "HAPTIC_BUDGET_HOUR": "2",
+    "HAPTIC_BUDGET_DAY": "5",
+    "HAPTIC_BUDGET_SHARED": "1",
+    "HAPTIC_MODEL": "claude-sonnet-5-5"
+  },
+  "workers_dev": true
+}

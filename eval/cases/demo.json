@@ -1,0 +1,6680 @@
+{
+ "about": "Haptic's own demo app: a small, tidy console. Scores here are a ceiling, not a forecast.",
+ "site": {
+  "version": 1,
+  "id": "site_demo",
+  "name": "Acme Console",
+  "origin": "http://localhost:4000",
+  "allowedOrigins": [
+   "http://localhost:4000",
+   "http://localhost:5055"
+  ],
+  "appearance": {
+   "accent": "#1E6EF4",
+   "position": "bottom-right",
+   "launcherLabel": "Ask"
+  },
+  "notes": "Acme Console is where teams manage their Acme projects, teammates and subscription.\n\n- Everything about the account (settings, plan, payment, security) is under the round \"A\" button at the top right.\n- Billing details are changed with \"Update payment method\" on the Plan and billing page. We don't store full card numbers.\n- API keys are on the Security tab of Settings.",
+  "docs": [
+   {
+    "title": "Inviting teammates",
+    "source": "demo/help/inviting-teammates.md",
+    "text": "# Inviting teammates\n\nGo to Team, type the person's email address and press Send invite. They get an email with a link that works for 7 days.\nOnly the workspace owner can remove people."
+   }
+  ],
+  "pages": [
+   {
+    "path": "/demo",
+    "title": "Overview · Acme Console",
+    "headings": [
+     "Overview",
+     "Usage this month",
+     "Latest deploy"
+    ],
+    "links": [
+     {
+      "label": "Acme Console",
+      "to": "/demo"
+     },
+     {
+      "label": "Overview",
+      "to": "/demo"
+     },
+     {
+      "label": "Projects",
+      "to": "/demo/projects"
+     },
+     {
+      "label": "Team",
+      "to": "/demo/team"
+     },
+     {
+      "label": "Settings",
+      "to": "/demo/settings"
+     },
+     {
+      "label": "Plan and billing",
+      "to": "/demo/settings-billing"
+     },
+     {
+      "label": "Sign out",
+      "to": "/demo"
+     },
+     {
+      "label": "View projects",
+      "to": "/demo/projects"
+     }
+    ],
+    "buttons": [
+     "A"
+    ],
+    "fields": []
+   },
+   {
+    "path": "/demo/projects",
+    "title": "Projects · Acme Console",
+    "headings": [
+     "Projects",
+     "New project"
+    ],
+    "links": [
+     {
+      "label": "Acme Console",
+      "to": "/demo"
+     },
+     {
+      "label": "Overview",
+      "to": "/demo"
+     },
+     {
+      "label": "Projects",
+      "to": "/demo/projects"
+     },
+     {
+      "label": "Team",
+      "to": "/demo/team"
+     },
+     {
+      "label": "Settings",
+      "to": "/demo/settings"
+     },
+     {
+      "label": "Plan and billing",
+      "to": "/demo/settings-billing"
+     },
+     {
+      "label": "Sign out",
+      "to": "/demo"
+     }
+    ],
+    "buttons": [
+     "A",
+     "New project",
+     "Cancel",
+     "Create project"
+    ],
+    "fields": [
+     "Project name",
+     "Region US EastEU West"
+    ]
+   },
+   {
+    "path": "/demo/settings",
+    "title": "Settings · Acme Console",
+    "headings": [
+     "Settings"
+    ],
+    "links": [
+     {
+      "label": "Acme Console",
+      "to": "/demo"
+     },
+     {
+      "label": "Overview",
+      "to": "/demo"
+     },
+     {
+      "label": "Projects",
+      "to": "/demo/projects"
+     },
+     {
+      "label": "Team",
+      "to": "/demo/team"
+     },
+     {
+      "label": "Settings",
+      "to": "/demo/settings"
+     },
+     {
+      "label": "Plan and billing",
+      "to": "/demo/settings-billing"
+     },
+     {
+      "label": "Sign out",
+      "to": "/demo"
+     },
+     {
+      "label": "General",
+      "to": "/demo/settings"
+     },
+     {
+      "label": "Security",
+      "to": "/demo/settings-security"
+     }
+    ],
+    "buttons": [
+     "A",
+     "Save changes"
+    ],
+    "fields": [
+     "Workspace name",
+     "Time zone UTCEasternPacific"
+    ]
+   },
+   {
+    "path": "/demo/settings-billing",
+    "title": "Plan and billing · Acme Console",
+    "headings": [
+     "Plan and billing",
+     "Current plan",
+     "Payment method",
+     "Invoices",
+     "Update payment method"
+    ],
+    "links": [
+     {
+      "label": "Acme Console",
+      "to": "/demo"
+     },
+     {
+      "label": "Overview",
+      "to": "/demo"
+     },
+     {
+      "label": "Projects",
+      "to": "/demo/projects"
+     },
+     {
+      "label": "Team",
+      "to": "/demo/team"
+     },
+     {
+      "label": "Settings",
+      "to": "/demo/settings"
+     },
+     {
+      "label": "Plan and billing",
+      "to": "/demo/settings-billing"
+     },
+     {
+      "label": "Sign out",
+      "to": "/demo"
+     },
+     {
+      "label": "General",
+      "to": "/demo/settings"
+     },
+     {
+      "label": "Security",
+      "to": "/demo/settings-security"
+     },
+     {
+      "label": "Download latest invoice",
+      "to": "/demo/settings-billing"
+     }
+    ],
+    "buttons": [
+     "A",
+     "Change plan",
+     "Update payment method",
+     "Cancel",
+     "Save payment method"
+    ],
+    "fields": [
+     "Name on card",
+     "Billing postcode"
+    ]
+   },
+   {
+    "path": "/demo/settings-security",
+    "title": "Security · Acme Console",
+    "headings": [
+     "Security",
+     "API keys"
+    ],
+    "links": [
+     {
+      "label": "Acme Console",
+      "to": "/demo"
+     },
+     {
+      "label": "Overview",
+      "to": "/demo"
+     },
+     {
+      "label": "Projects",
+      "to": "/demo/projects"
+     },
+     {
+      "label": "Team",
+      "to": "/demo/team"
+     },
+     {
+      "label": "Settings",
+      "to": "/demo/settings"
+     },
+     {
+      "label": "Plan and billing",
+      "to": "/demo/settings-billing"
+     },
+     {
+      "label": "Sign out",
+      "to": "/demo"
+     },
+     {
+      "label": "General",
+      "to": "/demo/settings"
+     },
+     {
+      "label": "Security",
+      "to": "/demo/settings-security"
+     }
+    ],
+    "buttons": [
+     "A",
+     "Create API key"
+    ],
+    "fields": [
+     "Require two-factor authentication"
+    ]
+   },
+   {
+    "path": "/demo/team",
+    "title": "Team · Acme Console",
+    "headings": [
+     "Team"
+    ],
+    "links": [
+     {
+      "label": "Acme Console",
+      "to": "/demo"
+     },
+     {
+      "label": "Overview",
+      "to": "/demo"
+     },
+     {
+      "label": "Projects",
+      "to": "/demo/projects"
+     },
+     {
+      "label": "Team",
+      "to": "/demo/team"
+     },
+     {
+      "label": "Settings",
+      "to": "/demo/settings"
+     },
+     {
+      "label": "Plan and billing",
+      "to": "/demo/settings-billing"
+     },
+     {
+      "label": "Sign out",
+      "to": "/demo"
+     }
+    ],
+    "buttons": [
+     "A",
+     "Send invite"
+    ],
+    "fields": [
+     "Email address"
+    ]
+   }
+  ],
+  "source": {
+   "url": "http://localhost:4000/demo/",
+   "maxPages": 30,
+   "docs": [
+    "demo/help"
+   ],
+   "notesFile": "demo/notes.md"
+  },
+  "createdAt": "2026-11-12T22:51:16.192Z",
+  "updatedAt": "2026-11-15T03:50:48.035Z"
+ },
+ "cases": [
+  {
+   "id": "billing-1",
+   "guide": "billing",
+   "request": {
+    "goal": "How do I change my billing info?",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/demo",
+     "title": "Overview · Acme Console",
+     "headings": [
+      "Overview",
+      "Usage this month",
+      "Latest deploy"
+     ],
+     "text": [
+      "Welcome back. Your workspace has 3 projects and 4 teammates.",
+      "12,480 requests of 50,000 included.",
+      "storefront-api went live 2 hours ago."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "link",
+       "label": "View projects",
+       "href": "/demo/projects",
+       "context": "main › Latest deploy"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "A",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "billing-2",
+   "guide": "billing",
+   "request": {
+    "goal": "How do I change my billing info?",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "How do I change my billing info?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo",
+     "title": "Overview · Acme Console",
+     "headings": [
+      "Overview",
+      "Usage this month",
+      "Latest deploy"
+     ],
+     "text": [
+      "Welcome back. Your workspace has 3 projects and 4 teammates.",
+      "12,480 requests of 50,000 included.",
+      "storefront-api went live 2 hours ago."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "expanded"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "menuitem",
+       "label": "Settings",
+       "href": "/demo/settings",
+       "context": "menu"
+      },
+      {
+       "id": "e7",
+       "role": "menuitem",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "menu"
+      },
+      {
+       "id": "e8",
+       "role": "menuitem",
+       "label": "Sign out",
+       "href": "/demo",
+       "context": "menu"
+      },
+      {
+       "id": "e9",
+       "role": "link",
+       "label": "View projects",
+       "href": "/demo/projects",
+       "context": "main › Latest deploy"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"A\".",
+    "change": "New: menuitem \"Settings\", menuitem \"Plan and billing\", menuitem \"Sign out\".\nbutton \"A\" is now expanded and is no longer collapsed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Plan and billing"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "billing-3",
+   "guide": "billing",
+   "request": {
+    "goal": "How do I change my billing info?",
+    "step": 2,
+    "history": [
+     {
+      "role": "user",
+      "text": "How do I change my billing info?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Plan and billing."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings-billing",
+     "title": "Plan and billing · Acme Console",
+     "headings": [
+      "Plan and billing",
+      "Current plan",
+      "Payment method",
+      "Invoices"
+     ],
+     "text": [
+      "Team plan, $49 a month.",
+      "Visa ending in 4242",
+      "Invoices are emailed on the 1st of each month."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "Change plan",
+       "context": "main › Current plan"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Update payment method",
+       "context": "main › Payment method"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "Download latest invoice",
+       "href": "/demo/settings-billing",
+       "context": "main › Invoices"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked menuitem \"Plan and billing\". A new page loaded: the user went from /demo to /demo/settings-billing."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Update payment method",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "billing-4",
+   "guide": "billing",
+   "request": {
+    "goal": "How do I change my billing info?",
+    "step": 3,
+    "history": [
+     {
+      "role": "user",
+      "text": "How do I change my billing info?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Plan and billing."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked menuitem \"Plan and billing\". A new page loaded: the user went from /demo to /demo/settings-billing."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Update payment method."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings-billing",
+     "title": "Plan and billing · Acme Console",
+     "headings": [
+      "Plan and billing",
+      "Current plan",
+      "Payment method",
+      "Invoices",
+      "Update payment method"
+     ],
+     "text": [
+      "Name on card",
+      "Billing postcode"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "textbox",
+       "label": "Name on card",
+       "context": "form"
+      },
+      {
+       "id": "e2",
+       "role": "textbox",
+       "label": "Billing postcode",
+       "context": "form"
+      },
+      {
+       "id": "e3",
+       "role": "button",
+       "label": "Cancel",
+       "context": "form"
+      },
+      {
+       "id": "e4",
+       "role": "button",
+       "label": "Save payment method",
+       "context": "form"
+      }
+     ],
+     "truncated": false,
+     "dialog": "Update payment method"
+    },
+    "event": "The user clicked button \"Update payment method\".",
+    "change": "Dialog \"Update payment method\" opened.\nNew text: \"Update payment method\", \"Name on card\", \"Billing postcode\"."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Name on card"
+     },
+     {
+      "label": "Billing postcode"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "billing-5",
+   "guide": "billing",
+   "request": {
+    "goal": "How do I change my billing info?",
+    "step": 4,
+    "history": [
+     {
+      "role": "user",
+      "text": "How do I change my billing info?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Plan and billing."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked menuitem \"Plan and billing\". A new page loaded: the user went from /demo to /demo/settings-billing."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Update payment method."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"Update payment method\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Type the name on the card."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings-billing",
+     "title": "Plan and billing · Acme Console",
+     "headings": [
+      "Plan and billing",
+      "Current plan",
+      "Payment method",
+      "Invoices",
+      "Update payment method"
+     ],
+     "text": [
+      "Name on card",
+      "Billing postcode"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "textbox",
+       "label": "Name on card",
+       "context": "form"
+      },
+      {
+       "id": "e2",
+       "role": "textbox",
+       "label": "Billing postcode",
+       "context": "form"
+      },
+      {
+       "id": "e3",
+       "role": "button",
+       "label": "Cancel",
+       "context": "form"
+      },
+      {
+       "id": "e4",
+       "role": "button",
+       "label": "Save payment method",
+       "context": "form"
+      }
+     ],
+     "truncated": false,
+     "dialog": "Update payment method"
+    },
+    "event": "The user filled in textbox \"Name on card\". You can't see what they entered.",
+    "change": "Nothing visible on the page changed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Billing postcode"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "billing-6",
+   "guide": "billing",
+   "request": {
+    "goal": "How do I change my billing info?",
+    "step": 5,
+    "history": [
+     {
+      "role": "user",
+      "text": "How do I change my billing info?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Plan and billing."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked menuitem \"Plan and billing\". A new page loaded: the user went from /demo to /demo/settings-billing."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Update payment method."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"Update payment method\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Type the name on the card."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Name on card\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Type the billing postcode."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings-billing",
+     "title": "Plan and billing · Acme Console",
+     "headings": [
+      "Plan and billing",
+      "Current plan",
+      "Payment method",
+      "Invoices",
+      "Update payment method"
+     ],
+     "text": [
+      "Name on card",
+      "Billing postcode"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "textbox",
+       "label": "Name on card",
+       "context": "form"
+      },
+      {
+       "id": "e2",
+       "role": "textbox",
+       "label": "Billing postcode",
+       "context": "form"
+      },
+      {
+       "id": "e3",
+       "role": "button",
+       "label": "Cancel",
+       "context": "form"
+      },
+      {
+       "id": "e4",
+       "role": "button",
+       "label": "Save payment method",
+       "context": "form"
+      }
+     ],
+     "truncated": false,
+     "dialog": "Update payment method"
+    },
+    "event": "The user filled in textbox \"Billing postcode\". You can't see what they entered.",
+    "change": "Nothing visible on the page changed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Save payment method",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "billing-7",
+   "guide": "billing",
+   "request": {
+    "goal": "How do I change my billing info?",
+    "step": 6,
+    "history": [
+     {
+      "role": "user",
+      "text": "How do I change my billing info?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Plan and billing."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked menuitem \"Plan and billing\". A new page loaded: the user went from /demo to /demo/settings-billing."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Update payment method."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"Update payment method\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Type the name on the card."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Name on card\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Type the billing postcode."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Billing postcode\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Save payment method."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings-billing",
+     "title": "Plan and billing · Acme Console",
+     "headings": [
+      "Plan and billing",
+      "Current plan",
+      "Payment method",
+      "Invoices"
+     ],
+     "text": [
+      "Team plan, $49 a month.",
+      "Visa ending in 4242",
+      "Invoices are emailed on the 1st of each month.",
+      "Payment method updated."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "Change plan",
+       "context": "main › Current plan"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Update payment method",
+       "context": "main › Payment method"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "Download latest invoice",
+       "href": "/demo/settings-billing",
+       "context": "main › Invoices"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"Save payment method\".",
+    "change": "Dialog \"Update payment method\" closed.\nNew text: \"Team plan, $49 a month.\", \"Visa ending in 4242\", \"Invoices are emailed on the 1st of each month.\", \"Payment method updated.\"."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "invite-1",
+   "guide": "invite",
+   "request": {
+    "goal": "I want to invite a teammate",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/demo",
+     "title": "Overview · Acme Console",
+     "headings": [
+      "Overview",
+      "Usage this month",
+      "Latest deploy"
+     ],
+     "text": [
+      "Welcome back. Your workspace has 3 projects and 4 teammates.",
+      "12,480 requests of 50,000 included.",
+      "storefront-api went live 2 hours ago."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "link",
+       "label": "View projects",
+       "href": "/demo/projects",
+       "context": "main › Latest deploy"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Team"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "invite-2",
+   "guide": "invite",
+   "request": {
+    "goal": "I want to invite a teammate",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "I want to invite a teammate"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Team."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/team",
+     "title": "Team · Acme Console",
+     "headings": [
+      "Team"
+     ],
+     "text": [
+      "People who can access this workspace.",
+      "Avery (owner)",
+      "Sam",
+      "Priya",
+      "Jordan",
+      "Email address"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Sam"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Priya"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Jordan"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Email address",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Send invite",
+       "context": "form"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked link \"Team\". A new page loaded: the user went from /demo to /demo/team."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Email address"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "invite-3",
+   "guide": "invite",
+   "request": {
+    "goal": "I want to invite a teammate",
+    "step": 2,
+    "history": [
+     {
+      "role": "user",
+      "text": "I want to invite a teammate"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Team."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked link \"Team\". A new page loaded: the user went from /demo to /demo/team."
+     },
+     {
+      "role": "assistant",
+      "text": "Type their email address."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/team",
+     "title": "Team · Acme Console",
+     "headings": [
+      "Team"
+     ],
+     "text": [
+      "People who can access this workspace.",
+      "Avery (owner)",
+      "Sam",
+      "Priya",
+      "Jordan",
+      "Email address"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Sam"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Priya"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Jordan"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Email address",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Send invite",
+       "context": "form"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user filled in textbox \"Email address\". You can't see what they entered.",
+    "change": "Nothing visible on the page changed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Send invite",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "invite-4",
+   "guide": "invite",
+   "request": {
+    "goal": "I want to invite a teammate",
+    "step": 3,
+    "history": [
+     {
+      "role": "user",
+      "text": "I want to invite a teammate"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Team."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked link \"Team\". A new page loaded: the user went from /demo to /demo/team."
+     },
+     {
+      "role": "assistant",
+      "text": "Type their email address."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Email address\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Send invite."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/team",
+     "title": "Team · Acme Console",
+     "headings": [
+      "Team"
+     ],
+     "text": [
+      "People who can access this workspace.",
+      "Avery (owner)",
+      "Sam",
+      "Priya",
+      "Jordan",
+      "Email address",
+      "Invite sent."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Sam"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Priya"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Jordan"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Email address",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Send invite",
+       "context": "form"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"Send invite\".",
+    "change": "New text: \"Invite sent.\"."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "invite-here-1",
+   "guide": "invite-here",
+   "request": {
+    "goal": "invite a teammate",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/demo/team",
+     "title": "Team · Acme Console",
+     "headings": [
+      "Team"
+     ],
+     "text": [
+      "People who can access this workspace.",
+      "Avery (owner)",
+      "Sam",
+      "Priya",
+      "Jordan",
+      "Email address"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Sam"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Priya"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Jordan"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Email address",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Send invite",
+       "context": "form"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Email address"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "invite-here-2",
+   "guide": "invite-here",
+   "request": {
+    "goal": "invite a teammate",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "invite a teammate"
+     },
+     {
+      "role": "assistant",
+      "text": "Type their email address."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/team",
+     "title": "Team · Acme Console",
+     "headings": [
+      "Team"
+     ],
+     "text": [
+      "People who can access this workspace.",
+      "Avery (owner)",
+      "Sam",
+      "Priya",
+      "Jordan",
+      "Email address"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Sam"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Priya"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Jordan"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Email address",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Send invite",
+       "context": "form"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user filled in textbox \"Email address\". You can't see what they entered.",
+    "change": "Nothing visible on the page changed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Send invite",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "invite-here-3",
+   "guide": "invite-here",
+   "request": {
+    "goal": "invite a teammate",
+    "step": 2,
+    "history": [
+     {
+      "role": "user",
+      "text": "invite a teammate"
+     },
+     {
+      "role": "assistant",
+      "text": "Type their email address."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Email address\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Send invite."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/team",
+     "title": "Team · Acme Console",
+     "headings": [
+      "Team"
+     ],
+     "text": [
+      "People who can access this workspace.",
+      "Avery (owner)",
+      "Sam",
+      "Priya",
+      "Jordan",
+      "Email address",
+      "Invite sent."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Sam"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Priya"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Jordan"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Email address",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Send invite",
+       "context": "form"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"Send invite\".",
+    "change": "New text: \"Invite sent.\"."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "invite-wrong-click-1",
+   "guide": "invite-wrong-click",
+   "request": {
+    "goal": "add someone to my team",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/demo",
+     "title": "Overview · Acme Console",
+     "headings": [
+      "Overview",
+      "Usage this month",
+      "Latest deploy"
+     ],
+     "text": [
+      "Welcome back. Your workspace has 3 projects and 4 teammates.",
+      "12,480 requests of 50,000 included.",
+      "storefront-api went live 2 hours ago."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "link",
+       "label": "View projects",
+       "href": "/demo/projects",
+       "context": "main › Latest deploy"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Team"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "invite-wrong-click-2",
+   "guide": "invite-wrong-click",
+   "request": {
+    "goal": "add someone to my team",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "add someone to my team"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Team."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/projects",
+     "title": "Projects · Acme Console",
+     "headings": [
+      "Projects"
+     ],
+     "text": [
+      "storefront-api",
+      "marketing-site",
+      "internal-tools"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "New project",
+       "context": "main › Projects"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked \"Projects\" instead of link \"Team\". A new page loaded: the user went from /demo to /demo/projects."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Team"
+     }
+    ],
+    "status": "continue",
+    "sayStartsWith": "Not that one."
+   }
+  },
+  {
+   "id": "invite-wrong-click-3",
+   "guide": "invite-wrong-click",
+   "request": {
+    "goal": "add someone to my team",
+    "step": 2,
+    "history": [
+     {
+      "role": "user",
+      "text": "add someone to my team"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Team."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked \"Projects\" instead of link \"Team\". A new page loaded: the user went from /demo to /demo/projects."
+     },
+     {
+      "role": "assistant",
+      "text": "Not that one. Click Team."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/team",
+     "title": "Team · Acme Console",
+     "headings": [
+      "Team"
+     ],
+     "text": [
+      "People who can access this workspace.",
+      "Avery (owner)",
+      "Sam",
+      "Priya",
+      "Jordan",
+      "Email address"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Sam"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Priya"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Jordan"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Email address",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Send invite",
+       "context": "form"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked link \"Team\". A new page loaded: the user went from /demo/projects to /demo/team."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Email address"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "invite-wrong-click-4",
+   "guide": "invite-wrong-click",
+   "request": {
+    "goal": "add someone to my team",
+    "step": 3,
+    "history": [
+     {
+      "role": "user",
+      "text": "add someone to my team"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Team."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked \"Projects\" instead of link \"Team\". A new page loaded: the user went from /demo to /demo/projects."
+     },
+     {
+      "role": "assistant",
+      "text": "Not that one. Click Team."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked link \"Team\". A new page loaded: the user went from /demo/projects to /demo/team."
+     },
+     {
+      "role": "assistant",
+      "text": "Type their email address."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/team",
+     "title": "Team · Acme Console",
+     "headings": [
+      "Team"
+     ],
+     "text": [
+      "People who can access this workspace.",
+      "Avery (owner)",
+      "Sam",
+      "Priya",
+      "Jordan",
+      "Email address"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Sam"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Priya"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Jordan"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Email address",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Send invite",
+       "context": "form"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user filled in textbox \"Email address\". You can't see what they entered.",
+    "change": "Nothing visible on the page changed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Send invite",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "invite-wrong-click-5",
+   "guide": "invite-wrong-click",
+   "request": {
+    "goal": "add someone to my team",
+    "step": 4,
+    "history": [
+     {
+      "role": "user",
+      "text": "add someone to my team"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Team."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked \"Projects\" instead of link \"Team\". A new page loaded: the user went from /demo to /demo/projects."
+     },
+     {
+      "role": "assistant",
+      "text": "Not that one. Click Team."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked link \"Team\". A new page loaded: the user went from /demo/projects to /demo/team."
+     },
+     {
+      "role": "assistant",
+      "text": "Type their email address."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Email address\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Send invite."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/team",
+     "title": "Team · Acme Console",
+     "headings": [
+      "Team"
+     ],
+     "text": [
+      "People who can access this workspace.",
+      "Avery (owner)",
+      "Sam",
+      "Priya",
+      "Jordan",
+      "Email address",
+      "Invite sent."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Sam"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Priya"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Jordan"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Email address",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Send invite",
+       "context": "form"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"Send invite\".",
+    "change": "New text: \"Invite sent.\"."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "new-project-1",
+   "guide": "new-project",
+   "request": {
+    "goal": "create a new project",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/demo",
+     "title": "Overview · Acme Console",
+     "headings": [
+      "Overview",
+      "Usage this month",
+      "Latest deploy"
+     ],
+     "text": [
+      "Welcome back. Your workspace has 3 projects and 4 teammates.",
+      "12,480 requests of 50,000 included.",
+      "storefront-api went live 2 hours ago."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "link",
+       "label": "View projects",
+       "href": "/demo/projects",
+       "context": "main › Latest deploy"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Projects"
+     },
+     {
+      "label": "View projects"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "new-project-2",
+   "guide": "new-project",
+   "request": {
+    "goal": "create a new project",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "create a new project"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Projects."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/projects",
+     "title": "Projects · Acme Console",
+     "headings": [
+      "Projects"
+     ],
+     "text": [
+      "storefront-api",
+      "marketing-site",
+      "internal-tools"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "New project",
+       "context": "main › Projects"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked link \"Projects\". A new page loaded: the user went from /demo to /demo/projects."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "New project",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "new-project-3",
+   "guide": "new-project",
+   "request": {
+    "goal": "create a new project",
+    "step": 2,
+    "history": [
+     {
+      "role": "user",
+      "text": "create a new project"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Projects."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked link \"Projects\". A new page loaded: the user went from /demo to /demo/projects."
+     },
+     {
+      "role": "assistant",
+      "text": "Click New project."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/projects",
+     "title": "Projects · Acme Console",
+     "headings": [
+      "Projects",
+      "New project"
+     ],
+     "text": [
+      "Project name",
+      "Region"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "textbox",
+       "label": "Project name",
+       "context": "form"
+      },
+      {
+       "id": "e2",
+       "role": "select",
+       "label": "Region",
+       "options": [
+        "US East",
+        "EU West"
+       ],
+       "context": "form"
+      },
+      {
+       "id": "e3",
+       "role": "button",
+       "label": "Cancel",
+       "context": "form"
+      },
+      {
+       "id": "e4",
+       "role": "button",
+       "label": "Create project",
+       "context": "form"
+      }
+     ],
+     "truncated": false,
+     "dialog": "New project"
+    },
+    "event": "The user clicked button \"New project\".",
+    "change": "Dialog \"New project\" opened.\nNew text: \"New project\", \"Project name\", \"Region\"."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Project name"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "new-project-4",
+   "guide": "new-project",
+   "request": {
+    "goal": "create a new project",
+    "step": 3,
+    "history": [
+     {
+      "role": "user",
+      "text": "create a new project"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Projects."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked link \"Projects\". A new page loaded: the user went from /demo to /demo/projects."
+     },
+     {
+      "role": "assistant",
+      "text": "Click New project."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"New project\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Type a name for the project."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/projects",
+     "title": "Projects · Acme Console",
+     "headings": [
+      "Projects",
+      "New project"
+     ],
+     "text": [
+      "Project name",
+      "Region"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "textbox",
+       "label": "Project name",
+       "context": "form"
+      },
+      {
+       "id": "e2",
+       "role": "select",
+       "label": "Region",
+       "options": [
+        "US East",
+        "EU West"
+       ],
+       "context": "form"
+      },
+      {
+       "id": "e3",
+       "role": "button",
+       "label": "Cancel",
+       "context": "form"
+      },
+      {
+       "id": "e4",
+       "role": "button",
+       "label": "Create project",
+       "context": "form"
+      }
+     ],
+     "truncated": false,
+     "dialog": "New project"
+    },
+    "event": "The user filled in textbox \"Project name\". You can't see what they entered.",
+    "change": "Nothing visible on the page changed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Create project",
+      "role": "button"
+     },
+     {
+      "label": "Region"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "new-project-5",
+   "guide": "new-project",
+   "request": {
+    "goal": "create a new project",
+    "step": 4,
+    "history": [
+     {
+      "role": "user",
+      "text": "create a new project"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Projects."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked link \"Projects\". A new page loaded: the user went from /demo to /demo/projects."
+     },
+     {
+      "role": "assistant",
+      "text": "Click New project."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"New project\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Type a name for the project."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Project name\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Region."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/projects",
+     "title": "Projects · Acme Console",
+     "headings": [
+      "Projects"
+     ],
+     "text": [
+      "storefront-api",
+      "marketing-site",
+      "internal-tools",
+      "billing-service"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "New project",
+       "context": "main › Projects"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked \"Create project\" instead of select \"Region\".",
+    "change": "Dialog \"New project\" closed.\nNew text: \"storefront-api\", \"marketing-site\", \"internal-tools\", \"billing-service\"."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "api-key-1",
+   "guide": "api-key",
+   "request": {
+    "goal": "Where do I get an API key?",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/demo/projects",
+     "title": "Projects · Acme Console",
+     "headings": [
+      "Projects"
+     ],
+     "text": [
+      "storefront-api",
+      "marketing-site",
+      "internal-tools"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "New project",
+       "context": "main › Projects"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "A",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "api-key-2",
+   "guide": "api-key",
+   "request": {
+    "goal": "Where do I get an API key?",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "Where do I get an API key?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/projects",
+     "title": "Projects · Acme Console",
+     "headings": [
+      "Projects"
+     ],
+     "text": [
+      "storefront-api",
+      "marketing-site",
+      "internal-tools"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "expanded"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "menuitem",
+       "label": "Settings",
+       "href": "/demo/settings",
+       "context": "menu"
+      },
+      {
+       "id": "e7",
+       "role": "menuitem",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "menu"
+      },
+      {
+       "id": "e8",
+       "role": "menuitem",
+       "label": "Sign out",
+       "href": "/demo",
+       "context": "menu"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "New project",
+       "context": "main › Projects"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"A\".",
+    "change": "New: menuitem \"Settings\", menuitem \"Plan and billing\", menuitem \"Sign out\".\nbutton \"A\" is now expanded and is no longer collapsed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Settings"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "api-key-3",
+   "guide": "api-key",
+   "request": {
+    "goal": "Where do I get an API key?",
+    "step": 2,
+    "history": [
+     {
+      "role": "user",
+      "text": "Where do I get an API key?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Settings."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings",
+     "title": "Settings · Acme Console",
+     "headings": [
+      "Settings",
+      "Danger zone"
+     ],
+     "text": [
+      "Workspace name",
+      "Time zone",
+      "Deleting the workspace removes its projects and members for good."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Workspace name",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "select",
+       "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
+       "context": "form"
+      },
+      {
+       "id": "e11",
+       "role": "button",
+       "label": "Save changes",
+       "context": "form"
+      },
+      {
+       "id": "e12",
+       "role": "button",
+       "label": "Delete workspace",
+       "context": "main › Danger zone"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked menuitem \"Settings\". A new page loaded: the user went from /demo/projects to /demo/settings."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Security"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "api-key-4",
+   "guide": "api-key",
+   "request": {
+    "goal": "Where do I get an API key?",
+    "step": 3,
+    "history": [
+     {
+      "role": "user",
+      "text": "Where do I get an API key?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Settings."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked menuitem \"Settings\". A new page loaded: the user went from /demo/projects to /demo/settings."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Security."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings-security",
+     "title": "Security · Acme Console",
+     "headings": [
+      "Security",
+      "API keys"
+     ],
+     "text": [
+      "Require two-factor authentication",
+      "Production key, created in March"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "checkbox",
+       "label": "Require two-factor authentication",
+       "context": "main › Security"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Create API key",
+       "context": "main › API keys"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked tab \"Security\". A new page loaded: the user went from /demo/settings to /demo/settings-security."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Create API key",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "api-key-5",
+   "guide": "api-key",
+   "request": {
+    "goal": "Where do I get an API key?",
+    "step": 4,
+    "history": [
+     {
+      "role": "user",
+      "text": "Where do I get an API key?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Settings."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked menuitem \"Settings\". A new page loaded: the user went from /demo/projects to /demo/settings."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Security."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked tab \"Security\". A new page loaded: the user went from /demo/settings to /demo/settings-security."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Create API key."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings-security",
+     "title": "Security · Acme Console",
+     "headings": [
+      "Security",
+      "API keys"
+     ],
+     "text": [
+      "Require two-factor authentication",
+      "Production key, created in March",
+      "New key, created just now",
+      "API key created."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "checkbox",
+       "label": "Require two-factor authentication",
+       "context": "main › Security"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Create API key",
+       "context": "main › API keys"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"Create API key\".",
+    "change": "New text: \"New key, created just now\", \"API key created.\"."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "two-factor-1",
+   "guide": "two-factor",
+   "request": {
+    "goal": "turn on two-factor authentication",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/demo/team",
+     "title": "Team · Acme Console",
+     "headings": [
+      "Team"
+     ],
+     "text": [
+      "People who can access this workspace.",
+      "Avery (owner)",
+      "Sam",
+      "Priya",
+      "Jordan",
+      "Email address"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Sam"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Priya"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Jordan"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Email address",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Send invite",
+       "context": "form"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "A",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "two-factor-2",
+   "guide": "two-factor",
+   "request": {
+    "goal": "turn on two-factor authentication",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "turn on two-factor authentication"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/team",
+     "title": "Team · Acme Console",
+     "headings": [
+      "Team"
+     ],
+     "text": [
+      "People who can access this workspace.",
+      "Avery (owner)",
+      "Sam",
+      "Priya",
+      "Jordan",
+      "Email address"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "expanded"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "menuitem",
+       "label": "Settings",
+       "href": "/demo/settings",
+       "context": "menu"
+      },
+      {
+       "id": "e7",
+       "role": "menuitem",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "menu"
+      },
+      {
+       "id": "e8",
+       "role": "menuitem",
+       "label": "Sign out",
+       "href": "/demo",
+       "context": "menu"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Sam"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Priya"
+      },
+      {
+       "id": "e11",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Jordan"
+      },
+      {
+       "id": "e12",
+       "role": "textbox",
+       "label": "Email address",
+       "context": "form"
+      },
+      {
+       "id": "e13",
+       "role": "button",
+       "label": "Send invite",
+       "context": "form"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"A\".",
+    "change": "New: menuitem \"Settings\", menuitem \"Plan and billing\", menuitem \"Sign out\".\nbutton \"A\" is now expanded and is no longer collapsed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Settings"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "two-factor-3",
+   "guide": "two-factor",
+   "request": {
+    "goal": "turn on two-factor authentication",
+    "step": 2,
+    "history": [
+     {
+      "role": "user",
+      "text": "turn on two-factor authentication"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Settings."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings",
+     "title": "Settings · Acme Console",
+     "headings": [
+      "Settings",
+      "Danger zone"
+     ],
+     "text": [
+      "Workspace name",
+      "Time zone",
+      "Deleting the workspace removes its projects and members for good."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Workspace name",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "select",
+       "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
+       "context": "form"
+      },
+      {
+       "id": "e11",
+       "role": "button",
+       "label": "Save changes",
+       "context": "form"
+      },
+      {
+       "id": "e12",
+       "role": "button",
+       "label": "Delete workspace",
+       "context": "main › Danger zone"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked menuitem \"Settings\". A new page loaded: the user went from /demo/team to /demo/settings."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Security"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "two-factor-4",
+   "guide": "two-factor",
+   "request": {
+    "goal": "turn on two-factor authentication",
+    "step": 3,
+    "history": [
+     {
+      "role": "user",
+      "text": "turn on two-factor authentication"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Settings."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked menuitem \"Settings\". A new page loaded: the user went from /demo/team to /demo/settings."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Security."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings-security",
+     "title": "Security · Acme Console",
+     "headings": [
+      "Security",
+      "API keys"
+     ],
+     "text": [
+      "Require two-factor authentication",
+      "Production key, created in March"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "checkbox",
+       "label": "Require two-factor authentication",
+       "context": "main › Security"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Create API key",
+       "context": "main › API keys"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked tab \"Security\". A new page loaded: the user went from /demo/settings to /demo/settings-security."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Require two-factor authentication"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "two-factor-5",
+   "guide": "two-factor",
+   "request": {
+    "goal": "turn on two-factor authentication",
+    "step": 4,
+    "history": [
+     {
+      "role": "user",
+      "text": "turn on two-factor authentication"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Settings."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked menuitem \"Settings\". A new page loaded: the user went from /demo/team to /demo/settings."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Security."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked tab \"Security\". A new page loaded: the user went from /demo/settings to /demo/settings-security."
+     },
+     {
+      "role": "assistant",
+      "text": "Tick Require two-factor authentication."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings-security",
+     "title": "Security · Acme Console",
+     "headings": [
+      "Security",
+      "API keys"
+     ],
+     "text": [
+      "Require two-factor authentication",
+      "Production key, created in March",
+      "Two-factor authentication is now required."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "checkbox",
+       "label": "Require two-factor authentication",
+       "state": [
+        "checked"
+       ],
+       "context": "main › Security"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Create API key",
+       "context": "main › API keys"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked checkbox \"Require two-factor authentication\".",
+    "change": "checkbox \"Require two-factor authentication\" is now checked.\nNew text: \"Two-factor authentication is now required.\"."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "rename-workspace-1",
+   "guide": "rename-workspace",
+   "request": {
+    "goal": "How can I rename my workspace?",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/demo",
+     "title": "Overview · Acme Console",
+     "headings": [
+      "Overview",
+      "Usage this month",
+      "Latest deploy"
+     ],
+     "text": [
+      "Welcome back. Your workspace has 3 projects and 4 teammates.",
+      "12,480 requests of 50,000 included.",
+      "storefront-api went live 2 hours ago."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "link",
+       "label": "View projects",
+       "href": "/demo/projects",
+       "context": "main › Latest deploy"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "A",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "rename-workspace-2",
+   "guide": "rename-workspace",
+   "request": {
+    "goal": "How can I rename my workspace?",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "How can I rename my workspace?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo",
+     "title": "Overview · Acme Console",
+     "headings": [
+      "Overview",
+      "Usage this month",
+      "Latest deploy"
+     ],
+     "text": [
+      "Welcome back. Your workspace has 3 projects and 4 teammates.",
+      "12,480 requests of 50,000 included.",
+      "storefront-api went live 2 hours ago."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "expanded"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "menuitem",
+       "label": "Settings",
+       "href": "/demo/settings",
+       "context": "menu"
+      },
+      {
+       "id": "e7",
+       "role": "menuitem",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "menu"
+      },
+      {
+       "id": "e8",
+       "role": "menuitem",
+       "label": "Sign out",
+       "href": "/demo",
+       "context": "menu"
+      },
+      {
+       "id": "e9",
+       "role": "link",
+       "label": "View projects",
+       "href": "/demo/projects",
+       "context": "main › Latest deploy"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"A\".",
+    "change": "New: menuitem \"Settings\", menuitem \"Plan and billing\", menuitem \"Sign out\".\nbutton \"A\" is now expanded and is no longer collapsed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Settings"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "rename-workspace-3",
+   "guide": "rename-workspace",
+   "request": {
+    "goal": "How can I rename my workspace?",
+    "step": 2,
+    "history": [
+     {
+      "role": "user",
+      "text": "How can I rename my workspace?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Settings."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings",
+     "title": "Settings · Acme Console",
+     "headings": [
+      "Settings",
+      "Danger zone"
+     ],
+     "text": [
+      "Workspace name",
+      "Time zone",
+      "Deleting the workspace removes its projects and members for good."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Workspace name",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "select",
+       "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
+       "context": "form"
+      },
+      {
+       "id": "e11",
+       "role": "button",
+       "label": "Save changes",
+       "context": "form"
+      },
+      {
+       "id": "e12",
+       "role": "button",
+       "label": "Delete workspace",
+       "context": "main › Danger zone"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked menuitem \"Settings\". A new page loaded: the user went from /demo to /demo/settings."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Workspace name"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "rename-workspace-4",
+   "guide": "rename-workspace",
+   "request": {
+    "goal": "How can I rename my workspace?",
+    "step": 3,
+    "history": [
+     {
+      "role": "user",
+      "text": "How can I rename my workspace?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Settings."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked menuitem \"Settings\". A new page loaded: the user went from /demo to /demo/settings."
+     },
+     {
+      "role": "assistant",
+      "text": "Type the new name."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings",
+     "title": "Settings · Acme Console",
+     "headings": [
+      "Settings",
+      "Danger zone"
+     ],
+     "text": [
+      "Workspace name",
+      "Time zone",
+      "Deleting the workspace removes its projects and members for good."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Workspace name",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "select",
+       "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
+       "context": "form"
+      },
+      {
+       "id": "e11",
+       "role": "button",
+       "label": "Save changes",
+       "context": "form"
+      },
+      {
+       "id": "e12",
+       "role": "button",
+       "label": "Delete workspace",
+       "context": "main › Danger zone"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user filled in textbox \"Workspace name\". You can't see what they entered.",
+    "change": "Nothing visible on the page changed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Save changes",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "rename-workspace-5",
+   "guide": "rename-workspace",
+   "request": {
+    "goal": "How can I rename my workspace?",
+    "step": 4,
+    "history": [
+     {
+      "role": "user",
+      "text": "How can I rename my workspace?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Settings."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked menuitem \"Settings\". A new page loaded: the user went from /demo to /demo/settings."
+     },
+     {
+      "role": "assistant",
+      "text": "Type the new name."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in textbox \"Workspace name\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Save changes."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings",
+     "title": "Settings · Acme Console",
+     "headings": [
+      "Settings",
+      "Danger zone"
+     ],
+     "text": [
+      "Workspace name",
+      "Time zone",
+      "Settings saved.",
+      "Deleting the workspace removes its projects and members for good."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Workspace name",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "select",
+       "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
+       "context": "form"
+      },
+      {
+       "id": "e11",
+       "role": "button",
+       "label": "Save changes",
+       "context": "form"
+      },
+      {
+       "id": "e12",
+       "role": "button",
+       "label": "Delete workspace",
+       "context": "main › Danger zone"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"Save changes\".",
+    "change": "New text: \"Settings saved.\"."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "time-zone-1",
+   "guide": "time-zone",
+   "request": {
+    "goal": "change the time zone",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/demo/settings-billing",
+     "title": "Plan and billing · Acme Console",
+     "headings": [
+      "Plan and billing",
+      "Current plan",
+      "Payment method",
+      "Invoices"
+     ],
+     "text": [
+      "Team plan, $49 a month.",
+      "Visa ending in 4242",
+      "Invoices are emailed on the 1st of each month."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "Change plan",
+       "context": "main › Current plan"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Update payment method",
+       "context": "main › Payment method"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "Download latest invoice",
+       "href": "/demo/settings-billing",
+       "context": "main › Invoices"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "General"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "time-zone-2",
+   "guide": "time-zone",
+   "request": {
+    "goal": "change the time zone",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "change the time zone"
+     },
+     {
+      "role": "assistant",
+      "text": "Click General."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings",
+     "title": "Settings · Acme Console",
+     "headings": [
+      "Settings",
+      "Danger zone"
+     ],
+     "text": [
+      "Workspace name",
+      "Time zone",
+      "Deleting the workspace removes its projects and members for good."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Workspace name",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "select",
+       "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
+       "context": "form"
+      },
+      {
+       "id": "e11",
+       "role": "button",
+       "label": "Save changes",
+       "context": "form"
+      },
+      {
+       "id": "e12",
+       "role": "button",
+       "label": "Delete workspace",
+       "context": "main › Danger zone"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked tab \"General\". A new page loaded: the user went from /demo/settings-billing to /demo/settings."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Time zone"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "time-zone-3",
+   "guide": "time-zone",
+   "request": {
+    "goal": "change the time zone",
+    "step": 2,
+    "history": [
+     {
+      "role": "user",
+      "text": "change the time zone"
+     },
+     {
+      "role": "assistant",
+      "text": "Click General."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked tab \"General\". A new page loaded: the user went from /demo/settings-billing to /demo/settings."
+     },
+     {
+      "role": "assistant",
+      "text": "Pick your time zone."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings",
+     "title": "Settings · Acme Console",
+     "headings": [
+      "Settings",
+      "Danger zone"
+     ],
+     "text": [
+      "Workspace name",
+      "Time zone",
+      "Deleting the workspace removes its projects and members for good."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Workspace name",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "select",
+       "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
+       "context": "form"
+      },
+      {
+       "id": "e11",
+       "role": "button",
+       "label": "Save changes",
+       "context": "form"
+      },
+      {
+       "id": "e12",
+       "role": "button",
+       "label": "Delete workspace",
+       "context": "main › Danger zone"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user filled in select \"Time zone\". You can't see what they entered.",
+    "change": "Nothing visible on the page changed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Save changes",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "time-zone-4",
+   "guide": "time-zone",
+   "request": {
+    "goal": "change the time zone",
+    "step": 3,
+    "history": [
+     {
+      "role": "user",
+      "text": "change the time zone"
+     },
+     {
+      "role": "assistant",
+      "text": "Click General."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked tab \"General\". A new page loaded: the user went from /demo/settings-billing to /demo/settings."
+     },
+     {
+      "role": "assistant",
+      "text": "Pick your time zone."
+     },
+     {
+      "role": "user",
+      "text": "The user filled in select \"Time zone\". You can't see what they entered."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Save changes."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings",
+     "title": "Settings · Acme Console",
+     "headings": [
+      "Settings",
+      "Danger zone"
+     ],
+     "text": [
+      "Workspace name",
+      "Time zone",
+      "Settings saved.",
+      "Deleting the workspace removes its projects and members for good."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Workspace name",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "select",
+       "label": "Time zone",
+       "options": [
+        "UTC",
+        "Eastern",
+        "Pacific"
+       ],
+       "context": "form"
+      },
+      {
+       "id": "e11",
+       "role": "button",
+       "label": "Save changes",
+       "context": "form"
+      },
+      {
+       "id": "e12",
+       "role": "button",
+       "label": "Delete workspace",
+       "context": "main › Danger zone"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"Save changes\".",
+    "change": "New text: \"Settings saved.\"."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "invoice-1",
+   "guide": "invoice",
+   "request": {
+    "goal": "download my latest invoice",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/demo",
+     "title": "Overview · Acme Console",
+     "headings": [
+      "Overview",
+      "Usage this month",
+      "Latest deploy"
+     ],
+     "text": [
+      "Welcome back. Your workspace has 3 projects and 4 teammates.",
+      "12,480 requests of 50,000 included.",
+      "storefront-api went live 2 hours ago."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "link",
+       "label": "View projects",
+       "href": "/demo/projects",
+       "context": "main › Latest deploy"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "A",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "invoice-2",
+   "guide": "invoice",
+   "request": {
+    "goal": "download my latest invoice",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "download my latest invoice"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo",
+     "title": "Overview · Acme Console",
+     "headings": [
+      "Overview",
+      "Usage this month",
+      "Latest deploy"
+     ],
+     "text": [
+      "Welcome back. Your workspace has 3 projects and 4 teammates.",
+      "12,480 requests of 50,000 included.",
+      "storefront-api went live 2 hours ago."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "expanded"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "menuitem",
+       "label": "Settings",
+       "href": "/demo/settings",
+       "context": "menu"
+      },
+      {
+       "id": "e7",
+       "role": "menuitem",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "menu"
+      },
+      {
+       "id": "e8",
+       "role": "menuitem",
+       "label": "Sign out",
+       "href": "/demo",
+       "context": "menu"
+      },
+      {
+       "id": "e9",
+       "role": "link",
+       "label": "View projects",
+       "href": "/demo/projects",
+       "context": "main › Latest deploy"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"A\".",
+    "change": "New: menuitem \"Settings\", menuitem \"Plan and billing\", menuitem \"Sign out\".\nbutton \"A\" is now expanded and is no longer collapsed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Plan and billing"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "invoice-3",
+   "guide": "invoice",
+   "request": {
+    "goal": "download my latest invoice",
+    "step": 2,
+    "history": [
+     {
+      "role": "user",
+      "text": "download my latest invoice"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Plan and billing."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings-billing",
+     "title": "Plan and billing · Acme Console",
+     "headings": [
+      "Plan and billing",
+      "Current plan",
+      "Payment method",
+      "Invoices"
+     ],
+     "text": [
+      "Team plan, $49 a month.",
+      "Visa ending in 4242",
+      "Invoices are emailed on the 1st of each month."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "Change plan",
+       "context": "main › Current plan"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Update payment method",
+       "context": "main › Payment method"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "Download latest invoice",
+       "href": "/demo/settings-billing",
+       "context": "main › Invoices"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked menuitem \"Plan and billing\". A new page loaded: the user went from /demo to /demo/settings-billing."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Download latest invoice"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "upgrade-1",
+   "guide": "upgrade",
+   "request": {
+    "goal": "I want to upgrade my plan",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/demo",
+     "title": "Overview · Acme Console",
+     "headings": [
+      "Overview",
+      "Usage this month",
+      "Latest deploy"
+     ],
+     "text": [
+      "Welcome back. Your workspace has 3 projects and 4 teammates.",
+      "12,480 requests of 50,000 included.",
+      "storefront-api went live 2 hours ago."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "link",
+       "label": "View projects",
+       "href": "/demo/projects",
+       "context": "main › Latest deploy"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "A",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "upgrade-2",
+   "guide": "upgrade",
+   "request": {
+    "goal": "I want to upgrade my plan",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "I want to upgrade my plan"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo",
+     "title": "Overview · Acme Console",
+     "headings": [
+      "Overview",
+      "Usage this month",
+      "Latest deploy"
+     ],
+     "text": [
+      "Welcome back. Your workspace has 3 projects and 4 teammates.",
+      "12,480 requests of 50,000 included.",
+      "storefront-api went live 2 hours ago."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "expanded"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "menuitem",
+       "label": "Settings",
+       "href": "/demo/settings",
+       "context": "menu"
+      },
+      {
+       "id": "e7",
+       "role": "menuitem",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "menu"
+      },
+      {
+       "id": "e8",
+       "role": "menuitem",
+       "label": "Sign out",
+       "href": "/demo",
+       "context": "menu"
+      },
+      {
+       "id": "e9",
+       "role": "link",
+       "label": "View projects",
+       "href": "/demo/projects",
+       "context": "main › Latest deploy"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"A\".",
+    "change": "New: menuitem \"Settings\", menuitem \"Plan and billing\", menuitem \"Sign out\".\nbutton \"A\" is now expanded and is no longer collapsed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Plan and billing"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "upgrade-3",
+   "guide": "upgrade",
+   "request": {
+    "goal": "I want to upgrade my plan",
+    "step": 2,
+    "history": [
+     {
+      "role": "user",
+      "text": "I want to upgrade my plan"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Plan and billing."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings-billing",
+     "title": "Plan and billing · Acme Console",
+     "headings": [
+      "Plan and billing",
+      "Current plan",
+      "Payment method",
+      "Invoices"
+     ],
+     "text": [
+      "Team plan, $49 a month.",
+      "Visa ending in 4242",
+      "Invoices are emailed on the 1st of each month."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "Change plan",
+       "context": "main › Current plan"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Update payment method",
+       "context": "main › Payment method"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "Download latest invoice",
+       "href": "/demo/settings-billing",
+       "context": "main › Invoices"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked menuitem \"Plan and billing\". A new page loaded: the user went from /demo to /demo/settings-billing."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Change plan",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "upgrade-4",
+   "guide": "upgrade",
+   "request": {
+    "goal": "I want to upgrade my plan",
+    "step": 3,
+    "history": [
+     {
+      "role": "user",
+      "text": "I want to upgrade my plan"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Plan and billing."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked menuitem \"Plan and billing\". A new page loaded: the user went from /demo to /demo/settings-billing."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Change plan."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/settings-billing",
+     "title": "Plan and billing · Acme Console",
+     "headings": [
+      "Plan and billing",
+      "Current plan",
+      "Payment method",
+      "Invoices"
+     ],
+     "text": [
+      "Team plan, $49 a month.",
+      "Visa ending in 4242",
+      "Invoices are emailed on the 1st of each month.",
+      "Plan changes are switched off in this demo."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "tab",
+       "label": "General",
+       "href": "/demo/settings",
+       "context": "tabs"
+      },
+      {
+       "id": "e7",
+       "role": "tab",
+       "label": "Plan and billing",
+       "state": [
+        "selected"
+       ],
+       "href": "/demo/settings-billing",
+       "context": "tabs"
+      },
+      {
+       "id": "e8",
+       "role": "tab",
+       "label": "Security",
+       "href": "/demo/settings-security",
+       "context": "tabs"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "Change plan",
+       "context": "main › Current plan"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Update payment method",
+       "context": "main › Payment method"
+      },
+      {
+       "id": "e11",
+       "role": "link",
+       "label": "Download latest invoice",
+       "href": "/demo/settings-billing",
+       "context": "main › Invoices"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"Change plan\".",
+    "change": "New text: \"Plan changes are switched off in this demo.\"."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "sign-out-1",
+   "guide": "sign-out",
+   "request": {
+    "goal": "sign out",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/demo/team",
+     "title": "Team · Acme Console",
+     "headings": [
+      "Team"
+     ],
+     "text": [
+      "People who can access this workspace.",
+      "Avery (owner)",
+      "Sam",
+      "Priya",
+      "Jordan",
+      "Email address"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Sam"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Priya"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Jordan"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Email address",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Send invite",
+       "context": "form"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "A",
+      "role": "button"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "sign-out-2",
+   "guide": "sign-out",
+   "request": {
+    "goal": "sign out",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "sign out"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo/team",
+     "title": "Team · Acme Console",
+     "headings": [
+      "Team"
+     ],
+     "text": [
+      "People who can access this workspace.",
+      "Avery (owner)",
+      "Sam",
+      "Priya",
+      "Jordan",
+      "Email address"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "expanded"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "menuitem",
+       "label": "Settings",
+       "href": "/demo/settings",
+       "context": "menu"
+      },
+      {
+       "id": "e7",
+       "role": "menuitem",
+       "label": "Plan and billing",
+       "href": "/demo/settings-billing",
+       "context": "menu"
+      },
+      {
+       "id": "e8",
+       "role": "menuitem",
+       "label": "Sign out",
+       "href": "/demo",
+       "context": "menu"
+      },
+      {
+       "id": "e9",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Sam"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Priya"
+      },
+      {
+       "id": "e11",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Jordan"
+      },
+      {
+       "id": "e12",
+       "role": "textbox",
+       "label": "Email address",
+       "context": "form"
+      },
+      {
+       "id": "e13",
+       "role": "button",
+       "label": "Send invite",
+       "context": "form"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked button \"A\".",
+    "change": "New: menuitem \"Settings\", menuitem \"Plan and billing\", menuitem \"Sign out\".\nbutton \"A\" is now expanded and is no longer collapsed."
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Sign out"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "sign-out-3",
+   "guide": "sign-out",
+   "request": {
+    "goal": "sign out",
+    "step": 2,
+    "history": [
+     {
+      "role": "user",
+      "text": "sign out"
+     },
+     {
+      "role": "assistant",
+      "text": "Click the round A button at the top right."
+     },
+     {
+      "role": "user",
+      "text": "The user clicked button \"A\"."
+     },
+     {
+      "role": "assistant",
+      "text": "Click Sign out."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo",
+     "title": "Overview · Acme Console",
+     "headings": [
+      "Overview",
+      "Usage this month",
+      "Latest deploy"
+     ],
+     "text": [
+      "Welcome back. Your workspace has 3 projects and 4 teammates.",
+      "12,480 requests of 50,000 included.",
+      "storefront-api went live 2 hours ago."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "link",
+       "label": "View projects",
+       "href": "/demo/projects",
+       "context": "main › Latest deploy"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked menuitem \"Sign out\". A new page loaded: the user went from /demo/team to /demo."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "usage-1",
+   "guide": "usage",
+   "request": {
+    "goal": "where can I see my usage this month?",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/demo/team",
+     "title": "Team · Acme Console",
+     "headings": [
+      "Team"
+     ],
+     "text": [
+      "People who can access this workspace.",
+      "Avery (owner)",
+      "Sam",
+      "Priya",
+      "Jordan",
+      "Email address"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Sam"
+      },
+      {
+       "id": "e7",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Priya"
+      },
+      {
+       "id": "e8",
+       "role": "button",
+       "label": "Remove",
+       "context": "main › Team › row: Jordan"
+      },
+      {
+       "id": "e9",
+       "role": "textbox",
+       "label": "Email address",
+       "context": "form"
+      },
+      {
+       "id": "e10",
+       "role": "button",
+       "label": "Send invite",
+       "context": "form"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [
+     {
+      "label": "Overview"
+     },
+     {
+      "label": "Acme Console"
+     }
+    ],
+    "status": "continue"
+   }
+  },
+  {
+   "id": "usage-2",
+   "guide": "usage",
+   "request": {
+    "goal": "where can I see my usage this month?",
+    "step": 1,
+    "history": [
+     {
+      "role": "user",
+      "text": "where can I see my usage this month?"
+     },
+     {
+      "role": "assistant",
+      "text": "Click Acme Console."
+     }
+    ],
+    "snapshot": {
+     "path": "/demo",
+     "title": "Overview · Acme Console",
+     "headings": [
+      "Overview",
+      "Usage this month",
+      "Latest deploy"
+     ],
+     "text": [
+      "Welcome back. Your workspace has 3 projects and 4 teammates.",
+      "12,480 requests of 50,000 included.",
+      "storefront-api went live 2 hours ago."
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "link",
+       "label": "View projects",
+       "href": "/demo/projects",
+       "context": "main › Latest deploy"
+      }
+     ],
+     "truncated": false
+    },
+    "event": "The user clicked \"Overview\" instead of link \"Acme Console\". A new page loaded: the user went from /demo/team to /demo."
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  },
+  {
+   "id": "no-such-feature-1",
+   "guide": "no-such-feature",
+   "request": {
+    "goal": "How do I delete a project?",
+    "step": 0,
+    "history": [],
+    "snapshot": {
+     "path": "/demo/projects",
+     "title": "Projects · Acme Console",
+     "headings": [
+      "Projects"
+     ],
+     "text": [
+      "storefront-api",
+      "marketing-site",
+      "internal-tools"
+     ],
+     "elements": [
+      {
+       "id": "e1",
+       "role": "link",
+       "label": "Acme Console",
+       "href": "/demo",
+       "context": "header"
+      },
+      {
+       "id": "e2",
+       "role": "link",
+       "label": "Overview",
+       "href": "/demo",
+       "context": "nav"
+      },
+      {
+       "id": "e3",
+       "role": "link",
+       "label": "Projects",
+       "href": "/demo/projects",
+       "context": "nav"
+      },
+      {
+       "id": "e4",
+       "role": "link",
+       "label": "Team",
+       "href": "/demo/team",
+       "context": "nav"
+      },
+      {
+       "id": "e5",
+       "role": "button",
+       "label": "A",
+       "state": [
+        "collapsed"
+       ],
+       "context": "header"
+      },
+      {
+       "id": "e6",
+       "role": "button",
+       "label": "New project",
+       "context": "main › Projects"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   "expect": {
+    "targets": [],
+    "status": "done"
+   }
+  }
+ ]
+}

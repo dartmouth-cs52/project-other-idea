@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan and billing · Acme Console</title>
+<link rel="stylesheet" href="/demo/style.css">
+</head>
+<body>
+<header>
+  <a class="brand" href="/demo/">Acme Console</a>
+  <nav>
+    <a href="/demo/">Overview</a>
+    <a href="/demo/projects">Projects</a>
+    <a href="/demo/team">Team</a>
+  </nav>
+  <div class="account">
+    <button id="account-button" aria-expanded="false" aria-haspopup="menu">A</button>
+    <div id="account-menu" role="menu" hidden>
+      <a role="menuitem" href="/demo/settings">Settings</a>
+      <a role="menuitem" href="/demo/settings-billing">Plan and billing</a>
+      <a role="menuitem" href="/demo/">Sign out</a>
+    </div>
+  </div>
+</header>
+<main>
+<h1>Plan and billing</h1>
+<div class="tabs" role="tablist"><a role="tab" href="/demo/settings">General</a><a role="tab" aria-selected="true" href="/demo/settings-billing">Plan and billing</a><a role="tab" href="/demo/settings-security">Security</a></div>
+<section><h2>Current plan</h2><p>Team plan, $49 a month.</p><button id="change-plan">Change plan</button></section>
+<section><h2>Payment method</h2><p id="card-line">Visa ending in 4242</p><button id="edit-payment">Update payment method</button></section>
+<section><h2>Invoices</h2><p>Invoices are emailed on the 1st of each month.</p><a href="/demo/settings-billing">Download latest invoice</a></section>
+<p id="billing-result" role="status"></p>
+<dialog id="payment-dialog" aria-labelledby="payment-title">
+  <h2 id="payment-title">Update payment method</h2>
+  <form method="dialog">
+    <label>Name on card <input name="cardname" required></label>
+    <label>Billing postcode <input name="postcode" required></label>
+    <div class="row"><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save payment method</button></div>
+  </form>
+</dialog>
+</main>
+<script src="/demo/app.js"></script>
+<script src="/widget.js" data-site="site_demo" async></script>
+</body>
+</html>

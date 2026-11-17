@@ -1,0 +1,51 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "haptic-web",
+  "compatibility_date": "2026-11-01",
+  // The sign-in proxy and the page reader use parts of Node's standard library.
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./worker/index.ts",
+  // The static site that `next build` writes to out/.
+  "assets": {
+    "directory": "./out",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": true
+  },
+  // Where contact form requests are kept.
+  "kv_namespaces": [{ "binding": "ACCESS_REQUESTS", "id": "90e7d35b139e4720ac435d792e9b4280" }],
+  // Emails the team a copy of each request. The inbox is the NOTIFY_TO secret, and must be verified under Email Routing.
+  "send_email": [{ "name": "EMAIL" }],
+  // Once a day, at 14:00 UTC: email companies about common questions whose guides stopped finishing (worker/health.ts).
+  // Every hour, at 17 past: send Stripe any finished guides the widget server didn't (worker/billing.ts). HOURLY in worker/handler.ts must match.
+  "triggers": { "crons": ["0 14 * * *", "17 * * * *"] },
+  // Each request sends an email, so one address gets 5 tries a minute.
+  "ratelimits": [
+    { "name": "FORM_LIMIT", "namespace_id": "1001", "simple": { "limit": 5, "period": 60 } },
+    // Sign-in can send an email on each try, so one address gets 10 tries a minute.
+    { "name": "AUTH_LIMIT", "namespace_id": "1003", "simple": { "limit": 10, "period": 60 } }
+  ],
+  // Sign-in and the dashboard. Secrets, set with `npx wrangler secret put <NAME>`:
+  //   DATABASE_URL             Neon's connection string for the haptic project's main branch
+  //   NEON_AUTH_COOKIE_SECRET  32 or more random characters, e.g. from `openssl rand -base64 32`
+  //   APPROVE_SECRET           32 or more random characters; signs the Approve links in request emails
+  //   RESEND_API_KEY           sends the sign-in email, which Neon Auth hands over at /api/neon-auth-hook
+  //   STRIPE_SECRET_KEY        billing: Stripe's secret key, test or live (scripts/stripe-setup.ts)
+  //   STRIPE_WEBHOOK_SECRET    billing: signs Stripe's webhooks to /api/stripe/webhook
+  "vars": {
+    // Neon Auth for the haptic project's main branch. Not a secret: browsers talk to it through /api/auth.
+    "NEON_AUTH_URL": "https://ep-purple-dust-bcr2f524.neonauth.c-16.us-east-1.aws.neon.tech/neondb/auth",
+    "WIDGET_URL": "https://widget.joinhaptic.com"
+  },
+  // A real browser, for reading the public pages of sites built with JavaScript. Without it, pages are read as plain HTML.
+  "browser": { "binding": "BROWSER" },
+  // Code the reader runs inside a page is sent as source text, so the bundler must not wrap it in name helpers.
+  "keep_names": false,
+  // The preview address on workers.dev stays on. It is marked so search engines skip it.
+  "workers_dev": true,
+  // The live site. The Worker sends www to the bare domain.
+  "routes": [
+    { "pattern": "joinhaptic.com", "custom_domain": true },
+    { "pattern": "www.joinhaptic.com", "custom_domain": true }
+  ]
+}
