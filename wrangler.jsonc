@@ -9,8 +9,13 @@
   "build": { "command": "npm run build" },
   // Each site's context, under its id. Written by `npm run site:publish`.
   "kv_namespaces": [{ "binding": "SITES", "id": "b481eb9c6ba24efe9889ef52a4f17e8a" }],
-  // One visitor on one site gets 30 steps a minute.
-  "ratelimits": [{ "name": "TURN_LIMIT", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }],
+  "ratelimits": [
+    // One visitor on one site gets 30 steps a minute.
+    { "name": "TURN_LIMIT", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } },
+    // Teach mode: one caller gets 20 token checks and step posts a minute, whatever the site. Tokens are 32 random
+    // bytes, so this is not what stops guessing; it keeps a caller from making the server look tokens up all day.
+    { "name": "TEACH_LIMIT", "namespace_id": "1004", "simple": { "limit": 20, "period": 60 } }
+  ],
   // What each site has spent on the model this hour and today, so a site can be stopped at its budget.
   // One object per site, in worker/budget.ts.
   "durable_objects": { "bindings": [{ "name": "BUDGET", "class_name": "BudgetMeter" }] },

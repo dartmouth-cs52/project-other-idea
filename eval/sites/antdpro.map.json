@@ -1,0 +1,293 @@
+{
+  "version": 1,
+  "id": "site_bench_antdpro",
+  "name": "Ant Design Pro",
+  "origin": "https://preview.pro.ant.design",
+  "allowedOrigins": [
+    "https://preview.pro.ant.design"
+  ],
+  "appearance": {
+    "accent": "#1E6EF4",
+    "position": "bottom-right",
+    "launcherLabel": "Ask"
+  },
+  "notes": "",
+  "docs": [],
+  "pages": [
+    {
+      "path": "/chatbot",
+      "title": "AI Assistant - Ant Design Pro",
+      "headings": [
+        "Ant Design Pro"
+      ],
+      "links": [
+        {
+          "label": "Welcome",
+          "to": "/welcome"
+        }
+      ],
+      "buttons": [
+        "Welcome Admin Dashboard Form List Profile Result…",
+        "Welcome",
+        "Admin",
+        "Dashboard",
+        "Form",
+        "List",
+        "Profile",
+        "Result",
+        "Exception",
+        "Account",
+        "AI Assistant",
+        "Ant Design Pro",
+        "使用文档",
+        "历史版本",
+        "语言切换",
+        "ProUser",
+        "新建对话",
+        "arrow-up icon"
+      ],
+      "fields": [
+        "输入消息，按 Enter 发送..."
+      ]
+    },
+    {
+      "path": "/dashboard/analysis",
+      "title": "Analysis - Ant Design Pro",
+      "headings": [
+        "Ant Design Pro",
+        "门店销售额排名"
+      ],
+      "links": [
+        {
+          "label": "Welcome",
+          "to": "/welcome"
+        },
+        {
+          "label": "Monitor",
+          "to": "/dashboard/monitor"
+        },
+        {
+          "label": "Workplace",
+          "to": "/dashboard/workplace"
+        },
+        {
+          "label": "AI Assistant",
+          "to": "/chatbot"
+        }
+      ],
+      "buttons": [
+        "Welcome Admin Dashboard Analysis Monitor Workplac…",
+        "Welcome",
+        "Admin",
+        "Dashboard",
+        "Analysis",
+        "Monitor",
+        "Workplace",
+        "Form",
+        "List",
+        "Profile",
+        "Result",
+        "Exception",
+        "Account",
+        "AI Assistant",
+        "Ant Design Pro",
+        "使用文档",
+        "历史版本",
+        "语言切换",
+        "ProUser",
+        "销售额"
+      ],
+      "fields": [
+        "Start date",
+        "End date"
+      ]
+    },
+    {
+      "path": "/dashboard/monitor",
+      "title": "Monitor - Ant Design Pro",
+      "headings": [
+        "Ant Design Pro"
+      ],
+      "links": [
+        {
+          "label": "Welcome",
+          "to": "/welcome"
+        },
+        {
+          "label": "Analysis",
+          "to": "/dashboard/analysis"
+        },
+        {
+          "label": "Workplace",
+          "to": "/dashboard/workplace"
+        },
+        {
+          "label": "AI Assistant",
+          "to": "/chatbot"
+        }
+      ],
+      "buttons": [
+        "Welcome Admin Dashboard Analysis Monitor Workplac…",
+        "Welcome",
+        "Admin",
+        "Dashboard",
+        "Analysis",
+        "Monitor",
+        "Workplace",
+        "Form",
+        "List",
+        "Profile",
+        "Result",
+        "Exception",
+        "Account",
+        "AI Assistant",
+        "Ant Design Pro",
+        "使用文档",
+        "历史版本",
+        "语言切换",
+        "ProUser"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/dashboard/workplace",
+      "title": "Workplace - Ant Design Pro",
+      "headings": [
+        "Ant Design Pro"
+      ],
+      "links": [
+        {
+          "label": "Welcome",
+          "to": "/welcome"
+        },
+        {
+          "label": "Analysis",
+          "to": "/dashboard/analysis"
+        },
+        {
+          "label": "Monitor",
+          "to": "/dashboard/monitor"
+        },
+        {
+          "label": "AI Assistant",
+          "to": "/chatbot"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/dashboard"
+        },
+        {
+          "label": "全部项目",
+          "to": "/"
+        },
+        {
+          "label": "Alipay",
+          "to": "/"
+        },
+        {
+          "label": "科学搬砖组",
+          "to": "/"
+        },
+        {
+          "label": "Angular",
+          "to": "/"
+        },
+        {
+          "label": "全组都是吴彦祖",
+          "to": "/"
+        },
+        {
+          "label": "Ant Design",
+          "to": "/"
+        },
+        {
+          "label": "中二少女团",
+          "to": "/"
+        },
+        {
+          "label": "Ant Design Pro",
+          "to": "/"
+        },
+        {
+          "label": "程序员日常",
+          "to": "/"
+        },
+        {
+          "label": "Bootstrap",
+          "to": "/"
+        }
+      ],
+      "buttons": [
+        "Welcome Admin Dashboard Analysis Monitor Workplac…",
+        "Welcome",
+        "Admin",
+        "Dashboard",
+        "Analysis",
+        "Monitor",
+        "Workplace",
+        "Form",
+        "List",
+        "Profile",
+        "Result",
+        "Exception",
+        "Account",
+        "AI Assistant",
+        "Ant Design Pro",
+        "使用文档",
+        "历史版本",
+        "语言切换",
+        "ProUser",
+        "曲丽丽"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/welcome",
+      "title": "Welcome - Ant Design Pro",
+      "headings": [
+        "Ant Design Pro",
+        "#Ant Design Pro Cheatsheet",
+        "#🎉 What's New in v6",
+        "#Getting Started",
+        "#Routes & Menu",
+        "#Layout",
+        "#Data Flow",
+        "#Request"
+      ],
+      "links": [
+        {
+          "label": "AI Assistant",
+          "to": "/chatbot"
+        }
+      ],
+      "buttons": [
+        "Welcome Admin Dashboard Form List Profile Result…",
+        "Welcome",
+        "Admin",
+        "Dashboard",
+        "Form",
+        "List",
+        "Profile",
+        "Result",
+        "Exception",
+        "Account",
+        "AI Assistant",
+        "Ant Design Pro",
+        "使用文档",
+        "历史版本",
+        "语言切换",
+        "ProUser"
+      ],
+      "fields": []
+    }
+  ],
+  "source": {
+    "url": "https://preview.pro.ant.design/",
+    "maxPages": 30,
+    "docs": [],
+    "maxDepth": 3,
+    "reader": "browser"
+  },
+  "createdAt": "2026-11-15T06:33:34.157Z",
+  "updatedAt": "2026-11-15T22:57:46.662Z"
+}

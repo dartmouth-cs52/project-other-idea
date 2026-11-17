@@ -1,27 +1,28 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Field, FormAlert, failureFrom, useFieldErrors, type Failure } from "@/components/form";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ApiError, api, type Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
+import { siteAt } from "@/lib/dashboard";
 import { accessHref } from "@/lib/site";
-import { AppNav, Card, FailedCard, leaveFor } from "./parts";
+import { SITES_HREF, viewFrom } from "./nav";
+import { Card, FailedCard, leaveFor } from "./parts";
+import { Plain } from "./shell";
 import { SiteView } from "./site-view";
-
-/** The first word of the person's name, from Google. Someone who signed in by an emailed link has none. */
-function firstName(name: string | undefined): string | undefined {
-  return name?.trim().split(/\s+/)[0] || undefined;
-}
+import { SitesIndex } from "./sites-index";
 
 type State = { kind: "loading" } | { kind: "failed"; message: string } | { kind: "ready"; me: Me };
 
+/**
+ * Everything behind sign-in, on one page. The address chooses what it shows:
+ * a site and one of its pages when it names the site, and the list of sites
+ * when it names none, which is where sign-in lands. A company with no site
+ * yet is sent to the setup screens.
+ */
 export function Dashboard() {
   const [state, setState] = useState<State>({ kind: "loading" });
-  const router = useRouter();
   const params = useSearchParams();
 
   useEffect(() => {
@@ -48,47 +49,59 @@ export function Dashboard() {
     };
   }, []);
 
-  const me = state.kind === "ready" ? state.me : undefined;
-  return (
-    <>
-      <AppNav who={me ? (firstName(me.user.name) ?? me.user.email) : undefined} email={me?.user.email} />
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-12">
-        {state.kind === "loading" && <p className="text-base text-muted-foreground">Signing you in</p>}
-        {state.kind === "failed" && (
-          <FailedCard className="max-w-2xl" title="Something went wrong" message={state.message} retry={() => window.location.reload()} />
-        )}
-        {me && !me.approved && <NotApproved me={me} />}
-        {me?.approved && !me.sites?.length && (
-          <AddSite
-            name={firstName(me.user.name)}
-            onAdded={async (id) => {
-              setState({ kind: "ready", me: await api<Me>("/me") });
-              router.replace(`/dashboard/?site=${id}`);
-            }}
-          />
-        )}
-        {me?.approved && me.sites?.length ? <SiteSwitch me={me} chosen={params.get("site")} /> : null}
-      </main>
-    </>
-  );
-}
+  if (state.kind === "loading") {
+    return (
+      <Plain>
+        <p className="text-base text-muted-foreground">Signing you in</p>
+      </Plain>
+    );
+  }
+  if (state.kind === "failed") {
+    return (
+      <Plain>
+        <FailedCard className="max-w-2xl" title="Something went wrong" message={state.message} retry={() => window.location.reload()} />
+      </Plain>
+    );
+  }
 
-function SiteSwitch({ me, chosen }: { me: Me; chosen: string | null }) {
+  const { me } = state;
+  if (!me.approved) {
+    return (
+      <Plain me={me}>
+        <NotApproved me={me} />
+      </Plain>
+    );
+  }
+
   const sites = me.sites ?? [];
-  const current = sites.find((site) => site.id === chosen) ?? sites[0]!;
+  const view = params.get("view");
+  if (!sites.length) {
+    return (
+      <Plain me={me}>
+        <ToSetup />
+      </Plain>
+    );
+  }
+
+  // A site opens only when the address names it. Everything else is the list, for a company with one site as for one with several.
+  const current = siteAt(sites, params);
+  if (!current) {
+    return (
+      <Plain me={me} wide>
+        <SitesIndex me={me} />
+      </Plain>
+    );
+  }
   return (
-    <>
-      {sites.length > 1 && (
-        <nav className="flex flex-wrap gap-2" aria-label="Sites">
-          {sites.map((site) => (
-            <Link key={site.id} href={`/dashboard/?site=${site.id}`} className={buttonVariants({ variant: site.id === current.id ? "default" : "secondary" })}>
-              {site.name}, {new URL(site.origin).host}
-            </Link>
-          ))}
-        </nav>
-      )}
-      <SiteView key={current.id} siteId={current.id} onDeleted={() => window.location.replace("/dashboard/")} />
-    </>
+    <SiteView
+      key={current.id}
+      me={me}
+      row={current}
+      view={viewFrom(view)}
+      // The list of sites, not whichever site is left: a site was just deleted, and landing inside another one says nothing about that.
+      onDeleted={() => window.location.replace(SITES_HREF)}
+      onRenamed={() => void api<Me>("/me").then((next) => setState({ kind: "ready", me: next }), () => undefined)}
+    />
   );
 }
 
@@ -118,58 +131,11 @@ function NotApproved({ me }: { me: Me }) {
   );
 }
 
-function AddSite({ name, onAdded }: { name?: string; onAdded: (id: string) => void }) {
-  const [url, setUrl] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<Failure | null>(null);
-  const fields = useFieldErrors({ url: "site-url" });
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setFailure(null);
-    if (fields.show({ url: url.trim() ? undefined : "Paste your site's address." })) return;
-    setBusy(true);
-    try {
-      const site = await api<{ id: string }>("/sites", { method: "POST", body: { url } });
-      onAdded(site.id);
-    } catch (failure) {
-      if (!fields.showRefusal(failure)) setFailure(failureFrom("Couldn't add your site", failure));
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="grid items-start gap-10 md:grid-cols-2">
-      <div className="flex flex-col gap-4">
-        <h1 className="text-4xl font-medium tracking-[-0.03em] text-balance">Welcome{name ? `, ${name}` : ""}.</h1>
-        <p className="text-lg leading-7 text-muted-foreground">
-          Paste your site&apos;s address. Haptic reads its public pages while you add the script, then shows you when it connects.
-        </p>
-      </div>
-      <form onSubmit={submit} className="flex flex-col gap-4 rounded-xl border bg-muted p-6" noValidate>
-        <Field
-          id="site-url"
-          label="Your site's address"
-          required
-          error={fields.errors.url}
-          hint="The address people use your product at. You can add staging and others later."
-        >
-          <Input
-            {...fields.control("url", { hint: true })}
-            required
-            value={url}
-            onChange={(event) => {
-              setUrl(event.target.value);
-              fields.clear("url");
-            }}
-            placeholder="https://app.example.com"
-            autoComplete="url"
-            className="h-11 bg-card px-3.5 md:text-base"
-          />
-        </Field>
-        <Button type="submit" size="xl" disabled={busy}>
-          {busy ? "Adding" : "Add site"}
-        </Button>
-        <FormAlert failure={failure} />
-      </form>
-    </div>
-  );
+/** A company with no site yet adds its first one on the setup screens, one question at a time. */
+function ToSetup() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/dashboard/setup/");
+  }, [router]);
+  return <p className="text-base text-muted-foreground">Taking you to setup</p>;
 }

@@ -1,0 +1,1450 @@
+{
+  "version": 1,
+  "id": "site_bench_orangehrm",
+  "name": "OrangeHRM",
+  "origin": "https://opensource-demo.orangehrmlive.com",
+  "allowedOrigins": [
+    "https://opensource-demo.orangehrmlive.com"
+  ],
+  "appearance": {
+    "accent": "#1E6EF4",
+    "position": "bottom-right",
+    "launcherLabel": "Ask"
+  },
+  "notes": "",
+  "docs": [],
+  "pages": [
+    {
+      "path": "/web/index.php/admin/viewSystemUsers",
+      "title": "Admin",
+      "headings": [
+        "User Management",
+        "System Users"
+      ],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "User Management",
+        "Job",
+        "Organization",
+        "Qualifications",
+        "Nationalities",
+        "Corporate Branding",
+        "Configuration",
+        "Help",
+        "caret-up-fill icon",
+        "Reset",
+        "Search",
+        "Add"
+      ],
+      "fields": [
+        "Search",
+        "Username",
+        "Type for hints..."
+      ]
+    },
+    {
+      "path": "/web/index.php/buzz/viewBuzz",
+      "title": "Buzz",
+      "headings": [],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Buzz",
+        "Upgrade",
+        "Help",
+        "Post",
+        "Share Photos",
+        "Share Video",
+        "Most Recent Posts",
+        "Most Liked Posts",
+        "Most Commented Posts"
+      ],
+      "fields": [
+        "Search",
+        "What's on your mind?"
+      ]
+    },
+    {
+      "path": "/web/index.php/claim/viewAssignClaim",
+      "title": "Claim",
+      "headings": [
+        "Employee Claims"
+      ],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Submit Claim",
+        "My Claims",
+        "Employee Claims",
+        "Assign Claim",
+        "Help"
+      ],
+      "fields": [
+        "Search",
+        "Type for hints...",
+        "yyyy-mm-dd"
+      ]
+    },
+    {
+      "path": "/web/index.php/dashboard/index",
+      "title": "Dashboard",
+      "headings": [],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Dashboard",
+        "Upgrade",
+        "Help",
+        "stopwatch icon",
+        "Assign Leave",
+        "Leave List",
+        "Timesheets",
+        "Apply Leave",
+        "My Leave",
+        "My Timesheet"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/web/index.php/directory/viewDirectory",
+      "title": "Directory",
+      "headings": [],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Directory",
+        "Upgrade",
+        "Help"
+      ],
+      "fields": [
+        "Search",
+        "Type for hints..."
+      ]
+    },
+    {
+      "path": "/web/index.php/leave/viewLeaveList",
+      "title": "Leave",
+      "headings": [
+        "Leave List"
+      ],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Apply",
+        "My Leave",
+        "Entitlements",
+        "Configure",
+        "Leave List",
+        "Assign Leave",
+        "Help"
+      ],
+      "fields": [
+        "Search",
+        "yyyy-mm-dd",
+        "Type for hints...",
+        "Include Past Employees"
+      ]
+    },
+    {
+      "path": "/web/index.php/maintenance/purgeEmployee",
+      "title": "Administrator Access",
+      "headings": [],
+      "links": [],
+      "buttons": [
+        "Cancel",
+        "Confirm"
+      ],
+      "fields": [
+        "Username",
+        "Password"
+      ]
+    },
+    {
+      "path": "/web/index.php/performance/searchEvaluatePerformanceReview",
+      "title": "Performance",
+      "headings": [
+        "Manage Reviews",
+        "Employee Reviews"
+      ],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Configure",
+        "Manage Reviews",
+        "My Trackers",
+        "Employee Trackers",
+        "Help"
+      ],
+      "fields": [
+        "Search",
+        "Type for hints...",
+        "yyyy-mm-dd"
+      ]
+    },
+    {
+      "path": "/web/index.php/pim/contactDetails/empNumber/:id",
+      "title": "OrangeHRM",
+      "headings": [],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        },
+        {
+          "label": "Personal Details",
+          "to": "/web/index.php/pim/viewPersonalDetails/empNumber/:id"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Help",
+        "Contact Details",
+        "Save"
+      ],
+      "fields": [
+        "Search",
+        "Street 1",
+        "Street 2",
+        "City",
+        "State/Province",
+        "Zip/Postal Code",
+        "Home",
+        "Mobile",
+        "Work",
+        "Work Email",
+        "Other Email"
+      ]
+    },
+    {
+      "path": "/web/index.php/pim/viewDependents/empNumber/:id",
+      "title": "OrangeHRM",
+      "headings": [],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Help",
+        "Dependents"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/web/index.php/pim/viewEmergencyContacts/empNumber/:id",
+      "title": "OrangeHRM",
+      "headings": [],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Help",
+        "Emergency Contacts"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/web/index.php/pim/viewEmployeeList",
+      "title": "PIM",
+      "headings": [
+        "Employee Information"
+      ],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Employee List",
+        "Add Employee",
+        "Reports",
+        "Help",
+        "chevron-right icon"
+      ],
+      "fields": [
+        "Search",
+        "Type for hints...",
+        "Employee Id"
+      ]
+    },
+    {
+      "path": "/web/index.php/pim/viewImmigration/empNumber/:id",
+      "title": "OrangeHRM",
+      "headings": [],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Help",
+        "Immigration"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/web/index.php/pim/viewJobDetails/empNumber/:id",
+      "title": "OrangeHRM",
+      "headings": [],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Help",
+        "Job"
+      ],
+      "fields": [
+        "Search",
+        "yyyy-mm-dd",
+        "Include Employment Contract Details"
+      ]
+    },
+    {
+      "path": "/web/index.php/pim/viewMemberships/empNumber/:id",
+      "title": "OrangeHRM",
+      "headings": [],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Help",
+        "Memberships"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/web/index.php/pim/viewPersonalDetails/empNumber/:id",
+      "title": "OrangeHRM",
+      "headings": [],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        },
+        {
+          "label": "Contact Details",
+          "to": "/web/index.php/pim/contactDetails/empNumber/:id"
+        },
+        {
+          "label": "Emergency Contacts",
+          "to": "/web/index.php/pim/viewEmergencyContacts/empNumber/:id"
+        },
+        {
+          "label": "Dependents",
+          "to": "/web/index.php/pim/viewDependents/empNumber/:id"
+        },
+        {
+          "label": "Immigration",
+          "to": "/web/index.php/pim/viewImmigration/empNumber/:id"
+        },
+        {
+          "label": "Job",
+          "to": "/web/index.php/pim/viewJobDetails/empNumber/:id"
+        },
+        {
+          "label": "Salary",
+          "to": "/web/index.php/pim/viewSalaryList/empNumber/:id"
+        },
+        {
+          "label": "Report-to",
+          "to": "/web/index.php/pim/viewReportToDetails/empNumber/:id"
+        },
+        {
+          "label": "Qualifications",
+          "to": "/web/index.php/pim/viewQualifications/empNumber/:id"
+        },
+        {
+          "label": "Memberships",
+          "to": "/web/index.php/pim/viewMemberships/empNumber/:id"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Help",
+        "Personal Details",
+        "Save"
+      ],
+      "fields": [
+        "Search",
+        "First Name",
+        "Middle Name",
+        "Last Name",
+        "Employee Id",
+        "Other Id",
+        "Driver's License Number",
+        "yyyy-mm-dd",
+        "Male",
+        "Female",
+        "Test_Field"
+      ]
+    },
+    {
+      "path": "/web/index.php/pim/viewQualifications/empNumber/:id",
+      "title": "OrangeHRM",
+      "headings": [],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Help",
+        "Qualifications"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/web/index.php/pim/viewReportToDetails/empNumber/:id",
+      "title": "OrangeHRM",
+      "headings": [],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Help",
+        "Report-to"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/web/index.php/pim/viewSalaryList/empNumber/:id",
+      "title": "OrangeHRM",
+      "headings": [],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Help",
+        "Salary"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/web/index.php/recruitment/viewCandidates",
+      "title": "Recruitment",
+      "headings": [
+        "Candidates"
+      ],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Candidates",
+        "Vacancies",
+        "Help"
+      ],
+      "fields": [
+        "Search",
+        "Type for hints...",
+        "Enter comma seperated words...",
+        "From",
+        "To"
+      ]
+    },
+    {
+      "path": "/web/index.php/time/viewEmployeeTimesheet",
+      "title": "Time",
+      "headings": [
+        "Timesheets",
+        "Select Employee",
+        "Timesheets Pending Action"
+      ],
+      "links": [
+        {
+          "label": "Admin",
+          "to": "/web/index.php/admin/viewAdminModule"
+        },
+        {
+          "label": "PIM",
+          "to": "/web/index.php/pim/viewPimModule"
+        },
+        {
+          "label": "Leave",
+          "to": "/web/index.php/leave/viewLeaveModule"
+        },
+        {
+          "label": "Time",
+          "to": "/web/index.php/time/viewTimeModule"
+        },
+        {
+          "label": "Recruitment",
+          "to": "/web/index.php/recruitment/viewRecruitmentModule"
+        },
+        {
+          "label": "My Info",
+          "to": "/web/index.php/pim/viewMyDetails"
+        },
+        {
+          "label": "Performance",
+          "to": "/web/index.php/performance/viewPerformanceModule"
+        },
+        {
+          "label": "Dashboard",
+          "to": "/web/index.php/dashboard/index"
+        },
+        {
+          "label": "Directory",
+          "to": "/web/index.php/directory/viewDirectory"
+        },
+        {
+          "label": "Maintenance",
+          "to": "/web/index.php/maintenance/viewMaintenanceModule"
+        },
+        {
+          "label": "Claim",
+          "to": "/web/index.php/claim/viewClaimModule"
+        },
+        {
+          "label": "Buzz",
+          "to": "/web/index.php/buzz/viewBuzz"
+        }
+      ],
+      "buttons": [
+        "chevron-left icon",
+        "Upgrade",
+        "Timesheets",
+        "Attendance",
+        "Project Info",
+        "Help",
+        "View"
+      ],
+      "fields": [
+        "Search",
+        "Type for hints..."
+      ]
+    }
+  ],
+  "source": {
+    "url": "https://opensource-demo.orangehrmlive.com/web/index.php/dashboard/index",
+    "maxPages": 30,
+    "docs": [],
+    "maxDepth": 3,
+    "reader": "browser"
+  },
+  "createdAt": "2026-11-15T06:35:08.962Z",
+  "updatedAt": "2026-11-15T22:57:34.291Z"
+}

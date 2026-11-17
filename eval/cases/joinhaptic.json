@@ -1,4 +1,5 @@
 {
+ "about": "Haptic's own public site: a simple marketing page with an accordion and a two-step form.",
  "site": {
   "version": 1,
   "id": "site_joinhaptic",
@@ -1635,7 +1636,7 @@
       "Is Haptic ready for enterprise?"
      ],
      "text": [
-      "Meet Haptic",
+      "Haptic, the AI guide that lives in your product",
       "The AI guide that lives in your product. People say what they want to do, and Haptic points to exactly where to click, step by step.",
       "No tours to script or maintain. Haptic reads the page as it is right now and points to the control that gets the job done.",
       "During setup, Haptic reads your site and your help docs, so its directions match how your product really works.",
@@ -1736,7 +1737,8 @@
        "state": [
         "collapsed"
        ],
-       "context": "main › Is Haptic ready for enterprise?"
+       "context": "main › Is Haptic ready for enterprise?",
+       "offscreen": "below"
       },
       {
        "id": "e11",
@@ -1819,7 +1821,7 @@
       "Is Haptic ready for enterprise?"
      ],
      "text": [
-      "Meet Haptic",
+      "Haptic, the AI guide that lives in your product",
       "The AI guide that lives in your product. People say what they want to do, and Haptic points to exactly where to click, step by step.",
       "No tours to script or maintain. Haptic reads the page as it is right now and points to the control that gets the job done.",
       "During setup, Haptic reads your site and your help docs, so its directions match how your product really works.",
@@ -1927,24 +1929,21 @@
        "role": "link",
        "label": "Privacy",
        "href": "/privacy",
-       "context": "nav",
-       "offscreen": "below"
+       "context": "nav"
       },
       {
        "id": "e12",
        "role": "link",
        "label": "Terms",
        "href": "/terms",
-       "context": "nav",
-       "offscreen": "below"
+       "context": "nav"
       },
       {
        "id": "e13",
        "role": "link",
        "label": "[email]",
        "href": "external:",
-       "context": "nav",
-       "offscreen": "below"
+       "context": "nav"
       }
      ],
      "truncated": false

@@ -18,12 +18,13 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
+export async function api<T>(path: string, init?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<T> {
   const response = await fetch(`/api/app${path}`, {
     method: init?.method ?? "GET",
     headers: init?.body === undefined ? undefined : { "content-type": "application/json" },
     body: init?.body === undefined ? undefined : JSON.stringify(init.body),
     credentials: "same-origin",
+    signal: init?.signal,
   }).catch(() => null);
   // The browser's own words for this differ in each browser, and none of them say what to do.
   if (!response) throw new ApiError(0, "Haptic couldn't be reached. Check your connection and try again.");
@@ -74,17 +75,62 @@ export interface Correction {
   createdAt: string;
 }
 
+/** One step someone taught Haptic, with the sentence the dashboard shows it as. Names only, never what was typed. */
+export interface TaughtStep {
+  kind: "press" | "choose" | "type" | "check" | "uncheck" | "enter";
+  path: string;
+  role: string;
+  label: string;
+  context?: string;
+  dialog?: string;
+  choice?: string;
+  row?: true;
+  /** Its words say it saves, sends, pays or deletes: always the visitor's click. */
+  commits?: true;
+  /** Left for the visitor in Do it with me. */
+  leave?: true;
+  note?: string;
+  /** "On /budgets, press New budget". */
+  text: string;
+  /** The recorder couldn't read a name for its control. It has to be named or deleted before saving. */
+  unnamed: boolean;
+}
+
+/** A route someone taught Haptic by doing the task, as saved. */
+export interface TaughtRoute {
+  id: string;
+  question: string;
+  steps: TaughtStep[];
+  createdAt: string;
+  by?: string;
+}
+
+/** A teach session: waiting for the tab to open, under way, steps ready to review, or done with. */
+export interface TeachSession {
+  id: string;
+  question: string;
+  status: "waiting" | "teaching" | "ready" | "saved" | "cancelled" | "expired";
+  createdAt: string;
+  expiresAt: string;
+  by: string | null;
+  stepCount: number;
+  steps: TaughtStep[] | null;
+}
+
 export interface Site {
   id: string;
   name: string;
   origin: string;
   allowedOrigins: string[];
   scriptUrl: string;
-  appearance: { accent: string; position: "bottom-right" | "bottom-left"; launcherLabel: string };
+  /** `launcher` is the Ask button's own colour. Missing means Ink. */
+  appearance: { accent: string; position: "bottom-right"; launcherLabel: string; launcher?: string };
   notes: string;
   docs: {
     budget: number;
     used: number;
+    /** The longest request that adds a doc, in characters as sent, and what to say when one is longer. */
+    bodyLimit: { max: number; message: string };
     list: { title: string; source: string; pasted: boolean; chars: number; inPrompt: boolean }[];
   };
   /** Answering in words from the docs. `chosen` is null while the site follows the default, which is on once it has docs. */
@@ -94,6 +140,8 @@ export interface Site {
   reading: Reading | null;
   corrections: Correction[];
   blocked: ControlName[];
+  /** Routes taught by doing the task. Absent from a server older than Teach Haptic. */
+  taught?: TaughtRoute[];
 }
 
 export type Outcome =
@@ -112,7 +160,9 @@ export type Outcome =
   // Haptic was asked for a control the company said never to point at.
   | "blocked"
   | "abandoned"
-  | "under_way";
+  | "under_way"
+  // Only in the count of how guides ended: under way, with no new step for two minutes. A single guide says so with `paused`.
+  | "paused";
 
 export interface Insights {
   days: number;
@@ -127,6 +177,8 @@ export interface Insights {
     step_count: number;
     helped: boolean | null;
     outcome: Outcome;
+    /** Under way, with nothing new for two minutes. See `paused` on LiveGuide. */
+    paused?: boolean;
     wrong_clicks: number;
     ms_to_pointer: number | null;
   }[];
@@ -138,6 +190,54 @@ export interface Insights {
   health: HealthGroup[];
   /** Groups the company was told about in the last month. */
   alerts: { key: string; sent_at: string; emailed: boolean }[];
+}
+
+/** One of a site's newest questions, with the step it has reached. */
+export interface LiveGuide {
+  id: string;
+  question: string;
+  started_at: string;
+  started_path: string;
+  step_count: number;
+  helped: boolean | null;
+  outcome: Outcome;
+  /**
+   * Still open, with no new step for two minutes, by the database's clock. The person has most likely
+   * walked away, so the dashboard says paused and not that Haptic is showing a step. A new step ends it.
+   */
+  paused?: boolean;
+  /** When it last moved: its newest step, or its start. */
+  moved_at: string;
+  /** The step it is on, or ended on. Null before the first answer comes back. */
+  last: { n: number; path: string; target_label: string | null; said: string; status: "continue" | "done" | "stuck" } | null;
+}
+
+/** What is happening on a site right now. `stamp` changes whenever anything about the last day's questions does. */
+export interface Live {
+  stamp: string;
+  guides: LiveGuide[];
+}
+
+/** A site's icon and its own colour, as its first page declares them. Either may be missing. */
+export interface Brand {
+  icon: string | null;
+  /** #RRGGBB, and only a colour that would do for the pointer. */
+  colour: string | null;
+  from: "stylesheet" | "theme-color" | "manifest" | "icon" | null;
+}
+
+/** A site as its card on the list of sites shows it. */
+export interface SiteCard {
+  id: string;
+  name: string;
+  origin: string;
+  connected: boolean;
+  /** Questions and finished guides in the last seven days. */
+  guides: number;
+  finished: number;
+  last: { question: string; started_at: string; outcome: Outcome; paused?: boolean } | null;
+  /** The last fortnight, one entry for each day that had a question. */
+  daily: { day: string; guides: number }[];
 }
 
 export interface HealthGroup {
@@ -159,6 +259,7 @@ export interface GroupGuide {
   started_at: string;
   helped: boolean | null;
   outcome: Outcome;
+  paused?: boolean;
   step_count: number;
 }
 
@@ -177,6 +278,7 @@ export interface GuideDetail {
   origin: string | null;
   helped: boolean | null;
   outcome: Outcome;
+  paused?: boolean;
   /** Steps asked again because the page changed while the model was answering. */
   cancelled_steps: number;
   steps: {
@@ -209,4 +311,10 @@ export const OUTCOME_LABEL: Record<Outcome, string> = {
   blocked: "A control you ruled out",
   abandoned: "Abandoned",
   under_way: "Under way",
+  paused: "Paused",
 };
+
+/** The viewer's clock against UTC in minutes, sent with anything counted by day, so a day starts at their midnight. */
+export function clock(): string {
+  return `tz=${new Date().getTimezoneOffset()}`;
+}

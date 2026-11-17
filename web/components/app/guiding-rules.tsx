@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, type ControlName, type Correction, type Site } from "@/lib/app-api";
 import { Card, CardTitle, when } from "./parts";
+import { TaughtRoutes } from "./teach";
 
 // What a company changes about how Haptic guides on its site. Corrections are
 // made from a guide's steps ("Point here instead"). The list of controls Haptic
@@ -189,14 +190,23 @@ export function PointHereInstead({ siteId, guideId, step, path, onSaved }: { sit
   );
 }
 
-/** The corrections made so far, and the controls Haptic must never point at. */
+/** The corrections made so far, the routes taught by doing, and the controls Haptic must never point at. */
 export function GuidingRules({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
   return (
-    <Card>
-      <CardTitle>How Haptic guides here</CardTitle>
-      <Corrections site={site} onChange={onChange} />
-      <NeverPointAt site={site} onChange={onChange} />
-    </Card>
+    <>
+      <Card>
+        <CardTitle>Corrections</CardTitle>
+        <Corrections site={site} onChange={onChange} />
+      </Card>
+      <Card>
+        <CardTitle>Taught by doing</CardTitle>
+        <TaughtRoutes site={site} onChange={onChange} />
+      </Card>
+      <Card>
+        <CardTitle>Never point at</CardTitle>
+        <NeverPointAt site={site} onChange={onChange} />
+      </Card>
+    </>
   );
 }
 
@@ -213,7 +223,6 @@ function Corrections({ site, onChange }: { site: Site; onChange: (site: Site) =>
   }
   return (
     <div className="flex flex-col gap-3">
-      <h3 className="text-base font-medium">Corrections</h3>
       {site.corrections.length ? (
         <ul className="flex flex-col divide-y rounded-lg border bg-card">
           {[...site.corrections].reverse().map((correction) => (
@@ -233,7 +242,7 @@ function Corrections({ site, onChange }: { site: Site; onChange: (site: Site) =>
         </ul>
       ) : (
         <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
-          None yet. When Haptic points at the wrong thing, open the guide under Every question and choose Point here instead on that step. Haptic uses it
+          None yet. When Haptic points at the wrong thing, open the guide under Questions and choose Point here instead on that step. Haptic uses it
           for the same question, questions like it, and other questions on that page.
         </p>
       )}
@@ -272,7 +281,6 @@ function NeverPointAt({ site, onChange }: { site: Site; onChange: (site: Site) =
   }
   return (
     <div className="flex flex-col gap-3">
-      <h3 className="text-base font-medium">Never point at</h3>
       <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
         Controls that should only ever be used on purpose, such as Delete workspace or Transfer ownership. If Haptic is asked for one, it does not
         move the pointer, and says it can&apos;t help with that here.

@@ -20,8 +20,8 @@ export function Features() {
         <DocsDemo />
       </Feature>
       <Feature
-        title="Never reads what people type."
-        description="Haptic reads the names of buttons and fields. What people type stays in the browser, and emails and long numbers are masked before anything is sent."
+        title="Never sends what people type."
+        description="Haptic reads the names of buttons and fields, not what's in them. What fields hold stays in the browser and is cut wherever the page repeats it. Emails and long numbers are masked before sending, except what a person wrote in their question."
       >
         <PrivacyDemo />
       </Feature>

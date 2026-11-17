@@ -1,4 +1,5 @@
 import {
+  ACT_VERSION,
   GUIDE_ID,
   GUIDE_OUTCOMES,
   MAX_ASKED,
@@ -13,11 +14,14 @@ import {
   type TurnReply,
   type TurnRequest,
 } from "../shared/types.ts";
+import { publicActing } from "./acting.ts";
 import type { Alert, Budget, Gate } from "./budget.ts";
 import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
-import { parseOutlineReport, visitorHash } from "./learned.ts";
+import { networkHash, parseOutlineReport, visitorHash } from "./learned.ts";
 import { ceilingFor, measureTurn, TurnCancelled, TurnError } from "./model.ts";
 import type { TurnMeasure } from "./model.ts";
+import { teachCall, type TeachStore } from "./teach.ts";
+import { taughtFor } from "../shared/teach.ts";
 
 // What the Haptic server answers: the widget file, each site's public
 // settings, and the one endpoint the widget calls for every step of a guide.
@@ -35,14 +39,21 @@ export interface AppParts {
   loadSite(id: string, hurry?: boolean): Promise<SiteContext | undefined>;
   /** The widget bundle, as the text of one script. */
   widget(): Promise<string>;
+  /** The code that acts, widget-act.js, which the widget loads from beside itself on a site with acting on. Without it, such a site is guided by pointer. */
+  widgetActing?(): Promise<string>;
+  /** Teach mode, widget-teach.js, which the widget loads from beside itself only for a teaching link (src/shared/teach.ts). Without it, the page says teach mode couldn't be loaded. */
+  widgetTeaching?(): Promise<string>;
   /** How long browsers may keep the widget before asking again, in seconds. 0 for never. */
   widgetMaxAge: number;
   /** True when this caller has asked for too many steps lately. */
   overLimit(key: string): boolean | Promise<boolean>;
   /**
-   * Told when a guide's first question arrives, before the model is asked.
+   * Told when a guide's first question is about to be put to the model.
    * Recording it here means a guide whose first step fails, or whose visitor
-   * leaves before the answer, is still on record. Must not throw.
+   * leaves before the answer, is still on record. It is not told of a
+   * question the off switch or the budget refused: the model is never asked
+   * that one, so recording it would let anything that can send a request put
+   * questions on a site's dashboard for nothing. Must not throw.
    */
   onAsk?(request: TurnRequest, site: SiteContext, origin: string | undefined): void;
   /** The off switch, as this host keeps it: true stops every model call for the site. A site's own `off` is checked as well. */
@@ -69,15 +80,21 @@ export interface AppParts {
   onSeen?(site: SiteContext, origin: string, allowed: boolean): void;
   /**
    * Told about an outline of a page a visitor saw, for learning the site.
-   * `visitor` is already hashed with the site's id. Must not throw.
+   * `visitor` is already hashed with the site's id, and so is `network`, the
+   * network the caller's address belongs to (`networkHash` in learned.ts).
+   * It is absent when the caller's address is not known. Must not throw.
    */
-  onOutline?(site: SiteContext, visitor: string, outline: PageOutline): void;
+  onOutline?(site: SiteContext, visitor: string, outline: PageOutline, network?: string): void;
   /** Told how a guide ended, whether it helped, or that the visitor asked for a person. Must not throw. */
   onReport?(site: SiteContext, guide: string, report: GuideReport): void;
   /** How the handoff form is posted to a company's webhook. The web's own fetch unless a test says otherwise. */
   fetch?: typeof fetch;
   /** True on a developer's machine, where a webhook may be on the same machine. */
   localWebhooks?: boolean;
+  /** Where teach sessions are kept (src/server/teach.ts). Without one, teach mode is refused. */
+  teach?: TeachStore;
+  /** True when this caller has made too many teach calls lately. `overLimit` when not given. */
+  overTeachLimit?(key: string): boolean | Promise<boolean>;
 }
 
 const MAX_BODY_BYTES = 512 * 1024;
@@ -118,20 +135,28 @@ export function createApp(parts: AppParts) {
       });
     }
 
-    if (request.method === "GET" && url.pathname === "/widget.js") {
+    const scripts: Record<string, (() => Promise<string>) | undefined> = { "/widget.js": parts.widget, "/widget-act.js": parts.widgetActing, "/widget-teach.js": parts.widgetTeaching };
+    const scriptFor = request.method === "GET" ? scripts[url.pathname] : undefined;
+    if (scriptFor) {
       const cache = parts.widgetMaxAge > 0 ? `public, max-age=${parts.widgetMaxAge}` : "no-store";
-      return new Response(await parts.widget(), { headers: { ...cors, "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": cache } });
+      const script = await scriptFor.call(parts);
+      return new Response(script, { headers: { ...cors, "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": cache } });
     }
 
     const siteMatch = /^\/v1\/sites\/([^/]+)$/.exec(url.pathname);
     if (request.method === "GET" && siteMatch) {
       const site = await parts.loadSite(decodeURIComponent(siteMatch[1] ?? ""));
       if (!site) return json(404, { error: "No site with that id. Check the data-site attribute on the script tag." });
-      const allowed = originAllowed(site, origin);
+      const allowed = mayRead(site, origin);
       if (origin) parts.onSeen?.(site, origin, allowed);
-      if (!allowed) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      if (!allowed) return json(403, { error: refusal(origin) });
       const config: PublicSiteConfig = { name: site.name, appearance: site.appearance };
       if (await switchedOff(parts, site)) config.off = true;
+      else {
+        // Only a site with acting on says anything about it, so every other site's settings read as they always have.
+        const acting = publicActing(site);
+        if (acting) config.acting = acting;
+      }
       if (site.learn === false) config.learn = false;
       if (site.blocked?.length) config.blocked = site.blocked;
       const handoff = publicHandoff(site.handoff);
@@ -144,9 +169,8 @@ export function createApp(parts: AppParts) {
       if (!turn) return json(400, { error: "That isn't a valid turn request." });
       const site = await parts.loadSite(turn.site, true);
       if (!site) return json(404, { error: "No site with that id." });
-      if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      if (!mayWrite(site, origin)) return json(403, { error: refusal(origin) });
       if (await parts.overLimit(`${site.id} ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
-      if (turn.step === 0 && turn.guide) parts.onAsk?.(turn, site, origin);
 
       const streamed = (request.headers.get("Accept") ?? "").includes(STREAM_TYPE);
       // A page that was open before the switch was thrown still has its launcher, so a step can arrive.
@@ -160,6 +184,9 @@ export function createApp(parts: AppParts) {
         const reply = fixedReply(admitted.gate.why === "caller" ? FIXED_SAY.visitorLimit : FIXED_SAY.resting);
         return streamed ? lines(cors, undefined, async (line) => line(reply)) : json(200, reply);
       }
+
+      // The question goes on record now that the model is about to be asked, and not before: one refused above is not recorded.
+      if (turn.step === 0 && turn.guide) parts.onAsk?.(turn, site, origin);
 
       // A widget that asks for it gets the step as it forms: the control to point at first, then the whole reply.
       if (streamed) return streamTurn(parts, site, turn, caller, admitted, cors, origin, request.signal);
@@ -179,7 +206,9 @@ export function createApp(parts: AppParts) {
 
     // How a guide ended, and later whether it helped. The widget sends it as
     // text/plain, which needs no preflight, so it still arrives when the page
-    // is being left.
+    // is being left. It is the widget's word: whoever keeps it decides what
+    // of it to believe (`Store.report` keeps "finished", which is billed, only
+    // when the steps this server recorded bear it out).
     const reportMatch = /^\/v1\/guides\/([^/]+)\/report$/.exec(url.pathname);
     if (request.method === "POST" && reportMatch) {
       const guide = reportMatch[1] ?? "";
@@ -187,7 +216,7 @@ export function createApp(parts: AppParts) {
       if (!GUIDE_ID.test(guide) || !report) return json(400, { error: "That isn't a valid report." });
       const site = await parts.loadSite(report.site, true);
       if (!site) return json(404, { error: "No site with that id." });
-      if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      if (!mayWrite(site, origin)) return json(403, { error: refusal(origin) });
       if (await parts.overLimit(`${site.id} ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
       parts.onReport?.(site, guide, report);
       return json(200, { ok: true });
@@ -196,16 +225,22 @@ export function createApp(parts: AppParts) {
     // An outline of a page a visitor saw, for learning the site. Sent as
     // text/plain, which needs no preflight. Answered at once: what is learned
     // is written after the response, and never on a step's path.
+    //
+    // What is learned here ends up in the prompt of everyone on the site. Like
+    // every write it needs an Origin the site lists (`mayWrite`), which is a
+    // low bar, since any program can write the header itself. What such a
+    // caller cannot do is arrive from several networks at once, and that is
+    // what is counted (`networkHash`).
     if (request.method === "POST" && url.pathname === "/v1/outline") {
       const report = parseOutlineReport(await readJson(request));
       if (!report) return json(400, { error: "That isn't a valid outline." });
       const site = await parts.loadSite(report.site, true);
       if (!site) return json(404, { error: "No site with that id." });
-      if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      if (!mayWrite(site, origin)) return json(403, { error: refusal(origin) });
       if (await parts.overLimit(`${site.id} outline ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
       // Without the widget's random id there is no way to count this visitor once, so the outline isn't used.
       if (site.learn === false || !report.visitor) return json(200, { ok: false });
-      parts.onOutline?.(site, await visitorHash(site.id, report.visitor), report.outline);
+      parts.onOutline?.(site, await visitorHash(site.id, report.visitor), report.outline, await networkHash(site.id, caller));
       return json(200, { ok: true });
     }
 
@@ -216,7 +251,7 @@ export function createApp(parts: AppParts) {
       if (!form) return json(400, { error: "That isn't a valid handoff. It needs an email address." });
       const site = await parts.loadSite(form.site);
       if (!site) return json(404, { error: "No site with that id." });
-      if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      if (!mayWrite(site, origin)) return json(403, { error: refusal(origin) });
       // Its own allowance, so a burst of steps doesn't cost someone their way to a person, and the reverse.
       if (await parts.overLimit(`${site.id} handoff ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
       if (!site.handoff?.webhook) return json(404, { error: "This site has nowhere to send that." });
@@ -225,6 +260,18 @@ export function createApp(parts: AppParts) {
       if (form.guide) parts.onReport?.(site, form.guide, { site: site.id, handoff: true });
       return json(200, { ok: true });
     }
+
+    // Teach mode: a person at the company showing Haptic a task in their own app. Never a model call.
+    const teaching = await teachCall(
+      { loadSite: (id) => parts.loadSite(id), teach: parts.teach, overLimit: (key) => (parts.overTeachLimit ?? parts.overLimit)(key) },
+      request,
+      url,
+      origin,
+      caller,
+      () => readJson(request),
+      json,
+    );
+    if (teaching) return teaching;
 
     return undefined;
   };
@@ -236,6 +283,8 @@ function parseReport(body: unknown): GuideReport | undefined {
   if (typeof raw.site !== "string") return undefined;
   const report: GuideReport = { site: raw.site };
   if (GUIDE_OUTCOMES.includes(raw.outcome as GuideOutcome)) report.outcome = raw.outcome as GuideOutcome;
+  // Only with an outcome, and only a step a turn request could have carried (parseTurn takes 0 to 100).
+  if (report.outcome && Number.isInteger(raw.step) && (raw.step as number) >= 0 && (raw.step as number) <= 100) report.step = raw.step as number;
   if (typeof raw.helped === "boolean") report.helped = raw.helped;
   if (raw.handoff === true) report.handoff = true;
   return report.outcome || report.helped !== undefined || report.handoff ? report : undefined;
@@ -363,10 +412,90 @@ async function switchedOff(parts: AppParts, site: SiteContext): Promise<boolean>
   return site.off === true || (await parts.isOff?.(site)) === true;
 }
 
-/** The widget only works on origins the site lists. Requests with no Origin header (same-origin GETs, curl) pass. */
-function originAllowed(site: SiteContext, origin: string | undefined): boolean {
+/** One step in the server's log. Every value is a number, a yes or no, or a name from Haptic's own code. */
+export type TurnCounts = Record<string, string | number | boolean>;
+
+/** The roles the widget's reading gives a control. Any other text in a request's role is logged as "other", so nothing a page wrote reaches the log. */
+const LISTED_ROLES = new Set([
+  "button", "link", "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "option", "checkbox", "radio", "switch",
+  "combobox", "treeitem", "textbox", "searchbox", "slider", "spinbutton", "select", "clickable", "gridcell",
+]);
+
+/**
+ * One step as counts, for the server's log: nothing the visitor wrote and
+ * nothing from their page, not even its address. The fields on acting are
+ * there only when the widget asked to act: whether it was answered in act
+ * mode (or why not), what the model said to do, whether the server took
+ * over a click the model had left to the visitor, what the server's check
+ * left and why it removed the rest, and whether the step was the hand-over.
+ * With `site`, whether a route the company taught was in the step's prompt
+ * (`taught`), which is how a route can be seen to be used, or not, for a
+ * question; the route itself is not logged.
+ */
+export function turnCounts(request: TurnRequest, measure: TurnMeasure, site?: Pick<SiteContext, "taught">): TurnCounts {
+  const { reply } = measure;
+  const counts: TurnCounts = {
+    haptic: "turn",
+    site: request.site,
+    version: request.version ?? 1,
+    step: request.step,
+    closing: request.closing === true,
+    model: measure.model,
+    ms: measure.ms,
+    msToTarget: measure.msToTarget,
+    status: reply.status,
+    pointed: reply.target !== null,
+    // "pointed": the server pointed at the control the sentence named. "asked": the model was asked again. "logged": neither.
+    recheck: measure.recheck ? (measure.recheck.pointed ? "pointed" : measure.recheck.asked ? "asked" : "logged") : "none",
+  };
+  if (site) counts.taught = taughtFor(site.taught, request.goal) !== undefined;
+  if (!measure.acting) return counts;
+  counts.acting = reply.mode === "act" ? "on" : (measure.acting.refused ?? "off");
+  if (reply.mode !== "act") return counts;
+  counts.capped = measure.acting.capped === true;
+  counts.modelDo = measure.acting.modelDo ?? "none";
+  // The model left a click on a control Haptic could press to the visitor, and the server made it Haptic's.
+  counts.converted = measure.acting.converted === true;
+  counts.do = reply.do ?? "none";
+  counts.withheld = reply.withheld ?? "none";
+  // Which act the check took away, and the kind of control it was on: "choose" on a "radio", "unfit".
+  counts.removed = reply.removed ?? "none";
+  const role = request.snapshot.elements.find((element) => element.id === reply.target)?.role;
+  counts.role = !role ? "none" : LISTED_ROLES.has(role) ? role : "other";
+  counts.commits = reply.commits === true;
+  counts.handover = reply.status === "done" && reply.target !== null && reply.commits === true && !reply.do;
+  return counts;
+}
+
+/**
+ * Who may read a site's public settings: a page on an origin the site lists,
+ * or a request that names no origin, as a browser's GET to its own origin and
+ * a command line do. The settings are public, and nothing is written.
+ */
+function mayRead(site: SiteContext, origin: string | undefined): boolean {
   return !origin || site.allowedOrigins.includes(origin);
 }
+
+/**
+ * Who may ask for a step, report on a guide, send an outline or post the
+ * handoff form: only a request that names an origin the site lists. A browser
+ * names the page's origin on every POST and a page cannot change it, so this
+ * is what keeps one site's id from being used by another site's pages. A
+ * request with no Origin header is never the widget, and is refused.
+ *
+ * It does not tell the widget from a program: anything that is not a browser
+ * can write whatever Origin it likes. So nothing that matters rests on this
+ * check alone. What a request may cost is bounded by the site's budget and
+ * the caller's limit, and what is billed by what this server recorded itself
+ * (`endingFor` in db.ts).
+ */
+function mayWrite(site: SiteContext, origin: string | undefined): boolean {
+  return origin !== undefined && site.allowedOrigins.includes(origin);
+}
+
+/** What a refused caller is told. */
+const refusal = (origin: string | undefined): string =>
+  origin ? `${origin} isn't an allowed origin for this site.` : "This needs an Origin header naming one of the site's allowed origins.";
 
 /** The body as JSON, or undefined when it is too big or isn't JSON. */
 async function readJson(request: Request): Promise<unknown> {
@@ -403,7 +532,18 @@ const text = (value: unknown, max: number): string => (typeof value === "string"
 const texts = (value: unknown, count: number, max: number): string[] =>
   Array.isArray(value) ? value.slice(0, count).map((item) => text(item, max)).filter(Boolean) : [];
 
-export function parseTurn(body: unknown): TurnRequest | undefined {
+/**
+ * The visitor's date, if it is one and could be today somewhere. By time zone
+ * alone their date is the server's, the day before or the day after. Anything
+ * further off is a clock set wrong, and the server's own date is the better guess.
+ */
+function plausibleToday(value: unknown, now: Date): string | undefined {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const days = (Date.parse(`${value}T00:00:00Z`) - Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00Z`)) / 86_400_000;
+  return Math.abs(days) <= 1 ? value : undefined;
+}
+
+export function parseTurn(body: unknown, now: Date = new Date()): TurnRequest | undefined {
   if (!body || typeof body !== "object") return undefined;
   const raw = body as Record<string, unknown>;
   const snap = raw.snapshot as Record<string, unknown> | undefined;
@@ -417,9 +557,12 @@ export function parseTurn(body: unknown): TurnRequest | undefined {
     if (item.icon) element.icon = text(item.icon, 40);
     if (item.href) element.href = text(item.href, 200);
     if (item.context) element.context = text(item.context, 120);
-    const state = texts(item.state, 6, 16);
+    // Room for a state that takes a few words, like one saying a control only shows while the mouse is over its box.
+    const state = texts(item.state, 8, 40);
     if (state.length) element.state = state;
     if (item.offscreen === "above" || item.offscreen === "below") element.offscreen = item.offscreen;
+    const options = texts(item.options, 12, 30);
+    if (options.length) element.options = options;
     elements.push(element);
   }
   const snapshot: Snapshot = {
@@ -442,5 +585,12 @@ export function parseTurn(body: unknown): TurnRequest | undefined {
   if (raw.event) request.event = text(raw.event, 600);
   if (raw.change) request.change = text(raw.change, 2000);
   if (raw.offTrack === true) request.offTrack = true;
+  if (raw.closing === true) request.closing = true;
+  // A widget from before the version number sends none. That is version 1, and is left unset.
+  if (Number.isInteger(raw.version) && (raw.version as number) >= 1 && (raw.version as number) <= 9999) request.version = raw.version as number;
+  // Acting is asked for only in these exact words, and only by a widget that understands act replies. Whether the site allows it is decided for each step (acting.ts).
+  if (raw.mode === "act" && (request.version ?? 1) >= ACT_VERSION) request.mode = "act";
+  const today = plausibleToday(raw.today, now);
+  if (today) request.today = today;
   return request;
 }

@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "tsx --test test/*.test.ts",
     "preview": "next build && wrangler dev",
     "deploy": "next build && wrangler deploy",
     "deploy:embedded": "next build && node scripts/embed-site.mjs && wrangler deploy -c wrangler.embedded.jsonc"
@@ -34,6 +35,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "wrangler": "^4.161.0"
   }

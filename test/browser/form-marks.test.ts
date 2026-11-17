@@ -4,9 +4,11 @@ import type { Browser, Page } from "playwright";
 import { BROWSERS, launch, statesOf } from "./harness.ts";
 
 // A field carries what the page itself marks on it: that it must be filled in,
-// that it may be left empty, or that it failed the page's check. The model
-// needs these to know what a form asks for before it points at Submit. They
-// come from attributes and labels, never from what is in the field.
+// or that what it holds will not be accepted. The model needs these to know
+// what a form asks for before it points at Submit. "required" comes from
+// attributes and labels, never from what is in the field (isRequired in
+// src/widget/snapshot.ts). A form that marks only its optional fields, and the
+// browser's own check behind "invalid", are covered in snapshot.test.ts.
 
 for (const name of BROWSERS) {
   describe(`form marks in ${name}`, () => {
@@ -27,7 +29,7 @@ for (const name of BROWSERS) {
           <span role="radio" aria-checked="false" tabindex="0">Monthly</span>
         </div>
         <label>Nickname <input></label>`);
-      assert.deepEqual(states, { Email: ["required"], Team: ["required"], Department: ["collapsed", "required"], Monthly: ["required"], Nickname: [] });
+      assert.deepEqual(states, { Email: ["required"], Team: ["required"], Department: ["required", "collapsed"], Monthly: ["required"], Nickname: [] });
     });
 
     test("reads the star on a label, written out, hidden from screen readers or drawn by the stylesheet", async () => {
@@ -52,40 +54,23 @@ for (const name of BROWSERS) {
         "Budget (required)": ["required"],
         "Cost centre": ["collapsed"],
         // A button the page draws as a list takes its label's star too.
-        Owner: ["collapsed", "required"],
+        Owner: ["required", "collapsed"],
       });
     });
 
-    test("reads optional from the label or the placeholder, and required wins over it", async () => {
-      const states = await statesOf(tab, `
-        <label for="a">Personal note<span>(optional)</span></label><textarea id="a"></textarea>
-        <label>Middle name <input placeholder="Optional"></label>
-        <label>Tax ID (optional) <input required></label>
-        <label>Optional extras <input type="checkbox"></label>`);
-      assert.deepEqual(states, {
-        "Personal note(optional)": ["optional"],
-        "Middle name": ["optional"],
-        "Tax ID (optional)": ["required"],
-        // The word has to close the label or sit in brackets. Here it does neither.
-        "Optional extras": [],
-      });
-    });
-
-    test("reads invalid from aria-invalid, on the field or its radio group, and not from aria-invalid=false", async () => {
+    test("reads invalid from aria-invalid, and not from aria-invalid=false", async () => {
       const states = await statesOf(tab, `
         <input aria-label="Email address 1" aria-invalid="true">
         <input aria-label="Email address 2" aria-invalid="false">
-        <label>Amount <input required aria-invalid="true"></label>
-        <div role="radiogroup" aria-invalid="true"><span role="radio" aria-checked="true" tabindex="0">Card</span></div>`);
-      assert.deepEqual(states, { "Email address 1": ["invalid"], "Email address 2": [], Amount: ["required", "invalid"], Card: ["checked", "invalid"] });
+        <label>Amount <input required aria-invalid="true"></label>`);
+      assert.deepEqual(states, { "Email address 1": ["invalid"], "Email address 2": [], Amount: ["required", "invalid"] });
     });
 
-    test("says the same for a filled field as for an empty one, because it never looks inside", async () => {
+    test("lists a required field the same whether it is empty or filled in", async () => {
       const states = await statesOf(tab, `
         <label>Empty <input required></label>
-        <label>Filled <input required value="sam@example.com"></label>
-        <label>Wrong <input type="email" required value="not an email"></label>`);
-      assert.deepEqual(states, { Empty: ["required"], Filled: ["required"], Wrong: ["required"] });
+        <label>Filled <input required value="sam@example.com"></label>`);
+      assert.deepEqual(states, { Empty: ["required"], Filled: ["required"] });
     });
 
     test("marks fields only, so a button or link with a star in its words is left alone", async () => {

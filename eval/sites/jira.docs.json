@@ -1,0 +1,977 @@
+{
+  "version": 1,
+  "id": "site_bench_jira",
+  "name": "ASF Jira",
+  "origin": "https://issues.apache.org",
+  "allowedOrigins": [
+    "https://issues.apache.org"
+  ],
+  "appearance": {
+    "accent": "#1E6EF4",
+    "position": "bottom-right",
+    "launcherLabel": "Ask"
+  },
+  "notes": "",
+  "docs": [
+    {
+      "title": "Reporting",
+      "source": "https://confluence.atlassian.com/jirasoftwareserver0917/reporting-1431244832.html",
+      "text": "Cloud\nData Center 9.17\nVersions\n11.3\n11.2\n11.1\n11.0\n10.7\n10.6\n10.5\n10.4\n10.3\n10.2\n10.1\n10.0\n9.17\n9.16\n9.15\n9.14\n9.13\n9.12\nSee all\nReporting\nWorking in an agile project\nEstimating an issue\nFlagging an issue\nPrinting issue cards\nProcessing issues with Smart Commits\nReferencing issues in your development work\nTransitioning an issue\nRanking an issue\nViewing the development information for an issue\nViewing agile information for an issue\nSearching for issues\nManaging your user profile\nReporting\nConfiguring dashboards\nUsing Jira on a mobile device\nOn this page\nIn this section\nBurndown Chart\nBurnup Chart\nControl Chart\nCumulative Flow Diagram\nEpic Burndown\nEpic Report\nRelease Burndown\nSprint Report\nVelocity Chart\nVersion Report\nRelated content\nNo related content found\nStill need help?\nThe Atlassian Community is here for you.\nAsk the community\nReporting is an activity that you will be doing throughout a project. Jira Software has a range of reports that you can use to show information about your project, versions, epics, sprints, and issues.\nThe documentation in this section will help you configure and use the reports in Jira Software.\nSearch the topics in 'Reporting':\nGenerating a report\nNavigate to the desired board and click Reports. The last report viewed will be displayed.\nClick Switch report to view a different report. The reports in this list are specific to agile development.\nSee the 'Reports for Scrum projects' or 'Reports for Kanban projects' sections below for more details.\nIf you want to view reports that are not specific to agile development, select All reports from the Switch report drop-down, and view the reports that are not in the 'Agile' section.\nSee the 'General reports for analyzing issues' section below for more details.\nReports for Scrum projects\nChartApplies toPurpose\nBurndown Chart SprintsTracks the total work remaining, and projects the likelihood of achieving the sprint goal.\nThis helps your team manage its progress and respond accordingly.\nBurnup Chart SprintsTracks the changes in sprint scope and progress and helps visualize a sprint's completed work compared with its total scope. This helps your team understand what the progress is at each point of the release process or sprint.\nSprint Report SprintsShows the work completed or pushed back to the backlog in each sprint.\nThis helps you determine if your team is overcommitting or if there is scope creep.\nControl Chart Projects, versions, or sprintsShows the cycle time for your product, version, or sprint.\nThis helps you identify whether data from the current process can be used to determine future performance.\nCumulative Flow Diagram Any period of timeShows the statuses of issues over time.\nThis helps you identify potential bottlenecks that need to be investigated.\nEpic Report EpicsShows the progress towards completing an epic over time.\nThis helps you manage your team's progress by tracking the remaining incomplete and unestimated work.\nEpic Burndown EpicsSimilar to the Epic Report, but optimized for Scrum teams that work in sprints. Tracks the projected number of sprints required to complete the epic.\nThis helps you monitor whether the epic will release on time, so you can take action if work is falling behind.\nRelease Burndown VersionsSimilar to the Version Report, but optimized for Scrum teams that work in sprints.\nTracks the projected release date for a version. This helps you monitor whether the version will release on time, so you can take action if work is falling behind.\nVelocity Chart SprintsTracks the amount of work completed from sprint to sprint.\nThis helps you determine your team's velocity, and estimate the work your team can realistically achieve in future sprints.\nVersion Report VersionsTracks the projected release date for a version.\nThis helps you monitor whether the version will release on time, so you can take action if work is falling behind.\nReports for Kanban projects\nChartApplies toPurpose\nControl Chart Projects, versions, or sprintsShows the cycle time for your product, version, or sprint.\nThis helps you identify whether data from the current process can be used to determine future performance.\nCumulative Flow Diagram Any period of timeShows the statuses of issues over time.\nThis helps you identify potential bottlenecks that need to be investigated.\nGeneral reports for analyzing issues\nChartPurpose\nAverage Age ReportShows the average age of unresolved issues for a project or filter. This helps you see whether your backlog is being kept up to date.\nCreated vs Resolved Issues ReportMaps created issues versus resolved issues over a period of time. This helps you understand whether your overall backlog is growing or shrinking.\nNotes...\nViewing the chart — Areas in red show periods where more issues were created than resolved. Areas in green show periods where more were resolved than created.\nPie Chart ReportShows a pie chart of issues for a project or filter grouped by a specified field. This helps you see the breakdown of a set of issues, at a glance.\nFor example, you could create a chart to show issues grouped by Assignee for a particular version in a project (using a filter).\nRecently Created Issues Report Shows the number of issues created over a period of time for a project or filter, and how many were resolved. This helps you understand if your team is keeping up with incoming work.\nNotes...\nViewing the chart — The green portion of the bar shows the created issues that are resolved. The red portion shows created but unresolved issues as yet.\nResolution Time ReportShows the length of time taken to resolve a set of issues for a project or filter. This helps you identify trends and incidents that you can investigate further.\nSingle Level Group By Report Shows issues grouped by a particular field for a filter. This helps you group search results by a field, and see the overall status of each group.\nFor example, you could view the issues in a version of a project, grouped by Assignee.\nTime Since Issues Report For a date field and project or filter, maps the issues against the date that the field was set. This can help you track how many issues were created, updated, etc over a period of time.\nTime Tracking Report *Shows time tracking information on issues for a particular version of a project.\nNotes...\nThe table in the report shows the issues within the version:\nThere are four time tracking fields as follows:Original Estimate - The original estimate of the total amount of time it would take to complete this issue.\nEstimated Time Remaining - The current estimate of the remaining amount of time it would take to complete this issue.\nTime Spent - The amount of time spent on the issue. This is the aggregate amount of time that has been logged against this issue.\nAccuracy- The accuracy of the original estimate compared to the current estimate for the issue. It is the difference between the sum of the Time Spent and Estimated Time Remaining fields, and the Original Estimate field.\nIf sub-tasks are enabled, the *'∑'*column at the right of the field shows the aggregate time tracking information for each 'parent' issue (i.e. the sum of the issue's own values, plus those of its sub-tasks).\nThe last line of the table shows the aggregate time tracking information for the whole version.\nThe report also includes two bar-graphs (above the table), which represent the aggregate time tracking information for the version:\nThe first bar-graph ('Progress') shows the percentage of completed issues (green) and incomplete issues (orange) in this version:\nThe second bar-graph ('Accuracy' -blue) shows the accuracy of the original estimates.\nThe length of the Accuracy bar compared to the Progress bar indicates whether the issues in this version are ahead of or behind schedule. There are three cases:\nThe issues are on schedule with the original estimate.\nThe Accuracy bar is completely blue and is the same length as the Progress bar above it.\nThe issues are behind the original estimate (i.e. will take longer than originally estimated).\nThe Progress graph is longer than the Accuracy graph. The blue region represents the original estimated time, and the light-grey region is the amount of time by which issues are behind.\nThe issues are ahead of the original estimate (i.e. will take less time than originally estimated).\nThe Accuracy graph is longer than the Progress graph. The blue bar represents the original estimated time, and the light-grey region represents the amount of time by which the original estimates were overestimated.\nWhen generating the time tracking report, consider the following settings:\nFor fix version, choose the version on which you wish to report. The report will include all issues that belong to this version, that is, all issues whose 'Fix Version' is this version.\nFor sorting, choose how the issues in the report will be sorted:Least completed issues first — shows issues with the highest Estimated Time Remaining first\nMost completed issues first — shows issues with the lowest Estimated Time Remaining first\nFor issues, choose which issues will be included in the report:All — includes all issues assigned to this version\nIncomplete issues only — excludes issues which are either completed (i.e. have an Estimated Time Remaining of zero), or are not time-tracked (i.e. do not have an Original Estimate).\nNote that issue status does not affect which issues are displayed.\nFor sub-task inclusion (note: this will only appear if sub-tasks are enabled), choose which sub-tasks will be included in the report, for all parent issues that belong to this version:Only include sub-tasks with the selected version — includes an issue's sub-tasks only if the sub-tasks belong to the same version as the issue\nAlso include sub-tasks without a version set — includes an issue's sub-tasks if the sub-tasks belong to either the same version as the issue or to no version\nInclude all sub-tasks — includes all of an issue's sub-tasks, regardless of whether the sub-tasks belong to the same version, some other version or no version.\nNote that sub-tasks which belong to this version, but whose parent issues do not belong to this version, will always be included in the report.\nUser Workload Report * Shows how much work a user has been allocated, and how long it should take.\nFor a specified user, you'll be able to see the number of unresolved issues assigned to the specified user, and the remaining workload, on a per-project basis.\nVersion Workload Report *Shows how much outstanding work there is (per user and per issue) before a given version is complete.\nFor the specified version, you'll be able to see a list of unresolved issues assigned to each user, each user's workload, and a summary of the total remaining workload for the version.\nWorkload Pie Chart Report *Shows the relative workload for assignees of all issues for a project or filter.\n* Only available if your JIRA administrator has enabled time tracking.\nReports available in Confluence\nIf you have connected Jira to Confluence, you can create the following reports in Confluence.\nChartPurpose\nChange Log Displays a list of issues from Jira. This list can be static or dynamic, automatically updating as the status of your issues change in Jira.\nStatus Report The Status Report displays the progress of a Jira project and fix version in pie charts by status, priority, component, and issue type. The Status Report uses the Jira Chart macro, and is dynamic.\nOther reports\nAdditional reports (e.g. Gantt Chart Report, Timesheet Report, Jira SQL Plugin) are available for download from the Atlassian Marketplace.\nJira administrators can also create new reports with the app API — see our Tutorial - Creating a Jira report . If you don't want to build an app yourself, Atlassian Experts are available for custom projects.\nIssue filters can be exported to Microsoft Excel, where they can be further manipulated into charts and reports. See Working with search results.\nLast modified on Nov 21, 2025\nWas this helpful?\nYes\nNo\nIt wasn't accurate\nIt wasn't clear\nIt wasn't relevant\nProvide feedback about this article\nIn this section\nBurndown Chart\nBurnup Chart\nControl Chart\nCumulative Flow Diagram\nEpic Burndown\nEpic Report\nRelease Burndown\nSprint Report\nVelocity Chart\nVersion Report\nRelated content\nNo related content found\nPowered by Confluence and Scroll Viewport."
+    },
+    {
+      "title": "Searching for issues",
+      "source": "https://confluence.atlassian.com/jirasoftwareserver/searching-for-issues-939938681.html",
+      "text": "Cloud\nData Center 11.3\nVersions\n11.3\n11.2\n11.1\n11.0\n10.7\n10.6\n10.5\n10.4\n10.3\n10.2\n10.1\n10.0\n9.17\n9.16\n9.15\n9.14\n9.13\n9.12\nSee all\nSearching for issues\nWorking in an agile project\nEstimating an issue\nFlagging an issue\nPrinting issue cards\nProcessing issues with Smart Commits\nReferencing issues in your development work\nTransitioning an issue\nRanking an issue\nViewing the development information for an issue\nViewing agile information for an issue\nSearching for issues\nManaging your user profile\nWorking with issues\nReporting\nConfiguring dashboards\nUsing Jira on a mobile device\nOn this page\nIn this section\nBasic searching\nQuick searching\nAdvanced searching\nSearch syntax for text fields\nSaving your search as a filter\nWorking with search results\nRelated content\nNo related content found\nStill need help?\nThe Atlassian Community is here for you.\nAsk the community\nCan't find the issue that you are looking for? This page will show you how to search for issues in Jira. Any user can search for issues, although they will only see issue results from projects where they can view issues (i.e. 'Browse Project' permission).You'll find a step-by-step guide below that will show you how to run a search and use the search results. If you want more details on anything described on this page, see the related topics at the bottom of the page.\nOn this page:\n1. Define your search criteria\nThe first step in searching for issues is to define the criteria for your new search. You can define your search criteria in three different ways: using the quick search, using the basic search, or using the advanced search.\nQuick searchThe quick search is the fastest way to define search criteria. However, it is less precise than other search methods for complex queries (e.g. project = Jira AND status = Open AND priority = High). It is most useful when your search criteria is not complex, for example, you know the project key and some key words for an issue.\nTo use the quick search: Enter your search criteria in the search box in the header bar of Jira and press Enter.\nTip: If you know the issue key or project key, enter it before other search terms, e.g. \"JRA help link is broken\".\nBasic searchThe basic search is more precise than the quick search, but easier to use than the advanced search. It provides a user-friendly interface that lets you define complex queries, without needing to know how to use JQL (advanced searching).\nTo use the basic search: Navigate to Issues (in header) > Search for issues, then enter your search criteria.\nTip: If the advanced search is shown instead of the basic search, click Basic next to the icon.\nAdvanced searchThe advanced search is the most powerful of the three search methods. You can specify criteria that cannot be defined in the other searches (e.g. ORDER BY clause). However, you need to know how to construct structured queries using the Jira Query Language (JQL) to use this feature.\nTo use the advanced search: Navigate to Issues (in header) > Search for issues, then enter your search criteria.\nTip: If the basic search is shown instead of the advanced search, click Advanced next to the icon.\n2. Change your view of the search results\nYou have crafted the perfect search criteria and run the search. Your search results will be displayed in the issue navigator. The issue navigator allows you to change how the search results are displayed. For example, you may want to bring high priority issues to the top or hide certain fields.\nChange the sort order: Click the column name.\nShow/hide columns: Click Columns and choose the desired columns.\n3. Working with the search results\nYou've got the search results displaying the way that you want. Now you can work with the actual issues in the search results. The issue navigator lets you action individual issues, as well as the entire set of issues returned by your search.\nIndividual issues:\nView the issue: Click the issue key or name.\nAction individual issues: Click the cog icon next to the issue row and select an option.\nAll issues in the search results:\nExport the search results to different formats, like CSV and XML: Click Export and select the desired format.\nShare the search results: Click Share, then enter the recipient's details.\nCreate an RSS feed: Click Export > RSS (Issues) or RSS (Comments).\nBulk modify issues in search results: Click Tools and select all <n> issue(s) under Bulk Change.\n4. Save your search\nIf you frequently run the same search, you can save the search criteria as a filter. This saves you from having to manually redefine the search criteria every time. Jira applications also include a number of predefined system filters for common queries, such as 'My Open Issues', 'Reported by Me', 'Recently Viewed', and 'All Issues'.\nTo save your search as a filter: On the search results page, click Save as and enter a name for the filter. Your new filter will be shown in the left panel with your other favorite filters, filters shared with you, and the system filters. To run a filter, just click it.\nGood to know\nKeep in mind that your search won't include issues that have been archived. These are removed from Jira's index, and can't be searched for like other issues.\nNext steps\nRead the following related topics:\nQuick searching\nBasic searching\nAdvanced searching\nSaving your search as a filter\nWorking with search results\nLast modified on Jun 22, 2022\nWas this helpful?\nYes\nNo\nIt wasn't accurate\nIt wasn't clear\nIt wasn't relevant\nProvide feedback about this article\nIn this section\nBasic searching\nQuick searching\nAdvanced searching\nSearch syntax for text fields\nSaving your search as a filter\nWorking with search results\nRelated content\nNo related content found\nPowered by Confluence and Scroll Viewport."
+    },
+    {
+      "title": "Basic searching",
+      "source": "https://confluence.atlassian.com/jirasoftwareserver/basic-searching-939938708.html",
+      "text": "Cloud\nData Center 11.3\nVersions\n11.3\n11.2\n11.1\n11.0\n10.7\n10.6\n10.5\n10.4\n10.3\n10.2\n10.1\n10.0\n9.17\n9.16\n9.15\n9.14\n9.13\n9.12\nSee all\nBasic searching\nSearching for issues\nBasic searching\nQuick searching\nAdvanced searching\nSearch syntax for text fields\nSaving your search as a filter\nWorking with search results\nOn this page\nRelated content\nNo related content found\nStill need help?\nThe Atlassian Community is here for you.\nAsk the community\nThe basic search provides a user-friendly interface that lets you define complex queries, without needing to know how to use JQL (advanced searching).\nIf you don't have complex search criteria, you may want to use quick search instead.\nIf you are comfortable with the Jira Query Language (JQL), you may want to use advanced search instead. This search is more powerful than than the basic search.\nScreenshot: Basic search\nOn this page:\nBasic searching\nChoose Issues > Search for issues.\nIf there are existing search criteria, click the New filter button to reset the search criteria.\nIf the advanced search is shown instead of the basic search, click Basic (next to the Search button).\nWhy can't I switch between basic and advanced search?\nIn general, a query created using basic search will be able to be translated to advanced search, and back again. However, a query created using advanced search may not be able to be translated to basic search, particularly if:\nthe query contains an OR operator (note you can have an IN operator and it will be translated, e.g. project in (A, B))i.e. even though this query: (project = JRA OR project = CONF) is equivalent to this query: (project in (JRA, CONF)), only the second query will be translated.\nthe query contains a NOT operator\nthe query contains an EMPTY operator\nthe query contains any of the comparison operators: !=, IS, IS NOT, >, >=, <, <=\nthe query specifies a field and value that is related to a project (e.g. version, component, custom fields) and the project is not explicitly included in the query (e.g. fixVersion = \"4.0\", without the AND project=JRA). This is especially tricky with custom fields since they can be configured on a Project/Issue Type basis. The general rule of thumb is that if the query cannot be created in the basic search form, then it will not be able to be translated from advanced search to basic search.\nEnter the criteria for the search. You can search against specific fields and/or search for specific text.\nIf you are searching against a field and can't find the field you want, or the field is displaying greyed out text, see the Troubleshooting section below.\nIf you are searching for text, you can use special characters and modifiers in your search text, such as wildcards and logical operators. See Search syntax for text fields.\nThe search results will automatically update in the issue navigator, unless your administrator has disabled automatic updates of search results. If so, you will need to click the Update button on the field drop-down after every change.\nRunning a saved search\nSaved searches (also known as filters) are shown in the left panel, when using basic search. If the left panel is not showing, hover your mouse over the left side of the screen to display it.\nTo run a filter, e.g. My Open Issues, simply click it. The search criteria for the basic search will be set, and the search results will be displayed.\nNote, clicking the Recently Viewed filter will switch you to the advanced search, as the basic search cannot represent the ORDER BY clause in this filter.\nTroubleshooting\nWhy can't I find the field I want to choose?\nSome fields are only valid for a particular project/issue type context. For these fields, you must select the applicable project/issue type. Otherwise, the field is not available for selection.\nWhy are the field criteria displaying in grey text?\nSome fields are only valid for a particular project/issue type context. If you choose a field in your search, then remove all projects/issue types that reference the field, then the field is invalid. The invalid field does not apply to your search and displays in grey text.\nWhy is there a red exclamation mark in my field?\nSome field values are only valid for a particular project/issue type context. For example, you may have configured a project to use a status In Review in its workflow. If you select this project and status in your search, then change the search to filter for a project that doesn't use In Review, the status will be invalid and ignored in the search.\nWhy don't my search results automatically update?\nYour search results will always update automatically whenever any fields are changed, provided that your administrator has not disabled automatic updates of search results. Ask your administrator whether they have disabled automatic updates of search results.\nNext steps\nRead the following related topics:\nSearching for issues\nAdvanced searching\nSaving your search as a filter\nWorking with search results — find out how to use the issue navigator, export your search results, bulk modify issues, and share your search results.\nLast modified on Apr 13, 2022\nWas this helpful?\nYes\nNo\nIt wasn't accurate\nIt wasn't clear\nIt wasn't relevant\nProvide feedback about this article\nRelated content\nNo related content found\nPowered by Confluence and Scroll Viewport."
+    },
+    {
+      "title": "Working with search results",
+      "source": "https://confluence.atlassian.com/jirasoftwareserver/working-with-search-results-939938808.html",
+      "text": "Cloud\nData Center 11.3\nVersions\n11.3\n11.2\n11.1\n11.0\n10.7\n10.6\n10.5\n10.4\n10.3\n10.2\n10.1\n10.0\n9.17\n9.16\n9.15\n9.14\n9.13\n9.12\nSee all\nWorking with search results\nSearching for issues\nBasic searching\nQuick searching\nAdvanced searching\nSearch syntax for text fields\nSaving your search as a filter\nWorking with search results\nOn this page\nIn this section\nConstructing cron expressions\nRelated content\nNo related content found\nStill need help?\nThe Atlassian Community is here for you.\nAsk the community\nOnce you have run a search, your search results will be displayed in the issue navigator. You may want to triage the entire list of issues or may be looking for just one. This page will show you what you can do with your search results, from changing what you see in the issue navigator to modifying the issues.\nOn this page:\nThe following screenshot provides an overview of the key features of the issue navigator.\nScreenshot: Issue navigator (Detail view)\nFilter panel: Click << to collapse the filter panel so you can have more space in the detail view.\nIssue: Select an issue from this panel to see the details in the detail view window.\nFilters: Select a filter to see all the matching issues in the panel to the immediate right.\nViews: Click to switch between the detail view and list view.\nDetail view: Check out all the details about the selected issue in this detail view.\nChanging your view of the search results\nList view or Detail viewClick the Change view () dropdown to switch between List view and Detail view for your search results.\nList view: Shows your search results as a list of issues. This view is easiest to scan and is best when you only need to know a few details about each issue.\nDetail view: Shows your search results as a list of issues, with the right panel showing the details of the currently selected issue. This view is best when you need more information about the individual issues, or you want to quickly edit issues as you go (via inline edit for certain fields).\nChange the sort orderClick the column name. If you click the same column name more than once, the sort order will switch between ascending and descending. Note:\nYou cannot sort by the 'Images' column nor the sub-task aggregate columns (i.e. all columns beginning with '∑').\nIf you sort the search results for an advanced search, an 'ORDER BY' clause will be added/updated for your JQL query to reflect the order of issues in your search results.\nColumns — show/hide and moveYou can create different column configurations for yourself and for specific filters. To switch between different column configurations, click Columns and select one of the following tabs:\nMy Defaults: This is your default column configuration for search results.\nFilter: This is enabled if you are viewing the search results for a filter. It will override your default column configuration.\nSystem (shows if you are a Jira administrator): This is the column configuration that applies to all users. It will be overridden by a user's default column configuration and filter-specific column configurations.\nYou can also modify any of these configurations. Make sure you have switched the desired configuration, then do the following:\nShow/hide columns: Click Columns, choose the desired columns, then click Done.\nMove a column: Click the column name and drag it to the desired position.\nWhy can't I add a column to my column configuration?\nIf you cannot find a column, please make sure that you haven't run in to any of the following restrictions:\nYou can only see columns for issue fields that have not been hidden and that you have permissions to see.\nIt is possible to add any of the existing custom fields to the column list, as long as the fields are visible, and you have the right permissions.\nSome custom fields, even if selected, do not appear in the Issue Navigator for all issues. For example, project-specific custom fields will be shown only if the filter has been restricted to that project only. Issue type custom fields will only appear if the filter has been restricted to that issue type.\nWorking with individual issues\nYou can action individual issues in your search results, directly from the issue navigator. Note that the list of issues will remain constant even if you change an issue, so that it doesn't meet the original search criteria. The advantage of this is that you have a constant set of search results that you can work from when triaging issues.\nView an issueClick the key or summary of the issue.\nIf you are in List view, you will redirected to the issue (leaving the search results page).\nIf you are in Detail view, the issue details will display in the right panel.\nAction an issueTo action an issue (e.g. edit it, transition it, log work on it, etc):\nIf you are in List view, click the cog icon and select from the options.\nIf you are in Detail view, select the issue and action it the issue via the details panel.\nYou can also select an issue and action it via keyboard shortcuts in either views.\nTip: use the 'j' and 'k' keys to select the previous/next issue in the issue navigator.\nSharing your search results\nClick Share in the issue navigator to email a link to a search result or shared filter.\nRecipients will receive an email with a link to the search result and the content of the Note field (if specified). The subject of the email will state that you (using your username) shared the issue.\nIf you share the results of a filter, rather than an ad-hoc search, recipients will receive a link to the filter. Note, if the recipient does not have permission to view the filter, they will receive a link to the search results instead.\nDisplaying your search results in Confluence\nIf your Jira applications are connected to Confluence, you can display your search results on a Confluence page using the Jira issues macro. For instructions, see Jira issues macro.\nDisplaying your search results as a chart\nClick Export > Dashboard charts. Choose the desired chart from the dialog that is displayed, then click Save to Dashboard.\nThe chart will be added to your dashboard. For more information on what each chart shows, see Reporting.\nExporting your search results\nCSVClick Export > CSV (All fields) or Export > CSV (Current fields), and choose a delimiter to separate the values.\nThe CSV file will contain a header row with every applicable issue field, comment, and attachment in your search result.\nCSV (All fields): this will include every issue field, comment and attachment. The header row may contain multiple values of \"Comment\" and/or \"Attachment\" if your issues have multiple comments and/or attachments.\nCSV (Current fields): this will include only issue fields that are currently displayed.\nNote, large exports (e.g. many hundreds of issues) are not recommended. You can change the number of issues that are exported, by changing the value of the tempMax parameter in the URL.\nIf you're making a lot of exports, your Jira admin can disable the extra dialog that asks about delimiters. In this case, comma will be used as the default delimiter. Learn more\nHTMLClick Export > HTML (All fields) or Export > HTML (Current fields).\nThe HTML file will contain a header row with a value for every applicable issue field in your search result.\nHTML (All fields): this will create an HTML file for every issue field (excluding comments). This will only show the custom fields that are available for all of the issues in the search results. For example, if a field is only available for one project and multiple projects are in the search results then that field will not appear in the HTML file. The same goes for fields that are only available for certain issue types.\nHTML (Current fields): this will create an HTML file for the issue fields that are currently displayed.\nNote, large exports (e.g. many hundreds of issues) are not recommended. You can change the number of issues that are exported, by changing the value of the tempMax parameter in the URL.\nXMLClick Export > XML.\nYou can use the URL of the XML view in a Confluence Jira issues macro. However, you can also use the JQL or the URL of the issue search, which are easier to get.\nTo restrict which issue fields are returned in the XML export, specify the field parameter in your URL. For example, to include only the Issue key and Summary, add &field=key&field=summary to the URL. If the field parameter is not specified, the XML output will include all the issue fields. Otherwise, if one or more field parameters are specified, the XML output will contain only the Issue key plus your chosen field(s). See the \"List of fields for field parameter\" below.\nWordClick Export > Word.\nThe export will include the Description, Comments, and all other issue data, not just the issue fields that are currently configured in your Issue Navigator. Note, large exports (e.g. hundreds of issues) are not recommended.\nList of fields for field parameter (XML exports):\nShow me...\nValue\nSample XML output\nNotes\ntitle\n<title>[TEST-4] This is a test</title>\nlink\n<link>https://extranet.atlassian.com:443/Jira/browse/TEST-4</link>\nThis is a 'permalink' to the issue. For links between issues, see * issuelinks * (below).\nproject (or pid)\n<project id=\"10330\" key=\"TST\">Test</project>\ndescription\n<description>This is a detailed description of the issue.<description>\nenvironment\n<environment>Sydney network<environment>\nkey\n<key id=\"22574\">TEST-4</key>\nsummary\n<summary>This is a test<summary>\ntype (or issuetype)\n<type id=\"3\" iconUrl=\"https://extranet.atlassian.com:443/Jira/images/icons/task.gif\">Task</type>\nparent\n<parent id=\"22620\">TEST-5</parent>\nOnly relevant if the issue is a sub-task.\npriority\n<priority id=\"4\" iconUrl=\"https://extranet.atlassian.com:443/Jira/images/icons/priority_minor.gif\">Minor<priority>\nstatus\n<status id=\"5\" iconUrl=\"https://extranet.atlassian.com:443/Jira/images/icons/status_resolved.gif\">Resolved</status>\nresolution\n<resolution id=\"1\">Fixed</resolution>\nlabels\n<labels>\n<label>focus</label>\n<labels>\nassignee\n<assignee username=\"jsmith\">John Smith</assignee>\nreporter\n<assignee username=\"jsmith\">John Smith</assignee>\nsecurity\n<security id=\"10021\">Private</security>\nOnly relevant if a security level has been applied to the issue.\ncreated\n<created>Mon, 1 Sep 2008 17:30:03 -0500 (CDT)>/created>\nupdated\n<updated>Mon, 1 Sep 2008 17:30:03 -0500 (CDT)>/updated>\nresolved (or resolutiondate)\n<resolved>Mon, 1 Sep 2008 17:30:03 -0500 (CDT)>/resolved>\ndue (or duedate)\n<due>Mon, 1 Sep 2008 17:30:03 -0500 (CDT)>/due>\nversion (or versions)\n<version>2.4.7</version>\nfixfor (or fixVersions)\n<fixVersion>2.6</fixVersion>\ncomponent (or components)\n<component>Documentation</component>\nvotes\n<votes>1</votes>\ncomments (or comment)\n<comments>\n<comment id=\"39270\" author=\"jsmith\" created=\"Tue, 24 Feb 2009 16:45:02 -0600 (CST)\">this looks familiar</comment>\n<comment id=\"39273\" author=\"jbrown\" created=\"Tue, 24 Feb 2009 16:48:16 -0600 (CST)\">to me too</comment>\n</comments>\nattachments (or attachment)\n<attachments>\n<attachment id=\"30318\" name=\"Issue Navigator - Atlassian Jira-2.png\" size=\"16161\" author=\"yoz\" created=\"Mon, 9 Feb 2009 13:32:58 -0600 (CST)\"/>\n<attachment id=\"30323\" name=\"Windows XP (with Firefox 3.0).jpg\" size=\"5802\" author=\"vbharara\" created=\"Tue, 10 Feb 2009 00:30:11 -0600 (CST)\"/>\n</attachments>\nOnly available if your administrator has enabled attachments.\ntimeoriginalestimate\n<timeoriginalestimate seconds=\"600\">10 minutes</timeoriginalestimate>\nOnly available if your administrator has time tracking enabled.\ntimeestimate\n<timeestimate seconds=\"300\">5 minutes</timeestimate>\nOnly available if your administrator has time tracking enabled.\ntimespent\n<timespent seconds=\"300\">5 minutes</timespent>\nOnly available if your administrator has time tracking enabled.\naggregatetimeoriginalestimate\n<aggregatetimeoriginalestimate seconds=\"36000\">10 hours</aggregatetimeoriginalestimate>\nAggregate time for the issue plus all of its sub-tasks. Only available if your administrator has time tracking enabled.\naggregatetimeestimate\n<aggregatetimeremainingestimate seconds=\"18000\">5 hours</aggregatetimeremainingestimate>\nAggregate time for the issue plus all of its sub-tasks. Only available if your administrator has time tracking enabled.\naggregatetimespent\n<aggregatetimespent seconds=\"18000\">5 hours</aggregatetimespent>\nAggregate time for the issue plus all of its sub-tasks. Only available if your administrator has time tracking enabled.\ntimetracking\n<timeoriginalestimate seconds=\"600\">10 minutes</timeoriginalestimate>\n<timeestimate seconds=\"300\">5 minutes</timeestimate>\n<timespent seconds=\"300\">5 minutes</timespent>\n<aggregatetimeoriginalestimate seconds=\"36000\">10 hours</aggregatetimeoriginalestimate>\n<aggregatetimeremainingestimate seconds=\"18000\">5 hours</aggregatetimeremainingestimate>\n<aggregatetimespent seconds=\"18000\">5 hours</aggregatetimespent>\nThis is a convenient shorthand way of specifying all of the above six time tracking fields. Only available if your administrator has time tracking enabled.\nissuelinks\n<issuelinks>\n<issuelinktype id=\"10020\">\n<name>Duplicate</name>\n<inwardlinks description=\"is duplicated by\">\n<issuelink>\n<issuekey id=\"22477\">INTSYS-1009</issuekey>\n</issuelink>\n</inwardlinks>\n</issuelinktype>\n</issuelinks>\nsubtasks (or subtask)\n<subtasks>\n<subtask id=\"22623\">TEST-8</subtask>\n</subtasks>\ncustomfield_xxxxx\n<customfields>\n<customfield id=\"customfield_10112\" key=\"com.atlassian.Jira.plugin.system.customfieldtypes:select\">\n<customfieldname>Department</customfieldname>\n<customfieldvalues>\n<customfieldvalue>Adminstration</customfieldvalue>\n</customfieldvalues>\n</customfield>\n</customfields>\n\"xxxxx\" is the id of a given custom field e.g. this output is the result of specifying &field=customfield_10112\nallcustom\n<customfields>\n<customfield id=\"customfield_10112\" key=\"com.atlassian.Jira.plugin.system.customfieldtypes:select\">\n<customfieldname>Department</customfieldname>\n<customfieldvalues>\n<customfieldvalue>Adminstration</customfieldvalue>\n</customfieldvalues>\n</customfield>\n<customfield id=\"customfield_10111\" key=\"com.atlassian.Jira.plugin.system.customfieldtypes:select\">\n<customfieldname>Expenditure Type</customfieldname>\n<customfieldvalues>\n<customfieldvalue>Operating</customfieldvalue>\n</customfieldvalues>\n</customfield>\n</customfields>\nPrintable views\nPrintableClick Export > Printable.\nCreates a view of your search results in your browser that can be printed 'Landscape'. This view only contains issue Type, Key, Summary, Assignee, Reporter, Priority, Status, Resolution, Created date, Updated date, and Due date.\nFull contentClick Export > Full content.\nCreates a view of your search results in your browser that can be printed. This view contains all issue fields, comments, and a list of attachments (there is no preview) for every issue returned by your search.\nSubscribing to your search results\nA subscription provides you with a periodic notification for all issues returned by the search. If you want to be notified when a particular issue changes, you should watch the issue instead.\nEmailYour search must be saved as a filter, if you want to create an email subscription for it. You can create a subscription of any frequency for yourself and/or other users. Note, only the first 200 results of a filter are sent.\nRun the filter that you want to subscribe to, then click Details (next to filter name).\nFill in the 'Filter Subscription form' and click Subscribe.\nMore information:\nIf you choose 'Advanced' for your Schedule, see this page for help on constructing Cron expressions.\nYou can choose to specify a group as a recipient, however you can only select a group that you are a member of:You must have the 'Manage Group Filter Subscriptions' global permission.\nBe aware that the emailed filter results will be specific to each recipient. For example, if the filter uses the currentUser()  function, the search results will be evaluated with the recipient as the current user. This does not apply to distribution lists (group email aliases).\nBe careful about sharing a subscription with a group with many members, as it can take a long time to generate the emails to be sent, since the search needs to be executed for each user (as per the previous point).\nRSSClick Export > RSS (Issues) or Export > RSS (Comments). The URL of the page that shows can be used in your feed reader.\nTips:\nYou can change the number of issues that are returned, by changing the value of the tempMax parameter in the URL.\nIf you only want to receive current comments in an RSS feed, use the Date Updated field when doing a search. For example, to only receive comments created in the last week, add the Date Update field and set it to updated within the last 1 week.\nYou may need to log into your Jira applications to view restricted data in your feed. If so, you can add os_authType=basic to the feed URL\n(e.g. http://mycompany.com/anypage?os_authType=basic) to show a login dialog when viewing the feed.\nBulk modifying issues in your search results\nBulk operations let you action multiple issues at once. These actions include transitioning issues, deleting issues, moving issues, and watching/unwatching issues.\nClick Tools > Bulk Change: all <N> issue(s) and follow the 'Bulk Operation' wizard.\nFor more information, see Editing multiple issues at the same time.\nNext steps\nRead the following related topics:\nSearching for issues\nConstructing cron expressions\nLast modified on Apr 13, 2022\nWas this helpful?\nYes\nNo\nIt wasn't accurate\nIt wasn't clear\nIt wasn't relevant\nProvide feedback about this article\nIn this section\nConstructing cron expressions\nRelated content\nNo related content found\nPowered by Confluence and Scroll Viewport."
+    }
+  ],
+  "pages": [
+    {
+      "path": "/jira/browse/:id",
+      "title": "[KAFKA-[number]] KRaft migration rollback causes offline partitions when KRaft…",
+      "headings": [],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "New search",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Find filters",
+          "to": "/jira/secure/ManageFilters.jspa?filterView=search"
+        },
+        {
+          "label": "My open issues",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Reported by me",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "All issues",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Open issues",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Done issues",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Viewed recently",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Created recently",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Resolved recently",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Updated recently",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "logged in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Page 2: issues 51 - 100",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Page 3: issues [number]",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Page 4: issues [number]",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Page 5: issues [number]",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Go to the next page (2 of 20)",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "3.9.3",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "kraft",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "migration",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Michael Westerby",
+          "to": "/jira/secure/ViewProfile.jspa?name=mwesterby"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Undock",
+        "Save as",
+        "Tools",
+        "Project: Kafka",
+        "Type: All",
+        "Status: All",
+        "Assignee: All",
+        "More",
+        "Search",
+        "Resolution: Unresolved",
+        "Remove filter for Resolution",
+        "Advanced",
+        "Switch search results view"
+      ],
+      "fields": [
+        "Search",
+        "Contains text"
+      ]
+    },
+    {
+      "path": "/jira/browse/:id?page=com.atlassian.jira.plugin.system.issuetabpanels:all-tabpanel",
+      "title": "[KAFKA-[number]] KRaft migration rollback causes offline partitions when KRaft…",
+      "headings": [],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "KAFKA-[number]",
+          "to": "/jira/browse/:id"
+        },
+        {
+          "label": "3.9.3",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "kraft",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "migration",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "Michael Westerby",
+          "to": "/jira/secure/ViewProfile.jspa?name=mwesterby"
+        },
+        {
+          "label": "20/Apr/26 14:17",
+          "to": "/jira/browse/:id"
+        },
+        {
+          "label": "Luke Chen",
+          "to": "/jira/secure/ViewProfile.jspa?name=showuon"
+        },
+        {
+          "label": "mwesterby",
+          "to": "/jira/secure/ViewProfile.jspa?name=mwesterby"
+        },
+        {
+          "label": "mumrah",
+          "to": "/jira/secure/ViewProfile.jspa?name=mumrah"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Patch Available",
+        "Details",
+        "Description",
+        "Issue Links",
+        "Activity",
+        "All",
+        "Comments",
+        "Work Log",
+        "History",
+        "Transitions",
+        "Oldest first"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/login.jsp",
+      "title": "Log into Atlassian - ASF Jira",
+      "headings": [
+        "Log in"
+      ],
+      "links": [
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Can't log in?",
+          "to": "/jira/secure/ForgotLoginDetails.jspa"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Log in",
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Show password"
+      ],
+      "fields": [
+        "Search",
+        "Username*",
+        "Password*",
+        "Remember me"
+      ]
+    },
+    {
+      "path": "/jira/plugins/servlet/Wallboard",
+      "title": "",
+      "headings": [],
+      "links": [],
+      "buttons": [],
+      "fields": []
+    },
+    {
+      "path": "/jira/projects/KAFKA?selectedItem=com.atlassian.jira.jira-projects-plugin:components-page",
+      "title": "Kafka",
+      "headings": [
+        "Components"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Components of Kafka",
+        "Active",
+        "Archived"
+      ],
+      "fields": [
+        "Search",
+        "Filter component list"
+      ]
+    },
+    {
+      "path": "/jira/projects/KAFKA?selectedItem=com.atlassian.jira.jira-projects-plugin:report-page",
+      "title": "Kafka",
+      "headings": [
+        "All reports",
+        "Issue analysis",
+        "Forecast & management"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Average Age Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa"
+        },
+        {
+          "label": "Created vs Resolved Issues Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa"
+        },
+        {
+          "label": "Pie Chart Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa?reportKey=com.atlassian.jira.jira-core-reports-plugin:pie-report"
+        },
+        {
+          "label": "Recently Created Issues Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa"
+        },
+        {
+          "label": "Resolution Time Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa"
+        },
+        {
+          "label": "Single Level Group By Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa"
+        },
+        {
+          "label": "Time Since Issues Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa?reportKey=com.atlassian.jira.jira-core-reports-plugin:timesince-report"
+        },
+        {
+          "label": "Time Tracking Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa?reportKey=com.atlassian.jira.jira-core-reports-plugin:time-tracking"
+        },
+        {
+          "label": "User Workload Report",
+          "to": "/jira/secure/ConfigureReport!default.jspa"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Reports of Kafka"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/projects/KAFKA/issues/:id?filter=allopenissues",
+      "title": "[KAFKA-[number]] KRaft migration rollback causes offline partitions when KRaft…",
+      "headings": [],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Kafka",
+          "to": "/jira/projects/KAFKA/summary"
+        },
+        {
+          "label": "Issues of Kafka",
+          "to": "/jira/projects/KAFKA/issues"
+        },
+        {
+          "label": "Reports of Kafka",
+          "to": "/jira/projects/KAFKA?selectedItem=com.atlassian.jira.jira-projects-plugin:report-page"
+        },
+        {
+          "label": "Components of Kafka",
+          "to": "/jira/projects/KAFKA?selectedItem=com.atlassian.jira.jira-projects-plugin:components-page"
+        },
+        {
+          "label": "View all issues and filters",
+          "to": "/jira/issues"
+        },
+        {
+          "label": "KAFKA-[number] KRaft migration rollback causes of…",
+          "to": "/jira/browse/:id"
+        },
+        {
+          "label": "KAFKA-[number] Potential data loss during KRaft m…",
+          "to": "/jira/browse/:id"
+        },
+        {
+          "label": "Page 2: issues 51 - 100",
+          "to": "/jira/projects/KAFKA/issues"
+        },
+        {
+          "label": "Page 3: issues [number]",
+          "to": "/jira/projects/KAFKA/issues"
+        },
+        {
+          "label": "Page 4: issues [number]",
+          "to": "/jira/projects/KAFKA/issues"
+        },
+        {
+          "label": "Page 5: issues [number]",
+          "to": "/jira/projects/KAFKA/issues"
+        },
+        {
+          "label": "Go to the next page (2 of 20)",
+          "to": "/jira/projects/KAFKA/issues"
+        },
+        {
+          "label": "Kafka",
+          "to": "/jira/browse/KAFKA"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Skip to sidebar",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Collapse sidebar ( [ )",
+        "Switch filter",
+        "Order by Priority",
+        "Order by Priority: descending sort applied, activ…",
+        "Refresh results",
+        "Not available - this is the first issue",
+        "Next Issue'KAFKA-[number]'",
+        "Expand issue ( z )",
+        "Patch Available",
+        "Export",
+        "Details",
+        "Description",
+        "Issue Links"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/projects/KAFKA/summary",
+      "title": "Kafka",
+      "headings": [
+        "ActivitySwitch view"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Mickael Maison",
+          "to": "/jira/secure/ViewProfile.jspa?name=mimaison"
+        },
+        {
+          "label": "Kafka",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Kafka",
+        "Switch view"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/secure/BrowseProjects.jspa",
+      "title": "Browse projects",
+      "headings": [
+        "All project types - All categories"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "All categories",
+          "to": "/jira/secure/BrowseProjects.jspa?selectedCategory=all"
+        },
+        {
+          "label": "Previous",
+          "to": "/jira/secure/undefined&page=0"
+        },
+        {
+          "label": "2",
+          "to": "/jira/secure/undefined&page=2"
+        },
+        {
+          "label": "3",
+          "to": "/jira/secure/undefined&page=3"
+        },
+        {
+          "label": "4",
+          "to": "/jira/secure/undefined&page=4"
+        },
+        {
+          "label": "5",
+          "to": "/jira/secure/undefined&page=5"
+        },
+        {
+          "label": "6",
+          "to": "/jira/secure/undefined&page=6"
+        },
+        {
+          "label": "Next",
+          "to": "/jira/secure/undefined&page=2"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "All project types",
+        "Software",
+        "Business",
+        "Abdera",
+        "Accumulo",
+        "Ace",
+        "ActiveMQ",
+        "Airavata",
+        "Ambari",
+        "Ant",
+        "Apache Software Foundation",
+        "Apex",
+        "Aries",
+        "Artemis"
+      ],
+      "fields": [
+        "Search",
+        "Search for projects"
+      ]
+    },
+    {
+      "path": "/jira/secure/BrowseProjects.jspa?selectedCategory=all",
+      "title": "Browse projects",
+      "headings": [
+        "All project types - All categories"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "All project types",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Software",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Business",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Abdera",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Accumulo",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Ace",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "ActiveMQ",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Airavata",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Ambari",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Ant",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Apache Software Foundation",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Apex",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Aries",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Artemis",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "AsterixDB",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Aurora",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Avro",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Axis",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Batik",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "Beam",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "BigTop",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        },
+        {
+          "label": "BookKeeper",
+          "to": "/jira/secure/BrowseProjects.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "All categories"
+      ],
+      "fields": [
+        "Search",
+        "Search for projects"
+      ]
+    },
+    {
+      "path": "/jira/secure/CreateIssue!default.jspa",
+      "title": "Error - ASF Jira",
+      "headings": [
+        "Error"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Report a problem"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/secure/credits/AroundTheWorld!default.jspa",
+      "title": "About Jira - ASF Jira",
+      "headings": [
+        "Jira Credits 🌍",
+        "Sydney",
+        "Amsterdam",
+        "Gdansk",
+        "San Francisco",
+        "Kuala Lumpur",
+        "Remote",
+        "Elsewhere"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/secure/Dashboard.jspa",
+      "title": "System Dashboard - ASF Jira",
+      "headings": [
+        "System Dashboard",
+        "Introduction"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "find",
+          "to": "/jira/secure/IssueNavigator.jspa"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help",
+        "Tools",
+        "Maximise",
+        "Expand"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/secure/ViewKeyboardShortcuts!default.jspa",
+      "title": "Keyboard Shortcuts - ASF Jira",
+      "headings": [
+        "Keyboard Shortcuts",
+        "Global Shortcuts",
+        "Navigating Issues",
+        "Issue Actions"
+      ],
+      "links": [
+        {
+          "label": "Log in",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "Go to jira home page",
+          "to": "/jira/secure/MyJiraHome.jspa"
+        },
+        {
+          "label": "Log In",
+          "to": "/jira/login.jsp"
+        },
+        {
+          "label": "About Jira",
+          "to": "/jira/secure/AboutPage.jspa/secure/AboutPage.jspa"
+        },
+        {
+          "label": "Report a problem",
+          "to": "/jira/secure/CreateIssue!default.jspa"
+        }
+      ],
+      "buttons": [
+        "Skip to main content",
+        "Linked Applications",
+        "Dashboards",
+        "Projects",
+        "Issues",
+        "Help"
+      ],
+      "fields": [
+        "Search"
+      ]
+    },
+    {
+      "path": "/jira/si/jira.issueviews:issue-html/:id/:id",
+      "title": "",
+      "headings": [],
+      "links": [
+        {
+          "label": "Back to previous view",
+          "to": "/jira/browse/:id"
+        }
+      ],
+      "buttons": [],
+      "fields": []
+    }
+  ],
+  "source": {
+    "url": "https://issues.apache.org/jira/projects/KAFKA/issues",
+    "maxPages": 30,
+    "docs": [
+      "https://confluence.atlassian.com/jirasoftwareserver0917/reporting-1431244832.html",
+      "https://confluence.atlassian.com/jirasoftwareserver/searching-for-issues-939938681.html",
+      "https://confluence.atlassian.com/jirasoftwareserver/basic-searching-939938708.html",
+      "https://confluence.atlassian.com/jirasoftwareserver/working-with-search-results-939938808.html"
+    ],
+    "maxDepth": 2,
+    "reader": "browser"
+  },
+  "createdAt": "2026-11-15T06:57:14.009Z",
+  "updatedAt": "2026-11-15T23:01:38.426Z"
+}

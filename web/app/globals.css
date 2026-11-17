@@ -124,3 +124,51 @@
 @utility pointer-shadow {
   filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.3)) drop-shadow(0 5px 9px rgb(0 0 0 / 0.26));
 }
+
+/* The thinking glow, the same one the widget draws over a customer's page (src/widget/ui.ts). In a demo it is
+   drawn over the mock page, under the chat. It is there only while Haptic thinks: a soft band the width of the page
+   comes in at the top edge and falls towards the bottom, slower the longer the wait, and goes on off the page, fading,
+   the moment the reply arrives. The fall itself is set in the demo's code (web/components/demo/kit.tsx).
+   It is multiplied into the page, so words and buttons stay sharp through it. The band is one element as tall as
+   the page. Its colour is Pointer blue (#1E6EF4) with its neighbours on either side, written down once and the same
+   in the widget on every site (GLOW in src/widget/ui.ts), in one gradient mixed in OKLCH so the hues melt into each
+   other, and a mask gives it a bell with no flat top and no edge. */
+.thinking-glow {
+  --glow-a: #77d0fe;
+  --glow-b: #5294ff;
+  --glow-c: #8460ee;
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  overflow: hidden;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.45s ease-in, visibility 0s 0.45s;
+}
+.thinking-glow[data-on="true"] {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.3s ease-out;
+}
+/* On a dark page, multiplying would lose the colour, so it is screened in. */
+@media (prefers-color-scheme: dark) {
+  .thinking-glow {
+    mix-blend-mode: screen;
+  }
+}
+.thinking-glow i {
+  --bell: rgb(0 0 0 / 0.62) 0%, rgb(0 0 0 / 0.605) 10%, rgb(0 0 0 / 0.56) 20%, rgb(0 0 0 / 0.49) 30%, rgb(0 0 0 / 0.405) 40%, rgb(0 0 0 / 0.31) 50%,
+    rgb(0 0 0 / 0.215) 60%, rgb(0 0 0 / 0.13) 70%, rgb(0 0 0 / 0.06) 80%, rgb(0 0 0 / 0.015) 90%, rgb(0 0 0 / 0) 100%;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom in oklch, var(--glow-a), var(--glow-b) 50%, var(--glow-c));
+  -webkit-mask-image: radial-gradient(200% 50% at 50% 50%, var(--bell));
+  mask-image: radial-gradient(200% 50% at 50% 50%, var(--bell));
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinking-glow {
+    display: none;
+  }
+}
