@@ -57,6 +57,12 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * include the trip from this machine to the server. `onAnswered` hears the
  * status of every request sent, retries included, so a caller can count what
  * reached the model: a 429 is the server's limit, which no model saw.
+ *
+ * The server answers a step only for a request that names one of the site's
+ * allowed origins, as the widget's does from a page of the site. So each
+ * request names the site's own: the first origin this machine's copy of the
+ * site allows. If the server's copy allows other origins, it answers 403 and
+ * says so, and the site needs publishing again.
  */
 export function serverAsker(address: string, onAnswered?: (status: number) => void): Asker {
   const base = address.replace(/\/$/, "");
@@ -70,7 +76,7 @@ export function serverAsker(address: string, onAnswered?: (status: number) => vo
       const started = Date.now();
       const response = await fetch(`${base}/v1/turn`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: STREAM_TYPE },
+        headers: { "Content-Type": "application/json", Accept: STREAM_TYPE, Origin: site.allowedOrigins[0] ?? site.origin },
         body: JSON.stringify({ ...request, site: site.id }),
       });
       onAnswered?.(response.status);
@@ -79,6 +85,7 @@ export function serverAsker(address: string, onAnswered?: (status: number) => vo
         continue;
       }
       if (response.status === 404) throw new Error(`${base} has no site called ${site.id}. Put it there first: npm run site:publish -- ${site.id}`);
+      if (response.status === 403) throw new Error(`${base} refused ${site.id}: ${(await response.text()).slice(0, 200)} Its copy of the site may allow other origins than this machine's. Publish it again: npm run site:publish -- ${site.id}`);
       if (!response.ok || !response.body) throw new Error(`${base} answered ${response.status}: ${(await response.text()).slice(0, 200)}`);
 
       // One JSON value per line: the control first, then the whole reply.
