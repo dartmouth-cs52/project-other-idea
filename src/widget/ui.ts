@@ -26,6 +26,8 @@ const CROSS_PATH = "M18 6 6 18M6 6l12 12";
 const ARROW_PATH = "M12 19V5M5 12l7-7 7 7";
 /** The square on the stop button, and the tick beside Done. */
 const SQUARE_PATH = "M6 6h12v12H6z";
+/** The turning arrow on Start over. */
+const RESTART_PATH = "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5";
 const TICK_PATH = "M20 6 9 17l-5-5";
 /** A click on the control is acknowledged like a pressed button: the ring and the pointer dip and come back. */
 const PRESS_MS = 240;
@@ -142,6 +144,13 @@ button { font: inherit; cursor: pointer; }
 .panel .send { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0;
   border-radius: 999px; background: #1c1917; color: #fafaf9; }
 .panel .send svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* Start over, on the far side of the row, once there is anything in the chat to clear. It dips when pressed, as a button does. */
+.panel .restart { display: none; align-items: center; justify-content: center; width: 32px; height: 32px; margin-right: auto; padding: 0; border: 0; border-radius: 999px;
+  background: transparent; color: #78716c; transition: background-color .2s, color .2s, transform .15s var(--glide); }
+.panel .restart:hover { background: #e7e5e4; color: #1c1917; }
+.panel .restart:active { transform: scale(.94); }
+.panel .restart svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.panel:has(.thread:not([hidden]), .done:not([hidden]), .did:not([hidden]), .helped:not([hidden]), .note:not([hidden])) .restart { display: inline-flex; }
 /* While a guide runs, the button in the ask box is the way to stop it. */
 .panel .stop { display: none; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 999px; background: #1c1917; color: #fafaf9; }
 .panel .stop svg { width: 12px; height: 12px; fill: currentColor; }
@@ -185,14 +194,9 @@ button { font: inherit; cursor: pointer; }
    pointer, so it never reads as the control's own focus ring. It lands as the pointer does, from slightly larger. */
 .ring { position: fixed; border: 2px solid var(--accent); border-radius: 10px; box-shadow: 0 0 0 1.5px #fff, inset 0 0 0 1.5px #fff, 0 3px 10px rgba(0,0,0,.14);
   transition: opacity .2s; animation: land .2s var(--glide) .35s both; }
-.ring.turn { animation: breathe 1.6s ease-in-out infinite; }
 .ring.press { animation: dip-ring ${PRESS_MS}ms ease-out; }
 @keyframes land { from { opacity: 0; transform: scale(1.06); } }
-@keyframes breathe { 50% { box-shadow: 0 0 0 1.5px #fff, inset 0 0 0 1.5px #fff, 0 0 0 8px color-mix(in srgb, var(--accent) 22%, transparent); } }
 @keyframes dip-ring { 40% { transform: scale(.97); } }
-.ripple { position: fixed; width: 28px; height: 28px; margin: -14px 0 0 -14px; border: 2px solid var(--accent); border-radius: 999px; pointer-events: none;
-  animation: ripple .25s ease-out forwards; }
-@keyframes ripple { from { transform: scale(.35); opacity: .9; } to { transform: scale(1.3); opacity: 0; } }
 .cursor { position: fixed; left: 0; top: 0; width: 24px; height: 24px; transition: transform .55s cubic-bezier(.2,.8,.2,1);
   filter: drop-shadow(0 1px 1px rgba(0,0,0,.3)) drop-shadow(0 5px 9px rgba(0,0,0,.26)); will-change: transform; }
 .cursor svg { display: block; overflow: visible; transform-origin: 16% 13%; }
@@ -241,8 +245,8 @@ button { font: inherit; cursor: pointer; }
   background: #fff; color: #1c1917; border: 2px solid #1c1917; border-radius: 999px; padding: 8px 22px; font-size: 22px; line-height: 30px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 24px rgba(0,0,0,.22); pointer-events: none; }
 .asked.top { bottom: auto; top: 16px; }
-@media (prefers-reduced-motion: reduce) { .cursor, .launcher, .launcher svg, .launcher span, .hide { transition: none; } .ring, .ring.turn, .ring.press, .caption, .cursor.press svg { animation: none; }
-  .ripple { display: none; } .status.thinking span { color: #78716c; background: none; animation: none; } }
+@media (prefers-reduced-motion: reduce) { .cursor, .launcher, .launcher svg, .launcher span, .hide, .panel .restart { transition: none; } .panel .restart:active { transform: none; } .ring, .ring.press, .caption, .cursor.press svg { animation: none; }
+  .status.thinking span { color: #78716c; background: none; animation: none; } }
 `;
 
 // A visitor is told they are dealing with an AI before they ask it anything,
@@ -267,9 +271,6 @@ const PRESENT_CSS = `
 .ring { border-width: 6px; border-radius: 14px; animation: none;
   box-shadow: 0 0 0 3px #fff, 0 0 0 14px color-mix(in srgb, var(--accent) 40%, transparent), 0 0 32px 16px rgba(0,0,0,.2); }
 .caption { animation: none; }
-.ring.turn { animation-name: breathe-present; }
-@keyframes breathe-present { 50% { box-shadow: 0 0 0 3px #fff, 0 0 0 22px color-mix(in srgb, var(--accent) 24%, transparent), 0 0 32px 16px rgba(0,0,0,.2); } }
-.ripple { width: 56px; height: 56px; margin: -28px 0 0 -28px; border-width: 5px; }
 .caption { max-width: min(780px, calc(100vw - 32px)); gap: 14px; border-radius: 20px; padding: 14px 14px 14px 24px; font-size: 27px; line-height: 36px;
   box-shadow: 0 0 0 3px var(--accent), 0 14px 40px rgba(0,0,0,.4); }
 .caption .close { width: 36px; height: 36px; }
@@ -283,7 +284,7 @@ const PRESENT_CSS = `
 /**
  * Where a guide is, for anything outside that needs to know: tests, the
  * benchmark, a customer's own script.
- * - "idle": no guide has run on this page yet.
+ * - "idle": no guide has run on this page yet, or the visitor started over.
  * - "asking": a question has been sent and the answer is not yet on show.
  * - "pointing": a pointer is on show and the widget is waiting for the visitor to use it.
  * - "watching": a sentence is on show with no pointer, and the widget is waiting for the visitor to do what it says.
@@ -324,6 +325,8 @@ export interface UiHandlers {
   onStop: () => void;
   /** The visitor let Haptic carry on after it paused for them. */
   onCarryOn?: () => void;
+  /** Start over: any guide is called off and the chat is cleared. */
+  onRestart?: () => void;
 }
 
 /** What the widget knows of the site's acting, when the site has it on and the page allows it. */
@@ -448,7 +451,7 @@ export class Ui {
   private captor?: Element;
   private frame = 0;
   /** What each of our buttons does, by its class. */
-  private buttons!: Record<"launcher" | "hide" | "send" | "stop" | "close" | "doit" | "go" | "resume", () => void>;
+  private buttons!: Record<"launcher" | "hide" | "send" | "stop" | "close" | "doit" | "go" | "resume" | "restart", () => void>;
   private readonly first: HTMLElement;
   private readonly note: HTMLElement;
   private readonly did: HTMLElement;
@@ -563,6 +566,7 @@ export class Ui {
             make(
               "div",
               { class: "row" },
+              make("button", { class: "restart", type: "button", "aria-label": "Start over", title: "Start over" }, icon(RESTART_PATH, { "aria-hidden": "true" })),
               make("button", { class: "doit", type: "button", title: "Do it with me (Ctrl+Enter)" }, "Do it"),
               make("button", { class: "send", type: "button", "aria-label": "Send" }, icon(ARROW_PATH, { "aria-hidden": "true" })),
               make("button", { class: "stop", type: "button", "aria-label": "Stop" }, icon(SQUARE_PATH, { "aria-hidden": "true" })),
@@ -677,6 +681,7 @@ export class Ui {
         if (question) this.send(handlers, question, true);
       },
       resume: () => handlers.onCarryOn?.(),
+      restart: () => handlers.onRestart?.(),
     };
     this.form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -955,7 +960,7 @@ export class Ui {
       if (button.classList.contains("person-open")) return this.onHandoff?.open();
       if (button.classList.contains("person-cancel")) return this.onHandoff?.cancel();
       if (button.classList.contains("person-send")) return this.onHandoff?.send();
-      const name = (["launcher", "hide", "send", "stop", "close", "doit", "go", "resume"] as const).find((name) => button.classList.contains(name));
+      const name = (["launcher", "hide", "send", "stop", "close", "doit", "go", "resume", "restart"] as const).find((name) => button.classList.contains(name));
       if (name) this.buttons[name]();
     };
     let pressed: HTMLButtonElement | undefined;
@@ -1100,11 +1105,6 @@ export class Ui {
     this.panel.classList.toggle("acts", allowed);
   }
 
-  /** The pointer's ring breathes slowly: it is the visitor's turn. */
-  yourTurn(on: boolean) {
-    this.ring.classList.toggle("turn", on);
-  }
-
   /**
    * "What I did", in the panel: one line per field Haptic set, written from
    * what it did, and a closing line. A click on a line calls `onLine` with
@@ -1153,17 +1153,19 @@ export class Ui {
   }
 
   /**
-   * Draws a press: an accent ring that grows from the point and fades in a
-   * quarter of a second. Nothing under reduced motion.
+   * Haptic's own press, where the pointer is: the pointer and the ring dip
+   * like a pressed button and come back, as they do when the visitor clicks
+   * (`press`), and both stay. Nothing under reduced motion.
    */
-  ripple(x: number, y: number) {
+  tap() {
     if (lessMotion()) return;
-    const ring = document.createElement("div");
-    ring.className = "ripple";
-    ring.style.left = `${x}px`;
-    ring.style.top = `${y}px`;
-    this.host.shadowRoot!.append(ring);
-    setTimeout(() => ring.remove(), 300);
+    this.endPress();
+    for (const part of [this.cursor, this.ring]) {
+      // Read back so the dip plays again if it has only just played.
+      void part.offsetWidth;
+      part.classList.add("press");
+    }
+    this.pressing = setTimeout(() => this.endPress(), PRESS_MS);
   }
 
   /**
@@ -1493,6 +1495,29 @@ export class Ui {
   }
 
   /**
+   * Start over: everything in the chat goes, the question, its reply, Done,
+   * "Did this help?", "What I did" and the way to a person, and the ask box is
+   * left empty, open and with the keyboard, as before the first question.
+   */
+  startOver() {
+    this.clear();
+    this.clearAnswer();
+    this.showQuestion("");
+    this.hideDid();
+    this.hideHelped();
+    this.hideHandoff();
+    this.setNote("");
+    this.first.hidden = true;
+    this.done.hidden = true;
+    this.input.value = "";
+    this.panel.classList.remove("nudged");
+    this.panel.hidden = false;
+    this.showActs();
+    this.keepPlaced();
+    this.input.focus();
+  }
+
+  /**
    * The visitor's question. In the chat it is a bubble at the top. In
    * presentation mode it is also kept on show across the page while its guide
    * runs and while its last sentence is up, so an audience that came in late
@@ -1651,6 +1676,8 @@ export class Ui {
     this.cursor.style.transform = `translate(${this.at.x - this.tipIn.x}px, ${this.at.y - this.tipIn.y}px)`;
 
     // The caption goes below the control, or above it when there is no room below or when something opened below.
+    // A text field is the other way round: the browser opens its own list under it, of saved addresses or of what
+    // was typed there before, drawn over the page where the caption would be and where nothing here can see it.
     // In presentation mode it looks for its place another way: see `presentedCaption`.
     const box = this.caption.getBoundingClientRect();
     let left: number;
@@ -1659,7 +1686,7 @@ export class Ui {
     else {
       const fitsBelow = rect.bottom + 14 + box.height < window.innerHeight;
       const fitsAbove = rect.top - box.height - 12 >= 8;
-      const above = this.captionAbove ? fitsAbove || !fitsBelow : !fitsBelow;
+      const above = this.captionAbove !== suggestsBelow(el) ? fitsAbove || !fitsBelow : !fitsBelow;
       top = above ? Math.max(8, rect.top - box.height - 12) : rect.bottom + 14;
       left = Math.min(Math.max(8, rect.left), window.innerWidth - box.width - 8);
     }
@@ -2240,6 +2267,18 @@ function scrollLeftUnder(el: Element, page: Element, pageLeft: number): number {
     if (overflow === "auto" || overflow === "scroll") return Math.max(0, at.scrollHeight - at.clientHeight - at.scrollTop);
   }
   return pageLeft;
+}
+
+/** Input types a browser offers its own suggestions under: saved addresses and logins, and what was typed there before. */
+const SUGGESTED = new Set(["text", "email", "tel", "url", "search", "password", "number"]);
+
+/**
+ * Whether the browser may open its list of suggestions under this field, over
+ * the page. The page cannot see that list, nor stop it: Chrome fills
+ * addresses into an email field whatever its autocomplete says.
+ */
+function suggestsBelow(el: Element): boolean {
+  return el instanceof HTMLInputElement && SUGGESTED.has(el.type) && !el.readOnly && !el.disabled;
 }
 
 /** Whether a click at this point would land on `el`. A point off the screen cannot be tested and counts. */

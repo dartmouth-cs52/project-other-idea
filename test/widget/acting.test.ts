@@ -329,7 +329,6 @@ test("a value the visitor did not give is their turn: the pointer waits on the f
     await session.untilState("pointing");
     assert.equal(await session.pointed(), "name");
     assert.equal(await session.status(), "Your turn");
-    assert.equal(await session.page.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.querySelector(".ring")!.classList.contains("turn")), true, "the ring does not say it is the visitor's turn");
     await session.page.locator("#name").click();
     await session.page.keyboard.type("Travel", { delay: 30 });
     await session.page.locator("h1").click();
@@ -668,7 +667,7 @@ test("after three steps in a row Haptic could not do, acting ends and the guide 
   }
 });
 
-test("each press is shown: the pointer glides to it and a ripple marks it, and with reduced motion there is no ripple", async () => {
+test("each press is shown: the pointer glides to it and dips as a pressed button does, and with reduced motion it does not dip", async () => {
   for (const reduce of [false, true]) {
     const session = await start(
       `${WATCH}<h1>Wizard</h1><div><button id="next" type="button" data-watch style="margin:200px 0 0 400px">Next</button></div><p id="step"></p>
@@ -679,20 +678,21 @@ test("each press is shown: the pointer glides to it and a ripple marks it, and w
     );
     try {
       await session.page.emulateMedia({ reducedMotion: reduce ? "reduce" : "no-preference" });
-      // Ripples are counted as they are added to Haptic's own element.
+      // Dips are counted as the pointer takes the class that plays one.
       await session.page.evaluate(() => {
-        const shadow = document.querySelector("haptic-root")!.shadowRoot!;
-        (window as unknown as { ripples: number }).ripples = 0;
-        new MutationObserver((records) => {
-          for (const record of records) for (const node of record.addedNodes) if (node instanceof Element && node.classList.contains("ripple")) (window as unknown as { ripples: number }).ripples++;
-        }).observe(shadow, { childList: true });
+        const cursor = document.querySelector("haptic-root")!.shadowRoot!.querySelector(".cursor")!;
+        (window as unknown as { dips: number }).dips = 0;
+        new MutationObserver(() => {
+          if (cursor.classList.contains("press")) (window as unknown as { dips: number }).dips++;
+        }).observe(cursor, { attributes: true, attributeFilter: ["class"] });
       });
       await session.ask("can you go to the next step", { act: true });
       await session.untilAsked(2, 15_000);
       assert.equal(await session.page.textContent("#step"), "Step two");
-      const ripples = await session.page.evaluate(() => (window as unknown as { ripples: number }).ripples);
-      if (reduce) assert.equal(ripples, 0, "a ripple was drawn with reduced motion");
-      else assert.ok(ripples >= 1, "no ripple marked the press");
+      const dips = await session.page.evaluate(() => (window as unknown as { dips: number }).dips);
+      if (reduce) assert.equal(dips, 0, "the pointer dipped with reduced motion");
+      else assert.ok(dips >= 1, "the pointer did not dip at the press");
+      assert.equal(await session.page.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.querySelector(".ripple")), null, "a ripple was drawn");
       // The pointer went to the button it pressed.
       const near = await session.page.evaluate(() => {
         const cursor = document.querySelector("haptic-root")!.shadowRoot!.querySelector(".cursor") as HTMLElement;

@@ -61,6 +61,35 @@ test("nothing a visitor typed is sent: not as a name, a caption, a row name, a h
   }
 });
 
+test("a field the browser or the page will not accept is marked invalid, and one that is only empty is not (Northpine: the guide moved on from \"charlie\" in an email field)", { skip }, async () => {
+  const snapshot = await read(
+    `<form>
+      <label>Typed wrong <input id="wrong" type="email"></label>
+      <label>Typed right <input id="right" type="email"></label>
+      <label>Still empty <input type="email" required></label>
+      <label>Said wrong <input type="text" aria-invalid="true"></label>
+      <label>Said fine <input type="text" aria-invalid="false"></label>
+      <label>Locked wrong <input type="email" value="charlie" disabled></label>
+      <button>Send</button>
+    </form>`,
+    {
+      before: async (page) => {
+        await page.fill("#wrong", "charlie");
+        await page.fill("#right", "charlie@northpine.example");
+      },
+    },
+  );
+  const states = Object.fromEntries(snapshot.elements.map((element) => [element.label, element.state ?? []]));
+  assert.ok(states["Typed wrong"]?.includes("invalid"), JSON.stringify(states));
+  assert.ok(!states["Typed right"]?.includes("invalid"), JSON.stringify(states));
+  assert.deepEqual(states["Still empty"], ["required"]);
+  assert.ok(states["Said wrong"]?.includes("invalid"), JSON.stringify(states));
+  assert.ok(!states["Said fine"]?.includes("invalid"), JSON.stringify(states));
+  assert.ok(!states["Locked wrong"]?.includes("invalid"), JSON.stringify(states));
+  // Only the mark is sent, never what was typed.
+  assert.ok(!JSON.stringify(snapshot).includes("charlie"), "what was typed was sent");
+});
+
 test("an editor is listed once, by the name its page gives it, and nothing inside it is listed", { skip }, async () => {
   const snapshot = await read(`<h1>Notes</h1>
     <div contenteditable="true" aria-label="Message body">Dear Dana, <a href="/secret">this link</a> <button contenteditable="false">Mention: Priya</button></div>

@@ -532,7 +532,8 @@ follow the glide, and the glow lasts exactly as long as the wait. Everything
 else is a fade, a small scale or a height change of 150 to 250ms that eases
 out. Nothing grows from nothing: things arrive from within a few percent of
 their final size. A click is acknowledged like a pressed button, with the mark
-dipping to 97 percent and back in a quarter of a second, and no ripple. With reduced motion on, the pointer jumps
+dipping to 97 percent and back in a quarter of a second, and no ripple, whether
+the person clicks or Haptic presses for them. With reduced motion on, the pointer jumps
 to its target, there is no glow and no shimmer, and each demo holds one still frame.
 
 Scrolling never changes what a demo shows. A demo waits on its first frame,
@@ -724,13 +725,16 @@ stays. The rest below is proposed.
   glide starts from the control just used. If nothing happens for about four
   seconds the mark pulses once, and no more often than that. In the widget the
   pointer goes with the mark between steps, and the next glide starts from
-  where it was. The mark breathes only when Haptic has done part of a task
-  itself and hands the last click to the person.
+  where it was. The mark holds still when Haptic hands a step to the person
+  too: no breathing, no halo.
 - **Say one thing.** A caption names the next action in a short sentence. It
   carries no buttons. In the widget it carries a small × that stops the guide,
   so there is a way out beside the pointer when the chat has been closed.
 - **Keep the conversation and the exit in view.** The chat stays open for the
   whole guide, with the question at the top and a stop button in the ask box.
+  Once anything is in the chat, a turning arrow on the far side of the ask
+  box's row starts over: it calls off a guide that is running and clears the
+  chat back to an empty ask box with the keyboard.
 - **Never cover the control.** When the chat would sit on the control being
   pointed at, or on its caption, it moves to the other side of the window
   while the pointer is there, and comes back when it has gone.
