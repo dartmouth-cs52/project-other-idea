@@ -14,6 +14,7 @@
 
 import { checkAddress, checkEmail, isSetupStep, mailboxOf, NEEDS_SIGN_IN, pageControls, riskyControls, type SetupState } from "../lib/setup";
 import type { PageNode, SiteContext } from "../../src/shared/types";
+import { boundedText } from "./body";
 import type { Organization, Sql } from "./db";
 import { developerEmail, UnsafeText } from "./developer-email";
 import { headline } from "./insights";
@@ -112,8 +113,8 @@ function refuse(status: number, error: string, field?: string): Answer {
 }
 
 async function body(request: Request): Promise<Record<string, unknown>> {
-  const text = await request.text();
-  if (text.length > 4_000) return {};
+  const text = await boundedText(request, 4_000);
+  if (text === null) return {};
   try {
     const value = JSON.parse(text || "{}");
     return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
