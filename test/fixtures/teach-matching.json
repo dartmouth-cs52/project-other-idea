@@ -1,0 +1,431 @@
+{
+  "about": "Pairs of a question a route was taught for and a question a visitor asks, and whether the route should be used. Unsure is no. test/teach-match.test.ts holds sameTask to every row.",
+  "pairs": [
+    {
+      "taught": "how do I add a budget",
+      "asked": "add a budget",
+      "match": true,
+      "why": "the same task, shorter"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "How do I add a new budget?",
+      "match": true,
+      "why": "new is part of adding"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "create a budget",
+      "match": true,
+      "why": "create is add"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "how can I make a budget for the team offsite",
+      "match": true,
+      "why": "make is add; the offsite is a detail"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "set up a budget",
+      "match": true,
+      "why": "set up is add"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "where do I create budgets?",
+      "match": true,
+      "why": "plural, and where instead of how"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "I need a new budget for marketing",
+      "match": true,
+      "why": "new is add"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "add a marketing budget",
+      "match": true,
+      "why": "still a budget"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "crear un budget",
+      "match": true,
+      "why": "Spanish verb, English noun"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "ajouter un budget",
+      "match": true,
+      "why": "French: budget is the same word"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "Budget erstellen",
+      "match": true,
+      "why": "German, verb last"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "neues Budget anlegen",
+      "match": true,
+      "why": "German, neu and anlegen are both add"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "add budget pls",
+      "match": true,
+      "why": "a word of politeness at the end"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "help me create a budget asap",
+      "match": true,
+      "why": "asap is not what is added"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "How do I add the marketing team's budget",
+      "match": true,
+      "why": "the team's budget is a budget"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "how would I go about adding a budget",
+      "match": true,
+      "why": "reworded"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "Budget hinzufügen",
+      "match": true,
+      "why": "German, with an umlaut"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "add a budget alert",
+      "match": false,
+      "why": "the thing added is an alert"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "add a budget, then edit it",
+      "match": false,
+      "why": "two actions"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "copy a budget",
+      "match": false,
+      "why": "copying is not read: unsure"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "I want to start a budget",
+      "match": false,
+      "why": "start could be several things: unsure"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "how do I delete a budget",
+      "match": false,
+      "why": "same noun, the opposite action"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "remove a budget",
+      "match": false,
+      "why": "remove is delete"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "get rid of the marketing budget",
+      "match": false,
+      "why": "get rid of is delete"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "archive a budget",
+      "match": false,
+      "why": "archive is delete"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "how do I change a budget's amount",
+      "match": false,
+      "why": "change, and the amount"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "edit a budget",
+      "match": false,
+      "why": "edit is change"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "raise the Platform travel budget to $75,000",
+      "match": false,
+      "why": "raise is change"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "what is a budget",
+      "match": false,
+      "why": "asks what it is"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "how do budgets work",
+      "match": false,
+      "why": "asks how it works"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "show me my budgets",
+      "match": false,
+      "why": "show is view"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "which budgets are over",
+      "match": false,
+      "why": "no action to do"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "export budgets",
+      "match": false,
+      "why": "export"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "add a budget owner",
+      "match": false,
+      "why": "the thing added is an owner"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "add money to a budget",
+      "match": false,
+      "why": "the thing added is money"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "add a person to a budget",
+      "match": false,
+      "why": "adding a person is inviting one"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "add a card",
+      "match": false,
+      "why": "another thing"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "I can't add a budget",
+      "match": false,
+      "why": "negation: unsure what they need"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "how do I add a budget without an owner",
+      "match": false,
+      "why": "negation"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "don't add a budget yet",
+      "match": false,
+      "why": "negation"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "set a budget for marketing",
+      "match": false,
+      "why": "set alone is add or change: unsure"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "budget",
+      "match": false,
+      "why": "no action"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "nuevo presupuesto",
+      "match": false,
+      "why": "presupuesto is not read as budget: unsure"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "add a budget and an alert",
+      "match": false,
+      "why": "two things"
+    },
+    {
+      "taught": "how do I pay the Brightdesk bill",
+      "asked": "pay a bill from Brightdesk",
+      "match": true,
+      "why": "the same bill, said another way"
+    },
+    {
+      "taught": "how do I pay the Brightdesk bill",
+      "asked": "how can I pay the Brightdesk bill?",
+      "match": true,
+      "why": "reworded"
+    },
+    {
+      "taught": "how do I pay the Brightdesk bill",
+      "asked": "where do I pay bills",
+      "match": true,
+      "why": "paying a bill"
+    },
+    {
+      "taught": "how do I pay the Brightdesk bill",
+      "asked": "pagar la bill de Brightdesk",
+      "match": true,
+      "why": "Spanish verb, English noun"
+    },
+    {
+      "taught": "how do I pay the Brightdesk bill",
+      "asked": "how do I approve the Brightdesk bill",
+      "match": false,
+      "why": "approve, not pay"
+    },
+    {
+      "taught": "how do I pay the Brightdesk bill",
+      "asked": "delete the Brightdesk bill",
+      "match": false,
+      "why": "delete"
+    },
+    {
+      "taught": "how do I pay the Brightdesk bill",
+      "asked": "view the Brightdesk bill",
+      "match": false,
+      "why": "view"
+    },
+    {
+      "taught": "how do I pay the Brightdesk bill",
+      "asked": "who is Brightdesk",
+      "match": false,
+      "why": "no action"
+    },
+    {
+      "taught": "how do I pay the Brightdesk bill",
+      "asked": "pay Brightdesk",
+      "match": false,
+      "why": "pay a vendor, not a bill: unsure"
+    },
+    {
+      "taught": "how do I pay the Brightdesk bill",
+      "asked": "can I not pay the Brightdesk bill yet",
+      "match": false,
+      "why": "negation"
+    },
+    {
+      "taught": "how do I pay the Brightdesk bill",
+      "asked": "pay a reimbursement",
+      "match": false,
+      "why": "another thing"
+    },
+    {
+      "taught": "how do I change a vendor's category",
+      "asked": "change the category of a vendor",
+      "match": true,
+      "why": "reworded"
+    },
+    {
+      "taught": "how do I change a vendor's category",
+      "asked": "edit a vendor's category",
+      "match": true,
+      "why": "edit is change"
+    },
+    {
+      "taught": "how do I change a vendor's category",
+      "asked": "how can I update the category for a vendor",
+      "match": true,
+      "why": "update is change"
+    },
+    {
+      "taught": "how do I change a vendor's category",
+      "asked": "cambiar la category de un vendor",
+      "match": true,
+      "why": "Spanish verb, English nouns"
+    },
+    {
+      "taught": "how do I change a vendor's category",
+      "asked": "set a vendor's category",
+      "match": false,
+      "why": "set alone: unsure"
+    },
+    {
+      "taught": "how do I change a vendor's category",
+      "asked": "add a vendor",
+      "match": false,
+      "why": "add, and a vendor"
+    },
+    {
+      "taught": "how do I change a vendor's category",
+      "asked": "delete a vendor",
+      "match": false,
+      "why": "delete"
+    },
+    {
+      "taught": "how do I change a vendor's category",
+      "asked": "change a vendor's address",
+      "match": false,
+      "why": "the address, not the category"
+    },
+    {
+      "taught": "how do I change a vendor's category",
+      "asked": "what category is Brightdesk in",
+      "match": false,
+      "why": "no action"
+    },
+    {
+      "taught": "can I buy lunch on my own card",
+      "asked": "am I allowed to buy lunch with my personal card",
+      "match": true,
+      "why": "reworded"
+    },
+    {
+      "taught": "can I buy lunch on my own card",
+      "asked": "can I pay for lunch on my card",
+      "match": true,
+      "why": "pay for lunch is buying it"
+    },
+    {
+      "taught": "can I buy lunch on my own card",
+      "asked": "can I buy lunch without a receipt",
+      "match": false,
+      "why": "negation"
+    },
+    {
+      "taught": "can I buy lunch on my own card",
+      "asked": "what's the meal limit",
+      "match": false,
+      "why": "asks what it is"
+    },
+    {
+      "taught": "how do I invite a teammate",
+      "asked": "add a teammate",
+      "match": true,
+      "why": "adding a person is inviting one"
+    },
+    {
+      "taught": "how do I invite a teammate",
+      "asked": "invite teammates",
+      "match": true,
+      "why": "plural"
+    },
+    {
+      "taught": "how do I invite a teammate",
+      "asked": "remove a teammate",
+      "match": false,
+      "why": "remove"
+    }
+  ]
+}

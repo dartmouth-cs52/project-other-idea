@@ -267,15 +267,17 @@ test("steps are written plainly, naming the page when it changes and the dialog 
   assert.equal(stepText(step({ label: "icon:plus" }), step({})), "Press the plus icon");
 });
 
-test("a visitor's question gets the route taught for a question like it, the closest and then the newest", () => {
+test("a visitor's question gets the route taught for the same task, the closest and then the newest", () => {
   const older = { ...ROUTE, id: "older", createdAt: "2026-11-01T00:00:00.000Z" };
   const spend = { ...ROUTE, id: "spend", question: "where do I see spend by department", createdAt: "2026-11-20T00:00:00.000Z" };
-  const routes = [older, ROUTE, spend];
-  assert.equal(taughtFor(routes, "How do I add a new budget?")?.id, ROUTE.id, "the newer of two the same");
-  assert.equal(taughtFor(routes, "add budget")?.id, ROUTE.id);
-  assert.equal(taughtFor(routes, "spend by department")?.id, "spend");
-  assert.equal(taughtFor(routes, "how do I reset my password"), undefined);
-  assert.equal(taughtFor(routes, "how do I"), undefined, "filler alone matches nothing");
+  const routes = () => [older, ROUTE, spend];
+  assert.equal(taughtFor(routes(), "how do I delete a budget"), undefined, "the same thing, another action");
+  assert.equal(taughtFor(routes(), "How do I add a new budget?")?.id, ROUTE.id, "the newer of two the same");
+  assert.equal(taughtFor(routes(), "add budget")?.id, ROUTE.id);
+  assert.equal(taughtFor(routes(), "show spend by department")?.id, "spend");
+  assert.equal(taughtFor(routes(), "spend by department"), undefined, "no action, so unsure");
+  assert.equal(taughtFor(routes(), "how do I reset my password"), undefined);
+  assert.equal(taughtFor(routes(), "how do I"), undefined, "filler alone matches nothing");
   assert.equal(taughtFor([{ ...ROUTE, steps: [] }], "add a budget"), undefined, "a route with no steps is never used");
   assert.equal(taughtFor(undefined, "add a budget"), undefined);
 });

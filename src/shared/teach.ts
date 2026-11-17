@@ -1,5 +1,5 @@
 // No extension on these imports: the website imports this file too, and its settings refuse one.
-import { similarQuestion } from "./corrections";
+import { sameTask } from "./task-match";
 import { cleanText, normalizePath, questionKey } from "./types";
 
 // Teach Haptic: someone at the company shows Haptic the right way to do a task
@@ -13,7 +13,7 @@ import { cleanText, normalizePath, questionKey } from "./types";
 // Never what was typed, and nothing the outline's masking would hide. The
 // person reviews the steps in the dashboard, and saving them keeps a taught
 // route in the site's context beside the corrections. A visitor's question
-// like the one taught carries the route into the prompt as the company's own
+// for the same task carries the route into the prompt as the company's own
 // instructions (src/server/prompt.ts).
 //
 // Shared by the widget (recording and wording), the widget server (checking
@@ -250,13 +250,15 @@ function overlap(a: string, b: string): number {
 }
 
 /**
- * The taught route for a visitor's question, if one was taught for a question
- * like it, matched the way corrections are (`similarQuestion`). The closest
- * question wins, then the newest. One at most, so the prompt stays short.
+ * The taught route for a visitor's question, if one was taught for the same
+ * task: the same action on the same thing, and nothing negated
+ * (`sameTask`, src/shared/task-match.ts). Stricter than corrections, since a
+ * route is a whole procedure. The closest question wins, then the newest.
+ * One at most, so the prompt stays short.
  */
 export function taughtFor(routes: TaughtRoute[] | undefined, goal: string): TaughtRoute | undefined {
   if (!routes?.length || !goal.trim()) return undefined;
-  const like = routes.filter((route) => route.steps.length && similarQuestion(route.question, goal));
+  const like = routes.filter((route) => route.steps.length && sameTask(route.question, goal));
   like.sort((a, b) => overlap(b.question, goal) - overlap(a.question, goal) || b.createdAt.localeCompare(a.createdAt));
   return like[0];
 }
