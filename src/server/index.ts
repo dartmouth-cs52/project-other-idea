@@ -38,7 +38,7 @@ function overLimit(key: string): boolean {
 // On a developer's machine one visitor is enough for a label to reach the prompt, and where they called
 // from is not counted (HAPTIC_LABEL_THRESHOLD, HAPTIC_NETWORK_THRESHOLD).
 const needs = labelNeeds(process.env);
-const store = process.env.DATABASE_URL ? new Store(process.env.DATABASE_URL, needs.visitors, { labelNetworks: needs.networks }) : undefined;
+const store = process.env.DATABASE_URL ? new Store(process.env.DATABASE_URL, needs.visitors, { labelNetworks: needs.networks, stripeKey: process.env.STRIPE_SECRET_KEY }) : undefined;
 const learned = new MemoryLearned();
 // Without a database, what was learned is kept in data/learned.json, so a restart doesn't forget the site.
 const LEARNED_FILE = fileURLToPath(new URL("../../data/learned.json", import.meta.url));

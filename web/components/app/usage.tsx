@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { api, type FinishedList } from "@/lib/app-api";
+import { BILLING_HREF } from "./nav";
 import { Card, CardTitle, when } from "./parts";
 
 /** The last twelve months, newest first, as "2026-11". */
@@ -90,8 +92,12 @@ export function FinishedGuides({ siteId, onOpen }: { siteId: string; onOpen: (id
         </>
       )}
       <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
-        These are the guides billing will count. A guide is finished when the person uses the last control Haptic pointed at, or reaches the screen
-        they asked for. Haptic is free during early access.
+        These are the guides billing counts. A guide is finished when the person uses the last control Haptic pointed at, or reaches the screen
+        they asked for. Your plan, and what all your sites have used this month, are on the{" "}
+        <Link href={BILLING_HREF} className="underline underline-offset-2">
+          billing page
+        </Link>
+        .
       </p>
     </Card>
   );
