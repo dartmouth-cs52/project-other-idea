@@ -125,3 +125,32 @@ test("a control below the window is said to be below, with the sentence at the b
     await session.close();
   }
 });
+
+test("the way back puts a control from the middle of the page in the middle of the window, clear of a header that sticks", async () => {
+  const paragraphs = (from: number, to: number) => Array.from({ length: to - from }, (_, n) => `<p style="height:60px;margin:0">Paragraph ${from + n}</p>`).join("");
+  const page = `<header style="position:sticky;top:0;height:120px;background:#eee;z-index:5">Acme</header>
+    ${paragraphs(1, 30)}<button id="export" type="button">Export</button>${paragraphs(30, 60)}`;
+  const session = await start(page, (request, index) => (index === 0 ? point(request, "Export", "Click Export.") : words("Exported.")));
+  try {
+    await session.ask("export this");
+    await session.untilState("pointing");
+    await session.until(async () => !!(await drawn(session)).ring, "the ring to go round Export", 3000);
+    await session.page.waitForTimeout(300);
+    await session.page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await session.page.waitForTimeout(300);
+    assert.equal((await drawn(session)).way, "Scroll up to it");
+    await session.page.locator("haptic-root .caption .where").click();
+    await session.until(async () => !(await drawn(session)).way, "the way back to go once Export is in the window", 3000);
+    // The smooth scroll ends where it was aimed: Export's middle at the window's.
+    await session.page.waitForTimeout(800);
+    const exported = await box(session, "#export");
+    const height = await session.page.evaluate(() => window.innerHeight);
+    assert.ok(Math.abs((exported.top + exported.bottom) / 2 - height / 2) <= 2, `Export is not in the middle of the window: its top is at ${exported.top} of ${height}`);
+    const ring = (await drawn(session)).ring;
+    assert.ok(ring && Math.abs(ring.left + 4 - exported.left) < 2 && Math.abs(ring.top + 4 - exported.top) < 2, "the ring is not round Export");
+    const hit = await session.page.evaluate(({ x, y }: { x: number; y: number }) => document.elementFromPoint(x, y)?.id, { x: (exported.left + exported.right) / 2, y: (exported.top + exported.bottom) / 2 });
+    assert.equal(hit, "export", "something covers Export where it was brought to");
+  } finally {
+    await session.close();
+  }
+});
