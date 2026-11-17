@@ -2285,7 +2285,10 @@ function markChosen(candidates: Candidate[]) {
     return [...Array.from(c.el.classList), ...Array.from(slot?.classList ?? [])].filter((name) => MARKS_CHOSEN.test(name));
   };
   for (const row of rows.values()) {
-    if (row.length < 2 || row.some((c) => c.state?.some((state) => ["current", "selected", "pressed", "checked"].includes(state)))) continue;
+    // An option a list says is selected, which is only the one the keys are on (`onlyHighlighted`), is listed as no
+    // more, but the row has still said which it marks: a class name there marks that one too, as "option-current" does.
+    const says = (c: Candidate) => c.el.getAttribute("aria-selected") === "true" || c.state?.some((state) => ["current", "selected", "pressed", "checked"].includes(state));
+    if (row.length < 2 || row.some(says)) continue;
     const each = row.map(marks);
     const seen = new Map<string, number>();
     for (const names of each) for (const name of new Set(names)) seen.set(name, (seen.get(name) ?? 0) + 1);
@@ -3135,12 +3138,83 @@ function stateOf(el: Element, role: string): string[] {
   else if (expanded === "false") state.push("collapsed");
   const current = el.getAttribute("aria-current");
   if (current && current !== "false") state.push("current");
-  if (el.getAttribute("aria-selected") === "true") state.push("selected");
+  if (el.getAttribute("aria-selected") === "true" && !onlyHighlighted(el, role)) state.push("selected");
   if (el.getAttribute("aria-pressed") === "true") state.push("pressed");
   const checkable = isTag(el, "input") && (el.type === "checkbox" || el.type === "radio");
   if ((checkable && el.checked) || el.getAttribute("aria-checked") === "true") state.push("checked");
   if (isTag(el, "details") ? el.open : el.tagName === "SUMMARY" && (el.parentElement as HTMLDetailsElement | null)?.open) state.push("expanded");
   return state;
+}
+
+/**
+ * Whether an option that says it is selected means only that the keys are on
+ * it, not that it is the one chosen. Such an option is not said to be
+ * selected, nor highlighted: where the keys are moves with the mouse, so it
+ * would fill what changed with noise, and the model reads "highlighted" as
+ * chosen all the same.
+ *
+ * cmdk, which shadcn/ui's Command and Combobox are built on, says
+ * aria-selected and data-selected of whichever option is highlighted, the
+ * first one as soon as the list opens, and never says which one is chosen.
+ * Northpine: with Owner still showing "Choose a person", the first person
+ * was listed as selected, and the model told the visitor they were already
+ * the owner. Other lists a combobox opens do the same (the ARIA practices'
+ * combobox examples, older Downshift), so an option is not the chosen one
+ * either when the combobox that opened its list shows other words. Where
+ * the combobox shows nothing that can be read, a field typed in or a box
+ * with no words, what the option says stands, as it does in a list of tabs,
+ * a grid, a list that allows several choices and a list of its own, whose
+ * selection moves with the keys.
+ */
+function onlyHighlighted(el: Element, role: string): boolean {
+  if (role !== "option") return false;
+  if (el.hasAttribute("cmdk-item") && el.getAttribute("data-selected") === el.getAttribute("aria-selected")) return true;
+  const listbox = el.closest('[role="listbox"]');
+  if (listbox?.getAttribute("aria-multiselectable") === "true") return false;
+  const list = listbox ?? el.parentElement;
+  if (!list) return false;
+  const shown = shownByComboboxes(el, list);
+  if (!shown.length) return false;
+  const option = squashed((el as HTMLElement).innerText ?? el.textContent ?? "");
+  // An option can say more than the combobox shows of it ("Avery Stone Controller", shown as "Avery Stone"), and a
+  // combobox more than the option ("Sort: Newest"), so either holding the other is the combobox showing it.
+  return !!option && !shown.some((words) => words.includes(option) || option.includes(words));
+}
+
+/**
+ * What the comboboxes that opened an option's list show, squashed, those that
+ * show any words: one that points at the option as the one the keys are on,
+ * or names the list, or a box around it like the popup it opens, as the box
+ * it controls. A field typed in, or a box that holds one, shows what the
+ * visitor typed, which is never read, so it shows nothing here. What the
+ * others show is the visitor's choice: it is compared here and let go, never
+ * kept or sent, and can only take a state away.
+ */
+function shownByComboboxes(option: Element, list: Element): string[] {
+  const root = option.getRootNode() as Document | ShadowRoot;
+  const shown: string[] = [];
+  for (const box of root.querySelectorAll('[role~="combobox"], [aria-haspopup="listbox"]')) {
+    if (list.contains(box) || holdsTyping(box) || box.querySelector('[contenteditable]:not([contenteditable="false"])')) continue;
+    const pointsAt = !!option.id && box.getAttribute("aria-activedescendant") === option.id;
+    const controls = ["aria-controls", "aria-owns"].some((name) =>
+      (box.getAttribute(name) ?? "")
+        .split(/\s+/)
+        .slice(0, 3)
+        .some((id) => {
+          const opened = id ? root.getElementById?.(id) : null;
+          return !!opened && !opened.contains(box) && opened.contains(list);
+        }),
+    );
+    if (!pointsAt && !controls) continue;
+    const words = squashed((box as HTMLElement).innerText ?? box.textContent ?? "");
+    if (words) shown.push(words);
+  }
+  return shown;
+}
+
+/** Words run together in lower case with nothing between them, for telling whether one text holds another. */
+function squashed(text: string): string {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function hrefOf(el: Element): string | undefined {

@@ -76,6 +76,20 @@ test("a site's settings go only to the origins it lists", async () => {
   assert.deepEqual(await allowed?.json(), { name: "Test", appearance: DEFAULT_APPEARANCE });
 });
 
+test("every site's widget is told Haptic's blue for the pointer, and its launcher as it will be drawn", async () => {
+  const saved = (appearance: Partial<SiteContext["appearance"]>): SiteContext => ({ ...site, id: "site_look", appearance: { ...DEFAULT_APPEARANCE, ...appearance } });
+  const told = async (appearance: Partial<SiteContext["appearance"]>) =>
+    (await (await makeApp(false, {}, [saved(appearance)]).app(new Request("https://widget.test/v1/sites/site_look", { headers: { Origin: "https://app.test" } }), "1.1.1.1"))?.json()).appearance;
+  // A pointer saved green, back when it was a setting, is blue. A widget still cached from then draws it blue too.
+  assert.deepEqual(await told({ accent: "#16A34A", launcher: "#17633A" }), { ...DEFAULT_APPEARANCE, launcher: "#17633A" });
+  // A launcher saved too light is sent darkened, the colour it is drawn in.
+  const yellow = (await told({ launcher: "#FACC15" })).launcher;
+  assert.match(yellow, /^#[0-9A-F]{6}$/);
+  assert.notEqual(yellow, "#FACC15");
+  // No launcher colour, Ink itself, or one that is not a colour: none is sent, and the widget draws Ink.
+  for (const launcher of [undefined, "#1C1917", "green"]) assert.deepEqual(await told(launcher === undefined ? {} : { launcher }), DEFAULT_APPEARANCE, String(launcher));
+});
+
 test("a step comes back whole when the caller does not ask for a stream", async () => {
   const { app, turns } = makeApp();
   const response = await app(turn(), "1.1.1.1");

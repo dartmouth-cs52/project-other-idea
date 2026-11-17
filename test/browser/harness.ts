@@ -2,7 +2,7 @@ import { build } from "esbuild";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
-import { chromium, firefox, webkit, type Browser, type BrowserType, type Page } from "playwright";
+import { chromium, firefox, webkit, type Browser, type BrowserType, type Locator, type Page } from "playwright";
 import { widgetBundles } from "../../src/widget/build.ts";
 import { DEFAULT_APPEARANCE, STREAM_TYPE, type PublicSiteConfig, type SnapElement, type TurnReply, type TurnRequest } from "../../src/shared/types.ts";
 
@@ -234,3 +234,25 @@ export async function reachable(tab: Page, selector: string): Promise<boolean> {
     return hit !== null && part.contains(hit) && !host.closest("[inert]");
   }, selector);
 }
+
+/**
+ * Where the first and the last letter of the words in this element are drawn, across the line. On a page written right
+ * to left, it tells a sentence that ends with its full stop from one drawn with the stop at its start.
+ */
+export const ends = (element: Locator) =>
+  element.evaluate((el) => {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const texts: Text[] = [];
+    while (walker.nextNode()) if ((walker.currentNode as Text).data.trim()) texts.push(walker.currentNode as Text);
+    const first = texts[0]!;
+    const last = texts[texts.length - 1]!;
+    // Written out in one piece: a named helper in here would not survive the trip into the page.
+    const [start, end] = ([[first, first.data.search(/\S/)], [last, last.data.trimEnd().length - 1]] as [Text, number][]).map(([node, at]) => {
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + 1);
+      const box = range.getBoundingClientRect();
+      return { char: node.data[at], left: box.left, right: box.right };
+    });
+    return { first: start!, last: end! };
+  });

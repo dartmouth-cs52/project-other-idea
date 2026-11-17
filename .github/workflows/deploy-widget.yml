@@ -12,6 +12,9 @@
 #   ANTHROPIC_API_KEY      copied onto the Worker as a secret on every deploy
 # Without it the deploy still goes ahead, and the server works only while
 # HAPTIC_MODEL in wrangler.jsonc is "mock".
+# And for billing, optional:
+#   STRIPE_SECRET_KEY      copied onto the Worker, so a finished guide reaches Stripe at once.
+#                          Without it the site's Worker sends it within the hour.
 
 name: Deploy widget server
 
@@ -106,6 +109,16 @@ jobs:
             exit 0
           fi
           printf '%s' "$KEY" | npx wrangler secret put ANTHROPIC_API_KEY
+
+      - name: Put the Stripe key on the server
+        env:
+          KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::warning::There is no STRIPE_SECRET_KEY secret, so finished guides reach Stripe from the site's hourly sweep instead of at once."
+            exit 0
+          fi
+          printf '%s' "$KEY" | npx wrangler secret put STRIPE_SECRET_KEY
 
       - name: Check the live server answers
         run: |
