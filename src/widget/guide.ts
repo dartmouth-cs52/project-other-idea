@@ -4,6 +4,7 @@ import {
   cleanText,
   describeElement,
   MAX_ASKED,
+  MAX_QUESTION,
   namedIn,
   standingAlone,
   type GuideOutcome,
@@ -369,7 +370,7 @@ export class Guide {
    */
   private get asked(): string {
     // Cut to the ask box's 300 characters first: a mask can be longer than what it hides, and the end of a question is usually what it asks.
-    return cleanText(this.goal.slice(0, 300), MAX_ASKED, this.shownOwn);
+    return cleanText(this.goal.slice(0, MAX_QUESTION), MAX_ASKED, this.shownOwn);
   }
 
   /**
@@ -377,7 +378,11 @@ export class Guide {
    * also shows. The page reading leaves those readable (`namedIn`), so the
    * question leaves them readable too, or the model could not tell that the
    * account on the page is the one asked about. Anything the visitor named
-   * that the page does not show stays masked in the question.
+   * that the page does not show stays masked in the question. The page's
+   * repeat of what the visitor typed is not the page showing it: the reading
+   * puts "[typed]" there for any email address or number, whether or not the
+   * question names it (`readableInQuestion` in snapshot.ts), so it is never
+   * found here.
    */
   private shownOwn: ReadonlySet<string> = new Set();
   private noteShownOwn(snapshot: Snapshot) {

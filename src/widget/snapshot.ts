@@ -1,4 +1,4 @@
-import { cleanText as maskAndTrim, describeElement, normalizePath, namedIn, type SnapElement, type Snapshot } from "../shared/types.ts";
+import { cleanText as maskAndTrim, describeElement, MAX_ASKED, MAX_QUESTION, normalizePath, namedIn, type SnapElement, type Snapshot } from "../shared/types.ts";
 
 // Turns the live page into the list of elements the model sees. One read-only
 // pass over the DOM. What a visitor typed is never read: not the value of a
@@ -642,11 +642,30 @@ let choiceBoxes: WeakSet<Element> = new WeakSet();
  */
 let typed: string[] = [];
 /**
- * The visitor's own question, as one lower-case line, for as long as one page
- * is being read. Words of it are theirs to send, and the server has them: a
- * field that holds some of them repeats nothing new (see `typedValues`).
+ * What of the visitor's own question is sent readable whatever the page
+ * shows, as one lower-case line, for as long as one page is being read. Those
+ * words the server has: a field that holds some of them repeats nothing new
+ * (see `typedValues`).
  */
 let asked = "";
+
+/** What stands in `asked` for an email address or a number that the question is sent without. No field's words hold it. */
+const NOT_SENT = "\u0000";
+/**
+ * The question as it leaves the browser when the page shows nothing of it:
+ * cut to what is sent, with every email address and number that a mask hides
+ * taken out (the guide's `asked`). "Pay with card 4111 1111 1111 1111" is sent
+ * as "pay with card [number]", so neither the number nor its first "4111" is
+ * a word of it. A reading that left such a value readable because a field
+ * held it would send it, and the page's repeat of the visitor's own typing
+ * would then count as the page showing it, which un-masks it in the question
+ * as well (`noteShownOwn` in guide.ts).
+ */
+function readableInQuestion(question: string): string {
+  return maskAndTrim(question.slice(0, MAX_QUESTION), MAX_ASKED)
+    .replace(/\[(?:email|number)\]/g, NOT_SENT)
+    .toLowerCase();
+}
 
 /** Whether `line` holds `value` whole, with no letter or digit run on to it: "settings" does not hold "set". Both lower case. */
 function holdsWhole(line: string, value: string): boolean {
@@ -691,12 +710,14 @@ let pageDocuments: Document[] = [];
  * What the fields and editors on the page hold now, each as one lower-case
  * line of words. Not what the visitor also wrote, whole, in their own
  * question: asked to "make Roma Johnston a manager", they type Roma in the
- * search box, and the row to point at is "Roma Johnston". Their question is
- * sent as it is, so that name tells the server nothing it was not told. With
- * it left out, the row read "[typed] Johnston", an option "[typed]
- * Cummerata", and a card's own page "[typed]" for its heading. Everything
- * else a field holds is left out as before, and an email or a long number is
- * still masked by its own rule (`own`).
+ * search box, and the row to point at is "Roma Johnston". Those words of
+ * their question are sent as they are, so that name tells the server nothing
+ * it was not told. With it left out, the row read "[typed] Johnston", an
+ * option "[typed] Cummerata", and a card's own page "[typed]" for its
+ * heading. Everything else a field holds is left out as before. That includes
+ * an email address or a number the question is sent without, though the
+ * visitor wrote it there too (`readableInQuestion`): typed, it is typing like
+ * any other.
  */
 function typedValues(): string[] {
   const values: string[] = [];
@@ -782,7 +803,7 @@ const cleanText = (text: string, max = 80): string => maskAndTrim(withoutTyping(
  */
 export function takeSnapshot(ignore: Element, question = "", near = (ignore as Element & { pointedAt?: Element }).pointedAt): PageSnapshot {
   own = namedIn(question);
-  asked = question.replace(/\s+/g, " ").trim().toLowerCase();
+  asked = readableInQuestion(question);
   pageDocuments = documentsOfPage();
   untiedLabels = pageDocuments.some((doc) => Array.from(doc.querySelectorAll("label")).some((label) => !label.hasAttribute("for") && !(label as HTMLLabelElement).control));
   choiceBoxes = choiceBoxesOf();
