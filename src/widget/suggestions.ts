@@ -114,6 +114,8 @@ class Suggestions {
       this.listen(wanted);
       this.group.hidden = !(wanted && this.fit());
     } catch (error) {
+      // Part way through being laid out, they are put away rather than left as they were.
+      this.group.hidden = true;
       console.warn("[Haptic]", error);
     }
   };

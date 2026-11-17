@@ -367,6 +367,18 @@ test("they never lie over a control the page keeps in place, like a top bar's, a
   }
 });
 
+test("on a site with the launcher bottom left, the pills line up with the panel's left edge", async () => {
+  const session = await start(CARDS, () => words("Done."), "/", { suggestions: SUGGESTED, appearance: { position: "bottom-left" } });
+  try {
+    await root(session).locator(".launcher").click();
+    const { texts: shown, boxes, panel } = await drawn(session);
+    assert.deepEqual(shown, TEXTS);
+    for (const box of boxes as Box[]) assert.ok(Math.abs(box.left - panel.left) <= 1 && box.bottom < panel.top, `a pill starts at ${box.left}, the panel at ${panel.left}`);
+  } finally {
+    await session.close();
+  }
+});
+
 test("in presentation mode the pills are drawn larger, and still fit above the panel", async () => {
   const session = await start(CARDS, () => words("Done."), "/", { suggestions: SUGGESTED, present: true });
   try {
