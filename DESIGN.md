@@ -3,8 +3,9 @@ version: alpha
 name: Haptic
 description: >-
   Design system for Haptic, an AI guide embedded in web apps. Covers the
-  marketing site at joinhaptic.com (web/) and the embedded widget (src/widget).
-  Built on shadcn/ui and Tailwind's default scale.
+  marketing site at joinhaptic.com (web/), the dashboard behind its sign-in,
+  and the embedded widget (src/widget). Built on shadcn/ui and Tailwind's
+  default scale.
 colors:
   # Light mode. Tailwind "stone", a warm neutral.
   primary: "#1C1917"
@@ -123,6 +124,10 @@ spacing:
   gutter: 24px
   container: 1024px
   content: 976px
+  # The dashboard. See Dashboard below.
+  dashboard-bar: 56px
+  dashboard-sidebar: 224px
+  dashboard-content: 1152px
 components:
   button-primary:
     backgroundColor: "{colors.primary}"
@@ -205,6 +210,20 @@ components:
     rounded: "{rounded.full}"
     height: 40px
     padding: 16px
+  # The dashboard. Proposed, see Dashboard below.
+  dashboard-card:
+    backgroundColor: "{colors.card}"
+    textColor: "{colors.foreground}"
+    typography: "{typography.body-sm}"
+    rounded: "{rounded.xl}"
+    padding: 20px
+  dashboard-nav-row:
+    backgroundColor: "{colors.secondary}"
+    textColor: "{colors.foreground}"
+    typography: "{typography.label-md}"
+    rounded: "{rounded.md}"
+    height: 32px
+    padding: 10px
 ---
 
 # Haptic
@@ -252,11 +271,13 @@ looks stark.
 - **Pointer blue (#1E6EF4):** The pointer, the mark around its target and the
   keyboard focus ring. Nothing else.
 - **Done green (#008932):** The small round tick that says a task is finished.
-  Blue means in progress and green means done, so the two never share a screen.
-  Not for buttons, text or bubbles.
-- **Error red (#DC2626):** Forms only. The star on a required field, the
-  outline and message on a field that failed its check, and the alert when
-  sending fails. It is shadcn's destructive colour.
+  Blue means in progress and green means done, so on a visitor's page the two
+  never share a screen. Not for buttons or bubbles. In the dashboard it also
+  says good, as set out under Dashboard.
+- **Error red (#DC2626):** Forms. The star on a required field, the outline
+  and message on a field that failed its check, and the alert when sending
+  fails. It is shadcn's destructive colour. In the dashboard it also says bad,
+  as set out under Dashboard.
 
 Dark mode follows the visitor's system setting and swaps the roles. The page
 becomes Ink (#1C1917), text becomes #F5F5F4, cards are #292524, borders are
@@ -297,7 +318,7 @@ loads a font on a customer's site.
 
 A single centred column. The container is 1024px (`max-w-5xl`) with 24px
 gutters, which leaves 976px of content. The hero demo and the FAQ both fill
-that width.
+that width. The dashboard has a frame of its own, set out under Dashboard.
 
 Spacing is a 4px grid, and most gaps are multiples of 8. The hero stacks with a
 fixed rhythm: 48px above the headline, 24px from headline to sub-copy, then
@@ -363,9 +384,10 @@ padding guesses.
 ## Elevation & Depth
 
 Flat. Hierarchy comes from the step between Paper and Card and from 1px borders,
-not from shadows. Three things are allowed a shadow, because they float above
-content: the demo window (`shadow-sm`), the widget's launcher and ask box, and
-the pointer with its caption. No gradients, no blur, no glass.
+not from shadows. Four things are allowed a shadow, because they float above
+content: the demo window (`shadow-sm`), the widget's launcher and ask box, the
+pointer with its caption, and in the dashboard a menu and the card a chart
+shows under the mouse (`shadow-sm`). No gradients, no blur, no glass.
 
 The pointer's shadow is two layers, a tight one and a soft one:
 `drop-shadow(0 1px 1px rgb(0 0 0 / .3)) drop-shadow(0 5px 9px rgb(0 0 0 / .26))`.
@@ -464,6 +486,135 @@ Scrolling never changes what a demo shows. A demo waits on its first frame,
 starts once about a third of it is on screen, and keeps playing until it has
 left the screen completely. Nothing switches while any of it can be seen.
 
+## Dashboard
+
+Signed off: colour says how a guide stands and which way a number moved, and
+no page says that it is live. The rest below is proposed. It is built, in
+`web/components/app`.
+
+The dashboard is where a company sees what its people asked and how each guide
+went. It is read at a glance and many times a day, so it is denser than the
+site. The colours, the pills, the icons and the voice are the same. What
+changes is the frame, the size of the type and one rule about surfaces.
+
+**Frame.** A 56px bar runs across the top and reads as a path. The pointer mark
+and Haptic come first and lead to the list of sites. The site comes next, and
+is a menu of the company's sites, with All sites and Add a site under them. Who
+is signed in is on the right, in a menu that names their company and holds Sign
+out. Inside a site its pages run down a 224px column on the left. Each is a
+32px row with a 16px icon. The page you are on is Border grey with Ink text,
+and the others are Muted text. Below 1024px the column becomes a row under the
+bar that scrolls sideways. Content is up to 1152px wide (`max-w-6xl`).
+
+**Pages.** A site has five, in this order, and no more are added without a
+reason a customer gave.
+
+- **Overview.** Is it working. Four numbers, the newest questions as they
+  happen, guides each day, how guides ended, and the three questions most
+  people could not find. A site nobody has asked anything yet says what will
+  show here, with a button to go and ask the first question.
+- **Questions.** Every question, newest first, as a table to search and filter.
+  A row opens its guide.
+- **Gaps.** What the company can fix. What people can't find, guides that
+  stopped finishing, where people give up and the steps they click past.
+- **Knowledge.** What Haptic reads and what the company has corrected. Notes,
+  help docs, corrections, the controls never to point at, and the pages read.
+- **Settings.** Three tabs. General holds how the widget looks and deleting
+  the site. Install holds the script and where it runs. Usage holds the
+  finished guides, month by month, which are what billing counts.
+
+**Sites.** A company with one site lands inside it. With more than one, the
+first page is the list, one card a site. A card says whether the script is
+running, how many questions the last seven days had and how many finished, the
+last fortnight as fourteen small bars, and the newest question. The whole card
+is the way in. A card never holds a picture of the site. Add a site leads to
+the setup screens, which have a frame of their own.
+
+**Type.** One 24px Medium title a page, the headline size. Card titles are
+16px Medium. Text, rows and tables are 14px. Notes under a number, table
+headings and the foot of a card are 12px Muted. A number in a tile is 36px
+Medium. Forms keep their 44px inputs, as everywhere.
+
+**Surfaces.** In the dashboard a card is Card white on Paper, with the 1px
+border and 14px corners. This is the one place the nesting differs from the
+site, where a card is Muted. A list of records inside a Muted card needed a
+white panel of its own, which made three surfaces for one list. Here the rows
+run edge to edge inside the card with hairlines between them, and the row
+under the mouse is Muted. The pages around sign-in, and the install page a
+developer is sent, keep Muted cards.
+
+**Numbers.** The four are guides finished, finish rate, questions Haptic
+couldn't guide, and median time to finish. A tile is a 14px Medium label in
+Muted text, the number at 36px, the change, and one 12px line that says what
+the number counts. A change against the same number of days before is said in
+words, such as "Up 12% on the previous 30 days", with a small arrow. The arrow
+and the words that say what moved, "Up 12%", are Done green when the number
+went the way it should and Error red when it did not. Which way is good
+depends on the number: more guides finished is good, more questions Haptic
+couldn't guide is not, and a shorter time to finish is good. The rest of the
+line is Muted text, and a number that did not move is Muted throughout. A new
+number arrives from 4px below in 200ms, which is how a tile shows it changed.
+
+**Colour.** The dashboard is the one place the three colours say how something
+stands, so a list can be read without reading it. Each is a 16px mark before
+the words, and the words stay in the text colour.
+
+- **Under way** is the pointer itself, Pointer blue with its white border and
+  shadow, because that is what is moving on someone's screen.
+- **Finished** is the green tick.
+- **A green dot** is a guide that got the person there another way: answered
+  from the help docs, or answered and not clicked.
+- **A red dot** is a guide Haptic couldn't guide: nothing to point at, a loop,
+  out of steps, an error, not in the help docs, or abandoned. These are the
+  guides the top row counts as ones Haptic couldn't guide.
+- **A grey dot** is one that was never Haptic's to answer: stopped by the
+  visitor, left for a person, off topic, or a control the company ruled out.
+  It is also a guide under way that has gone quiet, which reads "Paused".
+
+What the person said outweighs how the guide ended, so one they said didn't
+help is red and one they said helped is green. Colour is never the only sign:
+the words beside every mark say the same, and the arrow beside a number points
+the way it moved. Colour stays on marks, arrows and the few words of a change.
+It is never a fill, a card, a bar or a button.
+
+**Charts.** The two neutrals, and nothing else. Guides each day is a bar for
+each day of the range, in UTC, the same days the numbers above it count. Muted
+text grey is guides started, and Ink over it, from the same foot, is guides
+finished. Bars are at most 24px wide, rounded at the top and square at the
+foot, on hairlines with their numbers. Pointing at a day, or reaching it with
+the arrow keys, shows a small white card with that day's two numbers. A share
+of a whole is a thin Ink bar on a Border grey track. A site's card has the last
+fortnight as fourteen small bars, today's in Ink. Every chart has the same
+numbers as a table for a screen reader. There is no chart library.
+
+**Live.** A page that shows questions keeps itself current while it is open,
+asking every second and a half, and says nothing about it. There is no Live
+label and no dot. A new question is simply there, a step later it reads on,
+and the numbers above have moved. A question under way reads "Thinking", then
+"Showing step 2", with the shimmer, the same words the widget's status line
+uses, beside the blue pointer. A new row fades in from 4px above in 200ms.
+
+The pointer and the shimmer claim that someone is being shown a step right
+now, so they last only while that is likely. A guide with no new step for two
+minutes reads "Paused at step 2", still, beside a grey dot, because the person
+has most likely walked away and nobody can say otherwise. A new step brings
+the pointer back. After thirty minutes with no ending it is abandoned, as
+before, and only that is counted.
+
+The page speaks up only when it has stopped hearing from the server, with the
+word "Reconnecting" in Muted text where the time range is, so nobody takes
+what is on screen for the latest.
+
+**A guide.** It opens in a panel on the right, 576px wide, on Paper, with the
+page behind under a 20 percent Ink wash. Each step is a white card that says
+what was pointed at, and what Haptic said in the Ink caption bubble. The
+address holds the guide, so the link opens the same guide for someone else,
+and Back closes it.
+
+**Waiting.** While numbers load, Muted blocks hold the place of what is coming,
+at its size, so nothing jumps when it arrives. Once a page has numbers it keeps
+showing them while newer ones are on their way.
+
 ## Interaction
 
 How a guide should feel. Only what the designer has signed off belongs here.
@@ -543,7 +694,8 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
 - Do centre text in controls with flex, and keep every control on the 4px grid.
 - Don't replace the visitor's own mouse cursor.
 - Don't let the pointer or a caption cover the label it is pointing at.
-- Don't use Done green for anything but the finished mark.
+- Don't use Done green for anything but the finished mark, or Error red
+  outside a form, except to say good and bad in the dashboard.
 - Don't add another colour, a gradient, an illustration or artwork. Paintings
   behind the demos were tried and turned down. The window dots on the demo
   frame are the one borrowed exception.
