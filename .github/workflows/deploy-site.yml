@@ -8,6 +8,10 @@
 #   CLOUDFLARE_ACCOUNT_ID  the Cloudflare account the Worker lives in
 #   DATABASE_URL           Neon's connection string for the haptic project's main branch,
 #                          which the deploy brings up to date with db/migrations before it publishes
+# and, for billing, three optional ones:
+#   STRIPE_SECRET_KEY      Stripe's secret key, copied onto the Worker on every deploy
+#   STRIPE_WEBHOOK_SECRET  signs Stripe's webhooks to /api/stripe/webhook, copied onto the Worker too
+#   STRIPE_PRICES_KEY      a read-only Stripe key for the price check below. STRIPE_SECRET_KEY is used without it
 
 name: Deploy site
 
@@ -68,10 +72,26 @@ jobs:
 
       - run: npm run lint
 
-      # Before the publish, so the dashboard's Worker finds its tables. The migration runner is the
-      # repository's own, at the top. Migrations only add, so the site already live keeps working on
-      # the migrated database. The widget server's deploy runs this too, and the runner skips a
-      # migration the other deploy applied at the same moment.
+      # Stripe must charge what the pricing page says. A price changed in lib/site.ts
+      # and not yet in Stripe stops the deploy until `npm run stripe:setup` is run.
+      # STRIPE_PRICES_KEY is a restricted key that can only read billing meters,
+      # products, prices and the customer portal. Without it STRIPE_SECRET_KEY is
+      # used, and without either this only warns.
+      - name: Check Stripe charges what the pricing page says
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_PRICES_KEY || secrets.STRIPE_SECRET_KEY }}
+        run: |
+          if [ -z "$STRIPE_SECRET_KEY" ]; then
+            echo "::warning::There is no STRIPE_PRICES_KEY or STRIPE_SECRET_KEY secret, so Stripe's prices were not checked against lib/site.ts."
+            exit 0
+          fi
+          npm run stripe:check
+
+      # Before the publish, so the dashboard's Worker finds its tables, and after the checks that
+      # can stop the deploy, so a deploy stopped by them changes nothing in the database. The
+      # migration runner is the repository's own, at the top. Migrations only add, so the site
+      # already live keeps working on the migrated database. The widget server's deploy runs this
+      # too, and the runner skips a migration the other deploy applied at the same moment.
       - name: Apply database migrations
         working-directory: .
         env:
@@ -86,6 +106,22 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # After the publish, so the Worker exists. A secret takes effect at once and needs no other deploy.
+      # Billing stays switched off on the dashboard until both are there.
+      - name: Put the Stripe keys on the Worker
+        env:
+          KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          WEBHOOK: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$KEY" ] || [ -z "$WEBHOOK" ]; then
+            echo "::warning::STRIPE_SECRET_KEY or STRIPE_WEBHOOK_SECRET is missing, so billing is not switched on. See Billing in web/README.md."
+            exit 0
+          fi
+          printf '%s' "$KEY" | npx wrangler secret put STRIPE_SECRET_KEY -c wrangler.embedded.jsonc
+          printf '%s' "$WEBHOOK" | npx wrangler secret put STRIPE_WEBHOOK_SECRET -c wrangler.embedded.jsonc
 
       - name: Check the live site answers
         run: |

@@ -1,3 +1,4 @@
+import { inkOn, INK, launcherColour, POINTER_BLUE } from "../shared/colour.ts";
 import type { Appearance, Source, TurnReply } from "../shared/types.ts";
 
 // Everything Haptic draws: the launcher, the chat with its ask box, the
@@ -6,9 +7,10 @@ import type { Appearance, Source, TurnReply } from "../shared/types.ts";
 // ours can't leak out. Model text is only ever set as textContent.
 
 // Colours, radii and motion come from DESIGN.md, and the chat is the one in
-// the website's home page demo (web/components/demo/kit.tsx). The accent
-// colours the pointer, its ring and the heart of the thinking glow.
-// Everything else is ink on white. The pointer shape is assets/pointer.svg,
+// the website's home page demo (web/components/demo/kit.tsx). Haptic's blue
+// colours the pointer and its ring on every site, whatever the site saved: it
+// is not a setting (src/shared/colour.ts says why). The launcher takes the
+// site's own colour. Everything else is ink on white. The pointer shape is assets/pointer.svg,
 // with its tip at POINTER_TIP.
 //
 // The thinking glow is the one thing drawn over the page itself. It has an
@@ -109,7 +111,10 @@ const VEIL_CSS = `
 `;
 
 const CSS = `
-:host { all: initial; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
+/* Left to right on every page. The widget's own words are English, and 'all' leaves direction alone, so on a page
+   written right to left the chat would take that direction from the page and come out mirrored. What the visitor or
+   the model wrote takes its own direction from its first letter (dir="auto"), inside its bubble. */
+:host { all: initial; direction: ltr; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
   font: 14px/20px system-ui, -apple-system, "Segoe UI", sans-serif; color: #1c1917; --glide: cubic-bezier(.2,.8,.2,1); }
 * { box-sizing: border-box; }
 button { font: inherit; cursor: pointer; }
@@ -546,11 +551,12 @@ export class Ui {
     this.tipIn = this.present ? { x: POINTER_TIP.x * PRESENT_SCALE, y: POINTER_TIP.y * PRESENT_SCALE } : POINTER_TIP;
     this.glideMs = this.present ? PRESENT_GLIDE_MS : GLIDE_MS;
     this.host = document.createElement("haptic-root");
-    this.host.style.setProperty("--accent", this.present ? strongAccent(appearance.accent) : appearance.accent);
-    // The launcher takes the site's own colour when the company chose one. Only a six-digit hex is used: a property
-    // set to anything a browser can't read would leave the launcher with no background at all.
-    const launcher = /^#[0-9a-f]{6}$/i.test(appearance.launcher ?? "") ? appearance.launcher! : undefined;
-    if (launcher) {
+    // The pointer is Haptic's blue on every site. A colour a site saved for it before is not used.
+    this.host.style.setProperty("--accent", this.present ? strongAccent(POINTER_BLUE) : POINTER_BLUE);
+    // The launcher takes the site's own colour, darkened if it is too light to see on a white page. Anything that
+    // is not a six-digit hex is Ink: a property set to something a browser can't read would leave no background at all.
+    const launcher = launcherColour(appearance.launcher);
+    if (launcher !== INK) {
       this.host.style.setProperty("--launcher", launcher);
       this.host.style.setProperty("--launcher-ink", inkOn(launcher));
     }
@@ -560,17 +566,20 @@ export class Ui {
     // element and markup set as a string, and would leave the widget unstyled or not there at all.
     adoptStyles(root, this.present ? CSS + PRESENT_CSS : CSS);
     const hidden = { hidden: "" };
+    // Words the visitor or the model wrote can be in any language, so each holder reads in the direction of its own
+    // first letter: an Arabic question right to left inside its bubble, while the widget around it stays as it is.
+    const theirs = { dir: "auto" };
     root.append(
       make("div", { class: "ring", ...hidden }),
       make(
         "div",
         { class: "caption", ...hidden },
         make("button", { class: "where", type: "button", ...hidden }, icon(ARROW_PATH, { "aria-hidden": "true" })),
-        make("span"),
+        make("span", theirs),
         make("button", { class: "close", "aria-label": "Stop guide" }, icon(CROSS_PATH, { "aria-hidden": "true" })),
       ),
       make("div", { class: "cursor", ...hidden }, icon(POINTER_PATH, { width: "24", height: "24" })),
-      make("div", { class: "asked", ...hidden }),
+      make("div", { class: "asked", ...theirs, ...hidden }),
       make(
         "div",
         { class: "dock" },
@@ -581,8 +590,8 @@ export class Ui {
           make(
             "div",
             { class: "thread", ...hidden },
-            make("p", { class: "question" }),
-            make("div", { class: "reply", ...hidden }, make("p"), make("ul", { class: "sources", ...hidden }), make("p", { class: "missing", ...hidden })),
+            make("p", { class: "question", ...theirs }),
+            make("div", { class: "reply", ...hidden }, make("p", theirs), make("ul", { class: "sources", ...hidden }), make("p", { class: "missing", ...hidden })),
           ),
           make("div", { class: "status", role: "status", ...hidden }, icon(POINTER_PATH, { class: "arrow", "aria-hidden": "true" }), make("span"), make("button", { class: "resume", type: "button" }, "Carry on")),
           make("div", { class: "done", ...hidden }, make("i", { "aria-hidden": "true" }, icon(TICK_PATH)), "Done"),
@@ -597,14 +606,15 @@ export class Ui {
               "form",
               { class: "person", ...hidden },
               make("input", { type: "email", required: "", maxlength: "200", placeholder: "Your email", "aria-label": "Your email" }),
-              make("textarea", { rows: "2", maxlength: "1000", placeholder: "Anything to add", "aria-label": "Anything to add" }),
+              make("textarea", { rows: "2", maxlength: "1000", placeholder: "Anything to add", "aria-label": "Anything to add", ...theirs }),
               make("div", { class: "offer" }, make("span"), make("button", { class: "person-cancel", type: "button" }, "Cancel"), make("button", { class: "person-send", type: "button" }, "Send")),
             ),
           ),
           make(
             "form",
             { class: "ask" },
-            make("input", { type: "text", placeholder: "What do you want to do", "aria-label": "Ask a question", "aria-describedby": "haptic-empty", maxlength: "300" }),
+            // Empty, it is left to right, so the placeholder sits on the left as on any page. It turns with the first letter typed.
+            make("input", { type: "text", placeholder: "What do you want to do", "aria-label": "Ask a question", "aria-describedby": "haptic-empty", maxlength: "300", ...theirs }),
             make(
               "div",
               { class: "row" },
@@ -1182,6 +1192,8 @@ export class Ui {
       name.textContent = line.name;
       const value = document.createElement("span");
       value.className = "value";
+      // What was typed for the visitor, in their language.
+      value.dir = "auto";
       value.textContent = line.value ?? "";
       button.append(name, unseen(/[?:]$/.test(line.name) ? " " : ": "), value);
       const aside = line.partly ? ACTING_WORDS.partly : line.mine ? ACTING_WORDS.mine : "";
@@ -2289,24 +2301,6 @@ function isLayer(el: Element): boolean {
 /** Whether two boxes are the same, to the pixel. */
 function sameBox(a: Box, b: Box): boolean {
   return Math.abs(a.left - b.left) < 1 && Math.abs(a.top - b.top) < 1 && Math.abs(a.right - b.right) < 1 && Math.abs(a.bottom - b.bottom) < 1;
-}
-
-/** How bright a six-digit hex colour is, from 0 for black to 1 for white, as contrast is worked out from. */
-function luminance(hex: string): number {
-  const light = (channel: number) => {
-    const value = channel / 255;
-    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-  };
-  const [r, g, b] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)) as [number, number, number];
-  return 0.2126 * light(r) + 0.7152 * light(g) + 0.0722 * light(b);
-}
-
-/** The words and mark on a launcher of this colour: Paper or Ink, whichever is easier to read on it. */
-export function inkOn(hex: string): string {
-  const fill = luminance(hex);
-  const onPaper = (luminance("#fafaf9") + 0.05) / (fill + 0.05);
-  const onInk = (fill + 0.05) / (luminance("#1c1917") + 0.05);
-  return onPaper >= onInk ? "#fafaf9" : "#1c1917";
 }
 
 /**

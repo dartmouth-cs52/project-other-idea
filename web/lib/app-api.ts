@@ -41,6 +41,25 @@ export interface Me {
   sites?: { id: string; name: string; origin: string; connected: boolean }[];
 }
 
+/** The company's billing page: worker/billing.ts. */
+export interface Billing {
+  /** Stripe's keys are on the server, so a plan can be bought. */
+  ready: boolean;
+  testMode: boolean;
+  /** An owner or admin, who may buy, switch and open Stripe's portal. */
+  canManage: boolean;
+  plan: { id: string; name: string };
+  subscription: { status: string; cancelAt: string | null; periodEnd: string | null } | null;
+  hasCustomer: boolean;
+  /** The billing period under way, or the calendar month without a subscription. End is exclusive. */
+  period: { start: string; end: string; kind: "billing" | "month" };
+  finished: number;
+  /** Of those, how many Stripe has. */
+  sent: number;
+  sites: { id: string; name: string; finished: number }[];
+  plans: import("./billing-plans").PaidPlan[];
+}
+
 export interface Reading {
   read: number;
   max: number;
@@ -123,8 +142,13 @@ export interface Site {
   origin: string;
   allowedOrigins: string[];
   scriptUrl: string;
-  /** `launcher` is the Ask button's own colour. Missing means Ink. */
+  /** `launcher` is the Ask button's own colour, as it is drawn. Missing means Ink. `accent` is always Haptic's blue. */
   appearance: { accent: string; position: "bottom-right"; launcherLabel: string; launcher?: string };
+  /**
+   * The launcher's colour is read from the site once, when the site is added. `waiting` is true until that has
+   * finished for the site's address or a person has chosen a colour. `source` says where the colour came from.
+   */
+  launcherMatch?: { waiting: boolean; source: "matched" | "chosen" | null };
   notes: string;
   docs: {
     budget: number;

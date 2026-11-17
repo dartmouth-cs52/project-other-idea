@@ -19,7 +19,7 @@ The rest of the Worker's tests are at the top of the repository, in `../test/`. 
 - `app/privacy/`, `app/terms/`: plain text pages.
 - `components/demo.tsx`: the scripted demo. One task on a loop, driven by a list of steps at the top of the file.
 - `components/pointer.tsx`: the Haptic pointer. Same path as `../assets/pointer.svg` and the widget in `../src/widget/ui.ts`.
-- `lib/site.ts`: the name, contact address, links, FAQ copy and the pricing plans. A price is changed there and nowhere else. Nothing is charged yet: there is no checkout and no billing.
+- `lib/site.ts`: the name, contact address, links, FAQ copy and the pricing plans. A price is changed there and nowhere else. Billing reads the same plans: see [Billing](#billing).
 - `components/haptic-tag.tsx` and `haptic-notes.md`: Haptic itself, running on this site so people can try it. See [Haptic on this site](#haptic-on-this-site).
 - `public/sitemap.xml` and `public/robots.txt`: the list of pages for search engines. Add a line to the sitemap when a page is added.
 - `app/globals.css`: the colour, radius and motion tokens from `../DESIGN.md`.
@@ -50,7 +50,7 @@ Companies sign up by invitation. The pages are `app/sign-in/`, `app/dashboard/`,
 - `worker/insights.ts` is the dashboard's queries. `headline` at its end is the top row: guides finished (by when they finished, as billing counts them), finish rate, questions Haptic couldn't guide and the median time to finish, each against the same number of days before, and each day's guides started and finished. `live` is a site's twenty newest questions and the step each is on, in one query, with a `stamp` that changes whenever anything about the last day's questions does. `sitesOverview` is every site's card for the list of sites.
 - `worker/setup-api.ts` answers the setup screens at `app/dashboard/setup/`, where a company adds a site one question at a time: the address, reading its pages, what Haptic learned (with a "Never touch" list that feeds Never point at), adding the script, and seeing it connect. The screen it is on is kept in the site's context as `setup`, so a reload lands on it. The steps are listed in `lib/setup.ts`. A new address on the first screen changes the site in place, keeping all that was set up, until the script has called from anywhere. It also sends "Email it to my developer" through Resend from install@joinhaptic.com, naming the sender by their sign-in address, with replies going to them. In any 24 hours a company sends one mailbox 3 and everyone together 6 (the mailbox written one way, so a +tag or Gmail's dots count as the same), a site sends 10, a company 20 and one person 10. One person may also have 30 presses reach Resend in any hour, sent or turned down, since one turned down doesn't count toward the rest. Every limit gives the same answer, naming no cause. Each email is a row in `developer_emails` (`../db/migrations/0013`), holding a hash of the mailbox, the site, the company, the sender and the time, deleted once a day old. Until that migration is applied, the form says email isn't set up and offers the link to copy.
 - `worker/playbook.ts` serves `/install/<site>.md`, the steps a coding agent follows. The "Onboard your agent" pill (`components/app/agent-pill.tsx`) copies one line pointing at it, and opens Claude Code, Cursor or Codex by their own links (`lib/agents.ts`). Every way of sending the prompt copies it first and says whether the app opened (`lib/hand-off.ts`), because a link to an app that isn't installed does nothing at all.
-- `worker/brand.ts` reads a site's icon and its own colour from its first page and the stylesheets it links: a custom property named for it such as `--brand` or `--primary`, then `theme-color`, the manifest, an SVG icon's fill, and last the colour written most often. A grey, a near white or a near black is never the answer. `GET /api/app/sites/:id/brand` returns both, and keeps nothing. The dashboard shows the icon beside a site's name, trying `/favicon.ico` first and asking only when that fails, and "Match" in Settings sets the pointer to the colour.
+- `worker/brand.ts` reads a site's icon and its own colour from its first page and the stylesheets it links: a custom property named for it such as `--brand` or `--primary`, then `theme-color`, the manifest, an SVG icon's fill, and last the colour written most often. A grey, a near white or a near black is never the answer. `GET /api/app/sites/:id/brand` returns both and keeps nothing. The colour is the launcher's, never the pointer's, which is Haptic's blue on every site (`src/shared/colour.ts`). `matchLauncher` reads it once when a site is first asked for after it is added, and again if its address changes, after the answer has gone (the request's `waitUntil`, passed down from `worker/index.ts` through `handle` as `later`). It claims the read in the database first, so two requests start one read, and never saves over a colour a person chose in Settings (`launcherChosen`). A launcher colour too light to see on a white page is darkened to 3 to 1 against white when it is saved and when it is drawn. The dashboard shows the icon beside a site's name, trying `/favicon.ico` first and asking only when that fails.
 - `worker/docs.ts` reads a help doc from its address, keeping the article and leaving out navigation, headers, footers and scripts, as `npm run tag -- --docs` does. Each site's Settings tab in the dashboard sets the widget's colour, corner and button label, the company's notes, and its help docs, all of which the widget server reads within a minute. Whole docs go into the prompt in the order they were added, up to 60,000 characters, and the page shows which are left out. Deleting a site there, after typing its address, deletes its guides, steps and origins with it.
 - `worker/health.ts` groups questions by meaning for the dashboard's lead, what people can't find, counted by person, and for guide health, which flags a common question whose guides stopped finishing. The Worker runs `sendHealthAlerts` once a day from the schedule in `wrangler.jsonc` and emails the company's people through the `EMAIL` binding. Cloudflare only delivers that binding's mail to addresses verified under Email Routing, so emailing customers needs Cloudflare's email sending set up for joinhaptic.com, or another sending service. Until then each alert is still kept and shown on the dashboard.
 - `worker/corrections.ts` keeps what a company changes about how Haptic guides: "Point here instead" on a step, and the controls Haptic must never point at. Both live in the site's context, so the widget server picks them up within a minute.
@@ -73,6 +73,8 @@ npx wrangler secret put APPROVE_SECRET            # 32 or more random characters
 npx wrangler secret put RESEND_API_KEY            # sends the sign-in email, see below
 ```
 
+Billing needs two more, `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. See [Billing](#billing).
+
 `NEON_AUTH_URL` and `WIDGET_URL` are plain settings in `wrangler.jsonc`. In Neon Auth for the main branch, add `https://joinhaptic.com` as a trusted domain, turn on Magic Link with a 1440 minute expiry, and turn off email and password. Until the secrets are set, the sign-in pages load but say sign-in is not set up.
 
 **Trying it locally.** Copy the values above into `.dev.vars`, pointing at a Neon branch for testing, with `NEON_AUTH_URL` set to that branch's auth address and `WIDGET_URL=http://localhost:4000`. Add `http://localhost:8787` to that branch's trusted domains. Then:
@@ -92,6 +94,41 @@ npx wrangler dev --port 8787 --local-upstream localhost:8787
 4. In Neon, under Auth, Configuration, Webhooks for the main branch, turn webhooks on with the URL `https://joinhaptic.com/api/neon-auth-hook` and the event `send.magic_link` only.
 
 To go back to Neon's own email, turn the webhook off. Neon's webhook URL must be public HTTPS, so this cannot be tried against `wrangler dev`. `test/neon-hook.test.ts` at the top of the repository signs requests the way Neon does instead.
+
+## Billing
+
+Companies pay through Stripe for the plans in `lib/site.ts`. The unit is a finished guide, as the server decides it ([docs/operations.md](../docs/operations.md#which-guides-are-finished)). Each paid plan is one monthly subscription with two prices: the flat fee, paid at the start of the month, and finished guides, counted by a Stripe meter and paid at the end of it. The guides price has graduated tiers, so the plan's included guides cost nothing and each one after them costs the overage price. A month of 1,200 finished guides on Team comes to $149 + 200 × $0.12.
+
+- `lib/billing-plans.ts` works out from `pricing` what Stripe must hold: two prices a paid plan, found by lookup keys such as `haptic_team_monthly` and `haptic_team_guides`.
+- `scripts/stripe-setup.ts` makes them in Stripe, with the meter and the customer portal's settings, and with `--webhook` the webhook endpoint. `npm run stripe:check` changes nothing and exits 1 if Stripe differs from `lib/site.ts`. The site's deploy runs it when the `STRIPE_PRICES_KEY` repository secret is set, so a new price can't go live on the page before Stripe charges it.
+- `worker/billing.ts` answers `/api/app/billing` for the dashboard's Billing page (`components/app/billing.tsx`, reached from the account menu) and Stripe's webhook at `/api/stripe/webhook`.
+- `../src/shared/billing.ts` sends each finished guide to Stripe as one meter event, keyed by the guide's id. The widget server sends it when the guide is kept as finished, and this Worker sweeps every hour at 17 past for any that didn't get through. `guides.billed_at` records that it went.
+
+**Who can do what.** Everyone at a company sees the Billing page: its plan, finished guides this period against what the plan includes, and each site's count. Only an owner or admin can start a subscription, change plan or open Stripe's portal. Starting one goes through Stripe Checkout, which collects the card, the billing address and an optional tax id. Subscriptions renew at midnight UTC on the first of each month, so a bill covers the same month as each site's Usage tab, and the first month is prorated.
+
+**Changing plan** between Team and Scale happens on the Billing page, through the API, because Stripe's portal can't change a subscription with a metered price. It takes effect at once: the flat fee is prorated onto the next invoice, guides used before the change are billed at the old plan's rate, and the new plan's included guides start from the change. The portal is for the card, billing details, invoices and cancelling, which takes effect at the end of the period.
+
+**Going over, or a failed payment,** never switches Haptic off: that would break the company's product in front of its own customers. The Billing page says what the period comes to so far, and says plainly when a payment failed. Stripe retries the card and emails the customer by its own settings.
+
+**The webhook** checks Stripe's signature and refuses anything older than five minutes. It doesn't apply the event's copy of a subscription. It reads the subscription from Stripe and writes the company's row in `billing` (`../db/migrations/0015`), so events that arrive late, out of order or twice leave the same row. Each event's id is kept for 30 days in `stripe_events`, and one already applied is answered and skipped. It handles a finished Checkout, a subscription made, changed, paused, resumed or cancelled, and an invoice paid or failed. A subscription made by hand in Stripe's dashboard counts only if its customer is already a company's, or it has `organization_id` metadata naming one.
+
+**Tax.** Every product carries the tax code for business software as a service (`PRODUCT_TAX_CODE` in `lib/billing-plans.ts`). Stripe needs it to work out sales tax and VAT, whether through Stripe Tax or Managed Payments, where Stripe is the seller of record. Haptic's Stripe account has Managed Payments on by default, so Checkout shows Link's form and Stripe handles the tax. Whether to keep it is a business decision, set in Stripe's dashboard under Settings, Managed Payments, and no code changes either way.
+
+**Test and live mode.** The ids in a company's row belong to the mode they were made in. A server with a key for the other mode treats the row as empty, and never sends that company's usage to the other mode.
+
+**Setting it up.** In each mode, test first:
+
+```bash
+cd web
+STRIPE_SECRET_KEY=sk_test_… npm run stripe:setup -- --webhook https://joinhaptic.com --secret-file ~/haptic-webhook-secret
+npx wrangler secret put STRIPE_SECRET_KEY                                         # the same key, for this Worker
+npx wrangler secret put STRIPE_WEBHOOK_SECRET < ~/haptic-webhook-secret && rm ~/haptic-webhook-secret
+cd .. && npx wrangler secret put STRIPE_SECRET_KEY                                # the widget server, so finished guides go at once
+```
+
+The migration `0015_billing.sql` must be applied first. Without the two secrets the Billing page shows the plans and says paying isn't switched on yet. Without the key on the widget server, finished guides still reach Stripe, within the hour, from this Worker's sweep.
+
+To try the webhook locally, `stripe listen --forward-to localhost:8787/api/stripe/webhook` prints a signing secret for `.dev.vars`. `stripe trigger checkout.session.completed` sends a test event.
 
 ## Haptic on this site
 
