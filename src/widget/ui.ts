@@ -1,4 +1,5 @@
 import type { Appearance, Source, TurnReply } from "../shared/types.ts";
+import { isField } from "./snapshot.ts";
 
 // Everything Haptic draws: the launcher, the chat with its ask box, the
 // pointer, the ring around its target and the caption. It all lives in one
@@ -40,12 +41,13 @@ export const EMPTY_SEND = "Type what you want to do first, then send it.";
 /** Under the ask box, when Do it is pressed with nothing typed. */
 export const EMPTY_DOIT = "Type what you want Haptic to do first, then press Do it.";
 
-// The thinking glow. It is on the page only while Haptic waits for the model.
-// A soft band the width of the page comes in at the top edge and falls
-// towards the bottom, once for each wait. How long the wait will be is not
-// known, so the band is paced to it: quick at first and slower the longer the
-// wait goes on, always on its way down and never at the bottom before the
-// reply. The moment the reply arrives it goes the rest of the way and off the
+// The thinking glow. It is on the page only while Haptic waits for the model
+// and the visitor waits for Haptic: never over a visitor who is using the
+// page (see Ui.onHand). A soft band the width of the page comes in at the top
+// edge and falls towards the bottom, once for each wait. How long the wait
+// will be is not known, so the band is paced to it: quick at first and slower
+// the longer the wait goes on, always on its way down and never at the bottom
+// before the reply. The moment the reply arrives it goes the rest of the way and off the
 // page, fading, so every wait is one pass from top to bottom and the page is
 // clear by the time the pointer lands.
 /**
@@ -59,6 +61,10 @@ const FALL_EASE = "cubic-bezier(.14, 1, .3, 1)";
 /** How long the glow takes to come in, and to leave by the bottom once the reply has arrived. */
 const GLOW_IN_MS = 300;
 const GLOW_OUT_MS = 450;
+/** A key that does nothing on the page on its own, like the Command of Command-Tab. Pressing one is not using the page. */
+const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock", "Fn", "AltGraph", "OS"]);
+/** Roles of the page's own controls that a visitor fills in or picks a value from, as a text field and a dropdown are. */
+const FILLED_IN_ROLES = new Set(["textbox", "searchbox", "combobox", "listbox", "spinbutton"]);
 
 // The band's strength across its thickness: a bell with no flat top and no
 // edge, which is what makes it read as light and not as a stripe. A gradient
@@ -523,6 +529,15 @@ export class Ui {
   private readonly blend: (rule: string) => void;
   /** The glow that is on the page while Haptic thinks. */
   private glow?: HTMLElement;
+  /**
+   * The visitor's hands are on the page in this wait: they pressed or typed on it while Haptic thought, or the wait
+   * began with them in the middle of filling in a field. No glow is drawn over them until the wait is over.
+   */
+  private handsOn = false;
+  /** The visitor's last press or key on the page, while a guide runs, went to a field they fill in or to a dropdown's list. */
+  private filling = false;
+  /** The visitor's presses and keys are heard: only while a guide runs. */
+  private hearing = false;
 
   constructor(appearance: Appearance, handlers: UiHandlers, acting?: UiActing, options: { present?: boolean } = {}) {
     this.present = options.present === true;
@@ -1602,9 +1617,14 @@ export class Ui {
   setState(state: GuideState) {
     (this.host as HTMLElement & { guideState?: GuideState }).guideState = state;
     this.showStatus();
-    // "asking" is the wait for the model, and the only time the glow is on the page.
+    this.hearHand(state === "asking" || state === "pointing" || state === "watching" || state === "acting" || state === "paused");
+    // "asking" is the wait for the model, and the only time the glow is on the page. A wait the visitor spent with
+    // their hands on the page is over with it, and the next one starts with a glow again.
     if (state === "asking") this.glowOn();
-    else this.glowOff();
+    else {
+      this.handsOn = false;
+      this.glowOff();
+    }
     this.keepPlaced();
     this.showAsked();
   }
@@ -1615,7 +1635,15 @@ export class Ui {
    * motion on there is no glow at all.
    */
   private glowOn() {
-    if (this.glow || lessMotion()) return;
+    if (this.glow || this.handsOn || lessMotion()) return;
+    // A wait that begins with the visitor filling in a form, typing in a field or choosing from a dropdown, has no glow:
+    // they are using the page, not waiting for Haptic, and the next step comes all the same. A wait that begins after
+    // a button or a link has one, even when the page then puts the keyboard in a field of its own accord. Not while
+    // Haptic acts: it is the one in the fields then, and the glow is how it shows it is working.
+    if (!this.actingNow && this.filling && this.fillingNow()) {
+      this.handsOn = true;
+      return;
+    }
     try {
       // A page that swapped out its own document took the glow's element with it. It is put back, under ours.
       if (!this.veil.isConnected) {
@@ -1655,6 +1683,54 @@ export class Ui {
       // With no glow left, the element is not displayed, and the page is not blended with anything.
       if (!this.glass.querySelector(".glow")) this.blend("");
     }, GLOW_OUT_MS);
+  }
+
+  /**
+   * Hears the visitor's presses and keys while a guide runs, and no longer: nothing of ours listens to the page's
+   * presses when no guide is running. On the window, in the capture phase, so it is heard before the page or the
+   * guide hears it, and so before a press that ends a step can start the next wait.
+   */
+  private hearHand(on: boolean) {
+    if (on === this.hearing) return;
+    this.hearing = on;
+    this.filling = false;
+    for (const type of ["pointerdown", "keydown"]) {
+      if (on) window.addEventListener(type, this.onHand, { capture: true, passive: true });
+      else window.removeEventListener(type, this.onHand, { capture: true });
+    }
+  }
+
+  /**
+   * The visitor pressed or typed. Only what the browser marks as the visitor's own counts: what Haptic dispatches as
+   * it acts, and what the page's scripts dispatch, does not. A press or a key in our element is the visitor using
+   * the chat, not the page. One on the page while Haptic thinks sends the glow away, the way the reply does, and it
+   * does not come back for the rest of that wait: the visitor has gone on without it, and the chat still says Haptic
+   * is thinking. Haptic goes on thinking: the reply is not called off.
+   */
+  private onHand = (event: Event) => {
+    try {
+      if (!event.isTrusted) return;
+      if (event.type === "keydown" && MODIFIERS.has((event as KeyboardEvent).key ?? "")) return;
+      const path = event.composedPath();
+      if (path.includes(this.host)) {
+        this.filling = false;
+        return;
+      }
+      this.filling = path.some((node) => node instanceof Element && fillsIn(node));
+      if (this.state !== "asking" || this.handsOn) return;
+      this.handsOn = true;
+      this.glowOff();
+    } catch (error) {
+      console.warn("[Haptic]", error);
+    }
+  };
+
+  /** The keyboard is in a field of the page's that the visitor fills in, or in a dropdown: not in our element. */
+  private fillingNow(): boolean {
+    let active = document.activeElement;
+    if (!active || active === this.host) return false;
+    while (active.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+    return fillsIn(active);
   }
 
   /**
@@ -1906,6 +1982,16 @@ function lessMotion(): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * A control of the page's that a visitor fills in or picks a value from: a field text is typed into, a dropdown, a
+ * slider, or the list a dropdown drawn by the page opens. A label stands for its field. A button, a link, a tick box
+ * and a menu are used with one press, and are not.
+ */
+function fillsIn(el: Element): boolean {
+  if (el instanceof HTMLLabelElement) return !!el.control && isField(el.control);
+  return isField(el) || FILLED_IN_ROLES.has(el.getAttribute("role") ?? "");
 }
 
 /**
