@@ -167,8 +167,9 @@ test("a control off to the right is scrolled into view, and once scrolled away i
   try {
     await session.ask("open settings");
     await session.untilState("pointing");
-    // The guide brings it into the window, across.
+    // The guide brings it into the window, across. The ring shows as soon as any of it does, so its scroll is let finish.
     await session.until(async () => !!(await drawn(session)).ring && !!(await drawn(session)).pointer, "the pointer and ring to go round Settings", 3000);
+    await session.page.waitForTimeout(800);
     const width = await session.page.evaluate(() => document.documentElement.clientWidth);
     const brought = await box(session, "#far");
     assert.ok(brought.left >= 0 && brought.right <= width, `Settings is not in the window: it spans ${brought.left} to ${brought.right} of ${width}`);
@@ -236,6 +237,165 @@ test("a control parked off the side of a page that cannot scroll across is not s
     assert.equal(shown.way, undefined, "a way back is offered to a control no scrolling reaches");
     assert.ok(shown.caption, "the sentence went away");
     assert.equal(shown.caption.text, "Click Billing in the menu.");
+  } finally {
+    await session.close();
+  }
+});
+
+// A box inside the page that scrolls, like a sidebar, a list or a wide table, hides what is scrolled out of it while
+// that may still lie inside the window. The ring and the pointer would be drawn over whatever is beside the box, so
+// they go, and the sentence waits at the edge of the box, just outside it where there is room. A control half out of
+// the box has the ring round the half on show.
+const SIDEBAR = `<div style="display:flex;gap:24px">
+    <nav id="side" style="height:200px;width:200px;overflow-y:auto;border:1px solid #ccc">
+      ${["Home", "Inbox", "Projects", "Calendar", "Reports", "Files", "People", "Teams", "Goals", "Docs", "Tasks", "Apps", "Labels", "Billing", "Help"]
+        .map((name) => `<a href="#${name.toLowerCase()}" id="${name.toLowerCase()}" style="display:block;height:24px;padding:4px 8px">${name}</a>`)
+        .join("")}
+    </nav>
+    <main><h1>Overview</h1><p id="beside">What is beside the list.</p></main>
+  </div>`;
+
+/** Where a box shows what is inside it, inside its border. */
+const inside = (session: Session, selector: string): Promise<Box> =>
+  session.page.evaluate((s: string) => {
+    const el = document.querySelector(s)!;
+    const rect = el.getBoundingClientRect();
+    return { left: rect.left + el.clientLeft, top: rect.top + el.clientTop, right: rect.left + el.clientLeft + el.clientWidth, bottom: rect.top + el.clientTop + el.clientHeight };
+  }, selector);
+
+test("a control scrolled out of a box that scrolls, but still in the window, has its sentence wait just outside that box", async () => {
+  const session = await start(SIDEBAR, (request, index) => (index === 0 ? point(request, "Billing", "Click Billing.") : words("Here is billing.")));
+  try {
+    await session.ask("where is billing");
+    await session.untilState("pointing");
+    // The guide scrolls the list to it.
+    await session.until(async () => !!(await drawn(session)).ring, "the ring to go round Billing", 3000);
+    await session.page.waitForTimeout(300);
+    const side = await inside(session, "#side");
+    const billing = await box(session, "#billing");
+    assert.ok(billing.top >= side.top && billing.bottom <= side.bottom, "the list was not scrolled to Billing");
+
+    // The visitor scrolls the list back to its top. Billing is in the window, below the list's edge.
+    await session.page.evaluate(() => (document.getElementById("side")!.scrollTop = 0));
+    await session.page.waitForTimeout(300);
+    const hidden = await box(session, "#billing");
+    const height = await session.page.evaluate(() => window.innerHeight);
+    assert.ok(hidden.top >= side.bottom && hidden.bottom <= height, `Billing is not hidden by the list inside the window: ${JSON.stringify(hidden)}`);
+    const away = await drawn(session);
+    assert.equal(away.ring, undefined, `the ring is drawn outside the list, at ${JSON.stringify(away.ring)}`);
+    assert.equal(away.pointer, undefined, "the pointer is drawn outside the list");
+    assert.ok(away.caption, "the sentence went away");
+    assert.equal(away.way, "Scroll down to it");
+    assert.ok(away.caption.top >= side.bottom && away.caption.top <= side.bottom + 20, `the sentence is not just under the list: its top is at ${away.caption.top}, the list ends at ${side.bottom}`);
+
+    // The way back scrolls the list, and Billing is still the step.
+    await session.page.locator("haptic-root .caption .where").click();
+    await session.until(async () => !!(await drawn(session)).ring, "the ring to come back round Billing", 3000);
+    await session.page.waitForTimeout(800);
+    const back = await box(session, "#billing");
+    assert.ok(back.top >= side.top && back.bottom <= side.bottom, "the way back did not scroll the list to Billing");
+    await session.page.locator("#billing").click();
+    const second = await session.untilAsked(2);
+    assert.match(second.event ?? "", /^The user clicked link "Billing"\./);
+  } finally {
+    await session.close();
+  }
+});
+
+test("a control half out of a box that scrolls has the ring round the half on show", async () => {
+  const session = await start(SIDEBAR, (request, index) => (index === 0 ? point(request, "Billing", "Click Billing.") : words("Here is billing.")));
+  try {
+    await session.ask("where is billing");
+    await session.untilState("pointing");
+    await session.until(async () => !!(await drawn(session)).ring, "the ring to go round Billing", 3000);
+    await session.page.waitForTimeout(300);
+    // Billing straddles the bottom edge of the list.
+    await session.page.evaluate(() => {
+      const side = document.getElementById("side")!;
+      const billing = document.getElementById("billing")!;
+      side.scrollTop += billing.getBoundingClientRect().top + billing.offsetHeight / 2 - (side.getBoundingClientRect().top + side.clientTop + side.clientHeight);
+    });
+    await session.page.waitForTimeout(300);
+    const side = await inside(session, "#side");
+    const billing = await box(session, "#billing");
+    assert.ok(billing.top < side.bottom && billing.bottom > side.bottom, "Billing does not straddle the list's edge");
+    const shown = await drawn(session);
+    assert.ok(shown.ring, "the ring went with half of Billing on show");
+    assert.ok(Math.abs(shown.ring.bottom - 4 - side.bottom) < 2, `the ring does not end at the list's edge: it ends at ${shown.ring.bottom}, the list at ${side.bottom}`);
+    assert.ok(shown.pointer && shown.pointer.top < side.bottom, "the pointer is not on the half of Billing on show");
+  } finally {
+    await session.close();
+  }
+});
+
+test("a cell scrolled out across a wide table's box has its sentence wait at that side of the box", async () => {
+  const cells = Array.from({ length: 12 }, (_, n) => `<td style="min-width:120px">Column ${n + 1}</td>`).join("");
+  const page = `<div id="wrap" style="width:500px;overflow-x:auto;border:1px solid #ccc"><table><tr>${cells}<td><button id="edit" type="button">Edit</button></td></tr></table></div><p>Below the table.</p>`;
+  const session = await start(page, (request, index) => (index === 0 ? point(request, "Edit", "Click Edit.") : words("Editing.")));
+  try {
+    await session.ask("edit the row");
+    await session.untilState("pointing");
+    await session.until(async () => !!(await drawn(session)).ring, "the ring to go round Edit", 3000);
+    await session.page.evaluate(() => (document.getElementById("wrap")!.scrollLeft = 0));
+    await session.page.waitForTimeout(300);
+    const wrap = await inside(session, "#wrap");
+    const edit = await box(session, "#edit");
+    assert.ok(edit.left >= wrap.right, "Edit is still in the table's box");
+    const away = await drawn(session);
+    assert.equal(away.ring, undefined, "the ring is drawn outside the table's box");
+    assert.ok(away.caption, "the sentence went away");
+    assert.equal(away.way, "Scroll right to it");
+    assert.ok(away.caption.left >= wrap.right && away.caption.left <= wrap.right + 20, `the sentence is not just right of the table's box: its left is at ${away.caption.left}, the box ends at ${wrap.right}`);
+  } finally {
+    await session.close();
+  }
+});
+
+test("a control moved out of a box that only clips, like a strip of slides, gets no way back", async () => {
+  const slides = ["Welcome", "Plans", "Upgrade"].map((name) => `<div style="flex:none;width:300px;height:120px;padding:12px">${name === "Plans" ? '<button id="plans" type="button">See plans</button>' : name}</div>`).join("");
+  const page = `<div id="strip" style="width:300px;margin-left:700px;overflow:hidden;border:1px solid #ccc"><div style="display:flex">${slides}</div></div>
+    <button id="next" type="button">Next slide</button><button id="prev" type="button">Previous slide</button>
+    <script>
+      document.getElementById('strip').scrollLeft = 300;
+      document.getElementById('next').onclick = () => document.getElementById('strip').scrollLeft += 300;
+      document.getElementById('prev').onclick = () => document.getElementById('strip').scrollLeft -= 300;
+    </script>`;
+  const session = await start(page, (request, index) => (index === 0 ? point(request, "See plans", "Click See plans.") : words("Here are the plans.")));
+  try {
+    await session.ask("see the plans");
+    await session.untilState("pointing");
+    await session.until(async () => !!(await drawn(session)).ring, "the ring to go round See plans", 3000);
+    // The page moves the strip on by itself.
+    await session.page.evaluate(() => (document.getElementById("strip")!.scrollLeft = 600));
+    await session.page.waitForTimeout(300);
+    const strip = await inside(session, "#strip");
+    const plans = await box(session, "#plans");
+    assert.ok(plans.right <= strip.left && plans.left >= 0, "See plans is not hidden by the strip inside the window");
+    const away = await drawn(session);
+    assert.equal(away.ring, undefined, "the ring is drawn outside the strip");
+    assert.equal(away.pointer, undefined, "the pointer is drawn outside the strip");
+    assert.ok(away.caption, "the sentence went away");
+    assert.equal(away.way, undefined, "a way back is offered that the visitor could not scroll themselves");
+  } finally {
+    await session.close();
+  }
+});
+
+test("boxes that clip nothing of the control, like a card's or a run of text's, leave the ring and pointer round all of it", async () => {
+  const page = `<div style="overflow:hidden;border-radius:12px;border:1px solid #ccc;padding:16px;width:300px">
+      <p>Your changes are not saved yet.</p><span style="overflow:hidden"><button id="save" type="button">Save changes</button></span>
+    </div>`;
+  const session = await start(page, (request, index) => (index === 0 ? point(request, "Save changes", "Click Save changes.") : words("Saved.")));
+  try {
+    await session.ask("save");
+    await session.untilState("pointing");
+    await session.until(async () => !!(await drawn(session)).ring, "the ring to go round Save changes", 3000);
+    await session.page.waitForTimeout(700);
+    const save = await box(session, "#save");
+    const shown = await drawn(session);
+    assert.ok(shown.ring && Math.abs(shown.ring.left + 4 - save.left) < 2 && Math.abs(shown.ring.right - 4 - save.right) < 2 && Math.abs(shown.ring.bottom - 4 - save.bottom) < 2, "the ring is not round all of Save changes");
+    assert.ok(shown.pointer, "the pointer is not drawn");
+    assert.ok(shown.caption && shown.way === undefined, "the sentence is not beside Save changes");
   } finally {
     await session.close();
   }
