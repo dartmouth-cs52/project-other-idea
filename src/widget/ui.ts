@@ -1804,7 +1804,7 @@ export class Ui {
     // The caption and the launcher with its panel are placed together: neither covers the control, or the row it shows
     // in, the pointer or the other.
     const box = this.caption.getBoundingClientRect();
-    const { left, top, spot } = this.settle(this.rowOf(rect), pad, box, this.pointerBox(tip));
+    const { left, top, spot } = this.settle(this.rowOf(rect), pad, box, this.pointerBox(tip), rect);
     this.caption.style.left = `${left}px`;
     this.caption.style.top = `${top}px`;
     this.dockAt(spot);
@@ -1839,7 +1839,7 @@ export class Ui {
    * short window, the caption looks for a place clear of the dock, first with the dock at home. Only when nothing
    * keeps them apart does one end up over another.
    */
-  private settle(rect: DOMRect, pad: number, box: DOMRect, pointer: Box): { left: number; top: number; spot: Spot } {
+  private settle(rect: DOMRect, pad: number, box: DOMRect, pointer: Box, control: Box = rect): { left: number; top: number; spot: Spot } {
     const dock = this.dock.getBoundingClientRect();
     const size = { w: dock.width, h: dock.height };
     const captioned = !this.caption.hidden;
@@ -1847,7 +1847,9 @@ export class Ui {
     const place = (avoid: Box[], keepOffOpened = true) =>
       open ? this.presentedCaption(rect, pad, box, pointer, keepOffOpened ? open : { boxes: [] }, avoid, keepOffOpened) : this.plainCaption(rect, box, avoid);
     const boxOf = (at: { left: number; top: number }): Box => ({ left: at.left, top: at.top, right: at.left + box.width, bottom: at.top + box.height });
-    const onControl = (spot: Spot) => overlaps(boxAt(spot, size), rect, 8) || overlaps(boxAt(spot, size), pointer, 0);
+    // The dock keeps off the control itself and the pointer. The caption keeps off all of `rect`, the row a control shown
+    // on hover is in, which can be as wide as the window: no corner of it is clear of such a row.
+    const onControl = (spot: Spot) => overlaps(boxAt(spot, size), control, 8) || overlaps(boxAt(spot, size), pointer, 0);
     const usual = place([]);
     const covers = (spot: Spot) => onControl(spot) || (captioned && overlaps(boxAt(spot, size), boxOf(usual), 4));
     if (!covers(this.home)) return { ...usual, spot: this.home };
@@ -1870,17 +1872,18 @@ export class Ui {
 
   /** Where the caption goes outside presentation mode: below the control, or above it when there is no room below or when something opened below. */
   private plainCaption(rect: DOMRect, box: DOMRect, avoid: Box[]): { left: number; top: number; free: boolean } {
-    const left = Math.min(Math.max(8, rect.left), window.innerWidth - box.width - 8);
+    const clampX = (x: number) => Math.min(Math.max(8, x), window.innerWidth - box.width - 8);
     const fitsBelow = rect.bottom + 14 + box.height < window.innerHeight;
     const fitsAbove = rect.top - box.height - 12 >= 8;
-    const below = { left, top: rect.bottom + 14 };
-    const above = { left, top: Math.max(8, rect.top - box.height - 12) };
+    const below = { left: clampX(rect.left), top: rect.bottom + 14 };
+    const above = { left: clampX(rect.left), top: Math.max(8, rect.top - box.height - 12) };
     const first = (this.captionAbove ? fitsAbove || !fitsBelow : !fitsBelow) ? above : below;
-    const free = (at: { left: number; top: number }) => !avoid.some((other) => overlaps({ left: at.left, top: at.top, right: at.left + box.width, bottom: at.top + box.height }, other, 0));
-    if (free(first)) return { ...first, free: true };
     const other = first === above ? below : above;
-    if ((other === above ? fitsAbove : fitsBelow) && free(other)) return { ...other, free: true };
-    return { ...first, free: false };
+    const free = (at: { left: number; top: number }) => !avoid.some((other) => overlaps({ left: at.left, top: at.top, right: at.left + box.width, bottom: at.top + box.height }, other, 0));
+    // Its own side first, then the other, each lined up with the control's left edge and then with its right.
+    const places = [first, ...((other === above ? fitsAbove : fitsBelow) ? [other] : [])].flatMap((at) => [at, { left: clampX(rect.right - box.width), top: at.top }]);
+    const clear = places.find(free);
+    return clear ? { ...clear, free: true } : { ...first, free: false };
   }
 
   /** The box the pointer is drawn in, round its tip, at the size it is drawn. */
