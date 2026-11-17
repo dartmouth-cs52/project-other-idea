@@ -21,7 +21,7 @@ const chat = (session: Session) =>
       const el = root.querySelector(selector) as HTMLElement;
       return !el.closest("[hidden]") && getComputedStyle(el).display !== "none";
     });
-    const input = root.querySelector(".ask input") as HTMLInputElement;
+    const input = root.querySelector(".ask textarea") as HTMLTextAreaElement;
     return { restart, question, done, helped, panel, typed: input.value, focused: root.activeElement === input, saved: sessionStorage.getItem("haptic.guide") === null ? 0 : 1 };
   });
 

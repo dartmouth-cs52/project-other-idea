@@ -187,9 +187,11 @@ function onRecord(...looks: (Record<string, unknown> | undefined)[]) {
     return Promise.resolve(found ? [found] : []);
   };
   const store = new Store(sql as unknown as ConstructorParameters<typeof Store>[0], 3, { reportWaitsMs: [0, 0, 0] });
-  /** What was written, without the looks. */
-  const written = () => sent.filter((query) => !query.text.startsWith("select"));
-  return { store, sent, written, looks: () => look };
+  /** What was written to the guide, without the looks, and without what a guide's ending does to verified routes. */
+  const written = () => sent.filter((query) => !query.text.startsWith("select") && !query.text.startsWith("update routes"));
+  /** The writes that trust the verified routes behind a finished guide's steps (src/server/routes.ts). */
+  const trusted = () => sent.filter((query) => query.text.startsWith("update routes r set confirmed = true"));
+  return { store, sent, written, trusted, looks: () => look };
 }
 
 /** The guide as a look finds it: still open, with its newest step. */
@@ -231,10 +233,12 @@ test("finished is stored when the guide's steps on record bear it out", async ()
     { n: 0, status: "done", pointed: true },
     { n: 3, status: "continue", pointed: true },
   ]) {
-    const { store, written, looks } = onRecord(guideWith(step));
+    const { store, written, trusted, looks } = onRecord(guideWith(step));
     await store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished" });
     assert.equal(looks(), 1);
     assert.equal(written().length, 1);
+    // A finished guide trusts the routes behind its steps.
+    assert.equal(trusted().length, 1);
     assert.match(written()[0]!.text, /^update guides set outcome = \?, ended_at = now\(\) where id = \? and site_id = \? and outcome is null$/);
     assert.deepEqual(written()[0]!.values, ["finished", GUIDE, SITE.id]);
   }
@@ -286,10 +290,12 @@ test("a report of finished that the record contradicts is stored as the ending o
     [{ n: 1, status: "done", pointed: false, mode: "cannot_help", reason: "off_topic" }, "off_topic"],
   ];
   for (const [step, kept] of cases) {
-    const { store, written, looks } = onRecord(guideWith(step));
+    const { store, written, trusted, looks } = onRecord(guideWith(step));
     const said = await quiet(() => store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished" }));
     assert.equal(looks(), 1, "a later step would not change how this one ended");
     assert.deepEqual(written().map((query) => query.values), [[kept, GUIDE, SITE.id]]);
+    // Only an ending the record bears out trusts routes.
+    assert.deepEqual(trusted(), []);
     assert.match(said.join("\n"), new RegExp(`it is kept as ${kept}`));
   }
 });

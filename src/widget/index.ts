@@ -3,6 +3,7 @@ import { POINTER_BLUE } from "../shared/colour.ts";
 import { loadActing, type GateConfig } from "./acting-code.ts";
 import { Guide, type HandoffWay, type Reporter, type Watch } from "./guide.ts";
 import { startLearning, visitorId } from "./learn.ts";
+import { loadMapper, mappingAsked } from "./map-pass.ts";
 import { loadTeaching, takeTeachToken, teachingHeld } from "./teach-code.ts";
 import { showNotice } from "./teach-notice.ts";
 import { currentPath } from "./snapshot.ts";
@@ -25,6 +26,8 @@ import { Ui } from "./ui.ts";
 // ring, and the question kept on show. It is never on otherwise.
 
 const script = document.currentScript as HTMLScriptElement | null;
+// True in a tab where someone at the company is mapping their app (map.ts).
+const mapping = mappingAsked();
 
 async function boot() {
   const site = script?.dataset.site;
@@ -192,6 +195,8 @@ async function boot() {
   };
   const blocked = Array.isArray(config.blocked) ? config.blocked : [];
   const guide = new Guide(ui, sendTurn, gateConfig, report, handoff, blocked);
+  // A tab that is mapping the app does only that: no guide is picked up, and its presses are not learned from as a visitor's would be.
+  if (mapping) return loadMapper({ api, site, host: ui.host, blocked });
   // A guide that was acting when the last page went carries on only once the code that acts is in.
   if (actingReady) void actingReady.then(() => guide.resume());
   else guide.resume();

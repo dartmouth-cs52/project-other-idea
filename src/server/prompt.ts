@@ -368,7 +368,15 @@ function inertPage(page: PageNode): PageNode {
     fields: page.fields.map(inert),
   };
   if (page.description !== undefined) safe.description = inert(page.description);
-  if (page.opens) safe.opens = page.opens.map((opening) => ({ control: inert(opening.control), links: links(opening.links), buttons: opening.buttons.map(inert) }));
+  if (page.opens) {
+    safe.opens = page.opens.map((opening) => ({
+      control: inert(opening.control),
+      links: links(opening.links),
+      buttons: opening.buttons.map(inert),
+      // A dialog's fields, which the mapper notes (src/server/mapped.ts).
+      ...(opening.fields ? { fields: opening.fields.map(inert) } : {}),
+    }));
+  }
   return safe;
 }
 
@@ -389,7 +397,7 @@ function inertPage(page: PageNode): PageNode {
 export function renderSiteMap(given: PageNode[]): string {
   const pages = given.map(inertPage);
   const link = (l: { label: string; to: string }) => `${l.label} → ${l.to}`;
-  const opening = (o: PageOpening) => `behind "${o.control.replace(/"/g, "'")}": ${[...o.links.map(link), ...o.buttons].join("; ")}`;
+  const opening = (o: PageOpening) => `behind "${o.control.replace(/"/g, "'")}": ${[...o.links.map(link), ...o.buttons, ...(o.fields?.length ? [`fields: ${o.fields.join(", ")}`] : [])].join("; ")}`;
   const counts = new Map<string, number>();
   for (const page of pages) {
     for (const item of new Set([...page.links.map(link), ...page.buttons, ...(page.opens ?? []).map(opening)])) counts.set(item, (counts.get(item) ?? 0) + 1);

@@ -11,6 +11,7 @@
 // one that had nothing to do with the site are not counted: no change to the
 // product or its help docs would have answered them.
 
+import { ROUTE_METRICS_SQL, type RouteMetrics } from "../../src/shared/route-metrics";
 import type { Sql } from "./db";
 import { cantFind, COUNTED, guideHealth, PAUSED } from "./health";
 
@@ -26,16 +27,17 @@ const OUTCOME = `case
 const UNANSWERED = `(g.helped is distinct from true and (g.helped = false or (${OUTCOME}) in ('nothing_to_point_at', 'loop', 'step_limit', 'error', 'not_covered', 'abandoned')))`;
 
 /**
- * The new cards need db/migrations/0011. Until it is applied they come back empty, and the rest of the
- * dashboard still loads, so a deploy that lands before the migration breaks nothing.
+ * The newer cards need db/migrations/0011, and the card on verified routes needs 0008_routes. Until its migration
+ * is applied a card comes back empty, and the rest of the dashboard still loads, so a deploy that lands before the
+ * migration breaks nothing.
  */
-async function untilMigrated<T>(what: string, query: Promise<T[]>): Promise<T[]> {
+async function untilMigrated<T>(what: string, query: Promise<T[]>, migration = "0011"): Promise<T[]> {
   try {
     return await query;
   } catch (error) {
     const code = (error as { code?: string }).code;
     if (code !== "42703" && code !== "42P01" && code !== "42883") throw error;
-    console.error(`insights: ${what} needs db/migrations/0011, which isn't applied yet.`);
+    console.error(`insights: ${what} needs db/migrations/${migration}, which isn't applied yet.`);
     return [];
   }
 }
@@ -43,7 +45,7 @@ async function untilMigrated<T>(what: string, query: Promise<T[]>): Promise<T[]>
 export async function insights(sql: Sql, site: string, days: number) {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
 
-  const [summary, outcomes, recent, abandonedAt, wrongClicks, cannotFind, health, alerts] = await Promise.all([
+  const [summary, outcomes, recent, abandonedAt, wrongClicks, cannotFind, health, alerts, routes] = await Promise.all([
     sql.query(
       `select count(*)::int as guides,
         count(*) filter (where ${UNANSWERED})::int as unanswered,
@@ -97,9 +99,11 @@ export async function insights(sql: Sql, site: string, days: number) {
       "health alerts",
       sql.query(`select question_group as key, max(sent_at) as sent_at, bool_or(emailed) as emailed from health_alerts where site_id = $1 and sent_at > now() - interval '30 days' group by 1`, [site]),
     ),
+    // How often questions repeat, and how verified routes are doing (src/server/routes.ts).
+    untilMigrated("verified routes", sql.query(ROUTE_METRICS_SQL, [site, since]), "0008_routes"),
   ]);
 
-  return { days, summary: summary[0], outcomes, recent, abandonedAt, wrongClicks, cantFind: cannotFind, health, alerts };
+  return { days, summary: summary[0], outcomes, recent, abandonedAt, wrongClicks, cantFind: cannotFind, health, alerts, routes: (routes[0] as RouteMetrics | undefined) ?? null };
 }
 
 /** How many of a site's newest questions the live list carries. */
