@@ -60,7 +60,7 @@ button { font: inherit; cursor: pointer; }
 .launch:hover .hide, .launch:focus-within .hide { opacity: 1; transform: none; pointer-events: auto; }
 .launch.mini .hide { display: none; }
 .panel { width: min(320px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 14px;
-  padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.16); }
+  padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.16); outline: none; }
 [hidden] { display: none !important; }
 .ask { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 10px; background: #f5f5f4; }
 .ask:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
@@ -79,9 +79,16 @@ button { font: inherit; cursor: pointer; }
 .first .go { flex: none; height: 28px; border: 0; border-radius: 999px; padding: 0 14px; background: #1c1917; color: #fafaf9; font-size: 13px; }
 .status { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 2px 0 12px; }
 .status span { flex: 1; color: #78716c; }
-.stop, .resume { flex: none; height: 28px; border: 1px solid #e7e5e4; background: #fff; color: #78716c; border-radius: 999px; padding: 0 12px; font-size: 13px; }
+.stop, .resume, .another { flex: none; height: 28px; border: 1px solid #e7e5e4; background: #fff; color: #78716c; border-radius: 999px; padding: 0 12px; font-size: 13px; }
 .resume { border-color: #1c1917; background: #1c1917; color: #fafaf9; }
 .status:not(.paused) .resume { display: none; }
+/* Asking something else is offered while the guide waits on the visitor: with a pointer up, a sentence up, or paused for their hand. */
+.another { display: none; color: #1c1917; }
+.panel.waits .another { display: inline-block; }
+/* Paused there are three buttons, more than fit beside the sentence: the sentence has a line of its own, and they go under it. */
+.status.paused { flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; padding: 6px 2px 2px 12px; }
+.status.paused span { flex-basis: 100%; }
+.status button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .note { padding: 0 12px 6px; color: #78716c; font-size: 13px; line-height: 18px; }
 .did { padding: 4px 4px 2px; }
 .did h2 { margin: 4px 8px 6px; font-size: 13px; line-height: 18px; font-weight: 600; color: #1c1917; }
@@ -220,10 +227,15 @@ function rememberMinimized(mini: boolean) {
   }
 }
 
+/** The button that ends a guide to ask a new question, while that guide waits on the visitor. */
+const ASK_ELSE = "Ask something else";
+
 export interface UiHandlers {
   /** A question, with `act` set when the visitor pressed Do it (and, the first time, Go). */
   onAsk: (question: string, act: boolean) => void;
   onStop: () => void;
+  /** The visitor wants to ask something else while a guide is up: the guide ends as it does for Stop, and the ask box opens. */
+  onAskElse?: () => void;
   /** The visitor let Haptic carry on after it paused for them. */
   onCarryOn?: () => void;
 }
@@ -351,7 +363,7 @@ export class Ui {
   private captor?: Element;
   private frame = 0;
   /** What each of our buttons does, by its class. */
-  private buttons!: Record<"launcher" | "hide" | "send" | "stop" | "close" | "doit" | "go" | "resume", () => void>;
+  private buttons!: Record<"launcher" | "hide" | "send" | "stop" | "close" | "doit" | "go" | "resume" | "another", () => void>;
   private readonly first: HTMLElement;
   private readonly note: HTMLElement;
   private readonly did: HTMLElement;
@@ -419,7 +431,8 @@ export class Ui {
         { class: `dock ${side}` },
         make(
           "div",
-          { class: "panel", ...hidden },
+          // Focusable from here only, so keys typed at an open panel with nothing to type into stay with Haptic (`focusPanel`).
+          { class: "panel", tabindex: "-1", ...hidden },
           make(
             "div",
             { class: "thread", ...hidden },
@@ -451,7 +464,14 @@ export class Ui {
             ),
           ),
           make("div", { class: "first", ...hidden }, make("span"), make("button", { class: "go", type: "button" }, "Go")),
-          make("div", { class: "status", ...hidden }, make("span"), make("button", { class: "resume", type: "button" }, "Carry on"), make("button", { class: "stop", type: "button" }, "Stop")),
+          make(
+            "div",
+            { class: "status", ...hidden },
+            make("span"),
+            make("button", { class: "resume", type: "button" }, "Carry on"),
+            make("button", { class: "another", type: "button" }, ASK_ELSE),
+            make("button", { class: "stop", type: "button" }, "Stop"),
+          ),
           make("div", { class: "note", ...hidden }),
           make("div", { class: "did", ...hidden }, make("h2"), make("ul"), make("p")),
           make("p", { class: "about" }, "Haptic ", make("a", { href: ABOUT_URL, target: "_blank", rel: "noopener noreferrer" }, "is an AI guide and can be wrong.")),
@@ -528,7 +548,7 @@ export class Ui {
         this.keepPlaced();
         // Nothing kept our element in place while it was not in use. A dialog may have opened since.
         this.place();
-        if (!this.panel.hidden) this.input.focus();
+        if (!this.panel.hidden) this.focusPanel();
       },
       hide: () => {
         // From the keyboard, the button that is about to go has the keyboard, which then goes to the dot. A press with
@@ -552,6 +572,7 @@ export class Ui {
         if (question) handlers.onAsk(question, true);
       },
       resume: () => handlers.onCarryOn?.(),
+      another: () => handlers.onAskElse?.(),
     };
     this.form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -822,7 +843,7 @@ export class Ui {
       if (button.classList.contains("person-open")) return this.onHandoff?.open();
       if (button.classList.contains("person-cancel")) return this.onHandoff?.cancel();
       if (button.classList.contains("person-send")) return this.onHandoff?.send();
-      const name = (["launcher", "hide", "send", "stop", "close", "doit", "go", "resume"] as const).find((name) => button.classList.contains(name));
+      const name = (["launcher", "hide", "send", "stop", "close", "doit", "go", "resume", "another"] as const).find((name) => button.classList.contains(name));
       if (name) this.buttons[name]();
     };
     let pressed: HTMLButtonElement | undefined;
@@ -897,6 +918,20 @@ export class Ui {
     });
   }
 
+  /**
+   * Puts the keyboard in the open panel: in the ask box when it is there, on "Ask something else" while a guide waits
+   * on the visitor, and otherwise on the panel itself, where a key presses nothing (a space on Stop would stop the
+   * guide). A visitor who opens the panel and types finds their keys with Haptic, never with the page, whose own
+   * shortcuts would act on them: on Northpine, "e" and "n" typed at a panel that showed only "Your turn" and Stop took
+   * the visitor to another page.
+   */
+  private focusPanel() {
+    if (!this.form.hidden) return this.input.focus();
+    const another = this.status.querySelector<HTMLElement>(".another");
+    if (another && !this.status.hidden && another.getClientRects().length > 0) return another.focus({ preventScroll: true });
+    this.panel.focus({ preventScroll: true });
+  }
+
   /** The question in the ask box, on one line. */
   private typed(): string {
     return this.input.value.replace(/\s+/g, " ").trim();
@@ -909,8 +944,19 @@ export class Ui {
     if (box.value && box.scrollHeight > box.clientHeight) box.style.height = `${box.scrollHeight}px`;
   }
 
+  /** Opens the ask box with the keyboard in it. */
+  openAsk() {
+    this.panel.hidden = false;
+    this.showActs();
+    this.keepPlaced();
+    this.place();
+    this.input.focus();
+  }
+
   /** Show the ask box busy with a message, or back to the input when `text` is empty. `paused` adds Carry on beside Stop. */
   setBusy(text: string, paused = false) {
+    // The ask box had the keyboard, and goes: the keyboard stays in the panel, so what the visitor types next is not the page's.
+    const typing = text !== "" && !this.form.hidden && this.form.contains(this.host.shadowRoot?.activeElement ?? null);
     this.form.hidden = text !== "";
     this.status.hidden = text === "";
     this.statusText.textContent = text;
@@ -918,6 +964,7 @@ export class Ui {
     this.first.hidden = true;
     if (text) {
       this.panel.hidden = false;
+      if (typing) this.focusPanel();
       this.hideHelped();
       this.hideHandoff();
     } else {
@@ -1317,6 +1364,7 @@ export class Ui {
 
   setState(state: GuideState) {
     (this.host as HTMLElement & { guideState?: GuideState }).guideState = state;
+    this.panel.classList.toggle("waits", state === "pointing" || state === "watching" || state === "paused");
     this.keepPlaced();
     this.showAsked();
   }

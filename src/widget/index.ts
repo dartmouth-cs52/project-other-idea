@@ -144,6 +144,11 @@ async function boot() {
       // Do it pressed before the code that acts is in waits for it, and guides by pointer if it never comes.
       onAsk: (question, act) => (act && actingReady && actingLoaded === undefined ? void actingReady.then(() => guide.start(question, act)) : guide.start(question, act)),
       onStop: () => guide.stop(),
+      // The guide ends as it does for Stop, with the same outcome reported, and the ask box opens for the new question.
+      onAskElse: () => {
+        guide.stop();
+        ui.openAsk();
+      },
       onCarryOn: () => guide.carryOn(),
     },
     acting ? { site, confirmFirst: acting.confirmFirst !== false, allowedHere: () => actingLoaded !== false && actingAllowedAt(acting, currentPath()) } : undefined,
