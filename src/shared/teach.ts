@@ -19,8 +19,7 @@ import { cleanText, normalizePath, questionKey } from "./types";
 // Shared by the widget (recording and wording), the widget server (checking
 // what is posted), the website's Worker (saving) and the prompt.
 
-/** The name of the token in the address's fragment: #haptic-teach=<token>. */
-export const TEACH_FRAGMENT = "haptic-teach";
+export { TEACH_FRAGMENT, TEACH_KEY, TEACH_TOKEN } from "./teach-link";
 /** A teach session can be claimed for this long after it is made, and lasts this long after it is claimed. */
 export const TEACH_MINUTES = 30;
 /** The most steps one route keeps. A task needing more is not one to teach in one go. */
@@ -29,8 +28,6 @@ export const MAX_TAUGHT_STEPS = 30;
 export const MAX_TAUGHT_ROUTES = 50;
 /** A one-line note on a step. */
 export const MAX_NOTE = 140;
-/** A token or a claim: 32 random bytes in base64url. */
-export const TEACH_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
 /**
  * What was done with a control.

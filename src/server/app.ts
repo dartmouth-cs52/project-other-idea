@@ -40,6 +40,8 @@ export interface AppParts {
   widget(): Promise<string>;
   /** The code that acts, widget-act.js, which the widget loads from beside itself on a site with acting on. Without it, such a site is guided by pointer. */
   widgetActing?(): Promise<string>;
+  /** Teach mode, widget-teach.js, which the widget loads from beside itself only for a teaching link (src/shared/teach.ts). Without it, the page says teach mode couldn't be loaded. */
+  widgetTeaching?(): Promise<string>;
   /** How long browsers may keep the widget before asking again, in seconds. 0 for never. */
   widgetMaxAge: number;
   /** True when this caller has asked for too many steps lately. */
@@ -127,9 +129,11 @@ export function createApp(parts: AppParts) {
       });
     }
 
-    if (request.method === "GET" && (url.pathname === "/widget.js" || (url.pathname === "/widget-act.js" && parts.widgetActing))) {
+    const scripts: Record<string, (() => Promise<string>) | undefined> = { "/widget.js": parts.widget, "/widget-act.js": parts.widgetActing, "/widget-teach.js": parts.widgetTeaching };
+    const scriptFor = request.method === "GET" ? scripts[url.pathname] : undefined;
+    if (scriptFor) {
       const cache = parts.widgetMaxAge > 0 ? `public, max-age=${parts.widgetMaxAge}` : "no-store";
-      const script = url.pathname === "/widget.js" ? await parts.widget() : await parts.widgetActing!();
+      const script = await scriptFor.call(parts);
       return new Response(script, { headers: { ...cors, "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": cache } });
     }
 

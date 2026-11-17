@@ -2,7 +2,8 @@ import { actingAllowedAt, DEFAULT_APPEARANCE, localDate, MODES, STREAM_TYPE, TUR
 import { loadActing, type GateConfig } from "./acting-code.ts";
 import { Guide, type HandoffWay, type Reporter, type Watch } from "./guide.ts";
 import { startLearning, visitorId } from "./learn.ts";
-import { showNotice, startTeaching, takeTeachToken } from "./teach.ts";
+import { loadTeaching, takeTeachToken, teachingHeld } from "./teach-code.ts";
+import { showNotice } from "./teach-notice.ts";
 import { currentPath } from "./snapshot.ts";
 import { Ui } from "./ui.ts";
 
@@ -53,7 +54,19 @@ async function boot() {
   }
 
   // Teach mode: someone at the company showing Haptic a task. Nothing is guided and the model is never asked while it lasts.
-  if (await startTeaching(api, site, teachToken, config.appearance.accent)) return;
+  // It is a file of its own, widget-teach.js, loaded only for a teaching link or a teaching session this tab already holds.
+  if (teachToken !== undefined || teachingHeld()) {
+    const teach = await loadTeaching(script);
+    if (!teach) {
+      console.warn("[Haptic] Teach mode couldn't be loaded.");
+      showNotice(
+        teachToken !== undefined
+          ? "Haptic's teach mode couldn't be loaded on this page. Reload the page, or start again from your Haptic dashboard."
+          : "Haptic's teach mode couldn't be loaded on this page. Your steps so far are kept in this tab: reload the page to carry on.",
+        config.appearance.accent,
+      );
+    } else if (await teach.startTeaching(api, site, teachToken, config.appearance.accent)) return;
+  }
 
   // The reply comes as lines of JSON. The first lines say what kind of reply
   // it is (on a site with Answers on) and name the control to point at, each as

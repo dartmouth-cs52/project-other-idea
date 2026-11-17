@@ -1,6 +1,8 @@
-import { MAX_TAUGHT_STEPS, newTeachToken, sectionOf, stepText, TEACH_FRAGMENT, TEACH_TOKEN, type TaughtStep } from "../shared/teach.ts";
+import { MAX_TAUGHT_STEPS, newTeachToken, sectionOf, stepText, type TaughtStep } from "../shared/teach.ts";
+import { TEACH_KEY, TEACH_TOKEN } from "../shared/teach-link.ts";
 import { cleanText, type SnapElement } from "../shared/types.ts";
 import { currentPath, nameOf, shownWords, takeSnapshot, type PageSnapshot } from "./snapshot.ts";
+import { raise, showNotice } from "./teach-notice.ts";
 import { adoptStyles, make, topModal } from "./ui.ts";
 
 // Teach mode (src/shared/teach.ts). Someone at the company pressed "Teach
@@ -18,7 +20,6 @@ import { adoptStyles, make, topModal } from "./ui.ts";
 // this tab in sessionStorage, so they survive page loads and route changes,
 // until the server has them. A token that cannot be used says so on the page.
 
-const KEY = "haptic.teach";
 /** A press is read when the pointer goes down, before the page reacts to it. The click that follows within this long uses that reading. */
 const DOWN_FRESH_MS = 1500;
 /** How often the bar checks it is above the page's own modal dialog, outside which it could not be pressed. */
@@ -58,30 +59,9 @@ async function call(api: string, path: string, body: object): Promise<{ ok: bool
   }
 }
 
-/**
- * The teach token in the address's fragment, `#haptic-teach=<token>`, taken out
- * of the address bar straight away so it is not bookmarked, shared or left in
- * the tab's history. The rest of the fragment is kept.
- */
-export function takeTeachToken(): string | undefined {
-  const hash = location.hash.replace(/^#/, "");
-  const parts = hash.split("&");
-  const found = parts.find((part) => part.startsWith(`${TEACH_FRAGMENT}=`));
-  if (found === undefined) return undefined;
-  const rest = parts.filter((part) => part !== found).join("&");
-  try {
-    history.replaceState(history.state, "", location.pathname + location.search + (rest ? `#${rest}` : ""));
-  } catch {
-    // The address could not be changed. The token is single use, so it is spent once claimed all the same.
-  }
-  const token = found.slice(TEACH_FRAGMENT.length + 1);
-  // Something is always returned, so a link cut short in an email says it is broken rather than nothing happening.
-  return token;
-}
-
 function readTeaching(): Teaching | undefined {
   try {
-    const held = JSON.parse(sessionStorage.getItem(KEY) ?? "null") as Teaching | null;
+    const held = JSON.parse(sessionStorage.getItem(TEACH_KEY) ?? "null") as Teaching | null;
     return held && TEACH_TOKEN.test(held.token) && TEACH_TOKEN.test(held.claim) && Array.isArray(held.steps) ? held : undefined;
   } catch {
     return undefined;
@@ -90,7 +70,7 @@ function readTeaching(): Teaching | undefined {
 
 function keep(teaching: Teaching): boolean {
   try {
-    sessionStorage.setItem(KEY, JSON.stringify(teaching));
+    sessionStorage.setItem(TEACH_KEY, JSON.stringify(teaching));
     return true;
   } catch {
     return false;
@@ -99,7 +79,7 @@ function keep(teaching: Teaching): boolean {
 
 function forget() {
   try {
-    sessionStorage.removeItem(KEY);
+    sessionStorage.removeItem(TEACH_KEY);
   } catch {
     // Nothing kept.
   }
@@ -164,39 +144,6 @@ function refusal(answer: { status: number; data: Record<string, unknown> } | und
   if (answer.status === 429) return "Too many tries with teaching links. Wait a minute, then start again from your Haptic dashboard.";
   if (answer.status === 0) return "Haptic's server couldn't be reached to check this teaching link. Reload the page to try again.";
   return "This teaching link couldn't be checked. Start again from your Haptic dashboard.";
-}
-
-const NOTICE_CSS = `
-:host { all: initial; position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2147483647; margin: 0; padding: 0; border: 0;
-  background: transparent; overflow: visible; font: 14px/20px system-ui, -apple-system, "Segoe UI", sans-serif; color: #fafaf9; }
-* { box-sizing: border-box; }
-.notice { display: flex; align-items: center; gap: 12px; width: min(560px, calc(100vw - 32px)); padding: 12px 12px 12px 16px; border-radius: 14px;
-  background: #1c1917; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
-.notice p { flex: 1; margin: 0; }
-button { font: inherit; cursor: pointer; flex: none; height: 32px; border: 1px solid #44403c; border-radius: 999px; padding: 0 14px; background: transparent; color: #fafaf9; }
-`;
-
-/** A short notice on the page that a teaching link could not be used, with a way to close it. Never silent. */
-export function showNotice(message: string, accent: string) {
-  const host = document.createElement("haptic-teach-notice");
-  host.style.setProperty("--accent", accent);
-  const root = host.attachShadow({ mode: "open" });
-  adoptStyles(root, NOTICE_CSS);
-  const close = make("button", { type: "button" }, "Close");
-  root.append(make("div", { class: "notice", role: "alert" }, make("p", {}, message), close));
-  close.addEventListener("click", () => host.remove());
-  document.documentElement.appendChild(host);
-  raise(host);
-}
-
-/** Puts our element in the top layer, above anything the page stacks, when the browser can. */
-function raise(host: HTMLElement) {
-  try {
-    if (!host.hasAttribute("popover")) host.setAttribute("popover", "manual");
-    host.showPopover();
-  } catch {
-    // No popover support, or shown already. The fixed position and z-index still apply.
-  }
 }
 
 const BAR_CSS = `

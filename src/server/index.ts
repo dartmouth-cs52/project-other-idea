@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { extname, normalize } from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { ACTING_FILE, buildWidget, WIDGET_FILE } from "../widget/build.ts";
+import { ACTING_FILE, buildWidget, TEACH_FILE, WIDGET_FILE } from "../widget/build.ts";
 import { createApp } from "./app.ts";
 import { describeAlert, MemoryBudget } from "./budget.ts";
 import { Store } from "./db.ts";
@@ -74,6 +74,7 @@ const app = createApp({
   },
   widget: () => readFile(WIDGET_FILE, "utf8"),
   widgetActing: () => readFile(ACTING_FILE, "utf8"),
+  widgetTeaching: () => readFile(TEACH_FILE, "utf8"),
   widgetMaxAge: process.env.NODE_ENV === "production" ? 300 : 0,
   overLimit,
   teach,
@@ -161,5 +162,5 @@ function json(res: ServerResponse, status: number, body: unknown) {
 }
 
 const sizes = await buildWidget();
-console.log(`Built the widget (${(sizes.widget / 1024).toFixed(1)} KB, and ${(sizes.acting / 1024).toFixed(1)} KB for acting)`);
+console.log(`Built the widget (${(sizes.widget / 1024).toFixed(1)} KB, ${(sizes.acting / 1024).toFixed(1)} KB for acting and ${(sizes.teach / 1024).toFixed(1)} KB for teach mode)`);
 server.listen(PORT, () => console.log(`Haptic is running on http://localhost:${PORT} with model ${SETTINGS.model}. Demo: http://localhost:${PORT}/demo/`));

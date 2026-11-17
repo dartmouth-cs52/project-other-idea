@@ -59,15 +59,19 @@ interface Rig {
   later(ms: number): void;
   /** Answers the next posts of the steps with a server error. */
   failDone: number;
+  /** Answers teach mode's file with a server error, as a page that blocks it would see. */
+  failTeachFile: boolean;
   turns: number;
+  /** How many times teach mode's file was asked for. */
+  teachLoads: number;
   close(): Promise<void>;
 }
 
 async function startRig(): Promise<Rig> {
-  const { widget } = await widgetBundle();
+  const { widget, teach } = await widgetBundle();
   let shift = 0;
   const store = new MemoryTeachStore(() => Date.now() + shift);
-  const rig: Rig = { url: "", store, later: (ms) => (shift += ms), failDone: 0, turns: 0, close: async () => {} };
+  const rig: Rig = { url: "", store, later: (ms) => (shift += ms), failDone: 0, failTeachFile: false, turns: 0, teachLoads: 0, close: async () => {} };
   const site = (origin: string): SiteContext => ({
     version: 1,
     id: SITE,
@@ -85,6 +89,7 @@ async function startRig(): Promise<Rig> {
   const app = createApp({
     loadSite: async (id) => (id === SITE ? site(rig.url) : undefined),
     widget: async () => widget,
+    widgetTeaching: async () => teach,
     widgetMaxAge: 0,
     overLimit: () => false,
     teach: store,
@@ -92,11 +97,15 @@ async function startRig(): Promise<Rig> {
   const server: Server = createServer(async (req: IncomingMessage, res) => {
     const url = new URL(req.url ?? "/", rig.url);
     if (url.pathname === "/v1/turn") rig.turns++;
+    if (url.pathname === "/widget-teach.js") {
+      rig.teachLoads++;
+      if (rig.failTeachFile) return res.writeHead(500).end("No.");
+    }
     if (url.pathname === "/v1/teach/done" && rig.failDone > 0) {
       rig.failDone--;
       return res.writeHead(500, { "Content-Type": "application/json", "Access-Control-Allow-Origin": rig.url }).end(JSON.stringify({ error: "Something went wrong." }));
     }
-    if (url.pathname.startsWith("/v1/") || url.pathname === "/widget.js") {
+    if (url.pathname.startsWith("/v1/") || url.pathname === "/widget.js" || url.pathname === "/widget-teach.js") {
       const request = new Request(url, {
         method: req.method,
         headers: Object.entries(req.headers).flatMap(([name, value]) => (typeof value === "string" ? [[name, value] as [string, string]] : [])),
@@ -288,6 +297,29 @@ for (const name of BROWSERS) {
       assert.equal(await notice(cut), "This teaching link is incomplete. Start again from your Haptic dashboard.");
       assert.equal(rig.turns, 0);
       await first.context().close();
+      await context.close();
+    });
+
+    test("a visitor's page never loads teach mode, and a teaching link whose teach mode can't load says so", async () => {
+      const context = await browser.newContext();
+      const tab = await context.newPage();
+      const before = rig.teachLoads;
+      await tab.goto(`${rig.url}/budgets`);
+      await tab.waitForSelector("haptic-root", { state: "attached" });
+      await tab.click("#new");
+      await tab.waitForTimeout(300);
+      assert.equal(rig.teachLoads, before, "widget-teach.js is not loaded without a teaching link");
+      rig.failTeachFile = true;
+      try {
+        const token = await rig.store.create(SITE, QUESTION, newTeachToken());
+        const other = await context.newPage();
+        await other.goto(`${rig.url}/budgets#haptic-teach=${token}`);
+        assert.equal(await notice(other), "Haptic's teach mode couldn't be loaded on this page. Reload the page, or start again from your Haptic dashboard.");
+        assert.equal(await bar(other), null);
+        assert.equal(new URL(other.url()).hash, "", "the token still leaves the address bar");
+      } finally {
+        rig.failTeachFile = false;
+      }
       await context.close();
     });
 

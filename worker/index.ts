@@ -7,6 +7,7 @@ import { createSiteCache } from "../src/server/site-cache.ts";
 import { NeonTeachStore } from "../src/server/teach.ts";
 import type { SiteContext } from "../src/shared/types.ts";
 import widgetActing from "../dist/widget-act.txt";
+import widgetTeaching from "../dist/widget-teach.txt";
 import widget from "../dist/widget.txt";
 
 export { BudgetMeter } from "./budget.ts";
@@ -14,8 +15,8 @@ export { BudgetMeter } from "./budget.ts";
 // The Haptic server as customers' browsers reach it: a Cloudflare Worker at
 // widget.joinhaptic.com. It gives the same answers as the Node server in
 // src/server (both run app.ts). What differs is where things are kept: sites,
-// and every guide and step, are in Neon (src/server/db.ts), and the widget's two
-// files (widget.js, and widget-act.js for acting) are packed into the Worker when it is built.
+// and every guide and step, are in Neon (src/server/db.ts), and the widget's three
+// files (widget.js, widget-act.js for acting and widget-teach.js for teach mode) are packed into the Worker when it is built.
 //
 // Without the DATABASE_URL secret it still answers, from the KV store sites
 // were kept in before Neon, and records nothing. A site missing from Neon is
@@ -214,6 +215,7 @@ export default {
       loadSite: async (id, hurry) => (SITE_ID.test(id) ? sites(id, () => readSite(env, id), hurry ? (work) => ctx.waitUntil(work) : undefined) : undefined),
       widget: async () => widget,
       widgetActing: async () => widgetActing,
+      widgetTeaching: async () => widgetTeaching,
       widgetMaxAge: 300,
       overLimit: async (key) => (env.TURN_LIMIT ? !(await env.TURN_LIMIT.limit({ key })).success : false),
       overTeachLimit: async (key) => {
