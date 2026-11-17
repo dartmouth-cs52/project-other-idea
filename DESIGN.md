@@ -570,9 +570,11 @@ is a menu of the company's sites, with All sites and Add a site under them. Who
 is signed in is on the right, in a menu that names their company and holds Sign
 out. Inside a site its pages run down a 224px column on the left. Each is a
 32px row with a 16px icon. The page you are on is Border grey with Ink text,
-and the others are Muted text. The column is fixed to the window, so it and
-the line beside it stay where they are however far the page scrolls. Below
-1024px the column becomes a row under the bar that scrolls sideways. Content
+and the others are Muted text. The bar and the column are both fixed to the
+window, so they and their lines stay where they are however far the page
+scrolls, and when a Mac's trackpad pulls the page past its top or foot only the
+page moves under them. Below 1024px the column becomes a row under the bar that
+scrolls sideways, and the bar and the row stick to the top together. Content
 is up to 1152px wide (`max-w-6xl`).
 
 **Pages.** A site has five, in this order, and no more are added without a

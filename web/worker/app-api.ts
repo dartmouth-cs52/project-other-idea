@@ -21,7 +21,7 @@
 //   POST   /api/app/approve                     approve it, and email the person a sign-in link
 //
 // The setup screens, the email to a developer and the dashboard's top numbers
-// are answered in setup-api.ts.
+// are answered in setup-api.ts, and billing, under /api/app/billing, in billing.ts.
 //
 // Every site is looked up together with the caller's organization, so a site
 // id, which is public, is never enough to read or change someone's data.
@@ -34,6 +34,7 @@ import { pageControls } from "../lib/setup";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
 import { boundedText } from "./body";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
+import { billingRoutes, type BillingEnv } from "./billing";
 import { launcherState, matchLauncher, siteBrand } from "./brand";
 import { INK, launcherColour, POINTER_BLUE } from "../../src/shared/colour";
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
@@ -45,7 +46,7 @@ import { saveReadBatch } from "./read-batch";
 import { readingExtras, setupOf, setupRoutes } from "./setup-api";
 import type { SendEnv } from "./sign-in-email";
 
-export interface AppEnv extends AuthEnv, SendEnv {
+export interface AppEnv extends AuthEnv, SendEnv, BillingEnv {
   ACCESS_REQUESTS: { put(key: string, value: string): Promise<void>; get(key: string): Promise<string | null> };
   /** Neon's connection string. A secret. */
   DATABASE_URL?: string;
@@ -119,6 +120,8 @@ export async function appApi(request: Request, env: AppEnv, url: URL, later: Lat
     if (path === "/sites" && request.method === "GET") return reply(await sitesOverview(sql, org.id, minutesWest(url)));
     const more = await setupRoutes({ request, env, sql, org, user, path, url });
     if (more) return reply(more.body, more.status);
+    const billing = await billingRoutes({ request, env, sql, org, user, path, url });
+    if (billing) return reply(billing.body, billing.status);
 
     const match = /^\/sites\/([^/]+)(\/read|\/insights|\/live|\/brand|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?|\/teach(?:\/[^/]+)?|\/taught\/[^/]+)?$/.exec(path);
     if (match) {

@@ -66,6 +66,8 @@ export interface Env {
   HAPTIC_NETWORK_THRESHOLD?: string;
   /** A secret, set with `wrangler secret put`. Not needed while HAPTIC_MODEL is "mock". */
   ANTHROPIC_API_KEY?: string;
+  /** A secret. With it, a guide kept as finished is sent to Stripe as usage at once. Without it, the site's hourly sweep sends it. */
+  STRIPE_SECRET_KEY?: string;
 }
 
 const SITE_ID = /^site_[a-z0-9_]{3,40}$/;
@@ -78,7 +80,7 @@ const SITE_ID = /^site_[a-z0-9_]{3,40}$/;
 const sites = createSiteCache({ keepMs: 60_000, maxStaleMs: 10 * 60_000 });
 
 /** One per isolate, so its note of which origins were seen lately is shared by every request. */
-let store: { url: string; store: Store } | undefined;
+let store: { url: string; stripeKey: string | undefined; store: Store } | undefined;
 let teachStore: { url: string; store: NeonTeachStore } | undefined;
 /** Teach sessions are in Neon, beside the sites (db/migrations/0014_teach_sessions.sql). Without the database there is no teach mode. */
 function teachFor(env: Env): NeonTeachStore | undefined {
@@ -89,9 +91,10 @@ function teachFor(env: Env): NeonTeachStore | undefined {
 
 function storeFor(env: Env): Store | undefined {
   if (!env.DATABASE_URL) return undefined;
-  if (store?.url !== env.DATABASE_URL) {
+  if (store?.url !== env.DATABASE_URL || store.stripeKey !== env.STRIPE_SECRET_KEY) {
     const online = { HAPTIC_LABEL_THRESHOLD: env.HAPTIC_LABEL_THRESHOLD, HAPTIC_NETWORK_THRESHOLD: env.HAPTIC_NETWORK_THRESHOLD, HAPTIC_PRODUCTION: "1" };
-    store = { url: env.DATABASE_URL, store: new Store(env.DATABASE_URL, labelThreshold(online), { labelNetworks: networkThreshold(online) }) };
+    const options = { labelNetworks: networkThreshold(online), stripeKey: env.STRIPE_SECRET_KEY };
+    store = { url: env.DATABASE_URL, stripeKey: env.STRIPE_SECRET_KEY, store: new Store(env.DATABASE_URL, labelThreshold(online), options) };
   }
   return store.store;
 }

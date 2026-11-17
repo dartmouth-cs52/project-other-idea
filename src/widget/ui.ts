@@ -111,7 +111,10 @@ const VEIL_CSS = `
 `;
 
 const CSS = `
-:host { all: initial; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
+/* Left to right on every page. The widget's own words are English, and 'all' leaves direction alone, so on a page
+   written right to left the chat would take that direction from the page and come out mirrored. What the visitor or
+   the model wrote takes its own direction from its first letter (dir="auto"), inside its bubble. */
+:host { all: initial; direction: ltr; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
   font: 14px/20px system-ui, -apple-system, "Segoe UI", sans-serif; color: #1c1917; --glide: cubic-bezier(.2,.8,.2,1); }
 * { box-sizing: border-box; }
 button { font: inherit; cursor: pointer; }
@@ -563,17 +566,20 @@ export class Ui {
     // element and markup set as a string, and would leave the widget unstyled or not there at all.
     adoptStyles(root, this.present ? CSS + PRESENT_CSS : CSS);
     const hidden = { hidden: "" };
+    // Words the visitor or the model wrote can be in any language, so each holder reads in the direction of its own
+    // first letter: an Arabic question right to left inside its bubble, while the widget around it stays as it is.
+    const theirs = { dir: "auto" };
     root.append(
       make("div", { class: "ring", ...hidden }),
       make(
         "div",
         { class: "caption", ...hidden },
         make("button", { class: "where", type: "button", ...hidden }, icon(ARROW_PATH, { "aria-hidden": "true" })),
-        make("span"),
+        make("span", theirs),
         make("button", { class: "close", "aria-label": "Stop guide" }, icon(CROSS_PATH, { "aria-hidden": "true" })),
       ),
       make("div", { class: "cursor", ...hidden }, icon(POINTER_PATH, { width: "24", height: "24" })),
-      make("div", { class: "asked", ...hidden }),
+      make("div", { class: "asked", ...theirs, ...hidden }),
       make(
         "div",
         { class: "dock" },
@@ -584,8 +590,8 @@ export class Ui {
           make(
             "div",
             { class: "thread", ...hidden },
-            make("p", { class: "question" }),
-            make("div", { class: "reply", ...hidden }, make("p"), make("ul", { class: "sources", ...hidden }), make("p", { class: "missing", ...hidden })),
+            make("p", { class: "question", ...theirs }),
+            make("div", { class: "reply", ...hidden }, make("p", theirs), make("ul", { class: "sources", ...hidden }), make("p", { class: "missing", ...hidden })),
           ),
           make("div", { class: "status", role: "status", ...hidden }, icon(POINTER_PATH, { class: "arrow", "aria-hidden": "true" }), make("span"), make("button", { class: "resume", type: "button" }, "Carry on")),
           make("div", { class: "done", ...hidden }, make("i", { "aria-hidden": "true" }, icon(TICK_PATH)), "Done"),
@@ -600,14 +606,15 @@ export class Ui {
               "form",
               { class: "person", ...hidden },
               make("input", { type: "email", required: "", maxlength: "200", placeholder: "Your email", "aria-label": "Your email" }),
-              make("textarea", { rows: "2", maxlength: "1000", placeholder: "Anything to add", "aria-label": "Anything to add" }),
+              make("textarea", { rows: "2", maxlength: "1000", placeholder: "Anything to add", "aria-label": "Anything to add", ...theirs }),
               make("div", { class: "offer" }, make("span"), make("button", { class: "person-cancel", type: "button" }, "Cancel"), make("button", { class: "person-send", type: "button" }, "Send")),
             ),
           ),
           make(
             "form",
             { class: "ask" },
-            make("input", { type: "text", placeholder: "What do you want to do", "aria-label": "Ask a question", "aria-describedby": "haptic-empty", maxlength: "300" }),
+            // Empty, it is left to right, so the placeholder sits on the left as on any page. It turns with the first letter typed.
+            make("input", { type: "text", placeholder: "What do you want to do", "aria-label": "Ask a question", "aria-describedby": "haptic-empty", maxlength: "300", ...theirs }),
             make(
               "div",
               { class: "row" },
@@ -1185,6 +1192,8 @@ export class Ui {
       name.textContent = line.name;
       const value = document.createElement("span");
       value.className = "value";
+      // What was typed for the visitor, in their language.
+      value.dir = "auto";
       value.textContent = line.value ?? "";
       button.append(name, unseen(/[?:]$/.test(line.name) ? " " : ": "), value);
       const aside = line.partly ? ACTING_WORDS.partly : line.mine ? ACTING_WORDS.mine : "";

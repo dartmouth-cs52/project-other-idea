@@ -113,24 +113,34 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     }
   });
 
-  test("the list of pages stays where it is when the page scrolls, and nothing hidden makes the page longer", async () => {
+  test("the bar across the top and the list of pages stay where they are, together, when the page scrolls, and nothing hidden makes the page longer", async () => {
     const tab = await dash.open();
     await closing(tab, async () => {
       await tab.locator('[data-metric="Guides finished"]').waitFor();
       // The page is only as long as it will be once its lists have their rows. Until then there is nothing to scroll.
       await eventually(() => tab.evaluate(() => document.scrollingElement!.scrollHeight > window.innerHeight + 200), "the overview should be long enough to scroll");
       const where = () =>
-        tab.locator("aside").evaluate((el) => {
-          const box = el.getBoundingClientRect();
-          return { top: Math.round(box.top), bottom: Math.round(box.bottom) };
-        });
+        tab.evaluate(() =>
+          ["header", "aside"].map((selector) => {
+            const el = document.querySelector(selector)!;
+            const box = el.getBoundingClientRect();
+            return { top: Math.round(box.top), bottom: Math.round(box.bottom), position: getComputedStyle(el).position };
+          }),
+        );
       const start = await where();
-      assert.equal(start.bottom, 900, "the list of pages reaches the foot of the window");
+      const [bar, list] = start;
+      assert.equal(list!.bottom, 900, "the list of pages reaches the foot of the window");
+      assert.equal(list!.top, bar!.bottom, "the list of pages starts where the bar ends");
+      // A Mac's trackpad pulls the whole page past its top or foot and lets it spring back. That moves what scrolls with
+      // the page and not what is fixed to the window: the bar, sticky, slid down over Overview and left a gap above it,
+      // while the list of pages, fixed, stayed. Fixed alike, nothing that moves the page parts them. Chromium on Linux
+      // draws no such pull, so how each is held is what can be checked here.
+      assert.deepEqual(start.map((box) => box.position), ["fixed", "fixed"], "the bar and the list of pages should both be fixed to the window");
 
       // Straight to the foot of the page, which is where the list of pages used to slide up.
       await tab.evaluate(() => window.scrollTo({ top: document.scrollingElement!.scrollHeight, behavior: "instant" }));
       await eventually(() => tab.evaluate(() => window.scrollY > 100), "the page should have scrolled");
-      assert.deepEqual(await where(), start, "the list of pages moved with the page");
+      assert.deepEqual(await where(), start, "the bar or the list of pages moved with the page");
 
       // The chart's table for screen readers once made the page 39px longer than what was on it, and far more on 90 days.
       for (const days of ["90 days", "30 days"]) {
