@@ -145,6 +145,7 @@ async function boot() {
       onAsk: (question, act) => (act && actingReady && actingLoaded === undefined ? void actingReady.then(() => guide.start(question, act)) : guide.start(question, act)),
       onStop: () => guide.stop(),
       onCarryOn: () => guide.carryOn(),
+      onRestart: () => guide.restart(),
     },
     acting ? { site, confirmFirst: acting.confirmFirst !== false, allowedHere: () => actingLoaded !== false && actingAllowedAt(acting, currentPath()) } : undefined,
     { present },

@@ -155,6 +155,26 @@ test("the new marks on a control are printed as sent, and the two that are not p
   assert.match(rules, /An element marked "shows on hover" is hidden until the mouse is over that spot: point at it and say to move the mouse there\./);
 });
 
+test("a field marked invalid is printed as sent, and the rules say not to move on from it (Northpine: \"charlie\" in the invite's email field, and the guide went on to Role)", () => {
+  const page = buildUserMessage({
+    ...request('The user typed in textbox "Email address 1".'),
+    snapshot: {
+      path: "/people",
+      title: "People",
+      dialog: "Invite people",
+      headings: [],
+      text: [],
+      truncated: false,
+      elements: [
+        { id: "e1", role: "textbox", label: "Email address 1", state: ["invalid"], context: "dialog › Invite people" },
+        { id: "e2", role: "select", label: "Role for email 1", context: "dialog › Invite people" },
+      ],
+    },
+  });
+  assert.ok(page.includes('e1 textbox "Email address 1" (invalid) [dialog › Invite people]'));
+  assert.match(rules, /A field marked "invalid" holds something the page or the browser won't accept, like an email address with no @: when the field they just typed in is marked "invalid", don't move on\. Point at it again and say what it needs/);
+});
+
 test("the question asked after the last step is worded as a closing one", () => {
   const at = new Date("2026-11-15T12:00:00Z");
   const closing = buildUserMessage({ ...request('The user clicked link "Billing".'), closing: true }, undefined, at);

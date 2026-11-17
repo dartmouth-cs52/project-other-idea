@@ -304,7 +304,7 @@ export interface SnapElement {
   label: string;
   /** Icon name when the class gives one away, e.g. "settings" from lucide-settings. */
   icon?: string;
-  /** "disabled", "expanded", "collapsed", "current", "checked", "selected". */
+  /** "disabled", "required", "invalid", "expanded", "collapsed", "current", "checked", "selected". */
   state?: string[];
   /** Normalized path for same-site links, "external:host" for others. */
   href?: string;

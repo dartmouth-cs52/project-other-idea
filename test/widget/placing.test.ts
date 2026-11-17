@@ -48,7 +48,7 @@ const COMBO = `<h1>Rules</h1>
     for (const option of list.children) option.addEventListener('click', () => { list.hidden = true; size.setAttribute('aria-expanded', 'false'); document.getElementById('out').textContent = 'Showing ' + option.textContent; });
   </script>`;
 
-test("the caption lets clicks through to the page, all but its close button, and moves off a list that opens under it", async () => {
+test("the caption lets clicks through to the page, all but its close button, and keeps off a list that opens under it", async () => {
   const session = await start(COMBO, (request, index) => (index === 0 ? point(request, "Page size", "Open Page size and choose 50 / page.") : words("The table shows 50 rows.")));
   try {
     await session.ask("show 50 rows");
@@ -60,7 +60,7 @@ test("the caption lets clicks through to the page, all but its close button, and
     await session.page.waitForTimeout(100);
     assert.notEqual(await hitAt(session, before), "haptic", "the caption took a click meant for the list under it");
     assert.equal(await hitAt(session, await ours(session, ".caption .close")), "haptic", "the close button no longer takes clicks");
-    // Once something new shows under it, the caption moves to the other side of the control.
+    // A field that types has its caption above it from the start, so the list that opens under it is clear.
     await session.page.waitForTimeout(500);
     const moved = await ours(session, ".caption");
     const field = await session.page.locator("#size").boundingBox();
@@ -68,6 +68,46 @@ test("the caption lets clicks through to the page, all but its close button, and
     await session.page.locator("#o2").click();
     await session.untilAsked(2);
     assert.match(session.requests[1]!.event ?? "", /^The user chose "50 \/ page" from the list that combobox "Page size" opened\./);
+  } finally {
+    await session.close();
+  }
+});
+
+const INVITE = `<h1>Invite people</h1>
+  <label for="email" style="display:block;margin-top:120px">Email address</label>
+  <input id="email" type="email" placeholder="new.hire@example.com" style="width:320px;height:32px">
+  <div style="position:relative;margin-top:24px">
+    <button id="role" type="button" aria-haspopup="menu" aria-expanded="false" style="height:32px">Employee</button>
+    <div id="roles" role="menu" hidden style="position:absolute;top:38px;left:0;width:360px;background:#fff;border:1px solid #999">
+      ${["Employee", "Manager", "Admin"].map((role) => `<div role="menuitem" style="padding:10px">${role}</div>`).join("")}
+    </div>
+  </div>
+`;
+
+test("the caption goes above a text field, where the browser's own suggestions open below it, and below a button until something opens under it (Northpine: Chrome's saved addresses covered the caption on the invite's email field)", async () => {
+  const session = await start(INVITE, (request, index) =>
+    index === 0 ? point(request, "Email address", "Type the email of the person you want to invite.") : index === 1 ? point(request, "Employee", "Click Employee to pick their role.") : words("Done."),
+  );
+  try {
+    await session.ask("invite someone");
+    await session.untilState("pointing");
+    await session.page.waitForTimeout(700);
+    const field = (await session.page.locator("#email").boundingBox())!;
+    const overField = await ours(session, ".caption");
+    assert.ok(overField.bottom <= field.y, `the caption is not above the email field: its bottom is ${overField.bottom}, the field's top ${field.y}`);
+    await session.page.locator("#email").fill("sam@example.com");
+    await session.untilAsked(2, 10_000);
+    await session.untilState("pointing");
+    await session.page.waitForTimeout(700);
+    const button = (await session.page.locator("#role").boundingBox())!;
+    const underButton = await ours(session, ".caption");
+    assert.ok(underButton.top >= button.y + button.height, `the caption is not below the button: its top is ${underButton.top}, the button's bottom ${button.y + button.height}`);
+    // A menu the page opens by itself, where the caption is: the caption moves to the other side, and stays on show.
+    await session.page.evaluate(() => (document.getElementById("roles")!.hidden = false));
+    await session.page.waitForTimeout(700);
+    const moved = await ours(session, ".caption");
+    assert.ok(moved.bottom > moved.top, "the caption is not on show");
+    assert.ok(moved.bottom <= button.y, `the caption stayed on the menu: its bottom is ${moved.bottom}, the button's top ${button.y}`);
   } finally {
     await session.close();
   }
