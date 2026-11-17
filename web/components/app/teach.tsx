@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { api, type Outcome, type Site, type TaughtRoute, type TaughtStep, type TeachSession } from "@/lib/app-api";
 import { StepMark, when } from "./parts";
 
@@ -268,7 +268,7 @@ export function TaughtRoutes({ site, onChange }: { site: Site; onChange: (site: 
       ) : (
         <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
           None yet. When Haptic can&apos;t guide a task, show it how: choose Teach Haptic the right way on a question it got wrong, or teach it a task here.
-          Your site opens with a bar across it, you do the task as a visitor would, and Haptic guides questions like it that way from then on. It records
+          Your site opens with a bar across it, you do the task as a visitor would, and Haptic guides anyone who asks for that task the same way from then on. It records
           which controls you use, never what you type.
         </p>
       )}
@@ -386,9 +386,12 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
   return (
     <Sheet open onOpenChange={(open) => !open && close()}>
       <SheetContent className="gap-0 overflow-y-auto">
-        <SheetHeader className="gap-2 border-b p-5 pr-12">
-          <SheetDescription>Teach Haptic</SheetDescription>
-          <SheetTitle className="text-lg leading-6">{mine.question}</SheetTitle>
+        <SheetHeader className="border-b p-5 pr-12">
+          <SheetTitle className="flex flex-col gap-1 text-lg leading-6">
+            <span className="text-sm font-normal text-muted-foreground">Teach Haptic</span>
+            <span className="sr-only">: </span>
+            <span>{mine.question}</span>
+          </SheetTitle>
         </SheetHeader>
         <div className="flex flex-col gap-4 p-5">
 
@@ -528,7 +531,8 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
         {saved && (
           <div className="flex flex-col gap-3">
             <p className="text-sm leading-5">
-              Saved. When someone asks something like &ldquo;{saved.question}&rdquo;, Haptic guides them this way, checking each step against the page they see.
+              Saved. When someone asks for the same task as &ldquo;{saved.question}&rdquo;, however they word it, Haptic guides them this way, checking each step against the page
+              they see.
             </p>
             <ol className="flex flex-col gap-1.5 text-sm">
               {saved.steps.map((step, index) => (
