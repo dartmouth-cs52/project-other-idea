@@ -56,8 +56,8 @@ async function main() {
       await page.goto(set.origin + path);
       await page.waitForSelector("haptic-root", { state: "attached" });
       await page.locator("haptic-root .launcher").click();
-      await page.locator("haptic-root .ask input").fill("What is on this page?");
-      await page.locator("haptic-root .ask input").press("Enter");
+      await page.locator("haptic-root .ask textarea").fill("What is on this page?");
+      await page.locator("haptic-root .ask textarea").press("Enter");
       const deadline = Date.now() + 10_000;
       while (!seen && Date.now() < deadline) await page.waitForTimeout(50);
       if (!seen) throw new Error(`The widget never asked about ${path}.`);

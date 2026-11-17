@@ -96,8 +96,8 @@ for (const [name, policy] of Object.entries(POLICIES)) {
       assert.deepEqual(drawn.launcher, { height: 40, background: "rgb(28, 25, 23)", position: "fixed" }, "the launcher is not drawn with the widget's own styles");
 
       await page.locator("haptic-root .launcher").click();
-      await page.locator("haptic-root .ask input").fill("how do I export my orders");
-      await page.locator("haptic-root .ask input").press("Enter");
+      await page.locator("haptic-root .ask textarea").fill("how do I export my orders");
+      await page.locator("haptic-root .ask textarea").press("Enter");
       for (const until = Date.now() + 10_000; !asked.length && Date.now() < until; ) await page.waitForTimeout(50);
       assert.equal(asked.length, 1, "the question never reached Haptic");
       await page.locator("haptic-root .cursor").waitFor({ state: "visible", timeout: 5000 });
@@ -175,7 +175,7 @@ for (const [name, policy] of Object.entries(POLICIES)) {
       });
       await page.goto(`${PAGE}/expenses`);
       await page.locator("haptic-root .launcher").click();
-      await page.locator("haptic-root .ask input").fill("go on for me");
+      await page.locator("haptic-root .ask textarea").fill("go on for me");
       await page.locator("haptic-root .panel .doit").click();
       // Haptic follows the link itself, and carries on acting on the page it leads to.
       await page.waitForURL(`${PAGE}/expenses/2`, { timeout: 10_000 });
