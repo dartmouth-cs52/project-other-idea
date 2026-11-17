@@ -29,7 +29,7 @@ const CSS = `
 /* In the launcher's column just above the panel, lined up with its edge on the launcher's side, one pill a line. The column
    takes no press itself, and never shows without the panel. */
 .dock > .suggest { pointer-events: none; }
-.suggest { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; margin-bottom: 3px; animation: suggest-in .2s var(--glide); }
+.suggest { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; margin-bottom: 2px; animation: suggest-in .2s var(--glide); }
 .dock.left .suggest { align-items: flex-start; }
 .dock:has(> .panel[hidden]) > .suggest { display: none; }
 .suggest .pill { display: block; max-width: 100%; pointer-events: auto; border: 1px solid rgba(28,25,23,.1); border-radius: 999px; padding: 9px 16px;
@@ -44,7 +44,7 @@ const CSS = `
 
 /** Presentation mode: larger type, as the caption and "What I did" are, so the room can read them. */
 const PRESENT_CSS = `
-.suggest { margin-bottom: 7px; gap: 12px; }
+.suggest { margin-bottom: 6px; gap: 12px; }
 .suggest .pill { padding: 12px 22px; font-size: 20px; line-height: 28px; box-shadow: 0 10px 28px rgba(28,25,23,.16), 0 2px 4px rgba(28,25,23,.1); }
 .suggest .pill:focus-visible { outline-width: 3px; outline-offset: 3px; }
 `;
