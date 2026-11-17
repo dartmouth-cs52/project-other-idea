@@ -31,6 +31,13 @@ export default function Privacy() {
         things. We do not sign in to anything and we do not send forms.
       </p>
       <p>
+        If you ask us to email the install steps to your developer, we send them one email through Resend, from
+        install@joinhaptic.com, with your email address so they can reply to you. Resend gets their address
+        and the email, and nothing else. We do not keep their address. So that no address gets more than a few of
+        these emails, and no one can keep trying to send them, we keep a scrambled form of it with the site, your company, who sent it and when, and delete
+        that record once it is a day old, always within two days.
+      </p>
+      <p>
         Haptic runs on this website too, so you can try it. If you ask it something here, it works as the next part
         of this page describes, and we are the company that sees your questions.
       </p>

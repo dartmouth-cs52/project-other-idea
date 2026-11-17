@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Field, FormAlert, failureFrom, useFieldErrors, type Failure } from "@/components/form";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ApiError, api, type Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
 import { accessHref } from "@/lib/site";
@@ -21,7 +19,6 @@ type State = { kind: "loading" } | { kind: "failed"; message: string } | { kind:
 
 export function Dashboard() {
   const [state, setState] = useState<State>({ kind: "loading" });
-  const router = useRouter();
   const params = useSearchParams();
 
   useEffect(() => {
@@ -58,15 +55,7 @@ export function Dashboard() {
           <FailedCard className="max-w-2xl" title="Something went wrong" message={state.message} retry={() => window.location.reload()} />
         )}
         {me && !me.approved && <NotApproved me={me} />}
-        {me?.approved && !me.sites?.length && (
-          <AddSite
-            name={firstName(me.user.name)}
-            onAdded={async (id) => {
-              setState({ kind: "ready", me: await api<Me>("/me") });
-              router.replace(`/dashboard/?site=${id}`);
-            }}
-          />
-        )}
+        {me?.approved && !me.sites?.length && <ToSetup />}
         {me?.approved && me.sites?.length ? <SiteSwitch me={me} chosen={params.get("site")} /> : null}
       </main>
     </>
@@ -118,58 +107,11 @@ function NotApproved({ me }: { me: Me }) {
   );
 }
 
-function AddSite({ name, onAdded }: { name?: string; onAdded: (id: string) => void }) {
-  const [url, setUrl] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<Failure | null>(null);
-  const fields = useFieldErrors({ url: "site-url" });
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setFailure(null);
-    if (fields.show({ url: url.trim() ? undefined : "Paste your site's address." })) return;
-    setBusy(true);
-    try {
-      const site = await api<{ id: string }>("/sites", { method: "POST", body: { url } });
-      onAdded(site.id);
-    } catch (failure) {
-      if (!fields.showRefusal(failure)) setFailure(failureFrom("Couldn't add your site", failure));
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="grid items-start gap-10 md:grid-cols-2">
-      <div className="flex flex-col gap-4">
-        <h1 className="text-4xl font-medium tracking-[-0.03em] text-balance">Welcome{name ? `, ${name}` : ""}.</h1>
-        <p className="text-lg leading-7 text-muted-foreground">
-          Paste your site&apos;s address. Haptic reads its public pages while you add the script, then shows you when it connects.
-        </p>
-      </div>
-      <form onSubmit={submit} className="flex flex-col gap-4 rounded-xl border bg-muted p-6" noValidate>
-        <Field
-          id="site-url"
-          label="Your site's address"
-          required
-          error={fields.errors.url}
-          hint="The address people use your product at. You can add staging and others later."
-        >
-          <Input
-            {...fields.control("url", { hint: true })}
-            required
-            value={url}
-            onChange={(event) => {
-              setUrl(event.target.value);
-              fields.clear("url");
-            }}
-            placeholder="https://app.example.com"
-            autoComplete="url"
-            className="h-11 bg-card px-3.5 md:text-base"
-          />
-        </Field>
-        <Button type="submit" size="xl" disabled={busy}>
-          {busy ? "Adding" : "Add site"}
-        </Button>
-        <FormAlert failure={failure} />
-      </form>
-    </div>
-  );
+/** A company with no site yet adds its first one on the setup screens, one question at a time. */
+function ToSetup() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/dashboard/setup/");
+  }, [router]);
+  return <p className="text-base text-muted-foreground">Taking you to setup</p>;
 }
