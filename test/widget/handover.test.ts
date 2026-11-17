@@ -79,7 +79,8 @@ const CARD = (space: number) => `<style>
 const typing = (request: Asked, label: string, enter: string): TurnReply => ({ target: idOf(request, label), do: "type", enter, commits: false, status: "continue", say: `Typing ${enter} in ${label}.`, mode: "act" });
 
 /** Runs the form to its hand-over in a window of this size, keeping every frame from the moment the hand-over is on its way, and gives the frames back a second after it. */
-async function toHandOver(size: { width: number; height: number }, present: boolean, space: number): Promise<{ session: Session; frames: Frame[] }> {
+async function toHandOver(size: { width: number; height: number }, present: boolean, space: number): Promise<{ session: Session; frames: Frame[]; before: Box }> {
+  let before: Box = [0, 0, 0, 0];
   const session: Session = await start(
     CARD(space),
     async (request, index) => {
@@ -89,6 +90,8 @@ async function toHandOver(size: { width: number; height: number }, present: bool
       if (index === 3) return typing(request, "Purpose", "marketing");
       if (index === 4) {
         await session.page.evaluate(RECORD);
+        // Where the button is as the hand-over is sent, before the widget has it.
+        before = (await session.page.evaluate(`(() => { const r = document.getElementById('issue').getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); })()`)) as Box;
         return { target: idOf(request, "Issue card"), do: null, commits: true, status: "done", say: READY, mode: "act" };
       }
       return words("The card is issued.");
@@ -113,7 +116,7 @@ async function toHandOver(size: { width: number; height: number }, present: bool
   await session.until(async () => (await session.did()).lines.length === 4, "What I did to show");
   await session.page.waitForTimeout(1200);
   const frames = (await session.page.evaluate(() => (window as unknown as { frames: Frame[] }).frames)) as Frame[];
-  return { session, frames };
+  return { session, frames, before };
 }
 
 /** The frames from the first one that shows anything of the hand-over: its caption, or What I did. */
@@ -154,10 +157,9 @@ for (const [mode, present] of [
 
 test("in a short window the button is brought into view before the hand-over, the pointer is in sight, and What I did covers neither the caption nor the button", async () => {
   // 1280 by 720 is a 1920 by 1080 screen at 150% zoom. The button's lower edge starts under the window's.
-  const { session, frames } = await toHandOver({ width: 1280, height: 720 }, true, -14);
+  const { session, frames, before } = await toHandOver({ width: 1280, height: 720 }, true, -14);
   try {
-    const before = frames[0]!;
-    assert.ok(before.issue[1] < 720 && before.issue[3] > 720, `the button was not half out of view before the hand-over: ${before.issue}`);
+    assert.ok(before[1] < 720 && before[3] > 720, `the button was not half out of view before the hand-over: ${before}`);
     const shown = ofHandOver(frames);
     for (const [at, frame] of shown.entries()) {
       assert.ok(frame.issue[1] >= 0 && frame.issue[3] <= 720, `frame ${at}: the button is not wholly in the window: ${frame.issue}`);

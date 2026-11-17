@@ -25,7 +25,7 @@ import { hear, isOwn, keyName, keysAsked, nothingHeard, OUTCOME_WINDOW_MS, OWN_T
 import { onAddressChange } from "./navigation.ts";
 import { isDrawn, POPUP_ROLES, watchPopups } from "./popups.ts";
 import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, sameView, statesOf, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
-import { ACTING_WORDS, type DidShown, type Ui } from "./ui.ts";
+import { ACTING_WORDS, type DidShown, type Ui, SHOWING } from "./ui.ts";
 
 // Runs one guide: ask the model for a step, point at it, wait for the visitor
 // to act, let the page settle, and go again until the model has nothing more
@@ -37,9 +37,10 @@ const MAX_HISTORY = 12;
 const MAX_THREAD = 6;
 const STORAGE_KEY = "haptic.guide";
 /** Shown the moment the visitor does something other than the step, while the next step is worked out. */
-const OFF_TRACK = "Finding the way from here…";
+const OFF_TRACK = "Finding the way from here";
+/** What the chat says while the next step is worked out. */
+const THINKING = "Thinking";
 /** The ask box's line while a pointer is up and Haptic waits for the visitor. */
-const YOUR_TURN = ACTING_WORDS.yourTurn;
 /** A saved guide older than this isn't picked back up after a page load. */
 const RESUME_WINDOW_MS = 3 * 60 * 1000;
 const CLICKABLE = 'a[href], button, summary, select, input, textarea, label, [role], [onclick], [tabindex]:not([tabindex="-1"])';
@@ -427,7 +428,7 @@ export class Guide {
     if (this.acting) {
       this.ui.setBusy(ACTING_WORDS.doing);
       this.ui.setNote(ACTING_WORDS.starting);
-    } else this.ui.setBusy("Finding it…");
+    } else this.ui.setBusy(THINKING);
     // The page is given the same chance to finish drawing before the first reading as before any other.
     const run = this.run;
     void settle(this.ui.host).then(() => {
@@ -479,6 +480,7 @@ export class Guide {
     this.misses = 0;
     this.ui.clear();
     this.ui.clearAnswer();
+    this.ui.showQuestion("");
     this.ui.setBusy("");
     if (session?.did.length) this.showDid(session, ACTING_WORDS.stopped);
     // Typing that Stop cut short is reported by the engine a moment later, and shown then.
@@ -674,7 +676,7 @@ export class Guide {
     this.watchPage(true);
     this.ui.setState("asking");
     if (this.acting) this.ui.setBusy(ACTING_WORDS.doing);
-    else this.ui.setBusy(this.strayed ? OFF_TRACK : "Looking at this page…");
+    else this.ui.setBusy(this.strayed ? OFF_TRACK : "Looking at this page");
     // The script tag can run before the page has finished arriving, let alone drawn itself.
     void loaded()
       .then(() => settle(this.ui.host, { since: performance.now(), fetches: true }))
@@ -746,7 +748,7 @@ export class Guide {
     if (!closing) this.unconfirmed = undefined;
     ui.setState("asking");
     if (acting) ui.setBusy(ACTING_WORDS.doing);
-    else ui.setBusy(this.step === 0 ? "Finding it…" : this.strayed ? OFF_TRACK : closing ? "Checking…" : "Next step…");
+    else ui.setBusy(this.strayed ? OFF_TRACK : closing ? "Checking" : THINKING);
     // Still on the same page: a load that Haptic's last press might have started did not come.
     if (this.expectLoadUntil) {
       this.expectLoadUntil = 0;
@@ -863,7 +865,7 @@ export class Guide {
       this.moves = [...this.moves.filter((move) => move.run === run && now - move.at < MOVES_MS), { run, at: now }];
       if (this.moves.length > MAX_MOVES) return this.finish(MOVES_SAY, "loop");
       const here = currentPath();
-      ui.setBusy(this.step === 0 ? "Finding it…" : "Next step…");
+      ui.setBusy(THINKING);
       await settle(ui.host);
       if (run !== this.run) return;
       return this.turn(run, { event: `${event ?? ""} The user went from ${page.snapshot.path} to ${here}.`.trim(), ...(followed ? { followed } : {}), closing });
@@ -890,7 +892,7 @@ export class Guide {
           onTarget: pointEarly,
           // An answer takes a moment longer than a pointer, so say what the wait is for.
           onMode: (mode) => {
-            if (run === this.run && !acting && mode === "answer") ui.setBusy("Reading the help docs…");
+            if (run === this.run && !acting && mode === "answer") ui.setBusy("Reading the help docs");
           },
         },
         abort.signal,
@@ -1137,9 +1139,11 @@ export class Guide {
       // Saved straight away: if this click loads a new page, the next page needs to know about it.
       this.save(what.event);
       // The caption goes with the pointer: what the control opens often opens right where the caption was.
-      ui.clear();
+      // A click on the control itself is answered first, with a press: the ring and the pointer dip, and then go.
+      if (what.how === "clicked" && what.onTarget) ui.press();
+      else ui.clear();
       ui.setState("asking");
-      ui.setBusy(this.strayed ? OFF_TRACK : last ? "Checking…" : "Next step…");
+      ui.setBusy(this.strayed ? OFF_TRACK : last ? "Checking" : THINKING);
       const since = performance.now();
       const refused = what.how === "clicked" ? hearInvalid() : undefined;
       // A form that checks a field when it is left has not yet shown what comes next.
@@ -1175,7 +1179,7 @@ export class Guide {
     const lost = (gone: string) => {
       ui.clear();
       ui.setState("asking");
-      ui.setBusy("Next step…");
+      ui.setBusy(THINKING);
       void settle(ui.host, { since: performance.now() }).then(() =>
         onceStaying(() => {
           if (run !== this.run) return;
@@ -1197,7 +1201,7 @@ export class Guide {
       if (again) return showAgain(again);
       ui.clear();
       ui.setState("asking");
-      ui.setBusy("Next step…");
+      ui.setBusy(THINKING);
       void settle(ui.host, { since: performance.now() }).then(() =>
         onceStaying(() => {
           if (run !== this.run) return;
@@ -1418,13 +1422,13 @@ export class Guide {
   }
 
   /**
-   * The pointer is up and it is the visitor's turn. The ask box, closed now, says so if it is opened: it does not go on
-   * saying "Next step…" from the question just answered, which reads as Haptic still working while it waits for them.
-   * Stop stays beside it.
+   * The pointer is up and it is the visitor's turn. The chat stays open, as it does from the question to the last
+   * step, and says so: it does not go on saying "Thinking" from the question just answered, which reads as Haptic
+   * still working while it waits for them. The way to stop is in its ask box. If it would cover the control or its
+   * caption, it moves to the other side of the window while the pointer is there (Ui.settle).
    */
   private pointingNow() {
-    this.ui.setBusy(YOUR_TURN);
-    this.ui.closePanel();
+    this.ui.setBusy(SHOWING);
   }
 
   /**
@@ -1461,7 +1465,7 @@ export class Guide {
       this.save(event);
       ui.clear();
       ui.setState("asking");
-      ui.setBusy(acting ? ACTING_WORDS.doing : "Next step…");
+      ui.setBusy(acting ? ACTING_WORDS.doing : THINKING);
       void settle(ui.host, { since: performance.now() }).then(() =>
         onceStaying(() => {
           if (run === this.run) void this.turn(run, { event });
@@ -1649,9 +1653,12 @@ export class Guide {
     this.id = "";
     this.reported = undefined;
     this.unconfirmed = undefined;
-    // A finished guide is one the visitor followed to the end, which says as much as a "Yes".
-    if (ended === "finished") this.misses = 0;
-    else if (outcome !== "stopped") this.misses++;
+    // A finished guide is one the visitor followed to the end, which says as much as a "Yes". The chat marks it Done:
+    // the same ending that is billed, and no other.
+    if (ended === "finished") {
+      this.misses = 0;
+      this.ui.showDone();
+    } else if (outcome !== "stopped") this.misses++;
     if (ASK_IF_HELPED.includes(outcome)) {
       this.ui.askIfHelped((helped) => {
         this.report(id, { helped });

@@ -1,19 +1,18 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import type { TurnReply } from "../../src/shared/types.ts";
-import { ACTING_ON, closeBrowser, idOf, point, start, words, type Session } from "./harness.ts";
+import { closeBrowser, point, start, words, type Session } from "./harness.ts";
 
 after(closeBrowser);
 
 // Asking something else while a guide is up, and typing a long question.
 //
 // With a pointer on show the launcher opened a panel that held only "Your
-// turn" and Stop. A visitor who had not met the widget before had no way to
-// ask anything from there, and what they typed went to the page: on
-// Northpine, whose own keyboard shortcuts heard the letters and took them to
-// another page. The panel now offers "Ask something else", which ends the
-// guide as Stop does and opens the ask box, and the keyboard is in the panel
-// from the moment it opens.
+// turn" and Stop. A visitor had no way to ask anything else from there, and
+// what they typed went to the page: on Northpine, whose own keyboard shortcuts
+// heard the letters and took them to another page. The chat keeps its ask box
+// while a guide runs. It now says it is the way to ask something else, Send
+// comes back beside Stop once something is typed, sending ends the guide as
+// Stop does, and the launcher puts the keyboard in it.
 
 /**
  * A page with keyboard shortcuts of its own, heard on the window as an app's are: a letter typed anywhere but in one of
@@ -33,26 +32,6 @@ const SHORTCUTS = `<h1>Orders</h1><p id="where">Orders</p>
 /** The keys the page heard, and the view it is on. */
 const page = (session: Session) => session.page.evaluate(() => ({ heard: (window as unknown as { heard: string[] }).heard, where: document.getElementById("where")?.textContent }));
 
-/** What the launcher's panel shows: its status line, whether the ask box and "Ask something else" are on show, and what of ours holds the keyboard. */
-const panel = (session: Session) =>
-  session.page.evaluate(() => {
-    const root = document.querySelector("haptic-root")!.shadowRoot!;
-    // Written without a named function inside, which the test runner's build would wrap in a helper the page does not have.
-    const [open, status, askBox, another, stop] = [".panel", ".status", ".ask textarea", ".another", ".stop"].map((selector) => {
-      const el = root.querySelector(selector) as HTMLElement | null;
-      return !!el && el.getClientRects().length > 0;
-    });
-    const holds = root.activeElement;
-    return {
-      open,
-      status: status ? (root.querySelector(".status span")?.textContent ?? "") : "",
-      askBox,
-      another: another ? (root.querySelector(".another")?.textContent ?? "") : "",
-      stop,
-      keyboard: holds ? (holds.className || holds.tagName.toLowerCase()) : "",
-    };
-  });
-
 /** Every report the widget has sent, in order. */
 function reports(session: Session): Record<string, unknown>[] {
   const sent: Record<string, unknown>[] = [];
@@ -63,41 +42,65 @@ function reports(session: Session): Record<string, unknown>[] {
   return sent;
 }
 
-test("with a pointer up, the panel offers a way to ask something else, and what is typed there never reaches the page", async () => {
+/** What the chat shows: whether it is open, its status line, the ask box's words, which of its buttons show, and what of ours holds the keyboard. */
+const panel = (session: Session) =>
+  session.page.evaluate(() => {
+    const root = document.querySelector("haptic-root")!.shadowRoot!;
+    // Written without a named function inside, which the test runner's build would wrap in a helper the page does not have.
+    const [open, status, send, stop] = [".panel", ".status", ".ask .send", ".ask .stop"].map((selector) => {
+      const el = root.querySelector(selector) as HTMLElement | null;
+      return !!el && !el.hidden && el.getClientRects().length > 0;
+    });
+    const box = root.querySelector(".ask textarea") as HTMLTextAreaElement;
+    const holds = root.activeElement;
+    return {
+      open,
+      status: status ? (root.querySelector(".status span")?.textContent ?? "") : "",
+      placeholder: box.placeholder,
+      send,
+      stop,
+      keyboard: holds ? (holds.className || holds.tagName.toLowerCase()) : "",
+    };
+  });
+
+test("with a pointer up, the chat's ask box is the way to ask something else, and what is typed there never reaches the page", async () => {
   const session = await start(SHORTCUTS, (request, index) => (index === 0 ? point(request, "Export", "Click Export.") : words("Invoices are under Billing.")));
   const sent = reports(session);
   try {
     await session.ask("how do I export my orders");
     await session.untilState("pointing");
     const first = session.requests[0]!;
-    // A visitor who wants something else presses the launcher, as they did to ask the first time.
+    const up = await panel(session);
+    assert.deepEqual([up.open, up.placeholder, up.send, up.stop], [true, "Ask something else", false, true]);
+    // The visitor put the chat away, and presses Ask to ask something else: the keyboard is in the ask box.
     await session.page.locator("haptic-root .launcher").click();
-    assert.deepEqual(await panel(session), { open: true, status: "Your turn", askBox: false, another: "Ask something else", stop: true, keyboard: "another" });
-    // They type before reading. The keys are Haptic's, and the page's shortcuts hear none of them.
+    assert.equal((await panel(session)).open, false);
+    await session.page.locator("haptic-root .launcher").click();
+    assert.equal((await panel(session)).keyboard, "textarea");
+    // They type before reading. The keys are Haptic's, the page's shortcuts hear none of them, and the guide stays up.
     await session.page.keyboard.type("new", { delay: 20 });
     assert.deepEqual(await page(session), { heard: [], where: "Orders" });
     assert.equal(await session.state(), "pointing");
     assert.equal(await session.caption(), "Click Export.");
+    // Something is typed: Send is back beside Stop.
+    const typing = await panel(session);
+    assert.deepEqual([typing.send, typing.stop], [true, true]);
 
-    await session.page.locator("haptic-root .another").click();
-    await session.untilState("finished");
-    // The guide ended as it does for Stop: nothing is left pointing, and it is reported as stopped, once.
-    assert.equal(await session.pointed(), null);
-    assert.equal(await session.caption(), "");
-    await session.until(() => sent.length === 1, "the ending to be reported");
-    assert.deepEqual(sent, [{ guide: first.guide, outcome: "stopped", site: "site_widget_test" }]);
-    // The ask box is open and has the keyboard.
-    const asking = await panel(session);
-    assert.deepEqual([asking.open, asking.status, asking.askBox, asking.another], [true, "", true, ""]);
-    assert.equal(await session.page.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.activeElement?.matches(".ask textarea")), true);
+    await session.page.keyboard.press("Control+A");
     await session.page.keyboard.type("where are my invoices", { delay: 5 });
     await session.page.keyboard.press("Enter");
     const second = await session.untilAsked(2);
     assert.equal(second.goal, "where are my invoices");
     assert.notEqual(second.guide, first.guide);
+    // The guide before ended as it does for Stop: nothing is left pointing, and it is reported as stopped, once.
+    await session.until(() => sent.some((report) => report.guide === first.guide), "the first guide's ending to be reported");
+    await session.untilState("finished");
+    assert.equal(await session.pointed(), null);
     assert.deepEqual(await page(session), { heard: [], where: "Orders" });
     await session.page.waitForTimeout(300);
-    assert.equal(sent.filter((report) => report.guide === first.guide).length, 1, "the first guide's ending was reported twice");
+    assert.deepEqual(sent.filter((report) => report.guide === first.guide), [{ guide: first.guide, outcome: "stopped", site: "site_widget_test" }]);
+    // Once the guide is over the ask box asks its first question again.
+    assert.equal((await panel(session)).placeholder, "What do you want to do");
   } finally {
     await session.close();
   }
@@ -105,124 +108,26 @@ test("with a pointer up, the panel offers a way to ask something else, and what 
 
 test("asking something else at a guide's last pointer reports the guide exactly as Stop does there", async () => {
   const endings: unknown[] = [];
-  for (const button of [".another", ".stop"]) {
+  for (const how of ["ask", "stop"] as const) {
     const session = await start(SHORTCUTS, (request, index) => (index === 0 ? point(request, "Export", "Click Export to download them.", "done") : words("Done.")));
     const sent = reports(session);
     try {
       await session.ask("how do I export my orders");
       await session.untilState("pointing");
-      await session.page.locator("haptic-root .launcher").click();
-      await session.page.locator(`haptic-root ${button}`).click();
-      await session.untilState("finished");
-      await session.until(() => sent.length >= 1, "the ending to be reported");
-      endings.push(sent[0]?.outcome);
-      assert.equal((await panel(session)).askBox, true);
+      const first = session.requests[0]!;
+      if (how === "stop") await session.page.locator("haptic-root .ask .stop").click();
+      else {
+        await session.page.locator("haptic-root .ask textarea").click();
+        await session.page.keyboard.type("where are my invoices", { delay: 5 });
+        await session.page.keyboard.press("Enter");
+      }
+      await session.until(() => sent.some((report) => report.guide === first.guide && report.outcome), "the ending to be reported");
+      endings.push(sent.find((report) => report.guide === first.guide && report.outcome)?.outcome);
     } finally {
       await session.close();
     }
   }
   assert.deepEqual(endings, ["shown", "shown"]);
-});
-
-test("it is not offered while Haptic is finding the step, and with only a sentence up the ask box is there, with the keyboard", async () => {
-  let release: (() => void) | undefined;
-  const session = await start(SHORTCUTS, async (_request, index) => {
-    if (index === 0) await new Promise<void>((resolve) => (release = resolve));
-    return index === 0 ? words("Press Enter to search.", "continue") : words("Invoices are under Billing.");
-  });
-  try {
-    await session.ask("search my orders");
-    await session.untilState("asking");
-    await session.until(async () => (await panel(session)).status === "Finding it…", "the panel to say it is finding the step");
-    // Working on it: Stop is the way out, as before.
-    assert.deepEqual([(await panel(session)).another, (await panel(session)).stop], ["", true]);
-    // The keyboard stays in the panel when the ask box goes, and a key there presses nothing: not the page's
-    // shortcuts, and not Stop, which a space would press if it had the keyboard.
-    assert.equal((await panel(session)).keyboard, "panel");
-    await session.page.keyboard.type("c n", { delay: 20 });
-    assert.deepEqual(await page(session), { heard: [], where: "Orders" });
-    assert.equal(await session.state(), "asking");
-    // The step is held until it has been asked for, so the panel above was read while Haptic was finding it.
-    await session.until(() => release, "the step to be asked for");
-    release!();
-    await session.untilState("watching");
-    // A guide that only says something leaves the ask box as it was: the launcher opens it, and the keys are Haptic's.
-    await session.page.locator("haptic-root .launcher").click();
-    const waiting = await panel(session);
-    assert.deepEqual([waiting.askBox, waiting.another, waiting.keyboard], [true, "", "textarea"]);
-    await session.page.keyboard.type("new", { delay: 20 });
-    assert.deepEqual(await page(session), { heard: [], where: "Orders" });
-  } finally {
-    await session.close();
-  }
-});
-
-test("while Haptic is paused for the visitor's own hand, it is offered beside Carry on and Stop, and all of them fit in the panel", async () => {
-  const FORM = `<h1 id="title">New card</h1><form><label>Card name <input id="name"></label></form>`;
-  const LONG = "Marketing and events for the whole of the coming year";
-  const session = await start(
-    FORM,
-    (request, index): TurnReply =>
-      index === 0 ? { target: idOf(request, "Card name"), do: "type", enter: LONG, commits: false, status: "continue", say: "Typing the card's name.", mode: "act" } : words("Done."),
-    "/",
-    { acting: ACTING_ON },
-  );
-  try {
-    await session.ask(`can you make a card called ${LONG}`, { act: true });
-    await session.untilState("acting");
-    await session.until(async () => (await session.page.inputValue("#name")).length >= 4, "some of the name to be typed");
-    await session.page.locator("#title").click();
-    await session.untilState("paused");
-    const paused: { text: string | null; inside: boolean; wide: number }[] = await session.page.evaluate(() => {
-      const root = document.querySelector("haptic-root")!.shadowRoot!;
-      const box = root.querySelector(".panel")!.getBoundingClientRect();
-      return Array.from(root.querySelectorAll(".status span, .status button"))
-        .filter((el) => el.getClientRects().length > 0)
-        .map((el) => {
-          const rect = el.getBoundingClientRect();
-          return { text: el.textContent, inside: rect.left >= box.left && rect.right <= box.right && rect.top >= box.top && rect.bottom <= box.bottom, wide: rect.width };
-        });
-    });
-    assert.deepEqual(
-      paused.map((part) => part.text),
-      ["You took over, so I've paused.", "Carry on", "Ask something else", "Stop"],
-    );
-    for (const part of paused) assert.ok(part.inside, `"${part.text}" is not inside the panel: ${JSON.stringify(paused)}`);
-    // The sentence is read on lines of its own width, not squeezed to a word a line.
-    assert.ok(paused[0]!.wide > 150, `the sentence is ${paused[0]!.wide} px wide`);
-    await session.page.locator("haptic-root .another").click();
-    await session.untilState("finished");
-    assert.equal((await panel(session)).askBox, true);
-    assert.equal(await session.page.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.activeElement?.matches(".ask textarea")), true);
-  } finally {
-    await session.close();
-  }
-});
-
-test("when Haptic gives the visitor a step of its own, the panel offers it beside Stop, and not while Haptic is doing a step", async () => {
-  const FORM = `<h1>New card</h1><form id="card"><label>Card name <input id="name" name="name"></label><label>Spending limit <input id="limit" name="limit"></label>
-    <button id="issue" type="submit">Issue card</button></form><script>document.getElementById('card').addEventListener('submit', (event) => event.preventDefault());</script>`;
-  const seen: Awaited<ReturnType<typeof panel>>[] = [];
-  const session: Session = await start(
-    FORM,
-    async (request, index): Promise<TurnReply> => {
-      // The second question is asked while Haptic is at work between two steps.
-      if (index === 1) seen.push(await panel(session));
-      if (index === 0) return { target: idOf(request, "Card name"), do: "type", enter: "Ads", commits: false, status: "continue", say: "Typing the card's name.", mode: "act" };
-      return { target: idOf(request, "Spending limit"), do: null, enter: null, commits: false, status: "continue", say: "Type the limit you want in Spending limit.", mode: "act" };
-    },
-    "/",
-    { acting: ACTING_ON },
-  );
-  try {
-    await session.ask("Can you issue a card called Ads?", { act: true });
-    await session.untilState("pointing", 20_000);
-    assert.deepEqual([seen[0]?.status, seen[0]?.another, seen[0]?.stop], ["Doing it", "", true]);
-    const theirs = await panel(session);
-    assert.deepEqual([theirs.status, theirs.another, theirs.stop], ["Your turn", "Ask something else", true]);
-  } finally {
-    await session.close();
-  }
 });
 
 test("a long question is read whole while it is typed: the ask box grows to three lines, and Enter still sends it on one", async () => {

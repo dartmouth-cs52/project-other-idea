@@ -57,7 +57,7 @@ export interface ReadOptions {
 export async function startBrowser(): Promise<Browser | string> {
   let browser: Loose;
   try {
-    browser = await createRequire(import.meta.url)("playwright").chromium.launch();
+    browser = await createRequire(import.meta.url)("playwright").chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   } catch (error) {
     return `No browser to test in: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error)}`;
   }

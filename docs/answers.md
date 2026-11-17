@@ -67,7 +67,7 @@ npm run tag -- --id site_ab12cd34ef \
   --handoff-email support@example.com
 ```
 
-- **A webhook.** The widget shows a short form, an email address and a note. The server passes it on as JSON and keeps none of it: `kind` ("handoff"), `site`, `site_name`, `at`, `email`, `note`, `origin`, `page`, `guide`, `transcript` (each line has a `role`, its `text`, and for Haptic's lines the `kind` of reply), and `modes`, the kinds of reply used. With a secret set, the post carries `X-Haptic-Signature: sha256=` followed by the hex HMAC-SHA256 of the body, so the receiver can tell it came from Haptic. The address has to be https and on the public internet.
+- **A webhook.** The widget shows a short form, an email address and a note. The server passes it on as JSON and keeps none of it: `kind` ("handoff"), `site`, `site_name`, `at`, `email`, `note`, `origin`, `page`, `guide`, `transcript` (each line has a `role`, its `text`, and for Haptic's lines the `kind` of reply), and `modes`, the kinds of reply used. With a secret set, the post carries `X-Haptic-Signature: sha256=` followed by the hex HMAC-SHA256 of the body, so the receiver can tell it came from Haptic. It says the post came through Haptic, not that what is in it is what Haptic said: the email address, the note and the conversation are all sent by the visitor's browser, so treat every line of it as the visitor's word. The server passes on a form only from a page on one of the site's allowed origins, which a program can claim to be. The address has to be https and on the public internet.
 - **A page**, opened in a new tab.
 - **An email address.** The visitor's own mail program opens, with the conversation in the message.
 

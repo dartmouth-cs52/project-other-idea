@@ -125,7 +125,7 @@ test("Stop while Haptic waits for its next step: the step that arrives later is 
       try {
         await session.ask("can you write lunch as the memo and go on", { act: true });
         await session.untilAsked(2, 10_000);
-        await session.page.locator("haptic-root .status .stop").click();
+        await session.page.locator("haptic-root .ask .stop").click();
         await session.untilState("finished");
         const before = (await reached(session)).length;
         release();

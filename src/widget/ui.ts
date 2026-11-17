@@ -1,14 +1,20 @@
 import type { Appearance, Source, TurnReply } from "../shared/types.ts";
 import { boxThatShows } from "./snapshot.ts";
 
-// Everything Haptic draws: the launcher, the ask box, the pointer, the
-// highlight ring and the caption. It all lives in one shadow root on one host
-// element, so the customer's CSS can't reach it and ours can't leak out.
-// Model text is only ever set as textContent.
+// Everything Haptic draws: the launcher, the chat with its ask box, the
+// pointer, the ring around its target and the caption. It all lives in one
+// shadow root on one host element, so the customer's CSS can't reach it and
+// ours can't leak out. Model text is only ever set as textContent.
 
-// Colours, radii and motion come from DESIGN.md. The accent colours the
-// pointer and its highlight only. Everything else is ink on white.
-// The pointer shape is assets/pointer.svg, with its tip at POINTER_TIP.
+// Colours, radii and motion come from DESIGN.md, and the chat is the one in
+// the website's home page demo (web/components/demo/kit.tsx). The accent
+// colours the pointer, its ring and the heart of the thinking glow.
+// Everything else is ink on white. The pointer shape is assets/pointer.svg,
+// with its tip at POINTER_TIP.
+//
+// The thinking glow is the one thing drawn over the page itself. It has an
+// element of its own, under ours, so it can be blended into the page while the
+// chat and the pointer stay as they are.
 const POINTER_PATH =
   "M3.271 4.871A1.678 1.678 0 0 1 5.604 2.907L19.822 9.597A1.678 1.678 0 0 1 19.705 12.684L13.956 14.875A.622.622 0 0 0 13.643 15.139L10.506 20.431A1.678 1.678 0 0 1 7.444 20.021Z";
 const POINTER_TIP = { x: 3.81, y: 3.14 };
@@ -19,6 +25,72 @@ const PRESENT_SCALE = 2;
 /** The cross on the caption's close button, and the arrow on the send button. */
 const CROSS_PATH = "M18 6 6 18M6 6l12 12";
 const ARROW_PATH = "M12 19V5M5 12l7-7 7 7";
+/** The square on the stop button, and the tick beside Done. */
+const SQUARE_PATH = "M6 6h12v12H6z";
+const TICK_PATH = "M20 6 9 17l-5-5";
+/** A click on the control is acknowledged like a pressed button: the ring and the pointer dip and come back. */
+const PRESS_MS = 240;
+/** What the chat says while the pointer shows a step, in a guide Haptic is not doing itself. */
+export const SHOWING = "Showing you how";
+
+// The thinking glow. It is on the page only while Haptic waits for the model.
+// A soft band the width of the page comes in at the top edge and falls
+// towards the bottom, once for each wait. How long the wait will be is not
+// known, so the band is paced to it: quick at first and slower the longer the
+// wait goes on, always on its way down and never at the bottom before the
+// reply. The moment the reply arrives it goes the rest of the way and off the
+// page, fading, so every wait is one pass from top to bottom and the page is
+// clear by the time the pointer lands.
+/**
+ * How long the band takes to slow to a stop, near the foot of the page, if no
+ * reply comes. With FALL_EASE its middle is at the top edge after 0.4s,
+ * halfway down after 1.2s, which is a typical wait, two thirds down after 2s
+ * and four fifths after 3s.
+ */
+const FALL_MS = 8000;
+const FALL_EASE = "cubic-bezier(.14, 1, .3, 1)";
+/** How long the glow takes to come in, and to leave by the bottom once the reply has arrived. */
+const GLOW_IN_MS = 300;
+const GLOW_OUT_MS = 450;
+
+// The band's strength across its thickness: a bell with no flat top and no
+// edge, which is what makes it read as light and not as a stripe. A gradient
+// only joins its stops with straight lines, so the curve is spelled out.
+const BELL = [0.62, 0.605, 0.56, 0.49, 0.405, 0.31, 0.215, 0.13, 0.06, 0.015, 0].map((alpha, i) => `rgba(0,0,0,${alpha}) ${i * 10}%`).join(", ");
+
+// The glow's own element. It covers the page under the chat and the pointer,
+// takes no clicks, and is not displayed at all unless a glow is on. How it is
+// blended into the page is set when a glow starts (see Ui.glowOn).
+//
+// The band is one element, as tall as the page. Its colour runs from the
+// trailing edge to the leading one in a single gradient, mixed in OKLCH so
+// the hues melt into each other, and a mask gives it the bell: an ellipse far
+// wider than the page, so it is a touch thicker in the middle. Only its
+// transform and the opacity of what holds it change.
+const VEIL_CSS = `
+:host { all: initial; display: none; position: fixed; inset: 0; z-index: 2147483646; overflow: hidden; pointer-events: none;
+  --glow-a: #77d0fe; --glow-b: #5294ff; --glow-c: #8460ee; }
+/* The glow is the site's accent with its neighbours on either side, so it suits whatever colour the pointer is. */
+@supports (color: oklch(from red l c h)) {
+  :host { --glow-a: oklch(from var(--accent) .82 calc(c * .5) calc(h - 28)); --glow-b: oklch(from var(--accent) .68 calc(c * .85) h);
+    --glow-c: oklch(from var(--accent) .6 calc(c * .95) calc(h + 30)); }
+}
+.glow { position: absolute; inset: 0; animation: arrive ${GLOW_IN_MS}ms ease-out; transition: opacity ${GLOW_OUT_MS}ms ease-in; }
+.glow.fade { opacity: 0; }
+/* Without a mask the band would be a hard block of colour, so a browser with none shows no glow. */
+.glow i { display: none; }
+@supports (mask-image: linear-gradient(#000, #000)) or (-webkit-mask-image: linear-gradient(#000, #000)) {
+  .glow i { display: block; position: absolute; inset: 0; transform: translateY(-90%);
+    background: linear-gradient(to bottom, var(--glow-a), var(--glow-b) 50%, var(--glow-c));
+    background: linear-gradient(to bottom in oklch, var(--glow-a), var(--glow-b) 50%, var(--glow-c));
+    -webkit-mask-image: radial-gradient(200% 50% at 50% 50%, ${BELL}); mask-image: radial-gradient(200% 50% at 50% 50%, ${BELL}); }
+  /* Falling: towards the foot of the page, slower all the time. These are transitions, so each starts from wherever the band is. */
+  .glow i.falling { transform: translateY(40%); transition: transform ${FALL_MS}ms ${FALL_EASE}; }
+  /* The reply has arrived: on to the bottom and off the page. */
+  .glow.fade i { transform: translateY(100%); transition: transform ${GLOW_OUT_MS}ms ease-in; }
+}
+@keyframes arrive { from { opacity: 0; } }
+`;
 
 const CSS = `
 :host { all: initial; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
@@ -60,8 +132,9 @@ button { font: inherit; cursor: pointer; }
 .hide:hover { color: #1c1917; background: #fafaf9; }
 .launch:hover .hide, .launch:focus-within .hide { opacity: 1; transform: none; pointer-events: auto; }
 .launch.mini .hide { display: none; }
-.panel { width: min(320px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 14px;
-  padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.16); outline: none; }
+/* Never taller than the window above the launcher: in a short one the chat scrolls inside itself. */
+.panel { width: min(320px, calc(100vw - 40px)); max-height: calc(100vh - 90px); overflow-y: auto; scrollbar-width: thin; background: #fff; border: 1px solid #e7e5e4;
+  border-radius: 14px; padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.16); }
 [hidden] { display: none !important; }
 .ask { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 10px; background: #f5f5f4; }
 .ask:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
@@ -72,30 +145,40 @@ button { font: inherit; cursor: pointer; }
 .panel .send { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0;
   border-radius: 999px; background: #1c1917; color: #fafaf9; }
 .panel .send svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* While a guide runs, the button in the ask box is the way to stop it. */
+.panel .stop { display: none; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 999px; background: #1c1917; color: #fafaf9; }
+.panel .stop svg { width: 12px; height: 12px; fill: currentColor; }
 .panel .doit { display: none; height: 32px; border: 1px solid #e7e5e4; border-radius: 999px; padding: 0 14px; background: #fff; color: #1c1917; font-size: 13px; font-weight: 500;
   transition: background-color .2s, border-color .2s, color .2s; }
 .panel.acts .doit { display: inline-flex; align-items: center; }
+.panel.working .stop { display: inline-flex; }
+.panel.working .send, .panel.working .doit { display: none; }
+/* Something typed while a guide runs is a new question: Send is back beside Stop, and sending it ends the guide as Stop does. */
+.panel.working.typed .send { display: inline-flex; }
 .panel.nudged .doit { background: var(--accent); border-color: var(--accent); color: #fff; }
 .first { display: flex; align-items: center; gap: 10px; padding: 8px 4px 4px 12px; color: #44403c; font-size: 13px; line-height: 18px; }
 .first .go { flex: none; height: 28px; border: 0; border-radius: 999px; padding: 0 14px; background: #1c1917; color: #fafaf9; font-size: 13px; }
-.status { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 2px 0 12px; }
-.status span { flex: 1; color: #78716c; }
-.stop, .resume, .another { flex: none; height: 28px; border: 1px solid #e7e5e4; background: #fff; color: #78716c; border-radius: 999px; padding: 0 12px; font-size: 13px; }
-.resume { border-color: #1c1917; background: #1c1917; color: #fafaf9; }
+/* One line under the bubbles says what Haptic is doing: thinking, showing a step, or done. */
+.status, .done { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 2px 8px 8px; }
+.status span { color: #78716c; }
+.status .arrow { display: none; flex: none; width: 16px; height: 16px; }
+.status .arrow path { fill: var(--accent); }
+.status.pointing .arrow { display: block; }
+/* A lighter shade sweeps across the words while Haptic works. */
+.status.thinking span { color: transparent; background: linear-gradient(110deg, #78716c 35%, #d6d3d1 50%, #78716c 65%) 100% 0 / 300% 100% no-repeat;
+  -webkit-background-clip: text; background-clip: text; animation: shimmer 2s linear infinite; }
+@keyframes shimmer { to { background-position: 0 0; } }
+.resume { flex: none; margin-left: auto; height: 28px; border: 1px solid #1c1917; background: #1c1917; color: #fafaf9; border-radius: 999px; padding: 0 12px; font-size: 13px; }
 .status:not(.paused) .resume { display: none; }
-/* Asking something else is offered while the guide waits on the visitor: with a pointer up, a sentence up, or paused for their hand. */
-.another { display: none; color: #1c1917; }
-.panel.waits .another { display: inline-block; }
-/* Paused there are three buttons, more than fit beside the sentence: the sentence has a line of its own, and they go under it. */
-.status.paused { flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; padding: 6px 2px 2px 12px; }
-.status.paused span { flex-basis: 100%; }
-.status button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.done { color: #1c1917; font-weight: 500; }
+.done i { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 16px; border-radius: 999px; background: #008932; color: #fff; }
+.done svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .note { padding: 0 12px 6px; color: #78716c; font-size: 13px; line-height: 18px; }
 .did { padding: 4px 4px 2px; }
 .did h2 { margin: 4px 8px 6px; font-size: 13px; line-height: 18px; font-weight: 600; color: #1c1917; }
 /* In a short window the list scrolls inside itself, so the panel never grows past the window. */
 .did ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: fit-content(50%) minmax(0, 1fr); column-gap: 12px;
-  max-height: max(84px, calc(100vh - 330px)); overflow-y: auto; scrollbar-width: thin; }
+  max-height: max(84px, calc(100vh - 420px)); overflow-y: auto; scrollbar-width: thin; }
 .did li, .did .line { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); grid-template-columns: subgrid; }
 .did .line { width: 100%; align-items: baseline; border: 0; border-radius: 8px; padding: 4px 8px; background: transparent; color: #1c1917;
   font-size: 13px; line-height: 18px; text-align: left; }
@@ -105,20 +188,30 @@ button { font: inherit; cursor: pointer; }
 .did .mine { grid-column: 2; color: #78716c; font-style: italic; }
 .unseen { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .did p { margin: 6px 8px 4px; color: #78716c; font-size: 13px; line-height: 18px; }
-.ring { position: fixed; border: 2px solid var(--accent); border-radius: 10px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
-  transition: opacity .2s; }
+/* The ring around the control: the accent with a white edge on both sides and a soft shadow, the same recipe as the
+   pointer, so it never reads as the control's own focus ring. It lands as the pointer does, from slightly larger. */
+.ring { position: fixed; border: 2px solid var(--accent); border-radius: 10px; box-shadow: 0 0 0 1.5px #fff, inset 0 0 0 1.5px #fff, 0 3px 10px rgba(0,0,0,.14);
+  transition: opacity .2s; animation: land .2s var(--glide) .35s both; }
 .ring.turn { animation: breathe 1.6s ease-in-out infinite; }
-@keyframes breathe { 50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 12%, transparent); } }
+.ring.press { animation: dip-ring ${PRESS_MS}ms ease-out; }
+@keyframes land { from { opacity: 0; transform: scale(1.06); } }
+@keyframes breathe { 50% { box-shadow: 0 0 0 1.5px #fff, inset 0 0 0 1.5px #fff, 0 0 0 8px color-mix(in srgb, var(--accent) 22%, transparent); } }
+@keyframes dip-ring { 40% { transform: scale(.97); } }
 .ripple { position: fixed; width: 28px; height: 28px; margin: -14px 0 0 -14px; border: 2px solid var(--accent); border-radius: 999px; pointer-events: none;
   animation: ripple .25s ease-out forwards; }
 @keyframes ripple { from { transform: scale(.35); opacity: .9; } to { transform: scale(1.3); opacity: 0; } }
 .cursor { position: fixed; left: 0; top: 0; width: 24px; height: 24px; transition: transform .55s cubic-bezier(.2,.8,.2,1);
   filter: drop-shadow(0 1px 1px rgba(0,0,0,.3)) drop-shadow(0 5px 9px rgba(0,0,0,.26)); will-change: transform; }
-.cursor svg { display: block; overflow: visible; }
+.cursor svg { display: block; overflow: visible; transform-origin: 16% 13%; }
+.cursor.press svg { animation: dip-pointer ${PRESS_MS}ms ease-out; }
+@keyframes dip-pointer { 40% { transform: scale(.9); } }
 .cursor path { fill: var(--accent); stroke: #fff; stroke-width: 3; stroke-linejoin: round; paint-order: stroke; }
+/* A pointer's caption shows as the pointer lands. A sentence with nothing to point at shows at once. */
 /* As wide as its words, up to its limit, wherever it is put: a width that followed its place would change as it was placed, and it would be laid out again. */
 .caption { position: fixed; display: flex; align-items: center; gap: 8px; width: max-content; max-width: min(320px, calc(100vw - 24px)); background: #1c1917; color: #fafaf9;
-  border-radius: 14px; padding: 6px 6px 6px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.22); }
+  border-radius: 14px; padding: 6px 6px 6px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.22); animation: show .18s ease-out .35s both; }
+.caption.said { animation-delay: 0s; }
+@keyframes show { from { opacity: 0; } }
 .caption .close { display: inline-flex; align-items: center; justify-content: center; flex: none; align-self: flex-start; width: 24px; height: 24px; border: 0;
   border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; pointer-events: auto; }
 .caption .close:hover { background: rgba(250,250,249,.25); }
@@ -130,8 +223,8 @@ button { font: inherit; cursor: pointer; }
 .helped button:hover { background: #d6d3d1; }
 .thread { display: flex; flex-direction: column; gap: 8px; max-height: min(360px, calc(100vh - 220px)); overflow-y: auto; padding: 4px 4px 10px; }
 .thread p { margin: 0; overflow-wrap: anywhere; }
-.question { align-self: flex-end; max-width: 85%; background: #1c1917; color: #fafaf9; border-radius: 14px; padding: 6px 12px; }
-.reply { align-self: flex-start; background: #f5f5f4; border-radius: 14px; padding: 8px 12px; }
+.question { align-self: flex-end; max-width: 85%; background: #1c1917; color: #fafaf9; border-radius: 14px; padding: 8px 12px; line-height: 22px; }
+.reply { align-self: flex-start; background: #f5f5f4; border-radius: 14px; padding: 8px 12px; line-height: 22px; }
 .sources { margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid #e7e5e4; list-style: none; font-size: 12px; line-height: 16px; color: #78716c; }
 .sources li + li { margin-top: 6px; }
 .sources .from { margin-bottom: 4px; }
@@ -156,7 +249,8 @@ button { font: inherit; cursor: pointer; }
 .asked { position: fixed; left: 0; top: 0; width: max-content; max-width: min(760px, calc(100vw - 48px)); background: #fff; color: #1c1917; border: 2px solid #1c1917;
   border-radius: 24px; padding: 8px 22px; font-size: 22px; line-height: 30px; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,.22); pointer-events: none; }
 .asked span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
-@media (prefers-reduced-motion: reduce) { .cursor, .launcher, .launcher svg, .launcher span, .hide { transition: none; } .ring.turn { animation: none; } .ripple { display: none; } }
+@media (prefers-reduced-motion: reduce) { .cursor, .launcher, .launcher svg, .launcher span, .hide { transition: none; } .ring, .ring.turn, .ring.press, .caption, .cursor.press svg { animation: none; }
+  .ripple { display: none; } .status.thinking span { color: #78716c; background: none; animation: none; } }
 `;
 
 // A visitor is told they are dealing with an AI before they ask it anything,
@@ -178,8 +272,9 @@ const PRESENT_CSS = `
   filter: drop-shadow(0 2px 2px rgba(0,0,0,.45)) drop-shadow(0 8px 14px rgba(0,0,0,.35)); }
 .cursor svg { width: 48px; height: 48px; }
 .cursor path { stroke-width: 2.5; }
-.ring { border-width: 6px; border-radius: 14px;
+.ring { border-width: 6px; border-radius: 14px; animation: none;
   box-shadow: 0 0 0 3px #fff, 0 0 0 14px color-mix(in srgb, var(--accent) 40%, transparent), 0 0 32px 16px rgba(0,0,0,.2); }
+.caption { animation: none; }
 .ring.turn { animation-name: breathe-present; }
 @keyframes breathe-present { 50% { box-shadow: 0 0 0 3px #fff, 0 0 0 22px color-mix(in srgb, var(--accent) 24%, transparent), 0 0 32px 16px rgba(0,0,0,.2); } }
 .ripple { width: 56px; height: 56px; margin: -28px 0 0 -28px; border-width: 5px; }
@@ -237,15 +332,14 @@ function rememberMinimized(mini: boolean) {
   }
 }
 
-/** The button that ends a guide to ask a new question, while that guide waits on the visitor. */
+/** What the ask box says before a question, and while a guide runs, when what is typed there ends it and asks anew. */
+const ASK_FIRST = "What do you want to do";
 const ASK_ELSE = "Ask something else";
 
 export interface UiHandlers {
   /** A question, with `act` set when the visitor pressed Do it (and, the first time, Go). */
   onAsk: (question: string, act: boolean) => void;
   onStop: () => void;
-  /** The visitor wants to ask something else while a guide is up: the guide ends as it does for Stop, and the ask box opens. */
-  onAskElse?: () => void;
   /** The visitor let Haptic carry on after it paused for them. */
   onCarryOn?: () => void;
 }
@@ -373,7 +467,7 @@ export class Ui {
   private captor?: Element;
   private frame = 0;
   /** What each of our buttons does, by its class. */
-  private buttons!: Record<"launcher" | "hide" | "send" | "stop" | "close" | "doit" | "go" | "resume" | "another", () => void>;
+  private buttons!: Record<"launcher" | "hide" | "send" | "stop" | "close" | "doit" | "go" | "resume", () => void>;
   private readonly first: HTMLElement;
   private readonly note: HTMLElement;
   private readonly did: HTMLElement;
@@ -422,6 +516,22 @@ export class Ui {
    * has to move, and not round an empty square. Nothing is hovered, clicked or focused to show it.
    */
   private revealer?: Element;
+  /** The green tick and "Done", under the question, when its guide was followed to the end. */
+  private readonly done: HTMLElement;
+  /** The reply in words, under the question. */
+  private readonly reply: HTMLElement;
+  /** What the status line says, or "" when there is nothing to say. */
+  private busy = "";
+  /** A press that is still playing: the ring and the pointer are taken away when it ends. */
+  private pressing?: ReturnType<typeof setTimeout>;
+  /** The glow's element. It sits in the page under ours, and is blended into the page. */
+  private readonly veil: HTMLElement;
+  /** Where the glow is drawn, inside it. */
+  private readonly glass: ShadowRoot;
+  /** Says whether the glow's element shows and how it is blended, in its own stylesheet, so the page sees nothing change. */
+  private readonly blend: (rule: string) => void;
+  /** The glow that is on the page while Haptic thinks. */
+  private glow?: HTMLElement;
 
   constructor(appearance: Appearance, handlers: UiHandlers, acting?: UiActing, options: { present?: boolean } = {}) {
     this.present = options.present === true;
@@ -453,14 +563,17 @@ export class Ui {
         { class: `dock ${side}` },
         make(
           "div",
-          // Focusable from here only, so keys typed at an open panel with nothing to type into stay with Haptic (`focusPanel`).
-          { class: "panel", tabindex: "-1", ...hidden },
+          { class: "panel", ...hidden },
           make(
             "div",
             { class: "thread", ...hidden },
             make("p", { class: "question" }),
-            make("div", { class: "reply" }, make("p"), make("ul", { class: "sources", ...hidden }), make("p", { class: "missing", ...hidden })),
+            make("div", { class: "reply", ...hidden }, make("p"), make("ul", { class: "sources", ...hidden }), make("p", { class: "missing", ...hidden })),
           ),
+          make("div", { class: "status", role: "status", ...hidden }, icon(POINTER_PATH, { class: "arrow", "aria-hidden": "true" }), make("span"), make("button", { class: "resume", type: "button" }, "Carry on")),
+          make("div", { class: "done", ...hidden }, make("i", { "aria-hidden": "true" }, icon(TICK_PATH)), "Done"),
+          make("div", { class: "note", ...hidden }),
+          make("div", { class: "did", ...hidden }, make("h2"), make("ul"), make("p")),
           make("div", { class: "helped", ...hidden }),
           make(
             "div",
@@ -477,25 +590,16 @@ export class Ui {
           make(
             "form",
             { class: "ask" },
-            make("textarea", { rows: "1", placeholder: "What do you want to do?", "aria-label": "Ask a question", maxlength: "300", enterkeyhint: "send" }),
+            make("textarea", { rows: "1", placeholder: ASK_FIRST, "aria-label": "Ask a question", maxlength: "300", enterkeyhint: "send" }),
             make(
               "div",
               { class: "row" },
               make("button", { class: "doit", type: "button", title: "Do it with me (Ctrl+Enter)" }, "Do it"),
               make("button", { class: "send", type: "button", "aria-label": "Send" }, icon(ARROW_PATH, { "aria-hidden": "true" })),
+              make("button", { class: "stop", type: "button", "aria-label": "Stop" }, icon(SQUARE_PATH, { "aria-hidden": "true" })),
             ),
           ),
           make("div", { class: "first", ...hidden }, make("span"), make("button", { class: "go", type: "button" }, "Go")),
-          make(
-            "div",
-            { class: "status", ...hidden },
-            make("span"),
-            make("button", { class: "resume", type: "button" }, "Carry on"),
-            make("button", { class: "another", type: "button" }, ASK_ELSE),
-            make("button", { class: "stop", type: "button" }, "Stop"),
-          ),
-          make("div", { class: "note", ...hidden }),
-          make("div", { class: "did", ...hidden }, make("h2"), make("ul"), make("p")),
           make("p", { class: "about" }, "Haptic ", make("a", { href: ABOUT_URL, target: "_blank", rel: "noopener noreferrer" }, "is an AI guide and can be wrong.")),
         ),
         make(
@@ -524,7 +628,17 @@ export class Ui {
     this.note = pick(".note");
     this.did = pick(".did");
     this.asked = pick(".asked");
+    this.done = pick(".done");
+    this.reply = pick(".reply");
     this.side = side;
+    // The glow's element. Nothing in it is for the page's scripts, a screen reader or Haptic's own reading of the page.
+    // It is put in the page once, here, and never moved: what is drawn in it is its own business and the page sees none of it.
+    this.veil = document.createElement("haptic-veil");
+    this.veil.style.setProperty("--accent", this.present ? strongAccent(appearance.accent) : appearance.accent);
+    for (const [name, value] of Object.entries({ "aria-hidden": "true", "data-haptic-ignore": "", popover: "manual" })) this.veil.setAttribute(name, value);
+    this.glass = this.veil.attachShadow({ mode: "open" });
+    this.blend = adoptVeil(this.glass, VEIL_CSS);
+    document.documentElement.append(this.veil);
     this.home = corner(side);
     this.away = corner(side === "left" ? "right" : "left");
     this.acting = acting;
@@ -570,7 +684,7 @@ export class Ui {
         this.keepPlaced();
         // Nothing kept our element in place while it was not in use. A dialog may have opened since.
         this.place();
-        if (!this.panel.hidden) this.focusPanel();
+        if (!this.panel.hidden) this.input.focus();
       },
       hide: () => {
         // From the keyboard, the button that is about to go has the keyboard, which then goes to the dot. A press with
@@ -591,16 +705,15 @@ export class Ui {
         const question = this.typed();
         this.first.hidden = true;
         remember(this.acting);
-        if (question) handlers.onAsk(question, true);
+        if (question) this.send(handlers, question, true);
       },
       resume: () => handlers.onCarryOn?.(),
-      another: () => handlers.onAskElse?.(),
     };
     this.form.addEventListener("submit", (event) => {
       event.preventDefault();
       const question = this.typed();
       this.first.hidden = true;
-      if (question) handlers.onAsk(question, false);
+      if (question) this.send(handlers, question, false);
     });
     // Enter sends the question, as it did when the box was one line: a box of several lines would start a new one.
     // Ctrl or Cmd and Enter is Do it. The visitor's own words only colour the button. Shift and Enter is a new line,
@@ -614,6 +727,7 @@ export class Ui {
     this.input.addEventListener("input", () => {
       this.panel.classList.toggle("nudged", !!this.acting && asksToDo(this.input.value));
       this.first.hidden = true;
+      this.panel.classList.toggle("typed", this.typed() !== "");
       this.fitAsk();
     });
 
@@ -712,7 +826,7 @@ export class Ui {
   private onToggle = (event: Event) => {
     try {
       const toggled = event.target;
-      if (!(toggled instanceof Element) || toggled === this.host || this.host.contains(toggled) || !toggled.matches("[popover], dialog")) return;
+      if (!(toggled instanceof Element) || toggled === this.host || toggled === this.veil || this.host.contains(toggled) || !toggled.matches("[popover], dialog")) return;
       this.place(true);
     } catch (error) {
       console.warn("[Haptic]", error);
@@ -788,6 +902,12 @@ export class Ui {
   };
 
   private show() {
+    // The glow's element goes into the top layer first, so ours, shown after it, is over it.
+    try {
+      if (!this.veil.matches(":popover-open")) this.veil.showPopover();
+    } catch {
+      // No popover support. Its fixed position and z-index, one under ours, still apply.
+    }
     try {
       // Being a popover puts us in the top layer too, above anything the page stacks with z-index.
       this.host.showPopover();
@@ -821,6 +941,12 @@ export class Ui {
       this.host.hidePopover();
     } catch {
       return;
+    }
+    // The glow's element is shown again as well, first, so it too is over what the page opened, and still under ours.
+    try {
+      this.veil.hidePopover();
+    } catch {
+      // It was not showing as a popover.
     }
     this.show();
     focused?.focus();
@@ -873,7 +999,7 @@ export class Ui {
       if (button.classList.contains("person-open")) return this.onHandoff?.open();
       if (button.classList.contains("person-cancel")) return this.onHandoff?.cancel();
       if (button.classList.contains("person-send")) return this.onHandoff?.send();
-      const name = (["launcher", "hide", "send", "stop", "close", "doit", "go", "resume", "another"] as const).find((name) => button.classList.contains(name));
+      const name = (["launcher", "hide", "send", "stop", "close", "doit", "go", "resume"] as const).find((name) => button.classList.contains(name));
       if (name) this.buttons[name]();
     };
     let pressed: HTMLButtonElement | undefined;
@@ -949,17 +1075,27 @@ export class Ui {
   }
 
   /**
-   * Puts the keyboard in the open panel: in the ask box when it is there, on "Ask something else" while a guide waits
-   * on the visitor, and otherwise on the panel itself, where a key presses nothing (a space on Stop would stop the
-   * guide). A visitor who opens the panel and types finds their keys with Haptic, never with the page, whose own
-   * shortcuts would act on them: on Northpine, "e" and "n" typed at a panel that showed only "Your turn" and Stop took
-   * the visitor to another page.
+   * Shows the line under the question with what Haptic is doing: a lighter
+   * shade sweeps across the words while it waits for the model, and the
+   * pointer's mark is beside them while it shows a step. The ask box stays
+   * where it is, and its button is the way to stop for as long as a guide
+   * runs (see `setState`).
    */
-  private focusPanel() {
-    if (!this.form.hidden) return this.input.focus();
-    const another = this.status.querySelector<HTMLElement>(".another");
-    if (another && !this.status.hidden && another.getClientRects().length > 0) return another.focus({ preventScroll: true });
-    this.panel.focus({ preventScroll: true });
+  private showStatus() {
+    const state = this.state;
+    this.status.hidden = this.busy === "";
+    this.status.classList.toggle("thinking", state === "asking");
+    this.status.classList.toggle("pointing", state === "pointing");
+    const working = state === "asking" || state === "pointing" || state === "watching" || state === "acting" || state === "paused";
+    this.panel.classList.toggle("working", working);
+    // While a guide runs the ask box is the way to ask something else: sending from it ends the guide as Stop does.
+    this.input.placeholder = working ? ASK_ELSE : ASK_FIRST;
+  }
+
+  /** The guide was followed to the end: the green tick and "Done" under the question, until the next question. */
+  showDone() {
+    this.done.hidden = false;
+    this.keepPlaced();
   }
 
   /** The question in the ask box, on one line. */
@@ -974,38 +1110,22 @@ export class Ui {
     if (box.value && box.scrollHeight > box.clientHeight) box.style.height = `${box.scrollHeight}px`;
   }
 
-  /** Opens the ask box with the keyboard in it. */
-  openAsk() {
-    this.panel.hidden = false;
-    this.showActs();
-    this.keepPlaced();
-    this.place();
-    this.input.focus();
-  }
-
-  /** Show the ask box busy with a message, or back to the input when `text` is empty. `paused` adds Carry on beside Stop. */
+  /** Says what Haptic is doing in the line under the question, or nothing when `text` is empty. `paused` adds Carry on. */
   setBusy(text: string, paused = false) {
-    // The ask box had the keyboard, and goes: the keyboard stays in the panel, so what the visitor types next is not the
-    // page's. Inside a list or menu of the page's that keeps the keyboard to itself (`captor`), it goes back to that, as
-    // it always has, so its Escape still closes it.
-    const typing = text !== "" && !this.captor && !this.form.hidden && this.form.contains(this.host.shadowRoot?.activeElement ?? null);
-    this.form.hidden = text !== "";
-    this.status.hidden = text === "";
+    this.busy = text;
     this.statusText.textContent = text;
     this.status.classList.toggle("paused", paused && text !== "");
     this.first.hidden = true;
     if (text) {
       this.panel.hidden = false;
-      if (typing) this.focusPanel();
+      this.done.hidden = true;
       this.hideHelped();
       this.hideHandoff();
     } else {
-      this.input.value = "";
-      this.fitAsk();
-      this.panel.classList.remove("nudged");
       this.setNote("");
       this.showActs();
     }
+    this.showStatus();
     this.keepPlaced();
     // The ask box opening or closing changes what the question must keep off.
     this.showAsked();
@@ -1124,6 +1244,7 @@ export class Ui {
 
   /** Between two of Haptic's steps: the caption and the ring go, and the pointer rests where it is, so the next glide starts there. */
   rest() {
+    this.endPress();
     this.pointed = undefined;
     this.revealer = undefined;
     this.pointedBox = undefined;
@@ -1151,7 +1272,18 @@ export class Ui {
       this.keepPlaced();
       return;
     }
-    handlers.onAsk(question, true);
+    this.send(handlers, question, true);
+  }
+
+  /** Sends a question. It shows as a bubble in the chat from here on, so the ask box is emptied for the next one. */
+  private send(handlers: UiHandlers, question: string, act: boolean) {
+    this.input.value = "";
+    this.fitAsk();
+    this.panel.classList.remove("nudged", "typed");
+    // The ask box gives up the keyboard as the question goes: what the visitor does next, they do on the page. With the
+    // keyboard still in it, a field of the page's taking the keyboard would be read as the page pulling it away.
+    this.input.blur();
+    handlers.onAsk(question, act);
   }
 
   closePanel() {
@@ -1169,6 +1301,7 @@ export class Ui {
     const [asked, text, list, missing] = [".question", ".reply p", ".sources", ".missing"].map((selector) => this.thread.querySelector(selector) as HTMLElement);
     asked!.textContent = question;
     text!.textContent = reply.say;
+    this.reply.hidden = false;
     const sources = reply.sources ?? [];
     // Says where the words came from, then each article.
     list!.replaceChildren(make("li", { class: "from" }, "From the help docs"), ...sources.map(sourceRow));
@@ -1183,8 +1316,9 @@ export class Ui {
     this.keepPlaced();
   }
 
+  /** Takes the reply in words out of the chat. The question stays, for as long as its guide is on show. */
   clearAnswer() {
-    this.thread.hidden = true;
+    this.reply.hidden = true;
     this.hideHandoff();
   }
 
@@ -1252,8 +1386,44 @@ export class Ui {
     this.onHandoff = undefined;
   }
 
+  /**
+   * The visitor clicked what the pointer was on. The ring and the pointer dip
+   * like a pressed button and come back, where they are, even if the click
+   * took the control off the page, and then go. Everything else is put away
+   * at once, as `clear` does. Nothing is played under reduced motion.
+   */
+  press() {
+    const playing = !this.cursor.hidden && !lessMotion();
+    const ringShown = !this.ring.hidden;
+    this.clear();
+    if (!playing) return;
+    this.cursor.hidden = false;
+    this.ring.hidden = !ringShown;
+    for (const part of [this.cursor, this.ring]) {
+      part.classList.remove("press");
+      // Read back so the dip plays again if it has only just played.
+      void part.offsetWidth;
+      part.classList.add("press");
+    }
+    this.pressing = setTimeout(() => {
+      this.endPress();
+      this.ring.hidden = true;
+      this.cursor.hidden = true;
+    }, PRESS_MS);
+  }
+
+  /** Ends a press that is still playing, without taking the pointer away: it is about to be sent somewhere, or hidden. */
+  private endPress() {
+    clearTimeout(this.pressing);
+    this.pressing = undefined;
+    this.cursor.classList.remove("press");
+    this.ring.classList.remove("press");
+  }
+
   /** Move the pointer to an element and show the caption beside it. With no text yet, the pointer goes alone. */
   pointAt(el: Element, text: string) {
+    this.endPress();
+    this.caption.classList.remove("said");
     this.saying = false;
     this.lost = false;
     if (el !== this.pointed) {
@@ -1275,17 +1445,19 @@ export class Ui {
     // words if not in the guide's. Not while Haptic is the one using it.
     const hint = text && this.revealer && this.state !== "acting" && !TELLS_TO_HOVER.test(text) ? ` ${isRow(this.revealer) ? HOVER_HINT.row : HOVER_HINT.box}` : "";
     this.captionText.textContent = text + hint;
+
     this.caption.hidden = text === "";
     this.cursor.hidden = false;
     // Paint once at the old spot so the transition has somewhere to start from.
     this.cursor.style.transform = `translate(${this.at.x - this.tipIn.x}px, ${this.at.y - this.tipIn.y}px)`;
     cancelAnimationFrame(this.frame);
-    // The ring, the caption and the panel go to their places now, before anything is drawn, and stay there. The pointer glides from the next frame.
+    // The ring, the caption and the panel go to their places now, before anything is drawn, and stay there: they are not
+    // left for the next frame as the pointer's glide is. On a machine that draws slowly the next frame is a while off,
+    // and a guide that says it is pointing has its ring up.
     this.looked = 0;
     this.arrange();
     this.frame = requestAnimationFrame(this.track);
   }
-
   /**
    * Puts the ring, the caption and the launcher with its panel where they go for what is pointed at, all in one go
    * and before the browser draws them. Called when a pointer goes up and whenever the panel changes, so that the
@@ -1319,10 +1491,26 @@ export class Ui {
     }
   }
 
+
+  /** Puts the ring round a box of the page, or puts it away when the box is not in the window, and says which. */
+  private ringAt(rect: DOMRect): boolean {
+    const onScreen = rect.bottom > 0 && rect.top < window.innerHeight && rect.width + rect.height > 0;
+    this.ring.hidden = !onScreen;
+    if (!onScreen) return false;
+    // In presentation mode the ring is thicker, and stands further out so it does not cover the control's edge.
+    const pad = this.present ? 10 : 4;
+    this.ring.style.left = `${rect.left - pad}px`;
+    this.ring.style.top = `${rect.top - pad}px`;
+    this.ring.style.width = `${rect.width + pad * 2}px`;
+    this.ring.style.height = `${rect.height + pad * 2}px`;
+    return true;
+  }
+
   /** Show text with nothing to point at, above the launcher. */
   say(text: string) {
     this.clearPointer();
     this.captionText.textContent = text;
+    this.caption.classList.add("said");
     this.caption.hidden = false;
     this.saying = true;
     this.placeSaid();
@@ -1338,8 +1526,6 @@ export class Ui {
     this.onHelped = answer;
     this.helped.replaceChildren(...this.helpedRow());
     this.helped.hidden = false;
-    this.form.hidden = false;
-    this.status.hidden = true;
     this.panel.hidden = false;
     this.showActs();
     this.keepPlaced();
@@ -1383,6 +1569,7 @@ export class Ui {
   }
 
   clearPointer() {
+    this.endPress();
     this.saying = false;
     this.lost = false;
     this.pointed = undefined;
@@ -1408,9 +1595,10 @@ export class Ui {
   }
 
   /**
-   * The visitor's question, for presentation mode, where it stays on show
-   * while its guide runs and while its last sentence is up, so an audience
-   * that came in late can read what was asked. Nothing is shown otherwise.
+   * The visitor's question. In the chat it is a bubble at the top. In
+   * presentation mode it is also kept on show across the page while its guide
+   * runs and while its last sentence is up, so an audience that came in late
+   * can read what was asked. An empty question takes both away.
    */
   showQuestion(question: string) {
     this.question = question;
@@ -1418,6 +1606,11 @@ export class Ui {
     // A new question starts with every place open to it again.
     this.askedAt = undefined;
     this.askedTaken.clear();
+    // In the chat it is a bubble at the top, from the moment it is asked until the next one, or until the guide is called off.
+    (this.thread.querySelector(".question") as HTMLElement).textContent = question;
+    this.reply.hidden = true;
+    this.done.hidden = true;
+    this.thread.hidden = question === "";
     this.showAsked();
   }
 
@@ -1480,9 +1673,60 @@ export class Ui {
 
   setState(state: GuideState) {
     (this.host as HTMLElement & { guideState?: GuideState }).guideState = state;
-    this.panel.classList.toggle("waits", state === "pointing" || state === "watching" || state === "paused");
+    this.showStatus();
+    // "asking" is the wait for the model, and the only time the glow is on the page.
+    if (state === "asking") this.glowOn();
+    else this.glowOff();
     this.keepPlaced();
     this.showAsked();
+  }
+
+  /**
+   * Starts the glow: a band of colour comes in at the top of the page and
+   * falls towards the bottom, slower the longer Haptic thinks. With reduced
+   * motion on there is no glow at all.
+   */
+  private glowOn() {
+    if (this.glow || lessMotion()) return;
+    try {
+      // A page that swapped out its own document took the glow's element with it. It is put back, under ours.
+      if (!this.veil.isConnected) {
+        document.documentElement.append(this.veil);
+        this.raise(true);
+      }
+      const band = make("i");
+      const el = make("div", { class: "glow" }, band);
+      // One leaving and one new is the most there is to see at once.
+      const glows = this.glass.querySelectorAll(".glow");
+      for (let i = 0; i < glows.length - 1; i++) glows[i]?.remove();
+      // The glow is multiplied into a light page, so the page's words stay dark and sharp through it, and screened
+      // into a dark one, where multiplying would lose the colour.
+      this.blend(`:host { display: block; mix-blend-mode: ${pageIsDark() ? "screen" : "multiply"}; }`);
+      this.glass.append(el);
+      // Drawn once above the page's top edge, so the fall has somewhere to start from.
+      void band.offsetWidth;
+      band.classList.add("falling");
+      this.glow = el;
+    } catch (error) {
+      console.warn("[Haptic]", error);
+    }
+  }
+
+  /**
+   * Ends the glow, the moment the thinking is over, however it ended. From
+   * wherever the band is, it goes on to the bottom and off the page, fading
+   * as it goes, and its element is then not displayed at all.
+   */
+  private glowOff() {
+    const el = this.glow;
+    if (!el) return;
+    this.glow = undefined;
+    el.classList.add("fade");
+    setTimeout(() => {
+      el.remove();
+      // With no glow left, the element is not displayed, and the page is not blended with anything.
+      if (!this.glass.querySelector(".glow")) this.blend("");
+    }, GLOW_OUT_MS);
   }
 
   /**
@@ -1500,6 +1744,8 @@ export class Ui {
     this.aimed = rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
     this.target = partToClick(el, this.aimed);
     this.mark(this.target);
+    // The ring's corners follow the control's own, a little rounder for standing off it. Presentation mode has its own.
+    if (!this.present) this.ring.style.setProperty("border-radius", `${Math.min((parseFloat(getComputedStyle(this.target).borderTopLeftRadius) || 6) + 4, (rect.height + 8) / 2 || 10)}px`);
   }
 
   /** Follows the target every frame, so scrolling and layout shifts don't strand the pointer. */
@@ -1535,29 +1781,18 @@ export class Ui {
       this.caption.hidden = this.captionText.textContent === "";
     }
     let rect = el.getBoundingClientRect();
-    const onScreen = rect.bottom > 0 && rect.top < window.innerHeight && rect.width + rect.height > 0;
-    this.ring.hidden = !onScreen;
-    if (!onScreen) return;
+    if (!this.ringAt(this.ringed(el, rect))) return;
     // A control pointed at while it was scrolled out of view is looked at again once it is in view.
     if (!this.aimed && this.pointed) {
       this.aim(this.pointed);
       if (this.target !== el) return;
       rect = el.getBoundingClientRect();
+      this.ringAt(this.ringed(el, rect));
     }
 
-    // A control that shows only while the mouse is over its row: until it shows, the ring is round the row, which is
-    // what the visitor has to move to, and the caption keeps clear of that row for as long as this control is pointed at.
-    const row = this.revealer?.isConnected ? this.revealer.getBoundingClientRect() : undefined;
-    const around = row && row.width && row.height ? row : rect;
-    const ringed = around !== rect && !seen(el) ? around : rect;
-
-    // In presentation mode the ring is thicker, and stands further out so it does not cover the control's edge.
+    // As `ringAt` stands the ring off the control.
     const pad = this.present ? 10 : 4;
     this.pointedBox = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
-    this.ring.style.left = `${ringed.left - pad}px`;
-    this.ring.style.top = `${ringed.top - pad}px`;
-    this.ring.style.width = `${ringed.width + pad * 2}px`;
-    this.ring.style.height = `${ringed.height + pad * 2}px`;
 
     // The tip goes where the control is, or will show. On a first look the pointer is left where it was drawn, and glides from the next frame.
     const tip = this.held ?? this.tipOn(el, rect);
@@ -1566,9 +1801,10 @@ export class Ui {
       this.cursor.style.transform = `translate(${tip.x - this.tipIn.x}px, ${tip.y - this.tipIn.y}px)`;
     }
 
-    // The caption and the launcher with its panel are placed together: neither covers the control, the pointer or the other.
+    // The caption and the launcher with its panel are placed together: neither covers the control, or the row it shows
+    // in, the pointer or the other.
     const box = this.caption.getBoundingClientRect();
-    const { left, top, spot } = this.settle(around, pad, box, this.pointerBox(tip));
+    const { left, top, spot } = this.settle(this.rowOf(rect), pad, box, this.pointerBox(tip));
     this.caption.style.left = `${left}px`;
     this.caption.style.top = `${top}px`;
     this.dockAt(spot);
@@ -1579,6 +1815,21 @@ export class Ui {
     const caption = this.caption.hidden ? undefined : { left, top, right: left + box.width, bottom: top + box.height };
     if (caption) this.keepCaptionOff(el, caption);
     if (this.present) this.showAsked([this.ring.getBoundingClientRect(), this.pointerBox(tip)]);
+  }
+
+  /**
+   * The box the mouse has to be over for the pointed control to show, when it shows only on hover (`revealer`): the
+   * caption keeps clear of it for as long as the control is pointed at. The control's own box otherwise.
+   */
+  private rowOf(rect: DOMRect): DOMRect {
+    const row = this.revealer?.isConnected ? this.revealer.getBoundingClientRect() : undefined;
+    return row && row.width && row.height ? row : rect;
+  }
+
+  /** What the ring goes round: the row, while the control in it shows only on hover and is hidden, and the control otherwise. */
+  private ringed(el: Element, rect: DOMRect): DOMRect {
+    const row = this.rowOf(rect);
+    return row !== rect && !seen(el) ? row : rect;
   }
 
   /**
@@ -1776,6 +2027,50 @@ function adoptStyles(root: ShadowRoot, css: string) {
   const style = document.createElement("style");
   style.textContent = css;
   root.append(style);
+}
+
+/**
+ * Gives the glow's shadow root its styles, and a second stylesheet that is
+ * empty until a glow starts. Returns how to write that second one: it says
+ * whether the element shows and how it is blended into the page. Being a
+ * stylesheet and not an attribute, nothing on the page changes when it is written.
+ */
+function adoptVeil(root: ShadowRoot, css: string): (rule: string) => void {
+  try {
+    const [base, mode] = [new CSSStyleSheet(), new CSSStyleSheet()];
+    base.replaceSync(css);
+    root.adoptedStyleSheets = [base, mode];
+    return (rule) => mode.replaceSync(rule);
+  } catch {
+    // No stylesheet objects in this browser.
+  }
+  const [base, mode] = [document.createElement("style"), document.createElement("style")];
+  base.textContent = css;
+  root.append(base, mode);
+  return (rule) => (mode.textContent = rule);
+}
+
+/**
+ * Whether the page is dark where the glow will fall, going by the first
+ * background that is not see-through behind three spots on it. A page that
+ * gives nothing to go on is taken to be light.
+ */
+function pageIsDark(): boolean {
+  const spots: [number, number][] = [[0.5, 0.12], [0.5, 0.5], [0.2, 0.8]];
+  let dark = 0;
+  let known = 0;
+  for (const [x, y] of spots) {
+    let el: Element | null = document.elementFromPoint(window.innerWidth * x, window.innerHeight * y);
+    for (let depth = 0; el && depth < 16; el = el.parentElement, depth++) {
+      const colour = /^rgba?\(([^)]+)\)/.exec(getComputedStyle(el).backgroundColor);
+      const [r = 0, g = 0, b = 0, alpha = 1] = (colour?.[1] ?? "").split(/[\s,/]+/).filter(Boolean).map(Number);
+      if (!colour || alpha < 0.5) continue;
+      known++;
+      if (0.2126 * r + 0.7152 * g + 0.0722 * b < 110) dark++;
+      break;
+    }
+  }
+  return known > 0 && dark * 2 > known;
 }
 
 /** One of our elements, with its attributes and what goes in it. Text goes in as text, never as markup. */
