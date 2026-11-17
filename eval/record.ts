@@ -32,9 +32,7 @@ async function record(browser: Browser, set: GuideSet, guide: Guide, site: CaseF
   /** The recorder has just asked the question again itself, so the count starts over. */
   let askedAgain = false;
 
-  const answer = (sent: Case["request"]): TurnReply => {
-    // The guide and visitor ids are made up for each run and say nothing about the step, so the case does not keep them.
-    const { guide: _guide, visitor: _visitor, ...request } = sent;
+  const answer = (request: Case["request"]): TurnReply => {
     // When a page changes while a step is being answered, the widget looks again
     // and asks for the same step once more. The later look is the one a visitor
     // gets an answer about, so it replaces the earlier one.

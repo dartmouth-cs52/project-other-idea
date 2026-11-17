@@ -85,7 +85,7 @@ test("the model is told to point at nothing more once the goal is reached (10 si
 test("the model is told to say what to type and stop (jira and ui5: 'type it, then press Enter', which on Jira sends a signed-out visitor to sign in)", () => {
   // Jira's quick search has no button. Told "ask for Enter only if no button does it", the model said "type KAFKA-1, then press Enter" 8 times in 8 on staging.
   assert.match(rules, /For a text field, say what to type and stop there: never add "then press Enter" or any later step, even when no button sends it\./);
-  assert.match(rules, /You're asked again once they have typed it; then treat the field as filled in and point at what comes next, or say to press Enter if no button does it\./);
+  assert.match(rules, /You're asked again once they have typed it; then treat the field as filled in and point at what comes next, usually the search, save or submit button, or say to press Enter if no button does it\./);
 });
 
 test("the model is told what a step with nothing to point at means (ui5 and grafana: 'Press Enter' with no target ended the guide)", () => {
@@ -234,23 +234,6 @@ test("finding nothing on the first reply is stuck, and nothing left after some s
     snapshot: { path: "/", title: "", headings: [], text: [], truncated: false, elements },
   });
   assert.equal(later.status, "done");
-});
-
-test("the model is told what a form needs before its button, with Answers on or off", () => {
-  for (const [name, prompt] of [["guide", buildSystemPrompt(site)], ["answers", buildSystemPrompt({ ...site, answers: { enabled: true } })], ["act", buildSystemPrompt(site, "act")]] as const) {
-    // The button comes after what the form requires. The widget marks those fields "required", including the ones a
-    // form leaves unmarked when it marks only its optional fields (markRequiredByOptional in src/widget/snapshot.ts).
-    assert.match(prompt, /A form's save or submit button comes after everything the form needs\. A field or group marked "required" has to be filled in or chosen before its form's button will work\./, name);
-    // Only what the visitor filled in during the guide counts as done: the model cannot see into a field.
-    assert.match(prompt, /Take the visitor to each one they haven't filled in or chosen during this guide, one a step, top to bottom, then to the button\./, name);
-    // A form that already holds saved values is not walked through.
-    assert.match(prompt, /a form that already holds saved values, like renaming something: point at that field, then at save/, name);
-    // A form turned back is not a finished guide.
-    assert.match(prompt, /After the visitor submits, a field marked "invalid" or an error message that appears means the form was turned back/, name);
-    assert.match(prompt, /The goal isn't complete until the form goes through/, name);
-    // The rule this replaces sent the visitor to the button after any one field.
-    assert.doesNotMatch(prompt, /usually the (search, )?save or submit button/, name);
-  }
 });
 
 test("the model is told that stuck is its own status, apart from done", () => {

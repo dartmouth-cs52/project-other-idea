@@ -28,7 +28,7 @@ A fixed set of questions with known right answers, on Haptic's own demo and on r
 | `gitlab` | A public project on GitLab.com (held out, recorded in part) | DevOps platforms | 8 | 23 |
 | `moodle` | Moodle's demo school (held out, recorded in part) | learning systems | 9 | 33 |
 
-`corrections` holds 7 more cases on the demo app, for a site with corrections and controls ruled out (see [Corrections and controls never to point at](#corrections-and-controls-never-to-point-at)), and is not in the counts above. Nor is `northpine`, 17 cases from 3 guides on Northpine, the test app in `testbed/`, all about forms (see [Forms, and what they need before the submit button](#forms-and-what-they-need-before-the-submit-button)). The Answers benchmark, for replies in words, is separate: see [The Answers benchmark](#the-answers-benchmark).
+`corrections` holds 7 more cases on the demo app, for a site with corrections and controls ruled out (see [Corrections and controls never to point at](#corrections-and-controls-never-to-point-at)), and is not in the counts above. The Answers benchmark, for replies in words, is separate: see [The Answers benchmark](#the-answers-benchmark).
 
 Three more held-out guide sets, `horilla`, `dhis2` and `finefoods`, have no case file: they are only run whole. See [Three fresh held-out apps](#three-fresh-held-out-apps).
 
@@ -195,20 +195,6 @@ npm run eval -- --models claude-sonnet-5-5 --cases corrections --without-correct
 
 The second run takes the corrections and the list away, which shows what they change. **pointed at a ruled-out control** counts every pointer at one of the file's ruled-out controls, and must be 0 with the list in place: the server takes such a reply back whatever the model wrote. The Benchmark workflow takes the same choices, as `cases` and `corrections`.
 
-### Forms, and what they need before the submit button
-
-The widget marks a field `required` or `invalid` (see [what a form needs before its button](../docs/widget.md#what-a-form-needs-before-its-button)), and the rules say a form's button comes after every field it requires that the visitor has not filled in during the guide. `eval/cases/northpine.json` checks what the model makes of that, on a product that, like most, marks only its optional fields:
-
-- **invite** asks how to invite someone and names no department. After the email, the right step is Department. Pointing at Send invite there is the failure these cases were added for.
-- **invite-turned-back** has the visitor type half an address and press Send invite early. The form shows two messages and marks the email invalid, and the right step is one of those two fields, not "done".
-- **company-website** asks to change one field of a settings form that already holds saved values. The right steps are that field and Save changes. Walking through Legal name and the address there is the opposite failure.
-
-```bash
-npm run eval -- --models claude-sonnet-5-5 --cases northpine --yes
-```
-
-These cases were recorded with a widget that listed Personal note as `optional`, a mark the widget does not send, and before it marked the unmarked fields of such a form as `required`. So in them Department carries no mark, and the model has to work out from Personal note alone that it is needed, which the rules do not tell it to do. Record them again before reading their score: with Northpine running (`cd testbed && npm run dev`) and its site built as `eval/guides/northpine.ts` says, `npm run eval:record -- northpine invite company-website` records these three guides and no others.
-
 ### Before switching Answers on for a site
 
 A site with Answers on is asked with a longer prompt, and its replies carry a mode as well as a pointer. The steps a guide should give are the same, so the same cases say whether guiding got worse:
@@ -283,7 +269,6 @@ Two limits. Messages sent over a WebSocket that is already open are counted and 
 These guide files no longer match what the widget sends, and are not recorded again until the widget work under way has settled. The whole-guide runs do not depend on them.
 
 - `parabank`: its matchers describe the widget before it was reworked.
-- `northpine`: its three form guides carry an `optional` mark the widget does not send, and none of the `required` marks it does (see [Forms](#forms-and-what-they-need-before-the-submit-button)).
 - `ui5`, `wikipedia`, `toolshop` (five marks) and `orangehrm` (the chip's cross, the sort arrows): `unlisted` marks on controls the widget now lists. Toolshop's `{ label: "Excavator" }` no longer fits, and orangehrm's unnamed fields are now named.
 - The guides whose scripts changed on 15 November 2026: antdpro `rule-template` and `basic-form`, grafana `find-panel-data`, jira `export-spreadsheet` (new start), orangehrm `new-department` and `rejected-leave`, toolshop `buy-circular-saw` (new question) and `pay-in-instalments`, and the toolshop guides that name the signed-in customer.
 - The guides whose ends changed on 16 November 2026, whose last cases may differ: parabank `update-phone` (now ends on Update Profile, unpressed), grafana `delete-panel` (Delete counts only with The Basics selected). The ends of jira `opened-this-week`, orangehrm `shortlisted-candidates` and `rejection-emails`, and the answers of joinhaptic `pricing` and `what-it-reads`, changed too, which whole-guide runs alone use.

@@ -46,9 +46,9 @@ export default function Privacy() {
       <p>
         When someone asks Haptic for help, it reads the page they are on. That means the names of buttons, links and
         fields, where each link leads, whether a box is ticked or a section is open, which option is chosen in lists
-        and menus the page draws itself, whether a field is marked as required or as not accepted, the page title and
-        headings, the page&apos;s address within the product, and short pieces of visible text. While it is guiding
-        someone it also notes which control they used and what changed on the page.
+        and menus the page draws itself, the page title and headings, the page&apos;s address within the product, and
+        short pieces of visible text. While it is guiding someone it also notes which control they used and what
+        changed on the page.
       </p>
       <p>
         Haptic does not send what people type into fields, or anything inside an area the page marks as one they
@@ -66,8 +66,7 @@ export default function Privacy() {
         Haptic does note whether a field is marked as not accepted, by the page itself or by the browser&apos;s own
         check, such as an email field that holds no email address, so it can ask for the field to be fixed before
         moving on. It notes the same of an email address with no dot in its domain, which the browser accepts and
-        nearly every form does not. That is a yes or a no, and nothing of what was typed. Whether a field is empty or
-        filled in is not noted: a field the page requires is listed as required either way.
+        nearly every form does not. That is a yes or a no, and nothing of what was typed.
       </p>
       <p>
         Before anything leaves the browser, in what it reads, in the page&apos;s address and in the question itself,
