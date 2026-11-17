@@ -207,6 +207,18 @@ function action(step: TaughtStep): string {
 export const capital = (words: string) => words.charAt(0).toUpperCase() + words.slice(1);
 
 /**
+ * Text that ends with its own mark, in any script: a Unicode sentence terminal (. ? ! ؟ ۔ । 。 ？ ！ and the rest),
+ * an ellipsis, or a Greek question mark (";" after a Greek word, which is what U+037E becomes once normalised).
+ * Closing quotes and invisible format marks may follow it: "How do I?" needs no full stop after its quote. Closing
+ * brackets may not: "(etc.)" or "(optional?)" ends an aside, and the sentence around it still needs its own mark.
+ * A comma, Arabic ، included, ends nothing.
+ */
+const ENDED = /(?:[\p{Sentence_Terminal}\u2026\u037E]|\p{Script=Greek}\p{M}*;)[\p{Quotation_Mark}\p{Cf}\s]*$/u;
+
+/** Text as it ends a sentence: with its own mark if it has one, else a full stop. The teach bar's question and its last step. */
+export const sentence = (text: string) => (ENDED.test(text.trim()) ? text.trim() : `${text.trim()}.`);
+
+/**
  * One step as the dashboard shows it, written plainly: "On /budgets, press New
  * budget", "Choose Monthly in Period". The page is named when it differs from
  * the step before's, and the dialog when the control is in one.

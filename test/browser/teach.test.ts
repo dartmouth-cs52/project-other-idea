@@ -52,6 +52,9 @@ const BUDGETS = shell(`
 
 const DETAIL = shell(`<h1>Marketing</h1><button type="button">Add owner</button><button type="button">Share</button>`);
 
+/** A page in Arabic whose control's name ends with the Arabic question mark. */
+const ARABIC = shell(`<div dir="rtl" lang="ar"><h1>الميزانيات</h1><button type="button" id="ask">هل تحتاج مساعدة؟</button></div>`);
+
 /**
  * Pages that repeat what was typed in a field in a name teach mode reads for
  * itself, after the page reading: a radio group's label, a fieldset's legend,
@@ -167,7 +170,7 @@ async function startRig(): Promise<Rig> {
       }
     }
     const echo = url.pathname.startsWith("/echo/") ? ECHOES[url.pathname.slice("/echo/".length)]?.html : undefined;
-    const page = url.pathname === "/budgets" ? BUDGETS : url.pathname.startsWith("/budgets/") ? DETAIL : echo;
+    const page = url.pathname === "/budgets" ? BUDGETS : url.pathname.startsWith("/budgets/") ? DETAIL : url.pathname === "/arabic" ? ARABIC : echo;
     if (!page) return res.writeHead(404).end("Not found");
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }).end(page);
   });
@@ -397,6 +400,23 @@ for (const name of BROWSERS) {
       } finally {
         rig.failTeachFile = false;
       }
+      await context.close();
+    });
+
+    test("a question or step that ends with its own mark in another script gets no full stop after it", async () => {
+      const question = "كيف أضيف ميزانية؟";
+      const token = await rig.store.create(SITE, question, newTeachToken());
+      const context = await browser.newContext();
+      const tab = await context.newPage();
+      await tab.goto(`${rig.url}/arabic#haptic-teach=${token}`);
+      await barSays(tab, `Teaching Haptic: ${question}`);
+      const title = () => tab.evaluate(() => document.querySelector("haptic-teach")!.shadowRoot!.querySelector(".title")!.textContent);
+      assert.equal(await title(), `Teaching Haptic: ${question}`, "؟ ends the question, so no full stop follows it");
+      await barSays(tab, "No steps yet");
+      await tab.click("#ask");
+      await barSays(tab, "1 step. Last:");
+      const last = await tab.evaluate(() => document.querySelector("haptic-teach")!.shadowRoot!.querySelector(".last")!.textContent);
+      assert.equal(last, "1 step. Last: On /arabic, press هل تحتاج مساعدة؟", "the step's own ؟ ends it too");
       await context.close();
     });
 
