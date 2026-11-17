@@ -96,16 +96,28 @@ function resendLikeTheDocs() {
   return { delivered, fetcher };
 }
 
+/** Calls a route. A body that is a stream is sent as it is, and anything else as JSON. */
 function call(
   sql: unknown,
   body: unknown,
-  options: { org?: typeof ORG; user?: typeof USER; site?: string; fetcher?: SetupRequest["fetcher"]; key?: string | null; method?: string; what?: string; query?: string } = {},
+  options: {
+    org?: typeof ORG;
+    user?: typeof USER;
+    site?: string;
+    fetcher?: SetupRequest["fetcher"];
+    key?: string | null;
+    method?: string;
+    what?: string;
+    query?: string;
+    headers?: HeadersInit;
+  } = {},
 ) {
   const what = options.what ?? "developer-email";
   const site = options.site ?? SITE;
   const url = new URL(`https://joinhaptic.com/api/app/sites/${site}/${what}${options.query ?? ""}`);
+  const sent = options.method === "GET" ? undefined : body instanceof ReadableStream ? body : JSON.stringify(body);
   return setupRoutes({
-    request: new Request(url, { method: options.method ?? "POST", body: options.method === "GET" ? undefined : JSON.stringify(body) }),
+    request: new Request(url, { method: options.method ?? "POST", body: sent, headers: options.headers, duplex: "half" } as RequestInit),
     env: { RESEND_API_KEY: options.key === null ? undefined : (options.key ?? "re_test"), WIDGET_URL: "https://widget.joinhaptic.com" },
     sql: sql as SetupRequest["sql"],
     org: options.org ?? ORG,
@@ -202,6 +214,84 @@ test("where the setup is: one step at a time, Finish later, done, and only for t
   assert.equal((await call(sql, {}, { method: "PUT", what: "setup" }))?.status, 400);
   assert.equal((await call(sql, { step: "connect" }, { method: "PUT", what: "setup", org: OTHER_ORG }))?.status, 404);
   assert.equal(await call(sql, {}, { method: "GET", what: "setup" }), undefined, "anything else is left to app-api.ts");
+});
+
+/** A body made only as it is read, one chunk a pull, which counts what was read and whether the rest was cancelled. */
+function counted(next: (pull: number) => Uint8Array | undefined) {
+  const seen = { pulls: 0, bytes: 0, cancelled: false };
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        const chunk = next(seen.pulls++);
+        if (!chunk) return controller.close();
+        seen.bytes += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        seen.cancelled = true;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { body, seen };
+}
+
+test("a body too long for the setup, address or email routes reads as empty, and is not read in full", async () => {
+  // Each starts with JSON that gets further than an empty body. Sent alone it would be read; here it is followed by
+  // spaces, which JSON allows, up to 100 MB, Cloudflare's request limit, in 4 KiB chunks with no length given.
+  const routes = [
+    { what: "setup", method: "PUT", json: { step: "install" } },
+    { what: "address", method: "PUT", json: { url: "app.example.com" } },
+    { what: "developer-email", method: "POST", json: { to: "dev@example.com", key: "press-big01" } },
+  ];
+  const CHUNK = 4 * 1024;
+  const CHUNKS = (100 * 1024 * 1024) / CHUNK;
+  const spaces = new Uint8Array(CHUNK).fill(0x20);
+  const startingWith = (json: object) => {
+    const first = spaces.slice();
+    first.set(new TextEncoder().encode(JSON.stringify(json)));
+    return (pull: number) => (pull === 0 ? first : pull < CHUNKS ? spaces : undefined);
+  };
+  // With no Resend key, so the email the JSON asks for stops before anything is counted.
+  const send = (body: unknown, what: string, method: string, headers?: HeadersInit) => call(fakeSql([site()]), body, { what, method, key: null, headers });
+
+  for (const { what, method, json } of routes) {
+    const empty = await send({}, what, method);
+    assert.equal(empty?.status, 400, what);
+    assert.notDeepEqual(await send(json, what, method), empty, `${what}: the JSON alone is read`);
+
+    const chunked = counted(startingWith(json));
+    assert.deepEqual(await send(chunked.body, what, method), empty, what);
+    // 4,000 characters at three bytes each is 12,000 bytes. The third chunk goes past that, and nothing after it is pulled.
+    assert.equal(chunked.seen.pulls, 3, what);
+    assert.equal(chunked.seen.bytes, 3 * CHUNK, what);
+    assert.equal(chunked.seen.cancelled, true, what);
+
+    // A length given up front that is too long is enough: nothing is read.
+    const declared = counted(startingWith(json));
+    assert.deepEqual(await send(declared.body, what, method, { "content-length": String(CHUNKS * CHUNK) }), empty, what);
+    assert.equal(declared.seen.pulls, 0, what);
+  }
+});
+
+test("a body of 4,000 characters still reaches the setup routes at three bytes each, also in pieces that split them", async () => {
+  // Padded with "€", three bytes of UTF-8, to a given length in characters once written as JSON.
+  const SHELL = JSON.stringify({ step: "install", pad: "" }).length;
+  const padded = (chars: number) => ({ step: "install", pad: "€".repeat(chars - SHELL) });
+  const full = new TextEncoder().encode(JSON.stringify(padded(4_000)));
+  assert.equal(JSON.stringify(padded(4_000)).length, 4_000);
+  assert.ok(full.length > 11_900, "nearly three bytes a character");
+  const saved = { status: 200, body: { setup: { step: "install" } } };
+
+  assert.deepEqual(await call(fakeSql([site()]), padded(4_000), { method: "PUT", what: "setup" }), saved);
+  const pieces = counted((pull) => (pull * 7 < full.length ? full.subarray(pull * 7, (pull + 1) * 7) : undefined));
+  assert.deepEqual(await call(fakeSql([site()]), pieces.body, { method: "PUT", what: "setup" }), saved);
+  assert.equal(pieces.seen.bytes, full.length, "read to the end");
+
+  // One character more is still under 12,000 bytes, so it is the count of characters, checked once decoded, that turns it away.
+  const over = JSON.stringify(padded(4_001));
+  assert.ok(new TextEncoder().encode(over).length <= 12_000);
+  assert.deepEqual(await call(fakeSql([site()]), padded(4_001), { method: "PUT", what: "setup" }), { status: 400, body: { error: "Say which step, or Finish later." } });
 });
 
 // Sending and counting, with the real queries, against a real Postgres. CI runs these with a Postgres of its own.
