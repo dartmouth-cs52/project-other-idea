@@ -30,8 +30,8 @@ for (const name of BROWSERS) {
       await tab.locator("haptic-root .launcher").waitFor();
     });
     after(async () => {
-      await browser.close();
-      await harness.close();
+      await browser?.close();
+      await harness?.close();
     });
 
     test("stays the same gap above the panel once Yes is pressed and the question goes", async () => {

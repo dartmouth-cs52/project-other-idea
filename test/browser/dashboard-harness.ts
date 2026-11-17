@@ -257,7 +257,11 @@ export async function startDashboard(): Promise<Dashboard> {
     response.end(readFileSync(file));
   });
   const url = await listen(server);
-  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
+  // If the browser can't start, both servers are closed before the error goes on, or they would keep the run from ending.
+  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}).catch(async (error: unknown) => {
+    await Promise.all([new Promise((resolve) => server.close(resolve)), new Promise((resolve) => fixture.close(resolve))]);
+    throw error;
+  });
 
   return {
     url,

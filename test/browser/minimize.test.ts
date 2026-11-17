@@ -37,8 +37,8 @@ for (const name of BROWSERS) {
       browser = await launch(name);
     });
     after(async () => {
-      await browser.close();
-      await harness.close();
+      await browser?.close();
+      await harness?.close();
     });
     beforeEach(async () => {
       tab = await (await browser.newContext({ viewport: { width: 1000, height: 700 } })).newPage();

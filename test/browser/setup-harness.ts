@@ -193,9 +193,10 @@ export async function startFlow(state: () => State): Promise<Flow> {
     response.writeHead(200, { "content-type": "text/html" });
     response.end(`<!doctype html><html><head><meta charset="utf-8"></head><body><div id="root"></div><script src="/setup.js"></script></body></html>`);
   });
+  // The browser starts before the server listens: if it can't start, nothing is left open to keep the run from ending.
+  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const url = `http://localhost:${(server.address() as AddressInfo).port}`;
-  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   return {
     browser,
     url,

@@ -21,8 +21,8 @@ for (const name of BROWSERS) {
       browser = await launch(name);
     });
     after(async () => {
-      await browser.close();
-      await harness.close();
+      await browser?.close();
+      await harness?.close();
     });
 
     /** The launcher's fill and the colour of its words, with the site's look set to `launcher`. */
