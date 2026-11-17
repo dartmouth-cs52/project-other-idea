@@ -127,7 +127,8 @@
 
 /* The thinking glow, the same one the widget draws over a customer's page (src/widget/ui.ts). In a demo it is
    drawn over the mock page, under the chat. It is there only while Haptic thinks: a soft band the width of the page
-   comes in at the top edge and falls to the bottom, one pass after another, and fades the moment the reply arrives.
+   comes in at the top edge and falls towards the bottom, slower the longer the wait, and goes on off the page, fading,
+   the moment the reply arrives. The fall itself is set in the demo's code (web/components/demo/kit.tsx).
    It is multiplied into the page, so words and buttons stay sharp through it. The band is one element as tall as
    the page. Its colour is Pointer blue with its neighbours on either side, in one gradient mixed in OKLCH so the
    hues melt into each other, and a mask gives it a bell with no flat top and no edge. */
@@ -143,7 +144,7 @@
   mix-blend-mode: multiply;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.35s ease-out, visibility 0s 0.35s;
+  transition: opacity 0.45s ease-in, visibility 0s 0.45s;
 }
 .thinking-glow[data-on="true"] {
   opacity: 1;
@@ -168,15 +169,9 @@
     rgb(0 0 0 / 0.215) 60%, rgb(0 0 0 / 0.13) 70%, rgb(0 0 0 / 0.06) 80%, rgb(0 0 0 / 0.015) 90%, rgb(0 0 0 / 0) 100%;
   position: absolute;
   inset: 0;
-  transform: translateY(-90%);
   background: linear-gradient(to bottom in oklch, var(--glow-a), var(--glow-b) 50%, var(--glow-c));
   -webkit-mask-image: radial-gradient(200% 50% at 50% 50%, var(--bell));
   mask-image: radial-gradient(200% 50% at 50% 50%, var(--bell));
-  animation: glow-fall 1.6s linear infinite;
-}
-@keyframes glow-fall {
-  from { transform: translateY(-90%); }
-  to { transform: translateY(100%); }
 }
 @media (prefers-reduced-motion: reduce) {
   .thinking-glow {

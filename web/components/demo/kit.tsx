@@ -258,11 +258,19 @@ export function Stage({
       {children}
 
       {/* Everything below is Haptic, drawn on top of the customer's app. */}
-      {/* The thinking glow. It is on the page only while Haptic thinks: a soft band comes in at the top and falls to
-          the bottom, and fades the moment the reply arrives. It is the widget's own glow (src/widget/ui.ts), styled
-          in globals.css. It is over the page and under the chat, which sits at z-15. */}
+      {/* The thinking glow. It is on the page only while Haptic thinks: a soft band comes in at the top and falls towards
+          the bottom, slower the longer the wait, and goes the rest of the way and off the page the moment the reply
+          arrives. It is the widget's own glow (src/widget/ui.ts), with its timings, styled in globals.css. It is over
+          the page and under the chat, which sits at z-15. */}
       <div className="thinking-glow" data-on={thinking}>
-        <i key={spell} />
+        {spell > 0 && (
+          <motion.i
+            key={spell}
+            initial={{ y: "-90%" }}
+            animate={{ y: thinking ? "40%" : "100%" }}
+            transition={thinking ? { duration: 8, ease: [0.14, 1, 0.3, 1] } : { duration: 0.45, ease: "easeIn" }}
+          />
+        )}
       </div>
 
       <AnimatePresence>
