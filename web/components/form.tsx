@@ -185,7 +185,7 @@ export function FormAlert({ failure, retry }: { failure: Failure | null; retry?:
       {retry ? (
         <AlertDescription className="flex flex-col items-start gap-2">
           <span>{failure.detail}</span>
-          <Button variant="secondary" size="sm" onClick={retry}>
+          <Button variant="secondary" onClick={retry}>
             Try again
           </Button>
         </AlertDescription>
