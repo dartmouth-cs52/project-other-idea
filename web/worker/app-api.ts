@@ -27,12 +27,12 @@
 // id, which is public, is never enough to read or change someone's data.
 
 import { answersOn, cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
-import { textUpTo } from "./body-text";
 import { ANSWERS_DOCS_BUDGET, DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
 import { signedInUrl } from "../lib/dashboard";
 import { pageControls } from "../lib/setup";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
+import { boundedText } from "./body";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
 import { siteBrand } from "./brand";
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
@@ -222,12 +222,8 @@ const DOC_BODY: BodyLimit = {
 const SITE_BODY: BodyLimit = { max: MAX_NOTES * 2 + 4_000, message: `Notes can be up to ${MAX_NOTES.toLocaleString()} characters.`, field: "notes" };
 
 async function body(request: Request, limit: BodyLimit = ANY_BODY): Promise<Record<string, unknown>> {
-  // The limit is in characters, which are only known once decoded. A character is at most three bytes of UTF-8
-  // (one outside the BMP is four bytes but two characters), so a body over three bytes a character is too long
-  // whatever it holds, and is refused before it is read in full. A byte order mark adds three bytes that decode
-  // to nothing, but a JSON object's braces take one byte each, so a body that could be accepted still fits.
-  const text = await textUpTo(request, limit.max * 3);
-  if (text === undefined || text.length > limit.max) throw new Refusal(413, limit.message, limit.field);
+  const text = await boundedText(request, limit.max);
+  if (text === null) throw new Refusal(413, limit.message, limit.field);
   try {
     const value = JSON.parse(text || "{}");
     if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
@@ -408,10 +404,9 @@ function appearanceFrom(input: unknown, current: Appearance): Appearance {
     if (typeof raw.accent !== "string" || !HEX.test(raw.accent)) throw new Refusal(400, "The colour must be a hex value like #1E6EF4.", "accent");
     next.accent = raw.accent.toUpperCase();
   }
-  if (raw.position !== undefined) {
-    if (raw.position !== "bottom-right" && raw.position !== "bottom-left") throw new Refusal(400, "The corner must be bottom-right or bottom-left.", "position");
-    next.position = raw.position;
-  }
+  // The launcher is bottom right on every site. A site stored on the left before that choice went is put right on any save.
+  if (raw.position !== undefined && raw.position !== "bottom-right") throw new Refusal(400, "The launcher is always in the bottom right corner.", "position");
+  next.position = "bottom-right";
   // The launcher's own colour. Null, or nothing, puts it back to Ink.
   if (raw.launcher !== undefined) {
     if (raw.launcher === null || raw.launcher === "") delete next.launcher;

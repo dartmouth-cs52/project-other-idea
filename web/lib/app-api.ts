@@ -124,7 +124,7 @@ export interface Site {
   allowedOrigins: string[];
   scriptUrl: string;
   /** `launcher` is the Ask button's own colour. Missing means Ink. */
-  appearance: { accent: string; position: "bottom-right" | "bottom-left"; launcherLabel: string; launcher?: string };
+  appearance: { accent: string; position: "bottom-right"; launcherLabel: string; launcher?: string };
   notes: string;
   docs: {
     budget: number;

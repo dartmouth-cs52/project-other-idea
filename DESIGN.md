@@ -472,8 +472,9 @@ Components are shadcn/ui, restyled only through tokens and variants.
 - **Caption:** Ink bubble with Paper text, 14px, at most 288px wide. Text only.
   It sits under the target, or above when the space under it is busy, and
   never over the next control.
-- **Launcher:** The pill in the bottom right corner that opens the chat. Ink
-  with Paper words. A company can give it its own site's colour, so it looks
+- **Launcher:** The pill in the bottom right corner that opens the chat. It
+  is on the right on every site and only ever moves up that side, to clear a
+  control of the page's, never across to the left. Ink with Paper words. A company can give it its own site's colour, so it looks
   like part of the site, the way a support button does. Its words are then
   Paper or Ink, whichever reads better on that colour. The pointer never takes
   the site's colour. The two have opposite jobs: the launcher belongs to the
@@ -481,7 +482,11 @@ Components are shadcn/ui, restyled only through tokens and variants.
   sidebar was tried and could hardly be found.
 - **Chat:** Haptic's home, in the bottom right corner where support chat
   usually lives. A Card panel holding the conversation and the ask box. It
-  stays open from the first question to the last step.
+  stays open from the first question to the last step. A 24px × in Muted
+  foreground sits in its top right corner, the same place whatever the chat
+  holds, with a Muted circle under the mouse. It closes the chat and nothing
+  else: a running guide carries on, and the launcher opens the chat again as
+  it was.
 - **Ask box:** shadcn's input group: a Muted field with the text on top and a
   round Ink send button on a row beneath. While Haptic is guiding, send becomes
   a stop button.
@@ -789,10 +794,12 @@ stays. The rest below is proposed.
   The launcher carries no tag. A customer can change the launcher's word, and
   cannot remove the line.
 - **Put the launcher away.** With the mouse over the launcher or focus on it,
-  a 20px white circle with an × fades in on its outer bottom corner, the right
-  one for a launcher on the right. It takes the launcher down to a 14px dot in
+  a 20px white circle with a − fades in on its outer bottom corner, the right
+  one for a launcher on the right. A −, not an ×: it minimizes, and nothing
+  closes, and the chat's own × close button would otherwise show beside it
+  with another meaning. It takes the launcher down to a 14px dot in
   the same place: the word fades first, then the pill draws in. The dot stays
-  that small while the mouse that pressed the × is still over it. Once the
+  that small while the mouse that pressed the − is still over it. Once the
   mouse comes back, or with focus, it opens to 32px and shows the pointer
   mark, growing in place without moving, and a click brings the launcher back
   without opening the panel. Minimized, the area that answers the mouse is a

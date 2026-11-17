@@ -75,7 +75,13 @@ export interface SiteSource {
 export interface Appearance {
   /** Hex color for the pointer and its highlight. Blue unless the company changes it, so it stands out on any page. */
   accent: string;
-  position: "bottom-right" | "bottom-left";
+  /**
+   * Always bottom right: the launcher is on the right on every site, and the
+   * widget reads nothing here. Kept so the shape of stored sites stays the
+   * same; a site stored as "bottom-left" before the choice went is shown on
+   * the right too.
+   */
+  position: "bottom-right";
   launcherLabel: string;
   /**
    * Hex color for the launcher, the button people press to ask. Not set means Ink.
