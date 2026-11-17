@@ -1,4 +1,4 @@
-import { MAX_TAUGHT_STEPS, newTeachToken, sectionOf, stepText, type TaughtStep } from "../shared/teach.ts";
+import { MAX_TAUGHT_STEPS, newTeachToken, sectionOf, sentence, stepText, type TaughtStep } from "../shared/teach.ts";
 import { TEACH_KEY, TEACH_TOKEN } from "../shared/teach-link.ts";
 import { cleanText, type SnapElement } from "../shared/types.ts";
 import { currentPath, nameOf, shownWords, takeSnapshot, withoutTyping, withTyping, type PageSnapshot } from "./snapshot.ts";
@@ -174,9 +174,6 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .title .dot { animation: none; } }
 `;
 
-/** A question as it ends a sentence: with its own mark if it has one. */
-const sentence = (question: string) => (/[.?!]$/.test(question.trim()) ? question.trim() : `${question.trim()}.`);
-
 /** Teach mode in one tab: the bar, and the recording of what the person does. */
 export class Teacher {
   readonly host: HTMLElement;
@@ -287,7 +284,7 @@ export class Teacher {
     this.move.setAttribute("aria-label", this.teaching.top ? "Move this bar to the bottom" : "Move this bar to the top");
     if (!steps.length) return this.say("No steps yet. Start where a visitor would.");
     const latest = stepText(steps[steps.length - 1]!, steps[steps.length - 2]);
-    this.say(`${steps.length} ${steps.length === 1 ? "step" : "steps"}. Last: ${latest}${/[.?!]$/.test(latest) ? "" : "."}`);
+    this.say(`${steps.length} ${steps.length === 1 ? "step" : "steps"}. Last: ${sentence(latest)}`);
   }
 
   private record(step: TaughtStep, el?: Element) {
