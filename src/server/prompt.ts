@@ -239,6 +239,31 @@ function renderArticle({ id, doc }: Article): string {
 const MAX_PAGE_BUTTONS = 24;
 
 /**
+ * Text from a site's pages or from its visitors, made safe to write inside one
+ * of the prompt's blocks: on one line, and with nothing that reads as a tag,
+ * so it can neither close the block it is in nor open another. "</page>"
+ * becomes "</ page>", the way a help article's own tags are kept shut
+ * (`shut`). An angle bracket that starts no tag, as in "Next >", "<< Back" or
+ * "x<5", stays, so almost every label is left exactly as it was.
+ *
+ * The small and full-width angle brackets count as one, and so do the
+ * invisible characters and marks a tag can be split with: "</", a zero-width
+ * space and "page>" reads as "</page>", and becomes "</", the zero-width
+ * space, " page>". Doing it twice changes nothing.
+ */
+export function inert(text: string): string {
+  return text.replace(/[\s\p{Cc}]+/gu, " ").replace(/([<\uFE64\uFF1C])([\p{DI}\p{M}]*[\/\uFF0F]?[\p{DI}\p{M}]*)(?=[\p{L}_!?])/gu, "$1$2 ");
+}
+
+/**
+ * A control's label as the page's list writes it: `inert`, in double quotes,
+ * with any double quote of its own made single so that it cannot end the quote.
+ */
+export function quotedLabel(label: string): string {
+  return `"${inert(label).replace(/"/g, "'")}"`;
+}
+
+/**
  * One line per page. Links and buttons that repeat on most pages (the main
  * navigation) are listed once at the top, which leaves each page's line for
  * what's specific to it. The same goes for a menu that opens the same way on
@@ -327,9 +352,11 @@ export function buildUserMessage(request: TurnRequest, site?: SiteContext, now: 
     parts.push(`The visitor asks: ${request.goal}`);
   } else {
     const lines = [`Goal: ${request.goal}`, `Steps given so far: ${request.step}`];
+    // Both name the page's controls and quote its text, so both are made `inert` like the page. The change is one
+    // finding a line (describeChange in src/widget/snapshot.ts), so it is made inert a line at a time and keeps its lines.
     // In act mode the widget says who did each thing ("You clicked", "The visitor filled in"), so the line is not headed as the visitor's.
-    if (request.event) lines.push(`${request.mode === "act" ? "What happened" : "What the visitor did"}: ${request.event}`);
-    if (request.change) lines.push(`What changed on the page:\n${request.change}`);
+    if (request.event) lines.push(`${request.mode === "act" ? "What happened" : "What the visitor did"}: ${inert(request.event)}`);
+    if (request.change) lines.push(`What changed on the page:\n${request.change.split("\n").map(inert).join("\n")}`);
     parts.push(`<progress>\n${lines.join("\n")}\n</progress>\n${request.closing ? CLOSING : NEXT_STEP}`);
   }
   return parts.join("\n\n");
@@ -370,16 +397,24 @@ export function knownOpenings(site: SiteContext | undefined, path: string): (ele
   };
 }
 
+/**
+ * The page as the model reads it, inside <page>. Every piece of text in it is
+ * made `inert`, whatever field it came in: the page is the visitor's own, but
+ * it can show what other people wrote, like a shared item's name, a comment or
+ * a customer's company, and none of that may close the block. The id and
+ * `offscreen` are not: parseTurn lets through only an id like "e12", and
+ * only "above" or "below".
+ */
 export function renderSnapshot(snapshot: Snapshot, opens: (element: SnapElement) => string | undefined = () => undefined): string {
-  const lines = [`Path: ${snapshot.path}`, `Title: ${snapshot.title}`];
-  if (snapshot.dialog !== undefined) lines.push(`Open dialog: ${snapshot.dialog || "(untitled)"}. Only its elements are listed.`);
-  if (snapshot.headings.length) lines.push(`Headings: ${snapshot.headings.join(" | ")}`);
-  if (snapshot.text.length) lines.push(`Text on the page:\n${snapshot.text.map((text) => `- ${text}`).join("\n")}`);
+  const lines = [`Path: ${inert(snapshot.path)}`, `Title: ${inert(snapshot.title)}`];
+  if (snapshot.dialog !== undefined) lines.push(`Open dialog: ${inert(snapshot.dialog) || "(untitled)"}. Only its elements are listed.`);
+  if (snapshot.headings.length) lines.push(`Headings: ${snapshot.headings.map(inert).join(" | ")}`);
+  if (snapshot.text.length) lines.push(`Text on the page:\n${snapshot.text.map((text) => `- ${inert(text)}`).join("\n")}`);
   lines.push(
     "Elements:",
     ...snapshot.elements.map((element) => {
       const behind = opens(element);
-      return behind ? `${renderElement(element)} opens: ${behind}` : renderElement(element);
+      return behind ? `${renderElement(element)} opens: ${inert(behind)}` : renderElement(element);
     }),
   );
   if (snapshot.truncated) lines.push("(more elements exist than are listed)");
@@ -387,13 +422,13 @@ export function renderSnapshot(snapshot: Snapshot, opens: (element: SnapElement)
 }
 
 function renderElement(element: SnapElement): string {
-  let line = `${element.id} ${element.role}`;
-  if (element.label) line += ` "${element.label.replace(/"/g, "'")}"`;
-  if (element.icon) line += ` icon:${element.icon}`;
-  if (element.state?.length) line += ` (${element.state.join(", ")})`;
-  if (element.context) line += ` [${element.context}]`;
-  if (element.options?.length) line += ` choices: ${element.options.map((option) => option.replace(/\|/g, "/")).join(" | ")}`;
-  if (element.href) line += ` → ${element.href}`;
+  let line = `${element.id} ${inert(element.role)}`;
+  if (element.label) line += ` ${quotedLabel(element.label)}`;
+  if (element.icon) line += ` icon:${inert(element.icon)}`;
+  if (element.state?.length) line += ` (${element.state.map(inert).join(", ")})`;
+  if (element.context) line += ` [${inert(element.context)}]`;
+  if (element.options?.length) line += ` choices: ${element.options.map((option) => inert(option).replace(/\|/g, "/")).join(" | ")}`;
+  if (element.href) line += ` → ${inert(element.href)}`;
   if (element.offscreen) line += ` ${element.offscreen} the visible area`;
   return line;
 }
