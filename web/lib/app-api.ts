@@ -129,6 +129,8 @@ export interface Site {
   docs: {
     budget: number;
     used: number;
+    /** The longest request that adds a doc, in characters as sent, and what to say when one is longer. */
+    bodyLimit: { max: number; message: string };
     list: { title: string; source: string; pasted: boolean; chars: number; inPrompt: boolean }[];
   };
   /** Answering in words from the docs. `chosen` is null while the site follows the default, which is on once it has docs. */
