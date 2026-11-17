@@ -8,7 +8,7 @@ import { createApp } from "../../src/server/app.ts";
 import { MemoryTeachStore } from "../../src/server/teach.ts";
 import { newTeachToken, type TaughtStep } from "../../src/shared/teach.ts";
 import { DEFAULT_APPEARANCE, type SiteContext } from "../../src/shared/types.ts";
-import { BROWSERS, launch, snapshotBundle, widgetBundle } from "./harness.ts";
+import { BROWSERS, ends, launch, snapshotBundle, widgetBundle } from "./harness.ts";
 
 // Teach mode in real browsers: the dashboard's link opens the app with a
 // token in the fragment, the widget claims it with the real server code (an
@@ -54,6 +54,14 @@ const DETAIL = shell(`<h1>Marketing</h1><button type="button">Add owner</button>
 
 /** A page in Arabic whose control's name ends with the Arabic question mark. */
 const ARABIC = shell(`<div dir="rtl" lang="ar"><h1>الميزانيات</h1><button type="button" id="ask">هل تحتاج مساعدة؟</button></div>`);
+
+/**
+ * One page in Arabic, written right to left at /rtl and left to right at /ltr, so the bar can be compared on both. Only
+ * the direction differs: the language a page declares can change the font a browser draws the bar's words in (Firefox
+ * does), which is not what is compared.
+ */
+const BOTH_WAYS = shell(`<h1>الميزانيات</h1><button type="button">ميزانية جديدة</button>`);
+const SIDED: Record<string, string> = { "/ltr": BOTH_WAYS.replace("<html>", '<html lang="ar">'), "/rtl": BOTH_WAYS.replace("<html>", '<html dir="rtl" lang="ar">') };
 
 /**
  * Pages that repeat what was typed in a field in a name teach mode reads for
@@ -170,7 +178,7 @@ async function startRig(): Promise<Rig> {
       }
     }
     const echo = url.pathname.startsWith("/echo/") ? ECHOES[url.pathname.slice("/echo/".length)]?.html : undefined;
-    const page = url.pathname === "/budgets" ? BUDGETS : url.pathname.startsWith("/budgets/") ? DETAIL : url.pathname === "/arabic" ? ARABIC : echo;
+    const page = url.pathname === "/budgets" ? BUDGETS : url.pathname.startsWith("/budgets/") ? DETAIL : url.pathname === "/arabic" ? ARABIC : (echo ?? SIDED[url.pathname]);
     if (!page) return res.writeHead(404).end("Not found");
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }).end(page);
   });
@@ -434,6 +442,66 @@ for (const name of BROWSERS) {
       await tab.waitForSelector("haptic-root", { state: "attached" });
       assert.equal(await bar(tab), null, "a reload does not bring it back");
       await context.close();
+    });
+
+    test("on a page written right to left, the bar and the notice are drawn as on any other, and the question reads in its own direction", async () => {
+      // The bar's words are English, so it is left to right on every page. The question is the site's, in its own language.
+      const question = "كيف أضيف ميزانية";
+      const parts = [".bar", ".words", ".title", ".dot", ".how", ".last", ".buttons", "button.undo", "button.cancel", "button.done", "button.move"];
+      const layout = (tab: Page) =>
+        tab.evaluate((parts) => {
+          const root = document.querySelector("haptic-teach")!.shadowRoot!;
+          return Object.fromEntries(
+            parts.map((selector) => {
+              const box = root.querySelector(selector)!.getBoundingClientRect();
+              return [selector, [box.left, box.top, box.width, box.height].map(Math.round)];
+            }),
+          );
+        }, parts);
+      const open = async (path: string) => {
+        const token = await rig.store.create(SITE, question, newTeachToken());
+        const tab = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+        await tab.goto(`${rig.url}${path}#haptic-teach=${token}`);
+        await barSays(tab, "No steps yet");
+        return tab;
+      };
+      const ltr = await open("/ltr");
+      const there = await layout(ltr);
+      await ltr.context().close();
+
+      const tab = await open("/rtl");
+      assert.deepEqual(await tab.evaluate(() => [document.documentElement.dir, getComputedStyle(document.body).direction]), ["rtl", "rtl"]);
+      assert.deepEqual(await layout(tab), there);
+      // And in so many words: the words, then the buttons, with Done after Cancel; the red dot before the title.
+      const box = async (selector: string) => (await tab.locator(`haptic-teach ${selector}`).boundingBox())!;
+      const [words, buttons, cancel, done] = [await box(".words"), await box(".buttons"), await box("button.cancel"), await box("button.done")];
+      assert.ok(words.x + words.width <= buttons.x, JSON.stringify({ words, buttons }));
+      assert.ok(cancel.x + cancel.width <= done.x, JSON.stringify({ cancel, done }));
+      const title = await ends(tab.locator("haptic-teach .title"));
+      assert.equal(title.first.char, "T");
+      assert.ok((await box(".dot")).x + (await box(".dot")).width <= title.first.left, JSON.stringify(title));
+      const how = await ends(tab.locator("haptic-teach .how"));
+      assert.equal(how.last.char, ".");
+      assert.ok(how.last.left >= how.first.right, JSON.stringify(how));
+      // The question reads right to left after "Teaching Haptic:", its full stop at its left end, where an Arabic sentence ends.
+      await barSays(tab, `Teaching Haptic: ${question}.`);
+      const asked = tab.locator("haptic-teach .title span[dir]");
+      assert.equal(await asked.textContent(), `${question}.`);
+      assert.equal(await asked.evaluate((el) => getComputedStyle(el).direction), "rtl");
+      assert.equal(await tab.locator("haptic-teach .title").evaluate((el) => getComputedStyle(el).direction), "ltr");
+      const said = await ends(asked);
+      assert.ok(said.last.right <= said.first.left, JSON.stringify(said));
+
+      // A link that can't be used: the notice's words, then Close, and its full stop at the end of the line.
+      const other = await tab.context().newPage();
+      await other.goto(`${rig.url}/rtl#haptic-teach=${newTeachToken()}`);
+      assert.equal(await notice(other), "This teaching link isn't valid for this site. Start again from your Haptic dashboard.");
+      const [message, close] = [(await other.locator("haptic-teach-notice .notice p").boundingBox())!, (await other.locator("haptic-teach-notice button").boundingBox())!];
+      assert.ok(message.x + message.width <= close.x, JSON.stringify({ message, close }));
+      const line = await ends(other.locator("haptic-teach-notice .notice p"));
+      assert.equal(line.last.char, ".");
+      assert.ok(line.last.left >= line.first.right, JSON.stringify(line));
+      await tab.context().close();
     });
   });
 }

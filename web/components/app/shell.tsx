@@ -6,7 +6,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronsUpDown, LayoutGrid, LogOut, Plus } from "lucide-react";
+import { Check, ChevronsUpDown, CreditCard, LayoutGrid, LogOut, Plus } from "lucide-react";
 import { cn } from "cn";
 import { Pointer } from "@/components/pointer";
 import {
@@ -22,7 +22,7 @@ import type { Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
 import { hostOf } from "@/lib/setup";
 import { site as haptic } from "@/lib/site";
-import { NEW_SITE_HREF, SITES_HREF, VIEWS, siteHref, type View } from "./nav";
+import { BILLING_HREF, NEW_SITE_HREF, SITES_HREF, VIEWS, siteHref, type View } from "./nav";
 import { SiteIcon, leaveFor } from "./parts";
 
 type SiteRow = NonNullable<Me["sites"]>[number];
@@ -128,6 +128,12 @@ export function TopBar({ me, current, className }: { me?: Me; current?: SiteRow;
               </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
+            {me.approved && (
+              <DropdownMenuItem onClick={() => router.push(BILLING_HREF)} className="gap-2 py-1.5">
+                <CreditCard className="text-muted-foreground" />
+                Billing
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={signOut} className="gap-2 py-1.5">
               <LogOut className="text-muted-foreground" />
               Sign out
