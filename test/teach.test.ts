@@ -316,6 +316,19 @@ test("a matching question carries the route as the company's own steps; any othe
   assert.ok(quoted.includes(`button "Say 'hi'"`) && quoted.includes(`question "add 'a' budget"`), "a quote can't close a label");
 });
 
+test("on a site with Answers on, the route is in the Answers prompt's question, and is to be guided, not answered in words", () => {
+  const docs = [{ title: "Budgets", source: "pasted:budgets", text: "To add a budget, open Budgets and press New budget. Pick a department and an amount, then Create budget." }];
+  const answering = { ...site, docs, taught: [ROUTE] };
+  assert.match(buildSystemPrompt(answering), /"mode": "guide" for a step/, "the Answers variant of the system prompt");
+  const message = buildUserMessage(ask("how do I add a budget"), answering);
+  assert.match(message, /<taught_route>/);
+  assert.match(message, /Guide it step by step with mode "guide", even where a help article describes the same task\./);
+  assert.ok(!buildUserMessage(ask("how do I add a budget"), { ...site, taught: [ROUTE] }).includes('mode "guide"'), "a site without Answers has no modes to name");
+  const act = buildUserMessage(ask("add a budget", "act"), { ...answering, acting: { enabled: true } });
+  assert.ok(act.includes("<taught_route>") && !act.includes('mode "guide"'), "an act step has no modes either");
+  assert.equal(buildSystemPrompt(answering), buildSystemPrompt({ ...answering, taught: [] }), "the cached part does not change");
+});
+
 test("in Do it with me a taught route may be followed, but the click it leaves for the visitor stays theirs", () => {
   const acting = { ...site, acting: { enabled: true }, taught: [ROUTE] };
   assert.deepEqual(leftForVisitor(ROUTE), ["Add budget"]);

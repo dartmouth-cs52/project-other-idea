@@ -310,8 +310,8 @@ function dateInWords(day: string): string | undefined {
  * the server's otherwise. A request with `mode` "act" is one the server
  * answers in act mode: its caller removes the mode otherwise. With `site`, the
  * owner's corrections that fit this question or this page go with it, before
- * the question, and so does a route the company taught for a question like
- * this one. A site without any is asked exactly as before.
+ * the question, and so does a route the company taught for the same task.
+ * A site without any is asked exactly as before.
  */
 export function buildUserMessage(request: TurnRequest, site?: SiteContext, now: Date = new Date()): string {
   const parts = [`<page>\n${renderSnapshot(request.snapshot, knownOpenings(site, request.snapshot.path))}\n</page>`];
@@ -325,9 +325,10 @@ export function buildUserMessage(request: TurnRequest, site?: SiteContext, now: 
     );
     parts.push(`<corrections>\nThe site's owner corrected earlier guides. Where one is about the same task and its control is in this page's list, point at that control.\n${lines.join("\n")}\n</corrections>`);
   }
-  // A route someone at the company taught Haptic by doing the task (src/shared/teach.ts), only for a question like the one taught.
+  // A route someone at the company taught Haptic by doing the task (src/shared/teach.ts), only for a question for the same task.
+  // On a site with Answers on it is guided along, not answered in words. An act step has no modes.
   const taught = taughtFor(site?.taught, request.goal);
-  if (taught) parts.push(taughtRoutePrompt(taught));
+  if (taught) parts.push(taughtRoutePrompt(taught, { answers: !!site && request.mode !== "act" && answersOn(site) }));
   if (request.step === 0 && !request.event) {
     parts.push(`The visitor asks: ${request.goal}`);
   } else {

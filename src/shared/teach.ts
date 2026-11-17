@@ -306,11 +306,14 @@ function promptStep(step: TaughtStep, before: TaughtStep | undefined): string {
  * moved or reads a little differently does not break it, and a visitor who
  * is already past a step is not sent back.
  */
-export function taughtRoutePrompt(route: TaughtRoute): string {
+export function taughtRoutePrompt(route: TaughtRoute, options: { answers?: boolean } = {}): string {
   const lines = route.steps.map((step, index) => `${index + 1}. ${promptStep(step, route.steps[index - 1])}`);
+  // On a site with Answers on, an article on the same task could pull the question into a reply in words. The company
+  // showed the way by doing it, so the visitor is guided along it, and the articles are for explaining a step.
+  const answers = options.answers ? ` Guide it step by step with mode "guide", even where a help article describes the same task.` : "";
   return [
     "<taught_route>",
-    `The site's owner showed Haptic the way to do this, for the question ${quoted(route.question)}. If the visitor wants the same task, follow these steps in order: match each step's control to the one in this page's list by its kind and name, even if it has moved or reads a little differently, skip steps already done, and if a step's control is not here, find the way to it. Fields are for the visitor's own values.`,
+    `The site's owner showed Haptic the way to do this, for the question ${quoted(route.question)}. If the visitor wants the same task, follow these steps in order: match each step's control to the one in this page's list by its kind and name, even if it has moved or reads a little differently, skip steps already done, and if a step's control is not here, find the way to it. Fields are for the visitor's own values.${answers}`,
     ...lines,
     "</taught_route>",
   ].join("\n");
