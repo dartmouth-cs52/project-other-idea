@@ -153,7 +153,12 @@ button { font: inherit; cursor: pointer; }
 [hidden] { display: none !important; }
 .ask { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 10px; background: #f5f5f4; }
 .ask:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
-.ask input { width: 100%; height: 40px; font: inherit; color: inherit; padding: 4px 12px 0; border: 0; background: transparent; outline: none; }
+/* One line when empty. A longer question wraps, and the box grows a line at a time, up to six (see fit in the Ui class).
+   It never scrolls sideways, and up and down only once the words are more than six lines hold (.full): a scroll bar
+   that could show before then, where scroll bars take room as on Windows, would narrow the words onto a line more. */
+.ask textarea { display: block; width: 100%; height: 40px; max-height: 140px; font: inherit; line-height: 20px; color: inherit; padding: 13px 12px 7px;
+  border: 0; background: transparent; outline: none; resize: none; overflow: hidden; overflow-wrap: anywhere; }
+.ask textarea.full { overflow-y: auto; }
 .panel ::placeholder { color: #78716c; }
 .panel .row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 6px 10px 8px; }
 .panel .send { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0;
@@ -418,7 +423,7 @@ export class Ui {
   readonly host: HTMLElement;
   private readonly panel: HTMLElement;
   private readonly form: HTMLFormElement;
-  private readonly input: HTMLInputElement;
+  private readonly input: HTMLTextAreaElement;
   private readonly status: HTMLElement;
   private readonly statusText: HTMLElement;
   private readonly ring: HTMLElement;
@@ -581,7 +586,16 @@ export class Ui {
           make(
             "form",
             { class: "ask" },
-            make("input", { type: "text", placeholder: "What do you want to do", "aria-label": "Ask a question", "aria-describedby": "haptic-empty", maxlength: "300" }),
+            // A field of several lines, so a long question wraps where it can all be read rather than running off sideways. It is
+            // still one line of words: Enter sends it, and a line break pasted in is a space.
+            make("textarea", {
+              rows: "1",
+              placeholder: "What do you want to do",
+              "aria-label": "Ask a question",
+              "aria-describedby": "haptic-empty",
+              maxlength: "300",
+              enterkeyhint: "send",
+            }),
             make(
               "div",
               { class: "row" },
@@ -606,7 +620,7 @@ export class Ui {
     const pick = <T extends Element>(selector: string) => root.querySelector(selector) as T;
     this.panel = pick(".panel");
     this.form = pick(".ask");
-    this.input = pick(".ask input");
+    this.input = pick(".ask textarea");
     this.thread = pick(".thread");
     this.handoff = pick(".handoff");
     this.status = pick(".status");
@@ -682,7 +696,10 @@ export class Ui {
         this.keepPlaced();
         // Nothing kept our element in place while it was not in use. A dialog may have opened since.
         this.place();
-        if (!this.panel.hidden) this.input.focus();
+        if (this.panel.hidden) return;
+        // A question left half typed is shown on as many lines as before, or as the window's width now gives it.
+        this.fit();
+        this.input.focus();
       },
       hide: () => {
         // From the keyboard, the button that is about to go has the keyboard, which then goes to the dot. A press with
@@ -722,13 +739,30 @@ export class Ui {
       if (question) this.send(handlers, question, false);
       else this.askFirst(EMPTY_SEND);
     });
-    // Ctrl or Cmd and Enter is Do it. The visitor's own words only colour the button.
+    // Enter sends the question, with or without Shift, as it did when the ask box was one line: a question is one line
+    // of words however many it wraps onto. Ctrl or Cmd and Enter is Do it. Not while an input method is putting a word
+    // together, as for Japanese or Chinese, where Enter takes the word: Safari tells of that only by the key's code, 229.
     this.input.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" || !(event.ctrlKey || event.metaKey) || !this.panel.classList.contains("acts")) return;
+      if (event.key !== "Enter" || event.isComposing || event.keyCode === 229) return;
       event.preventDefault();
-      this.doIt(handlers);
+      if ((event.ctrlKey || event.metaKey) && this.panel.classList.contains("acts")) this.doIt(handlers);
+      else this.form.requestSubmit();
     });
+    // Some phone keyboards send no Enter key, only the new line it would make. That is a send too.
+    this.input.addEventListener("beforeinput", (event) => {
+      if (event.inputType !== "insertLineBreak" && event.inputType !== "insertParagraph") return;
+      event.preventDefault();
+      if (!event.isComposing) this.form.requestSubmit();
+    });
+    // The visitor's own words only colour the Do it button.
     this.input.addEventListener("input", () => {
+      // Lines pasted or dropped in run on as one, with the caret where it was: each break becomes one space.
+      if (this.input.value.includes("\n")) {
+        const [from, to] = [this.input.selectionStart, this.input.selectionEnd];
+        this.input.value = this.input.value.replace(/\n/g, " ");
+        this.input.setSelectionRange(from, to);
+      }
+      this.fit();
       this.panel.classList.toggle("nudged", !!this.acting && asksToDo(this.input.value));
       this.first.hidden = true;
       this.askFirst("");
@@ -777,6 +811,8 @@ export class Ui {
     if (this.homeFrame) return;
     this.homeFrame = requestAnimationFrame(() => {
       this.homeFrame = 0;
+      // The chat is narrower in a narrow window, so a question in the ask box may wrap onto more lines or fewer.
+      this.fit();
       this.findHome();
     });
   };
@@ -1259,10 +1295,30 @@ export class Ui {
     if (shown !== !this.empty.hidden) this.keepPlaced();
   }
 
+  /**
+   * Fits the ask box to what it holds: the lines a question wraps onto, up to the box's greatest height in CSS, past
+   * which it scrolls. Empty, it is one line again. A box not drawn, in a closed chat, has nothing to measure and is
+   * left at one line until something is typed in it. The words are measured with no scroll bar, at the width they are
+   * shown at, and the box has none until they are more than it holds at its tallest. With one allowed sooner, Chrome
+   * can keep one in a box the words fit exactly, and then they wrap onto a line more and the last is out of sight.
+   * Typing at the end of a full box, the box is scrolled right to its end, with the space under the last line: Firefox
+   * and Safari would show only the line itself, flush with the bottom edge, where Chrome shows the space too.
+   */
+  private fit() {
+    const box = this.input;
+    box.style.removeProperty("height");
+    box.classList.remove("full");
+    const needed = box.scrollHeight;
+    if (!box.value || needed <= box.clientHeight) return;
+    box.style.setProperty("height", `${needed}px`);
+    if (box.classList.toggle("full", needed > box.clientHeight) && box.selectionEnd === box.value.length) box.scrollTop = box.scrollHeight;
+  }
+
   /** Sends a question. It shows as a bubble in the chat from here on, so the ask box is emptied for the next one. */
   private send(handlers: UiHandlers, question: string, act: boolean) {
     this.askFirst("");
     this.input.value = "";
+    this.fit();
     this.panel.classList.remove("nudged");
     // The ask box gives up the keyboard as the question goes: what the visitor does next, they do on the page. With the
     // keyboard still in it, a field of the page's taking the keyboard would be read as the page pulling it away.
@@ -1556,6 +1612,7 @@ export class Ui {
     this.first.hidden = true;
     this.done.hidden = true;
     this.input.value = "";
+    this.fit();
     this.panel.classList.remove("nudged");
     this.panel.hidden = false;
     this.showActs();

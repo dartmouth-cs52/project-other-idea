@@ -489,7 +489,11 @@ Components are shadcn/ui, restyled only through tokens and variants.
   it was.
 - **Ask box:** shadcn's input group: a Muted field with the text on top and a
   round Ink send button on a row beneath. While Haptic is guiding, send becomes
-  a stop button.
+  a stop button. The field is one line when empty. A longer question wraps,
+  and the field grows a line at a time, up to six, so the whole question can
+  be read as it is typed; past six it scrolls up and down, never sideways.
+  It is still one question: Enter sends it, and a line break pasted in is a
+  space.
 - **Bubbles and status:** shadcn's chat parts. The person's question is an Ink
   bubble on the right. Haptic's reply is a Muted bubble on the left. Status
   sits under them as one line. While Haptic thinks it is the word "Thinking"
