@@ -501,6 +501,14 @@ export function isLearnableRoute(path: string): boolean {
 export interface GuideReport {
   site: string;
   outcome?: GuideOutcome;
+  /**
+   * With an outcome: the step whose reply the ending rests on, counting from
+   * 0, which is the last step the widget had an answer to. The server checks
+   * that step, so a step asked after it, like the look at what using the last
+   * control did, cannot change how it is kept. Absent from a widget older than
+   * this, and from one whose guide ended before any answer came.
+   */
+  step?: number;
   helped?: boolean;
   /** The visitor used the way to a person. */
   handoff?: true;

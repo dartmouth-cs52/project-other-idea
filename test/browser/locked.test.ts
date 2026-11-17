@@ -80,6 +80,20 @@ for (const name of BROWSERS) {
       assert.deepEqual({ pointer: after.pointer - before.pointer, caption: after.caption - before.caption }, { pointer: -120, caption: -120 }, "the pointer and the caption should move with the field");
     });
 
+    test("with the control scrolled out of the window, the caption waiting at the window's edge stays there as the page moves", async () => {
+      harness.script = (request) => point(idOf(request, "Choose a person"), "Pick who holds the card.");
+      await ask(tab, "issue a card");
+      assert.ok(await ringAround(tab, "#owner"));
+      await tab.evaluate(() => window.scrollTo({ top: 1200, behavior: "instant" }));
+      await part(tab, ".caption .where").waitFor();
+      await stopFrames(tab);
+      const before = await places(tab, "#owner");
+      await tab.evaluate(() => window.scrollTo({ top: 1100, behavior: "instant" }));
+      const after = await places(tab, "#owner");
+      assert.equal(after.control, before.control + 100, "the page should have moved");
+      assert.equal(after.caption, before.caption, "the caption left the window's edge with the page");
+    });
+
     test("for a control fixed to the window, they stay with the control and not the page", async () => {
       harness.script = (request) => point(idOf(request, "Save draft"), "Save it as a draft.");
       await ask(tab, "save a draft");

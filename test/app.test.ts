@@ -205,6 +205,32 @@ test("how a guide ended is passed on, from allowed origins only, and nonsense is
   ]);
 });
 
+test("a report names the step its ending rests on, as a whole number a step could be, and only with an ending", async () => {
+  const reports: unknown[] = [];
+  const app = createApp({
+    loadSite: async (id) => (id === site.id ? site : undefined),
+    widget: async () => "",
+    widgetMaxAge: 0,
+    overLimit: () => false,
+    onReport: (_site, guide, report) => void reports.push({ guide, ...report }),
+  });
+  const send = (body: Record<string, unknown>) =>
+    app(new Request(`https://widget.test/v1/guides/${GUIDE}/report`, { method: "POST", headers: { "Content-Type": "text/plain", Origin: "https://app.test" }, body: JSON.stringify({ site: site.id, ...body }) }), "1.1.1.1");
+  assert.equal((await send({ outcome: "finished", step: 3 }))?.status, 200);
+  assert.equal((await send({ outcome: "finished", step: 0 }))?.status, 200);
+  // Anything else in its place is left out, and the report is still taken, as one from a widget that names no step.
+  for (const step of ["3", -1, 1.5, 101, null, [3]]) assert.equal((await send({ outcome: "finished", step }))?.status, 200, JSON.stringify(step));
+  // A step says what an ending rests on, so without one it is left out, and a report of nothing else is still nothing.
+  assert.equal((await send({ helped: true, step: 2 }))?.status, 200);
+  assert.equal((await send({ step: 2 }))?.status, 400);
+  assert.deepEqual(reports, [
+    { guide: GUIDE, site: site.id, outcome: "finished", step: 3 },
+    { guide: GUIDE, site: site.id, outcome: "finished", step: 0 },
+    ...Array.from({ length: 6 }, () => ({ guide: GUIDE, site: site.id, outcome: "finished" })),
+    { guide: GUIDE, site: site.id, helped: true },
+  ]);
+});
+
 test("a guide's first question is passed on before the model answers, and later steps are not", async () => {
   const order: string[] = [];
   const hurried: (boolean | undefined)[] = [];
