@@ -259,8 +259,8 @@ mouse.
 ## Colors
 
 Two neutrals carry the whole interface. One colour belongs to the pointer, and
-one marks a finished task. The thinking glow is the pointer's colour with its
-two neighbours, and is the only place another hue is seen.
+one marks a finished task. The thinking glow is Pointer blue with its two
+neighbours, and is the only place another hue is seen.
 Neutrals are Tailwind's stone scale, which has a slight warmth so the page never
 looks stark.
 
@@ -279,11 +279,12 @@ looks stark.
   its middle, indigo at its leading edge. The three are the pointer's colour
   and its neighbours 28 degrees to one side and 30 to the other in OKLCH,
   mixed in OKLCH so they melt into each other with no seam. Staying that close
-  to the pointer's hue is what keeps it Haptic's and not a general AI rainbow,
-  and it means a customer's own accent gets a glow of its own neighbours: an
-  orange pointer glows peach to amber, a green one lime to teal. The three hex
-  values are what Pointer blue gives, and what a browser without relative
-  colours falls back to. Violet and pink were tried first and turned down:
+  to the pointer's hue is what keeps it Haptic's and not a general AI rainbow.
+  The glow is these three on every site, whatever the site's accent: it is how
+  Haptic looks when it thinks, the same on the home page and in every product
+  it runs in. It was once worked out from each site's accent instead, and a
+  site with a green one glowed lime to teal. The three are written down, not
+  worked out by the browser. Violet and pink were tried first and turned down:
   they are furthest from the pointer, they are what every other AI product
   uses, and violet is the darkest of them over a page. Never used flat, and
   never outside the glow.
@@ -537,7 +538,8 @@ follow the glide, and the glow lasts exactly as long as the wait. Everything
 else is a fade, a small scale or a height change of 150 to 250ms that eases
 out. Nothing grows from nothing: things arrive from within a few percent of
 their final size. A click is acknowledged like a pressed button, with the mark
-dipping to 97 percent and back in a quarter of a second, and no ripple. With reduced motion on, the pointer jumps
+dipping to 97 percent and back in a quarter of a second, and no ripple, whether
+the person clicks or Haptic presses for them. With reduced motion on, the pointer jumps
 to its target, there is no glow and no shimmer, and each demo holds one still frame.
 
 Scrolling never changes what a demo shows. A demo waits on its first frame,
@@ -576,9 +578,12 @@ reason a customer gave.
 - **Questions.** Every question, newest first, as a table to search and filter.
   A row opens its guide.
 - **Gaps.** What the company can fix. What people can't find, guides that
-  stopped finishing, where people give up and the steps they click past.
+  stopped finishing, where people give up and the steps they click past. Each
+  question people can't find has Teach Haptic the right way beside See the
+  guides.
 - **Knowledge.** What Haptic reads and what the company has corrected. Notes,
-  help docs, corrections, the controls never to point at, and the pages read.
+  help docs, corrections, the routes taught by doing, the controls never to
+  point at, and the pages read.
 - **Settings.** Three tabs. General holds the site's name, the widget's two
   colours and deleting the site. Install holds the script and where it runs.
   Usage holds the finished guides, month by month, which are what billing
@@ -592,10 +597,11 @@ changes it. When it is anything else, "Use Haptic blue" puts it back. The
 launcher sits bottom right on every site, where support chat usually lives,
 and that is not a setting. Deleting a site leads back to the list of sites.
 
-**Sites.** A company with one site lands inside it. With more than one, the
-first page is the list, one card a site. Sites whose script is running come
-first, the one asked most recently at their head, and those still waiting for
-the script come last, so the first card is the one with something happening.
+**Sites.** The first page after sign-in is the list, one card a site, for a
+company with one site as for one with several. A site opens when its card is
+pressed or a link names it. Sites whose script is running come first, the one
+asked most recently at their head, and those still waiting for the script
+come last, so the first card is the one with something happening.
 A card says how many questions the last seven days had and how many finished,
 the last fortnight as fourteen small bars, and the newest question. A site
 still waiting for its script says so in place of the numbers. A running site
@@ -696,6 +702,16 @@ what was pointed at, and what Haptic said in the Ink caption bubble. The
 address holds the guide, so the link opens the same guide for someone else,
 and Back closes it.
 
+**Teaching.** Teach Haptic uses the same panel. A guide that did not get there
+has Teach Haptic the right way at the top of its panel, and pressing it closes
+the guide and opens the teaching panel in its place, so one panel is open at a
+time. Its title is Teach Haptic in Muted text over the question. It says the
+site is open in another tab while the task is done there, then lists the
+recorded steps as white cards, each with its number in a ring, Delete and Add
+a note, and Save this route as the one Ink button. The address does not hold
+it: closing it loses nothing, and steps waiting for review are listed under
+Knowledge, in Taught by doing, with Review.
+
 **Waiting.** While numbers load, Muted blocks hold the place of what is coming,
 at its size, so nothing jumps when it arrives. Once a page has numbers it keeps
 showing them while newer ones are on their way.
@@ -729,13 +745,16 @@ stays. The rest below is proposed.
   glide starts from the control just used. If nothing happens for about four
   seconds the mark pulses once, and no more often than that. In the widget the
   pointer goes with the mark between steps, and the next glide starts from
-  where it was. The mark breathes only when Haptic has done part of a task
-  itself and hands the last click to the person.
+  where it was. The mark holds still when Haptic hands a step to the person
+  too: no breathing, no halo.
 - **Say one thing.** A caption names the next action in a short sentence. It
   carries no buttons. In the widget it carries a small × that stops the guide,
   so there is a way out beside the pointer when the chat has been closed.
 - **Keep the conversation and the exit in view.** The chat stays open for the
   whole guide, with the question at the top and a stop button in the ask box.
+  Once anything is in the chat, a turning arrow on the far side of the ask
+  box's row starts over: it calls off a guide that is running and clears the
+  chat back to an empty ask box with the keyboard.
 - **Never cover the control.** When the chat would sit on the control being
   pointed at, or on its caption, it moves to the other side of the window
   while the pointer is there, and comes back when it has gone.

@@ -779,9 +779,10 @@ let typedPattern: { of: string[]; pattern?: RegExp } = { of: [] };
  * that name is "Hello, [typed]", and a list's "Search for “divorce lawyer”"
  * while the search box holds it is "Search for “[typed]”". Every piece of text
  * a reading sends passes through it (`cleanText` below), so what the visitor
- * typed is never sent, wherever the page shows it again.
+ * typed is never sent, wherever the page shows it again. Outside a reading,
+ * and outside `withTyping`, it changes nothing.
  */
-function withoutTyping(text: string): string {
+export function withoutTyping(text: string): string {
   if (!typed.length || text.length < MIN_ECHO) return text;
   if (typedPattern.of !== typed) {
     const escaped = [...typed].sort((a, b) => b.length - a.length).map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+"));
@@ -790,6 +791,31 @@ function withoutTyping(text: string): string {
   return text.replace(typedPattern.pattern!, TYPED);
 }
 const cleanText = (text: string, max = 80): string => maskAndTrim(withoutTyping(text), max, own);
+
+/**
+ * Runs `read` with what the page's fields hold now in hand, as a reading has
+ * it, so a name read in it through this file (`nameOf`, `shownWords`,
+ * `withoutTyping`) has every place that repeats what a field holds put as
+ * "[typed]", before it is cut to length, as a reading's names have. A reading
+ * lets the fields' values go as it ends, so a name read after one otherwise
+ * keeps them. Teach mode (teach.ts) names a group, a list and a control the
+ * reading did not list itself, and passes every step through here before it
+ * keeps it. No question is given, so nothing a field holds is left readable.
+ * A reading taken inside `read` lets the values go as it ends, as any does.
+ */
+export function withTyping<T>(read: () => T): T {
+  const [ownBefore, askedBefore] = [own, asked];
+  own = new Set();
+  asked = "";
+  pageDocuments = documentsOfPage();
+  typed = typedValues();
+  try {
+    return read();
+  } finally {
+    typed = [];
+    [own, asked] = [ownBefore, askedBefore];
+  }
+}
 
 /**
  * Reads the page. `ignore` is Haptic's own element. `question` is what the
@@ -2953,6 +2979,24 @@ function isRequired(el: Element, role: string): boolean {
 }
 
 /**
+ * Whether the page or the browser says what a field holds will not do. The
+ * page says so with aria-invalid. The browser says so by its own check of the
+ * field's type, pattern, length or range, such as "charlie" in an email field,
+ * which the model cannot see because what was typed is never read: without
+ * this it takes the field as filled in and moves on. Only that yes or no is
+ * read. An empty field the form requires is not invalid: "required" says that.
+ */
+function isInvalid(el: Element, role: string): boolean {
+  if (!CAN_BE_REQUIRED.has(role)) return false;
+  const said = el.getAttribute("aria-invalid");
+  if (said && said !== "false") return true;
+  const field = el as Partial<HTMLInputElement>;
+  // A field the browser does not check, being disabled or read-only, is not the visitor's to fix.
+  const validity = field.willValidate ? field.validity : undefined;
+  return !!validity && !validity.valid && !validity.valueMissing;
+}
+
+/**
  * Whether a control cannot be used: it says so, a disabled group of fields
  * holds it, or it is inside an entry that says so, like the link inside a
  * menu's disabled item, or a tick box inside a list's disabled option.
@@ -3004,6 +3048,7 @@ function stateOf(el: Element, role: string): string[] {
   const state: string[] = [];
   if (isDisabled(el)) state.push("disabled");
   if (isRequired(el, role)) state.push("required");
+  if (isInvalid(el, role)) state.push("invalid");
   const popup = opens(el, role);
   if (popup) state.push(popup);
   const expanded = el.getAttribute("aria-expanded");

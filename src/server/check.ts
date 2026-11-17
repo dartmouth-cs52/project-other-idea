@@ -1,5 +1,6 @@
 import { checkAction } from "../shared/act-rules.ts";
 import type { SnapElement, Snapshot, TurnReply, TurnRequest } from "../shared/types.ts";
+import { inert, quotedLabel } from "./prompt.ts";
 
 // Checks on a reply before it reaches the visitor. A reply can be well formed
 // and still contradict itself: its sentence tells the visitor to use a control
@@ -25,6 +26,19 @@ const SHORTEST = 2;
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/**
+ * A control's label as a pattern to find it by in a sentence, with any run of
+ * spaces matching any other. The model read the label as the prompt writes it
+ * (`inert`), where "<b>Pay</b>" is "< b>Pay</ b>", and may give it back either
+ * way, so either is found. Most labels read the same both ways.
+ */
+function labelPattern(label: string): string {
+  const pattern = (text: string) => escape(text.trim()).replace(/\s+/g, "\\s+");
+  const asListed = pattern(label);
+  const asShown = pattern(inert(label));
+  return asListed === asShown ? asListed : `(?:${asListed}|${asShown})`;
+}
+
 /** The roles a visitor types into. */
 const TYPED = new Set(["textbox", "searchbox", "combobox"]);
 /** Words that say to type into a field, a few words before its name: "Try typing Skyline Air in the Search expenses box". Not the key: "press Enter in the Search box". */
@@ -44,7 +58,7 @@ function fieldsTold(snapshot: Snapshot, say: string): { element: SnapElement; at
     if (!NOT_AN_INSTRUCTION.test(say.slice(0, from))) found.push({ element, at, end });
   };
   for (const field of fields) {
-    const name = escape(field.label.trim()).replace(/\s+/g, "\\s+");
+    const name = labelPattern(field.label);
     const into = new RegExp(String.raw`\b${TYPE_IN}\b[^.!?;]{0,40}?\b(?:in|into)\s+(?:the\s+)?["“'‘]?(${name})["”'’]?(?:\s+(?:box|field|bar))?(?=$|[\s.,;:!?)])`, "gi");
     for (const match of say.matchAll(into)) {
       const at = match.index + match[0].lastIndexOf(match[1]!);
@@ -76,7 +90,7 @@ export function namedButNotPointed(snapshot: Snapshot, reply: TurnReply): SnapEl
     .filter((element) => element.label.trim().length >= SHORTEST)
     .sort((a, b) => b.label.length - a.label.length);
   for (const element of named) {
-    const name = escape(element.label.trim()).replace(/\s+/g, "\\s+");
+    const name = labelPattern(element.label);
     const told = new RegExp(String.raw`\b${USE}\s+(?:on\s+)?(?:the\s+)?["“'‘]?${name}["”'’]?(?=$|[\s.,;:!?)])`, "gi");
     const through = new RegExp(String.raw`\b${THROUGH}\s+["“'‘]?${name}["”'’]?\s+${KIND}\b`, "gi");
     for (const match of [...say.matchAll(told), ...say.matchAll(through)]) {
@@ -87,6 +101,13 @@ export function namedButNotPointed(snapshot: Snapshot, reply: TurnReply): SnapEl
 }
 
 /**
+ * How a note names a control: as the page's list does, `button "Pay" (e3)`.
+ * A note is a message of its own, outside <page>, so a label in it is quoted
+ * the same way and can no more end its quote there than in the list.
+ */
+const listedAs = (element: SnapElement): string => `${inert(element.role)} ${quotedLabel(element.label)} (${element.id})`;
+
+/**
  * What the model is told when its reply named a control and pointed at
  * nothing, as the next message of the same conversation. It is told what it
  * did, and given both ways out: point at the control, or stop telling the
@@ -95,7 +116,7 @@ export function namedButNotPointed(snapshot: Snapshot, reply: TurnReply): SnapEl
 export function namedButNotPointedNote(element: SnapElement, status?: TurnReply["status"]): string {
   const why = status === "stuck" ? `its status is "stuck"` : "its target is null";
   return (
-    `Your reply tells the visitor to use ${element.role} "${element.label}" (${element.id}), but ${why}, so nothing is pointed at. ` +
+    `Your reply tells the visitor to use ${listedAs(element)}, but ${why}, so nothing is pointed at. ` +
     `If they still have to use it, reply again with ${element.id} as the target and status "continue". ` +
     `If nothing is left for them to use, reply "done" with target null and a sentence that does not tell them to use anything.`
   );
@@ -220,7 +241,7 @@ function toldToUse(snapshot: Snapshot, say: string): { element: SnapElement; at:
   const found: { element: SnapElement; at: number; end: number }[] = [];
   const named = snapshot.elements.filter((element) => element.label.trim().length >= SHORTEST).sort((a, b) => b.label.length - a.label.length);
   for (const element of named) {
-    const name = escape(element.label.trim()).replace(/\s+/g, "\\s+");
+    const name = labelPattern(element.label);
     const told = new RegExp(String.raw`\b${USE}\s+(?:on\s+)?(?:the\s+)?["“'‘]?${name}["”'’]?(?=$|[\s.,;:!?)])`, "gi");
     const through = new RegExp(String.raw`\b${THROUGH}\s+["“'‘]?${name}["”'’]?\s+${KIND}\b`, "gi");
     for (const match of [...say.matchAll(told), ...say.matchAll(through)]) {
@@ -320,7 +341,7 @@ export function namedForTheGoal(request: Pick<TurnRequest, "goal" | "snapshot">,
     .sort((a, b) => b.label.length - a.label.length);
   for (const element of listed) {
     const label = element.label.trim();
-    const at = say.search(new RegExp(String.raw`(?<![\p{L}\p{N}_])${escape(label).replace(/\s+/g, "\\s+")}${NAME_END}`, "u"));
+    const at = say.search(new RegExp(String.raw`(?<![\p{L}\p{N}_])${labelPattern(label)}${NAME_END}`, "u"));
     if (at < 0 || NOT_AN_INSTRUCTION.test(say.slice(0, at))) continue;
     if (!found.some((other) => other.label.includes(label))) found.push(element);
   }
@@ -330,7 +351,7 @@ export function namedForTheGoal(request: Pick<TurnRequest, "goal" | "snapshot">,
 /** What the model is told when its guide ended in words that name the goal's control. Both ways out are open: point at it, or end as it did. */
 export function namedForTheGoalNote(element: SnapElement): string {
   return (
-    `Your reply ends the guide and names ${element.role} "${element.label}" (${element.id}), but its target is null, so nothing is pointed at. ` +
+    `Your reply ends the guide and names ${listedAs(element)}, but its target is null, so nothing is pointed at. ` +
     `If the visitor still has to use it to do what they asked, reply again with ${element.id} as the target and status "continue". ` +
     `If what they asked for is already done or showing, or there is truly no way forward, reply as before with target null.`
   );
@@ -370,7 +391,7 @@ const ASK_FOR = String.raw`(?:fill in|fill out|fill|type|enter|choose|pick|selec
 /** What ends a control's name in a sentence, as for the guide's check: "FAQs" is not "FAQ". */
 const NAME_END = String.raw`["”'’]?(?=$|[\s.,;:!?)])`;
 
-const nameIn = (element: SnapElement) => String.raw`["“'‘]?${escape(element.label.trim()).replace(/\s+/g, "\\s+")}`;
+const nameIn = (element: SnapElement) => String.raw`["“'‘]?${labelPattern(element.label)}`;
 
 /** Whether Haptic could press this control itself: one that holds no value, and that the check every act reply passes would let it click. */
 function hapticMayPress(element: SnapElement, request: Pick<TurnRequest, "goal" | "snapshot">, commitWords: readonly string[] | undefined): boolean {
@@ -451,7 +472,7 @@ export function namedButNotDone(request: Pick<TurnRequest, "goal" | "snapshot">,
  */
 export function namedButNotDoneNote(element: SnapElement): string {
   return (
-    `Your reply names ${element.role} "${element.label}" (${element.id}), but its target is null and its status "continue", so nothing is done and the visitor is left with nothing to use. ` +
+    `Your reply names ${listedAs(element)}, but its target is null and its status "continue", so nothing is done and the visitor is left with nothing to use. ` +
     `If using it is the next step, reply again with ${element.id} as the target, the "do" for it and status "continue". ` +
     `If the visitor has to fill something in first, point at that field with "do" null. ` +
     `If nothing is left to do, reply "done" with target null and a sentence that does not name a control to use.`

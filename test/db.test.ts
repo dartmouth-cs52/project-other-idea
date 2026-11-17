@@ -186,7 +186,7 @@ function onRecord(...looks: (Record<string, unknown> | undefined)[]) {
     const found = looks[Math.min(look++, looks.length - 1)];
     return Promise.resolve(found ? [found] : []);
   };
-  const store = new Store(sql as unknown as ConstructorParameters<typeof Store>[0], 3, [0, 0, 0]);
+  const store = new Store(sql as unknown as ConstructorParameters<typeof Store>[0], 3, { reportWaitsMs: [0, 0, 0] });
   /** What was written, without the looks. */
   const written = () => sent.filter((query) => !query.text.startsWith("select"));
   return { store, sent, written, looks: () => look };

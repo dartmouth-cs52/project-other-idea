@@ -230,3 +230,38 @@ test("the page writing into the pointed field by script is not the visitor typin
   assert.equal(run(FIELD, [written, tick(2000), tick(3000)]).verdict, undefined);
   assert.equal(run(SELECT, [written]).verdict?.how, "filled");
 });
+
+// Chrome's autofill, as it was seen on the request access form: the visitor picked one of the browser's suggestions in
+// First name, the pointed field, and the browser wrote First name and Last name at once. Moments later, before typing
+// would have paused, they clicked Additional details, and that click was heard as a wrong one: "Not that one".
+const DETAILS = where({ controls: [3], name: "Additional details" });
+
+test("the browser's autofill in the pointed field fills it in at once, with no pause to wait for", () => {
+  const { verdict, at } = run(FIELD, [press(0, TARGET), release(40), click(41, TARGET), { type: "input", at: 900, inTarget: true, autofill: true }]);
+  assert.deepEqual(verdict, { how: "filled", onTarget: true, strayed: false, autofill: true });
+  assert.equal(at, 900);
+  // A real dropdown the browser fills in says so too.
+  assert.deepEqual(run(SELECT, [{ type: "input", at: 10, inTarget: true, autofill: true }]).verdict, { how: "filled", onTarget: true, strayed: false, autofill: true });
+  // Autofill that reaches only the other fields of the form is not this step.
+  assert.equal(run(FIELD, [{ type: "input", at: 10, inTarget: false, autofill: true }, tick(2000)]).verdict, undefined);
+});
+
+test("a field typed in and then left for another control before the pause is filled in, and says what was clicked", () => {
+  const typed: Seen[] = [press(0, TARGET), release(40), click(41, TARGET), { type: "input", at: 400, inTarget: true }, { type: "input", at: 520, inTarget: true }];
+  // Into the next field, well inside the pause.
+  const next = run(FIELD, [...typed, press(900, DETAILS), release(950), click(951, DETAILS)]);
+  assert.deepEqual(next.verdict, { how: "filled", onTarget: true, strayed: false, then: "Additional details" });
+  assert.equal(next.at, 951);
+  // A press that no click followed, on a control that went: the same.
+  assert.equal(run(FIELD, [...typed, press(900, OTHER), release(950), tick(1040, { pressGone: true })]).verdict?.how, "filled");
+  // A control with no name that is safe to send is still named as clicked.
+  assert.deepEqual(run(FIELD, [...typed, press(900, where({ controls: [4] })), release(950), click(951, where({ controls: [4] }))]).verdict, { how: "filled", onTarget: true, strayed: false, then: "" });
+});
+
+test("another control clicked before anything was typed in the pointed field is still a wrong click", () => {
+  assert.deepEqual(run(FIELD, [press(0, DETAILS), release(50), click(51, DETAILS)]).verdict, { how: "other", name: "Additional details", onTarget: false, strayed: true });
+  // Clicking into the field first is not typing in it.
+  assert.equal(run(FIELD, [press(0, TARGET), release(40), click(41, TARGET), press(600, DETAILS), release(650), click(651, DETAILS)]).verdict?.how, "other");
+  // Nor is a value the page's script wrote there.
+  assert.equal(run(FIELD, [{ type: "input", at: 10, inTarget: true, byPage: true }, press(600, DETAILS), release(650), click(651, DETAILS)]).verdict?.how, "other");
+});

@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, type GroupGuide, type HealthGroup, type Insights } from "@/lib/app-api";
 import { ShareBar } from "./chart";
 import { GuideStatus, Panel, PanelEmpty, when } from "./parts";
+import { TeachButton } from "./teach";
 
 const percent = (share: number) => `${Math.round(share * 100)}%`;
 const people = (count: number) => `${count.toLocaleString()} ${count === 1 ? "person" : "people"}`;
@@ -102,9 +103,12 @@ function CantFind({ siteId, days, rows, onOpen }: { siteId: string; days: number
                     : "Those who gave up got no first step."}{" "}
                   Asked {row.asked.toLocaleString()} {row.asked === 1 ? "time" : "times"} in all.
                 </p>
-                <Button variant="secondary" size="sm" className="self-start" onClick={() => setShown(shown === row.key ? null : row.key)} aria-expanded={shown === row.key}>
-                  {shown === row.key ? "Hide the guides" : "See the guides"}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => setShown(shown === row.key ? null : row.key)} aria-expanded={shown === row.key}>
+                    {shown === row.key ? "Hide the guides" : "See the guides"}
+                  </Button>
+                  <TeachButton siteId={siteId} question={row.question} variant="ghost" />
+                </div>
                 {shown === row.key && <GroupGuides siteId={siteId} days={days} groupKey={row.key} onOpen={onOpen} />}
               </li>
             );

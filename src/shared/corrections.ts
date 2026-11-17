@@ -1,6 +1,6 @@
 // No extension on this import: the website imports this file too, and its settings refuse one.
 import { FILLER } from "./questions";
-import { describeElement, questionKey, type SnapElement } from "./types";
+import { questionKey, type SnapElement } from "./types";
 
 const FILLER_SET = new Set(FILLER);
 
@@ -73,9 +73,4 @@ export function correctionsFor(corrections: Correction[] | undefined, path: stri
     .filter((item) => item.like || item.here);
   scored.sort((a, b) => Number(b.like) - Number(a.like) || Number(b.here) - Number(a.here) || b.correction.createdAt.localeCompare(a.correction.createdAt));
   return scored.slice(0, MAX_CORRECTIONS).map((item) => item.correction);
-}
-
-/** How a control is named in the prompt and on the dashboard: button "Send invite". */
-export function controlText(control: ControlName): string {
-  return describeElement({ role: control.role || "control", label: control.label });
 }

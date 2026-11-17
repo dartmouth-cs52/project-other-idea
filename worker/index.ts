@@ -1,11 +1,13 @@
 import { createApp, turnCounts, type AppParts } from "../src/server/app.ts";
 import { describeAlert, meterFor, type Admission, type Ceiling, type Gate, type Limits, type Report } from "../src/server/budget.ts";
 import { Store } from "../src/server/db.ts";
-import { labelThreshold } from "../src/server/learned.ts";
+import { labelThreshold, networkThreshold } from "../src/server/learned.ts";
 import { configure } from "../src/server/model.ts";
 import { createSiteCache } from "../src/server/site-cache.ts";
+import { NeonTeachStore } from "../src/server/teach.ts";
 import type { SiteContext } from "../src/shared/types.ts";
 import widgetActing from "../dist/widget-act.txt";
+import widgetTeaching from "../dist/widget-teach.txt";
 import widget from "../dist/widget.txt";
 
 export { BudgetMeter } from "./budget.ts";
@@ -13,8 +15,8 @@ export { BudgetMeter } from "./budget.ts";
 // The Haptic server as customers' browsers reach it: a Cloudflare Worker at
 // widget.joinhaptic.com. It gives the same answers as the Node server in
 // src/server (both run app.ts). What differs is where things are kept: sites,
-// and every guide and step, are in Neon (src/server/db.ts), and the widget's two
-// files (widget.js, and widget-act.js for acting) are packed into the Worker when it is built.
+// and every guide and step, are in Neon (src/server/db.ts), and the widget's three
+// files (widget.js, widget-act.js for acting and widget-teach.js for teach mode) are packed into the Worker when it is built.
 //
 // Without the DATABASE_URL secret it still answers, from the KV store sites
 // were kept in before Neon, and records nothing. A site missing from Neon is
@@ -31,6 +33,8 @@ export interface Env {
   DATABASE_URL?: string;
   /** Slows down anyone asking for steps too fast. */
   TURN_LIMIT?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+  /** Slows down anyone checking teach tokens or posting taught steps too fast. TURN_LIMIT when it is not bound. */
+  TEACH_LIMIT?: { limit(options: { key: string }): Promise<{ success: boolean }> };
   /** What each site has spent on the model this hour and today. One object per site, in worker/budget.ts. */
   BUDGET?: {
     idFromName(name: string): unknown;
@@ -58,6 +62,8 @@ export interface Env {
   HAPTIC_OFF?: string;
   /** How many different visitors must have seen a learned label before the prompt gets it. 3 unless set. */
   HAPTIC_LABEL_THRESHOLD?: string;
+  /** How many different networks those visitors must have called from. 3 unless set, and never more than the visitors needed. */
+  HAPTIC_NETWORK_THRESHOLD?: string;
   /** A secret, set with `wrangler secret put`. Not needed while HAPTIC_MODEL is "mock". */
   ANTHROPIC_API_KEY?: string;
 }
@@ -73,9 +79,20 @@ const sites = createSiteCache({ keepMs: 60_000, maxStaleMs: 10 * 60_000 });
 
 /** One per isolate, so its note of which origins were seen lately is shared by every request. */
 let store: { url: string; store: Store } | undefined;
+let teachStore: { url: string; store: NeonTeachStore } | undefined;
+/** Teach sessions are in Neon, beside the sites (db/migrations/0014_teach_sessions.sql). Without the database there is no teach mode. */
+function teachFor(env: Env): NeonTeachStore | undefined {
+  if (!env.DATABASE_URL) return undefined;
+  if (teachStore?.url !== env.DATABASE_URL) teachStore = { url: env.DATABASE_URL, store: new NeonTeachStore(env.DATABASE_URL) };
+  return teachStore.store;
+}
+
 function storeFor(env: Env): Store | undefined {
   if (!env.DATABASE_URL) return undefined;
-  if (store?.url !== env.DATABASE_URL) store = { url: env.DATABASE_URL, store: new Store(env.DATABASE_URL, labelThreshold({ HAPTIC_LABEL_THRESHOLD: env.HAPTIC_LABEL_THRESHOLD, HAPTIC_PRODUCTION: "1" })) };
+  if (store?.url !== env.DATABASE_URL) {
+    const online = { HAPTIC_LABEL_THRESHOLD: env.HAPTIC_LABEL_THRESHOLD, HAPTIC_NETWORK_THRESHOLD: env.HAPTIC_NETWORK_THRESHOLD, HAPTIC_PRODUCTION: "1" };
+    store = { url: env.DATABASE_URL, store: new Store(env.DATABASE_URL, labelThreshold(online), { labelNetworks: networkThreshold(online) }) };
+  }
   return store.store;
 }
 
@@ -203,18 +220,24 @@ export default {
       loadSite: async (id, hurry) => (SITE_ID.test(id) ? sites(id, () => readSite(env, id), hurry ? (work) => ctx.waitUntil(work) : undefined) : undefined),
       widget: async () => widget,
       widgetActing: async () => widgetActing,
+      widgetTeaching: async () => widgetTeaching,
       widgetMaxAge: 300,
       overLimit: async (key) => (env.TURN_LIMIT ? !(await env.TURN_LIMIT.limit({ key })).success : false),
+      overTeachLimit: async (key) => {
+        const limit = env.TEACH_LIMIT ?? env.TURN_LIMIT;
+        return limit ? !(await limit.limit({ key })).success : false;
+      },
+      teach: teachFor(env),
       isOff: (site) => isOff(env, site.id),
       budget: budgetFor(env),
       onAlert: (site, alert) => ctx.waitUntil(sendAlert(env, describeAlert(site, alert))),
       background: (work) => ctx.waitUntil(work),
       onSeen: (site, origin, allowed) => later(db?.seenAt(site, origin, allowed)),
       onAsk: (turn, _site, origin) => later(db?.startGuide(turn, origin)),
-      onTurn: (turn, measure, _site, origin) => {
+      onTurn: (turn, measure, site, origin) => {
         // One line of counts per step, with nothing from the visitor or their page, so that how guides and acting go on a site can be seen.
         try {
-          console.log(JSON.stringify(turnCounts(turn, measure)));
+          console.log(JSON.stringify(turnCounts(turn, measure, site)));
         } catch {
           // A line that cannot be written must not cost the visitor their step.
         }
@@ -223,7 +246,7 @@ export default {
       },
       onReport: (site, guide, report) => later(db?.report(site, guide, report)),
       onCancel: (turn) => later(db?.cancelStep(turn)),
-      onOutline: (site, visitor, outline) => later(db?.recordOutline(site, visitor, outline)),
+      onOutline: (site, visitor, outline, network) => later(db?.recordOutline(site, visitor, outline, network)),
     });
     try {
       const response = await app(request, request.headers.get("CF-Connecting-IP") ?? "");
