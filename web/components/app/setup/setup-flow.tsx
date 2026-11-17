@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertCircleIcon } from "lucide-react";
 import { cn } from "cn";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { FormAlert } from "@/components/form";
 import { Pointer } from "@/components/pointer";
 import { Button } from "@/components/ui/button";
 import { ApiError, api, type Me } from "@/lib/app-api";
@@ -202,16 +201,10 @@ export function SetupFlow() {
       </div>
       {unsaved && (
         <div className="mx-auto w-full max-w-2xl px-6 pt-6">
-          <Alert variant="destructive" className="px-3.5 py-3">
-            <AlertCircleIcon />
-            <AlertTitle>Couldn&apos;t save where you are</AlertTitle>
-            <AlertDescription className="flex flex-col items-start gap-2">
-              <span>If you leave now, the setup may open on an earlier screen next time.</span>
-              <Button variant="secondary" size="sm" onClick={() => void save(unsaved.body, unsaved.id)}>
-                Retry
-              </Button>
-            </AlertDescription>
-          </Alert>
+          <FormAlert
+            failure={{ title: "Couldn't save where you are", detail: "If you leave now, the setup may open on an earlier screen next time." }}
+            retry={() => void save(unsaved.body, unsaved.id)}
+          />
         </div>
       )}
       <main className="flex flex-1 flex-col px-6 py-10 sm:py-16">
