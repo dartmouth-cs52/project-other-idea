@@ -48,7 +48,7 @@ describe("learning from visits, against Postgres", { skip: TEST_DATABASE_URL ? f
   });
 
   test("a label reaches the prompt once three networks have seen it, not five ids from one", async () => {
-    const store = new Store(sql(), 3, 3);
+    const store = new Store(sql(), 3, { labelNetworks: 3 });
     for (const visitor of ["v1", "v2", "v3", "v4", "v5"]) await store.recordOutline(site, visitor, buttons("/reports", "Export"), "aaaa");
     assert.deepEqual(await rows("outline_labels"), [{ label: "Export", visitor_count: 5, network_count: 1 }]);
     assert.deepEqual(await buttonsOn(store, "/reports"), []);
@@ -64,7 +64,7 @@ describe("learning from visits, against Postgres", { skip: TEST_DATABASE_URL ? f
 
   test("a label kept before networks were counted waits for three networks to see it again", async () => {
     exec(DB, `insert into outline_labels (site_id, route, kind, label, href, visitors) values ('${site.id}', '/reports', 'button', 'Export', '', '{a,b,c}')`);
-    const store = new Store(sql(), 3, 3);
+    const store = new Store(sql(), 3, { labelNetworks: 3 });
     assert.deepEqual(await buttonsOn(store, "/reports"), [], "three visitors with no networks are not enough");
     for (const [visitor, network] of [["a", "aaaa"], ["b", "bbbb"], ["c", "cccc"]] as const) await store.recordOutline(site, visitor, buttons("/reports", "Export"), network);
     assert.deepEqual(await rows("outline_labels"), [{ label: "Export", visitor_count: 3, network_count: 3 }], "the same visitors are not counted twice");
@@ -72,7 +72,7 @@ describe("learning from visits, against Postgres", { skip: TEST_DATABASE_URL ? f
   });
 
   test("a site at its limit keeps learning: what the prompt reads stays, and of the rest what was seen longest ago goes", async () => {
-    const store = new Store(sql(), 3, 3, 10);
+    const store = new Store(sql(), 3, { labelNetworks: 3, maxLabels: 10 });
     // A label the prompt reads, seen a month ago.
     for (const [visitor, network] of [["a", "aaaa"], ["b", "bbbb"], ["c", "cccc"]] as const) await store.recordOutline(site, visitor, buttons("/reports", "Export"), network);
     // Nine made up on one machine fill the site.
@@ -92,7 +92,7 @@ describe("learning from visits, against Postgres", { skip: TEST_DATABASE_URL ? f
   });
 
   test("what menus show makes room the same way", async () => {
-    const store = new Store(sql(), 3, 3, 4);
+    const store = new Store(sql(), 3, { labelNetworks: 3, maxLabels: 4 });
     const menu = (...items: string[]): PageOutline => ({ ...buttons("/"), opens: [{ control: "Help", links: [], buttons: items }] });
     for (const [visitor, network] of [["a", "aaaa"], ["b", "bbbb"], ["c", "cccc"]] as const) await store.recordOutline(site, visitor, menu("Docs"), network);
     await store.recordOutline(site, "x", menu("m1", "m2", "m3"), "ffff");

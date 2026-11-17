@@ -44,9 +44,12 @@ export interface AppParts {
   /** True when this caller has asked for too many steps lately. */
   overLimit(key: string): boolean | Promise<boolean>;
   /**
-   * Told when a guide's first question arrives, before the model is asked.
+   * Told when a guide's first question is about to be put to the model.
    * Recording it here means a guide whose first step fails, or whose visitor
-   * leaves before the answer, is still on record. Must not throw.
+   * leaves before the answer, is still on record. It is not told of a
+   * question the off switch or the budget refused: the model is never asked
+   * that one, so recording it would let anything that can send a request put
+   * questions on a site's dashboard for nothing. Must not throw.
    */
   onAsk?(request: TurnRequest, site: SiteContext, origin: string | undefined): void;
   /** The off switch, as this host keeps it: true stops every model call for the site. A site's own `off` is checked as well. */
@@ -134,9 +137,9 @@ export function createApp(parts: AppParts) {
     if (request.method === "GET" && siteMatch) {
       const site = await parts.loadSite(decodeURIComponent(siteMatch[1] ?? ""));
       if (!site) return json(404, { error: "No site with that id. Check the data-site attribute on the script tag." });
-      const allowed = originAllowed(site, origin);
+      const allowed = mayRead(site, origin);
       if (origin) parts.onSeen?.(site, origin, allowed);
-      if (!allowed) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      if (!allowed) return json(403, { error: refusal(origin) });
       const config: PublicSiteConfig = { name: site.name, appearance: site.appearance };
       if (await switchedOff(parts, site)) config.off = true;
       else {
@@ -156,9 +159,8 @@ export function createApp(parts: AppParts) {
       if (!turn) return json(400, { error: "That isn't a valid turn request." });
       const site = await parts.loadSite(turn.site, true);
       if (!site) return json(404, { error: "No site with that id." });
-      if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      if (!mayWrite(site, origin)) return json(403, { error: refusal(origin) });
       if (await parts.overLimit(`${site.id} ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
-      if (turn.step === 0 && turn.guide) parts.onAsk?.(turn, site, origin);
 
       const streamed = (request.headers.get("Accept") ?? "").includes(STREAM_TYPE);
       // A page that was open before the switch was thrown still has its launcher, so a step can arrive.
@@ -172,6 +174,9 @@ export function createApp(parts: AppParts) {
         const reply = fixedReply(admitted.gate.why === "caller" ? FIXED_SAY.visitorLimit : FIXED_SAY.resting);
         return streamed ? lines(cors, undefined, async (line) => line(reply)) : json(200, reply);
       }
+
+      // The question goes on record now that the model is about to be asked, and not before: one refused above is not recorded.
+      if (turn.step === 0 && turn.guide) parts.onAsk?.(turn, site, origin);
 
       // A widget that asks for it gets the step as it forms: the control to point at first, then the whole reply.
       if (streamed) return streamTurn(parts, site, turn, caller, admitted, cors, origin, request.signal);
@@ -191,7 +196,9 @@ export function createApp(parts: AppParts) {
 
     // How a guide ended, and later whether it helped. The widget sends it as
     // text/plain, which needs no preflight, so it still arrives when the page
-    // is being left.
+    // is being left. It is the widget's word: whoever keeps it decides what
+    // of it to believe (`Store.report` keeps "finished", which is billed, only
+    // when the steps this server recorded bear it out).
     const reportMatch = /^\/v1\/guides\/([^/]+)\/report$/.exec(url.pathname);
     if (request.method === "POST" && reportMatch) {
       const guide = reportMatch[1] ?? "";
@@ -199,7 +206,7 @@ export function createApp(parts: AppParts) {
       if (!GUIDE_ID.test(guide) || !report) return json(400, { error: "That isn't a valid report." });
       const site = await parts.loadSite(report.site, true);
       if (!site) return json(404, { error: "No site with that id." });
-      if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      if (!mayWrite(site, origin)) return json(403, { error: refusal(origin) });
       if (await parts.overLimit(`${site.id} ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
       parts.onReport?.(site, guide, report);
       return json(200, { ok: true });
@@ -209,20 +216,17 @@ export function createApp(parts: AppParts) {
     // text/plain, which needs no preflight. Answered at once: what is learned
     // is written after the response, and never on a step's path.
     //
-    // What is learned here ends up in the prompt of everyone on the site, so
-    // this is the one address that never takes a request with no Origin. A
-    // browser names the page's origin on every POST the widget makes, to
-    // another origin or its own, so the widget on a page always has one. It is
-    // a low bar, since any other caller can write the header itself: what
-    // such a caller cannot do is arrive from several networks at once, and
-    // that is what is counted (`networkHash`).
+    // What is learned here ends up in the prompt of everyone on the site. Like
+    // every write it needs an Origin the site lists (`mayWrite`), which is a
+    // low bar, since any program can write the header itself. What such a
+    // caller cannot do is arrive from several networks at once, and that is
+    // what is counted (`networkHash`).
     if (request.method === "POST" && url.pathname === "/v1/outline") {
       const report = parseOutlineReport(await readJson(request));
       if (!report) return json(400, { error: "That isn't a valid outline." });
       const site = await parts.loadSite(report.site, true);
       if (!site) return json(404, { error: "No site with that id." });
-      if (!origin) return json(403, { error: "An outline has to come from a page of the site, and this request names no origin." });
-      if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      if (!mayWrite(site, origin)) return json(403, { error: refusal(origin) });
       if (await parts.overLimit(`${site.id} outline ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
       // Without the widget's random id there is no way to count this visitor once, so the outline isn't used.
       if (site.learn === false || !report.visitor) return json(200, { ok: false });
@@ -237,7 +241,7 @@ export function createApp(parts: AppParts) {
       if (!form) return json(400, { error: "That isn't a valid handoff. It needs an email address." });
       const site = await parts.loadSite(form.site);
       if (!site) return json(404, { error: "No site with that id." });
-      if (!originAllowed(site, origin)) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
+      if (!mayWrite(site, origin)) return json(403, { error: refusal(origin) });
       // Its own allowance, so a burst of steps doesn't cost someone their way to a person, and the reverse.
       if (await parts.overLimit(`${site.id} handoff ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
       if (!site.handoff?.webhook) return json(404, { error: "This site has nowhere to send that." });
@@ -435,10 +439,35 @@ export function turnCounts(request: TurnRequest, measure: TurnMeasure): TurnCoun
   return counts;
 }
 
-/** The widget only works on origins the site lists. Requests with no Origin header (same-origin GETs, curl) pass, except for an outline, which must name one. */
-function originAllowed(site: SiteContext, origin: string | undefined): boolean {
+/**
+ * Who may read a site's public settings: a page on an origin the site lists,
+ * or a request that names no origin, as a browser's GET to its own origin and
+ * a command line do. The settings are public, and nothing is written.
+ */
+function mayRead(site: SiteContext, origin: string | undefined): boolean {
   return !origin || site.allowedOrigins.includes(origin);
 }
+
+/**
+ * Who may ask for a step, report on a guide, send an outline or post the
+ * handoff form: only a request that names an origin the site lists. A browser
+ * names the page's origin on every POST and a page cannot change it, so this
+ * is what keeps one site's id from being used by another site's pages. A
+ * request with no Origin header is never the widget, and is refused.
+ *
+ * It does not tell the widget from a program: anything that is not a browser
+ * can write whatever Origin it likes. So nothing that matters rests on this
+ * check alone. What a request may cost is bounded by the site's budget and
+ * the caller's limit, and what is billed by what this server recorded itself
+ * (`endingFor` in db.ts).
+ */
+function mayWrite(site: SiteContext, origin: string | undefined): boolean {
+  return origin !== undefined && site.allowedOrigins.includes(origin);
+}
+
+/** What a refused caller is told. */
+const refusal = (origin: string | undefined): string =>
+  origin ? `${origin} isn't an allowed origin for this site.` : "This needs an Origin header naming one of the site's allowed origins.";
 
 /** The body as JSON, or undefined when it is too big or isn't JSON. */
 async function readJson(request: Request): Promise<unknown> {

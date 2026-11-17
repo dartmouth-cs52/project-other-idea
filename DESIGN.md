@@ -204,6 +204,7 @@ components:
     rounded: "{rounded.full}"
     size: 20px
   launcher:
+    # Ink, or the site's own colour when the company matched it. See Components, Launcher.
     backgroundColor: "{colors.primary}"
     textColor: "{colors.primary-foreground}"
     typography: "{typography.label-md}"
@@ -238,7 +239,9 @@ case is logged in web apps.
 The look is quiet and exact. Soft black on off-white, set in Geist, with no
 decoration. The pointer is the product, so it is the only thing on any screen
 that has colour and the only thing that moves with intent. Everything else stays
-still and grey so the pointer reads instantly.
+still and grey so the pointer reads instantly. The one exception is the glow
+that falls down the page while Haptic thinks. It is gone the moment the reply
+arrives, so it and the pointer are never on the page together for long.
 
 The system sits on shadcn/ui and Tailwind's default scale. Sizes, radii and
 spacing come from those scales, never from one-off values, so anything built
@@ -256,7 +259,8 @@ mouse.
 ## Colors
 
 Two neutrals carry the whole interface. One colour belongs to the pointer, and
-one marks a finished task.
+one marks a finished task. The thinking glow is the pointer's colour with its
+two neighbours, and is the only place another hue is seen.
 Neutrals are Tailwind's stone scale, which has a slight warmth so the page never
 looks stark.
 
@@ -268,8 +272,21 @@ looks stark.
 - **Muted (#F5F5F4):** The fill of every card, and of the ask box.
 - **Muted text (#78716C):** Sub-copy and secondary labels. 4.6 to 1 on Paper.
 - **Border (#E7E5E4):** Hairlines and the secondary button.
-- **Pointer blue (#1E6EF4):** The pointer, the mark around its target and the
-  keyboard focus ring. Nothing else.
+- **Pointer blue (#1E6EF4):** The pointer, the mark around its target, the
+  keyboard focus ring and the heart of the thinking glow. Nothing else.
+- **Thinking glow (#77D0FE, #5294FF, #8460EE):** One soft band over the page
+  while Haptic thinks: sky at its trailing edge, a lighter Pointer blue through
+  its middle, indigo at its leading edge. The three are the pointer's colour
+  and its neighbours 28 degrees to one side and 30 to the other in OKLCH,
+  mixed in OKLCH so they melt into each other with no seam. Staying that close
+  to the pointer's hue is what keeps it Haptic's and not a general AI rainbow,
+  and it means a customer's own accent gets a glow of its own neighbours: an
+  orange pointer glows peach to amber, a green one lime to teal. The three hex
+  values are what Pointer blue gives, and what a browser without relative
+  colours falls back to. Violet and pink were tried first and turned down:
+  they are furthest from the pointer, they are what every other AI product
+  uses, and violet is the darkest of them over a page. Never used flat, and
+  never outside the glow.
 - **Done green (#008932):** The small round tick that says a task is finished.
   Blue means in progress and green means done, so on a visitor's page the two
   never share a screen. Not for buttons or bubbles. In the dashboard it also
@@ -387,7 +404,9 @@ Flat. Hierarchy comes from the step between Paper and Card and from 1px borders,
 not from shadows. Four things are allowed a shadow, because they float above
 content: the demo window (`shadow-sm`), the widget's launcher and ask box, the
 pointer with its caption, and in the dashboard a menu and the card a chart
-shows under the mouse (`shadow-sm`). No gradients, no blur, no glass.
+shows under the mouse (`shadow-sm`). No gradients, no blur, no glass. The
+thinking glow is the one gradient, and it is soft colour passing over the page,
+never a blur of what is behind it.
 
 The pointer's shadow is two layers, a tight one and a soft one:
 `drop-shadow(0 1px 1px rgb(0 0 0 / .3)) drop-shadow(0 5px 9px rgb(0 0 0 / .26))`.
@@ -413,6 +432,15 @@ logo mark and the favicon, where it is Ink with a white border.
 **The link preview.** When a link to the site is shared in a message, the
 picture is the pointer and the name Haptic on Paper, and nothing else. The
 pointer there is the live one, Pointer blue with its white border and shadow.
+
+**The lockup.** That same pair, the live pointer beside the name, is the lockup,
+and it is what stands for Haptic anywhere there is room for the name. The name
+is Geist Medium in Ink, tracked in by 0.04em like other large type. The pointer
+is about as tall as a capital letter, centred on it, and half a capital's
+height to its left. `assets/logo-light.svg` and `assets/logo-dark.svg` are the
+lockup with the name drawn as outlines, for places that cannot load Geist, such
+as the README. The dark one is for dark backgrounds. Its name is #F5F5F4 and
+its pointer is the dark-mode blue, #0091FF.
 The line under the picture is "The AI guide that lives in your product".
 
 The pointer's tip sits in the lower right corner of whatever it points at, so
@@ -436,13 +464,20 @@ Components are shadcn/ui, restyled only through tokens and variants.
   confirms at the end.
 - **Pointer:** 24px. Glides to its target, and dips with the mark when the
   person clicks. No face, no mascot.
-- **Target mark:** A 2px Pointer blue outline that stands 3px off the control,
+- **Target mark:** A 2px Pointer blue outline that stands 4 to 5px off the control,
   with a thin white edge on both sides and a soft shadow, the same recipe as
   the pointer. The gap and the white edge are what stop it reading as the
   control's own keyboard focus ring.
 - **Caption:** Ink bubble with Paper text, 14px, at most 288px wide. Text only.
   It sits under the target, or above when the space under it is busy, and
   never over the next control.
+- **Launcher:** The pill in the bottom right corner that opens the chat. Ink
+  with Paper words. A company can give it its own site's colour, so it looks
+  like part of the site, the way a support button does. Its words are then
+  Paper or Ink, whichever reads better on that colour. The pointer never takes
+  the site's colour. The two have opposite jobs: the launcher belongs to the
+  site, and the pointer has to be seen against it. A green pointer on a green
+  sidebar was tried and could hardly be found.
 - **Chat:** Haptic's home, in the bottom right corner where support chat
   usually lives. A Card panel holding the conversation and the ask box. It
   stays open from the first question to the last step.
@@ -454,7 +489,24 @@ Components are shadcn/ui, restyled only through tokens and variants.
   sits under them as one line. While Haptic thinks it is the word "Thinking"
   with a lighter shade sweeping across it, shadcn's `shimmer`, with no icon.
   While it points it reads "Showing you how". When it finishes it is the green
-  tick and "Done".
+  tick and "Done". The chat itself never glows.
+- **Thinking glow:** Soft colour over the page, from its top to its bottom,
+  and only while Haptic is thinking. It is not in the chat, and the chat, the
+  pointer, the mark and the caption are drawn over it and are never tinted. A
+  band the width of the page comes in at the top edge and falls towards the
+  bottom, once for each wait. Nobody knows how long a wait will be, so the
+  band is paced to it: quick at first and slower the longer the wait goes on,
+  halfway down after 1.2 seconds, which is a typical wait, two thirds after 2
+  and four fifths after 3, always on its way and never at the bottom before
+  the reply. The moment the reply arrives it goes the rest of the way and off
+  the page in under half a second, fading, so every wait is one pass from top
+  to bottom and the page is clear by the time the pointer lands. A reply that
+  failed and a guide that was stopped end it the same way. It is smooth before
+  anything else: one band, about a third of the page thick, whose strength is
+  a bell with no flat top and no edge, a touch thicker in the middle of the
+  page than at its sides, at about six tenths of full strength at its heart.
+  It is multiplied into a light page, so the page's words stay dark and sharp
+  through it, and screened into a dark one. It takes no clicks.
 - **Form:** Labels above 44px inputs and one primary button. A required field
   has an Error red star after its label, and a field with no star may be left
   empty. A step that has a way back puts a secondary Back button to the left of
@@ -474,13 +526,14 @@ Components are shadcn/ui, restyled only through tokens and variants.
 
 **Motion.** Restrained. The pointer glide is the one signature movement. It
 eases out with `cubic-bezier(.2, .8, .2, 1)`, quick to leave and slow to land,
-and takes 400 to 700ms depending on how far it travels. It is the one movement
-allowed to run longer than 300ms, because the eye has to follow it. Everything
+and takes 400 to 700ms depending on how far it travels. It and the thinking
+glow are the two movements allowed to run longer than 300ms: the eye has to
+follow the glide, and the glow lasts exactly as long as the wait. Everything
 else is a fade, a small scale or a height change of 150 to 250ms that eases
 out. Nothing grows from nothing: things arrive from within a few percent of
 their final size. A click is acknowledged like a pressed button, with the mark
 dipping to 97 percent and back in a quarter of a second, and no ripple. With reduced motion on, the pointer jumps
-to its target and each demo holds one still frame.
+to its target, there is no glow and no shimmer, and each demo holds one still frame.
 
 Scrolling never changes what a demo shows. A demo waits on its first frame,
 starts once about a third of it is on screen, and keeps playing until it has
@@ -521,20 +574,24 @@ reason a customer gave.
   stopped finishing, where people give up and the steps they click past.
 - **Knowledge.** What Haptic reads and what the company has corrected. Notes,
   help docs, corrections, the controls never to point at, and the pages read.
-- **Settings.** Three tabs. General holds the pointer's colour and deleting
-  the site. Install holds the script and where it runs. Usage holds the
-  finished guides, month by month, which are what billing counts.
+- **Settings.** Three tabs. General holds the site's name, the widget's two
+  colours and deleting the site. Install holds the script and where it runs.
+  Usage holds the finished guides, month by month, which are what billing
+  counts.
 
-The pointer's colour is the one thing a company chooses about the widget. It
-can be typed, picked, or matched: a secondary button, "Match website", reads
-the site's own colour from its first page and saves it in one press. A grey, a near white or a near black is never taken, because the
-pointer has to be seen on any page. The launcher sits bottom right on every
-site, where support chat usually lives, and that is not a setting.
+A company chooses two colours. The Ask button's is the one to match: a
+secondary button, "Match website", reads the site's own colour from its first
+page and saves it in one press. A grey, a near white or a near black is never
+taken. The pointer's colour is Haptic's blue, and stays so unless the company
+changes it. When it is anything else, "Use Haptic blue" puts it back. The
+launcher sits bottom right on every site, where support chat usually lives,
+and that is not a setting. Deleting a site leads back to the list of sites.
 
-**Sites.** A company with one site lands inside it. With more than one, the
-first page is the list, one card a site. Sites whose script is running come
-first, the one asked most recently at their head, and those still waiting for
-the script come last, so the first card is the one with something happening.
+**Sites.** The first page after sign-in is the list, one card a site, for a
+company with one site as for one with several. A site opens when its card is
+pressed or a link names it. Sites whose script is running come first, the one
+asked most recently at their head, and those still waiting for the script
+come last, so the first card is the one with something happening.
 A card says how many questions the last seven days had and how many finished,
 the last fortnight as fourteen small bars, and the newest question. A site
 still waiting for its script says so in place of the numbers. A running site
@@ -642,34 +699,53 @@ showing them while newer ones are on their way.
 ## Interaction
 
 How a guide should feel. Only what the designer has signed off belongs here.
-Behaviour that merely exists in the widget code is not a design decision, and
-the widget in `src/widget` does not follow this model yet.
+Behaviour that merely exists in the widget code is not a design decision. The
+widget in `src/widget` follows what is signed off below, and where it still
+differs from the rest, the bullet says so.
 
 Signed off: Haptic sits in the bottom right, in the place of support chat,
 because it is meant to replace it. The chat stays open once a question is
-asked. Thinking is a shimmer across the word. The rest below is proposed.
+asked. Thinking is a shimmer across the word in the chat, and the thinking
+glow on the page, from its top to its bottom, smooth, and there only while
+Haptic is thinking. A click on the control is answered with a press. A finished
+guide ends with the green tick and "Done". The line that says Haptic is an AI
+stays. The rest below is proposed.
 
 - **Haptic guides, the person acts.** Haptic points and explains. It does not
   click, type or scroll for anyone.
 - **Mark the control, leave the page alone.** One outline on the target. The
-  page is never dimmed, because the person may need to read it, and the edge of
-  the window never glows, because that is how agents signal that an AI has
-  taken control.
+  page is never dimmed or blurred, because the person may need to read it, and
+  the edge of the window never glows as a frame, because that is how agents
+  signal that an AI has taken control. The thinking glow is the one thing that
+  crosses the page. It is there only while Haptic thinks, and the page's words
+  stay readable under it.
 - **Motion arrives, then stops.** The glide leads the eye. The mark draws in
-  from slightly larger as the pointer lands, then holds still. If nothing
-  happens for about four seconds the mark pulses once, and no more often than
-  that.
+  from slightly larger as the pointer lands, then holds still. Between steps
+  the mark and the caption go and the pointer waits where it is, so the next
+  glide starts from the control just used. If nothing happens for about four
+  seconds the mark pulses once, and no more often than that. In the widget the
+  pointer goes with the mark between steps, and the next glide starts from
+  where it was. The mark breathes only when Haptic has done part of a task
+  itself and hands the last click to the person.
 - **Say one thing.** A caption names the next action in a short sentence. It
-  carries no buttons.
+  carries no buttons. In the widget it carries a small × that stops the guide,
+  so there is a way out beside the pointer when the chat has been closed.
 - **Keep the conversation and the exit in view.** The chat stays open for the
   whole guide, with the question at the top and a stop button in the ask box.
+- **Never cover the control.** When the chat would sit on the control being
+  pointed at, or on its caption, it moves to the other side of the window
+  while the pointer is there, and comes back when it has gone.
 - **A wrong click is not an error, and Haptic says so.** The ask box shows
   "Finding the way from here" at once. The next caption opens with "Not that
   one." and names the step that gets the person back. It is plain text in the
   usual caption: no Error red, no alert. If the click also leads to the goal,
   Haptic carries on without comment.
-- **Finish plainly.** Haptic confirms in a sentence, shows the green tick, and
-  reopens the ask box.
+- **Finish plainly.** Haptic confirms in a sentence, shows the green tick in
+  the chat, and the ask box is ready again. The tick is only for a guide the
+  person followed to the end, the same ending that is billed. An answer in
+  words, a sentence that says Haptic can't help, and a control that was shown
+  and not used all end without it. In the widget the sentence that ends a
+  guide stays in a caption just above the chat, where its × puts it away.
 - **An answer is read in the chat.** When Haptic answers in words, the chat
   shows the question as an Ink bubble on the right and the answer as a Muted
   bubble on the left. Under the answer, after a hairline, 12px Muted text says
@@ -722,7 +798,11 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
   outside a form, except to say good and bad in the dashboard.
 - Don't add another colour, a gradient, an illustration or artwork. Paintings
   behind the demos were tried and turned down. The window dots on the demo
-  frame are the one borrowed exception.
+  frame and the thinking glow are the two exceptions.
+- Don't put the thinking glow on the chat, leave it on the page once the
+  reply has arrived, or play it for anything but Haptic working on a reply.
+- Don't give the glow an edge, a stripe or a second band. If it can be seen
+  where it starts or stops, it is not smooth enough.
 - Don't use Bold, italics for emphasis, or text smaller than 12px.
 - Don't show logos, quotes or numbers that are not real.
 - Don't use punctuation beyond commas and periods in marketing copy.

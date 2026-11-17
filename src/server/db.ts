@@ -1,5 +1,6 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import { cleanText, normalizePath, questionKey, type GuideReport, type PageOutline, type SiteContext, type TurnRequest } from "../shared/types.ts";
+import { BLOCKED_SAY } from "../shared/corrections.ts";
+import { cleanText, normalizePath, NO_MODEL, questionKey, REASONS, type GuideOutcome, type GuideReport, type PageOutline, type SiteContext, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { MAX_VISITORS, openingRows, outlineRows, visitorHash, withLearned, type LearnedLabel, type LearnedOpening } from "./learned.ts";
 import type { TurnMeasure } from "./model.ts";
 
@@ -49,6 +50,61 @@ const LABELS_READ = 1500;
 /** How long a report waits before each look for its guide's row. A Worker may keep working this long after it has answered. */
 const REPORT_RETRIES_MS = [0, 1000, 3000, 6000];
 
+/** A guide's newest step, as this server recorded it when it answered. Nothing in it is the widget's word. */
+export interface LastStep {
+  n: number;
+  status: TurnReply["status"];
+  /** The reply pointed at a control on the page. */
+  pointed: boolean;
+  /** The model that answered. `NO_MODEL` when the server answered by itself, without asking one: a step past the cap on acting. */
+  model: string;
+  /** On a site with Answers on: the kind of reply, and why Haptic could not help (db/migrations/0005). Null on any other step, or while still being written. */
+  mode?: string | null;
+  reason?: string | null;
+  /** The model named a control the site's owner ruled out, so the visitor read the fixed sentence instead. */
+  blocked?: boolean;
+}
+
+/**
+ * How a guide the widget reports as finished is recorded. Only "finished" is
+ * billed, and the report is the widget's word, which anything that can send a
+ * request can give. So it is kept only when the server's own record of the
+ * guide bears it out: the newest step it recorded was answered by the model,
+ * and it either said the guide was done or pointed at a control the visitor
+ * could then have used. That is every ending the widget calls finished (see
+ * `GUIDE_OUTCOMES`): the visitor arrived, or used the control the last answer
+ * pointed at, which in Do it with me is the click that commits, pointed at by
+ * a reply that may still say "continue". That the control was used is the
+ * widget's word and stays so: the server sees no clicks.
+ *
+ * A step that ended the guide some other way does not bear it out: the model
+ * was stuck, the control was one the site's owner ruled out, the reply was an
+ * answer in words or said Haptic can't help, the server stopped acting at its
+ * cap, or a first answer only needed words. That ending is kept instead, as
+ * the widget would have reported it, and none of them is billed. When the
+ * record shows no ending at all, nothing is kept (undefined), and the guide
+ * stays one that never reported one.
+ */
+export function endingFor(last: LastStep | undefined): GuideOutcome | undefined {
+  // No step was answered: the question was only asked, or was refused by the off switch or the budget.
+  if (!last) return undefined;
+  // The server ended acting at its cap, without asking the model. The guide ran out of steps.
+  if (last.model === NO_MODEL) return "step_limit";
+  // The model found no way forward, which is free.
+  if (last.status === "stuck") return "nothing_to_point_at";
+  // The site's owner ruled the control out, and Haptic said it can't help with that here.
+  if (last.blocked) return "blocked";
+  // On a site with Answers on: an answer in words, or Haptic saying it can't help, ends a guide as that, and neither is billed.
+  // An answer that points and says "continue" goes on as a guide, and is finished, if ever, on a later step.
+  if (last.mode === "cannot_help") return (REASONS as readonly string[]).includes(last.reason ?? "") ? (last.reason as GuideOutcome) : "not_covered";
+  if (last.mode === "answer" && last.status === "done") return "answered";
+  // A step with no pointer that the visitor was still to do, like pressing a key. Nothing ended there.
+  if (last.status === "continue" && !last.pointed) return undefined;
+  // A first answer that only needed words was shown, and is free.
+  if (last.n === 0 && !last.pointed) return "shown";
+  return "finished";
+}
+
 export class Store {
   private readonly sql: NeonQueryFunction<false, false>;
   private readonly seen = new Map<string, number>();
@@ -57,20 +113,30 @@ export class Store {
   /** Each guide's step write still under way in this process, so a report about it can wait for it. */
   private readonly writing = new Map<string, Promise<void>>();
 
+  /** How many different networks a learned label's visitors must have called from before the prompt gets it. */
+  private readonly labelNetworks: number;
+  /** How long a report waits before each look at its guide. */
+  private readonly reportWaitsMs: readonly number[];
+  /** How many learned labels a site keeps, and as many items behind controls. */
+  private readonly maxLabels: number;
+
   /**
    * `connection` is Neon's connection string. A test hands in a stand-in for
    * the query function instead. `labelThreshold` is how many different
    * visitors must have seen a learned label before the prompt gets it, and
-   * `labelNetworks` how many different networks they must have called from.
-   * `maxLabels` is for tests, which would take long to fill the real limit.
+   * `labelNetworks` how many different networks they must have called from,
+   * the same number unless given. A test makes `reportWaitsMs` and
+   * `maxLabels` small.
    */
   constructor(
     connection: string | NeonQueryFunction<false, false>,
     private readonly labelThreshold = 3,
-    private readonly labelNetworks = labelThreshold,
-    private readonly maxLabels = MAX_LABELS,
+    options: { labelNetworks?: number; reportWaitsMs?: readonly number[]; maxLabels?: number } = {},
   ) {
     this.sql = typeof connection === "string" ? neon(connection) : connection;
+    this.labelNetworks = options.labelNetworks ?? labelThreshold;
+    this.reportWaitsMs = options.reportWaitsMs ?? REPORT_RETRIES_MS;
+    this.maxLabels = options.maxLabels ?? MAX_LABELS;
   }
 
   /**
@@ -284,13 +350,22 @@ export class Store {
     const { reply } = measure;
     const target = reply.target ? request.snapshot.elements.find((element) => element.id === reply.target) : undefined;
     const path = normalizePath(request.snapshot.path || "/");
-    const write = this.quietly("record a step", async () => {
-      await this.sql.transaction([
-        this.sql`
+    // A step the server answered by itself cost nothing to ask for, and the widget chooses the guide's id and the
+    // question. So it is added to a guide already on record and never starts one: otherwise anything that can send
+    // a request could put questions of its choosing on a site's dashboard without the model ever being called.
+    const guideRow =
+      measure.model === NO_MODEL
+        ? this.sql`
+          update guides set last_step_at = now(), step_count = greatest(step_count, ${request.step + 1})
+          where id = ${guide} and site_id = ${request.site}`
+        : this.sql`
           insert into guides (id, site_id, question, question_key, started_path, origin, last_step_at, step_count)
           values (${guide}, ${request.site}, ${cleanText(request.goal, 300)}, ${questionKey(request.goal)}, ${path}, ${origin ?? null}, now(), ${request.step + 1})
           on conflict (id) do update set last_step_at = now(), step_count = greatest(guides.step_count, excluded.step_count)
-          where guides.site_id = excluded.site_id`,
+          where guides.site_id = excluded.site_id`;
+    const write = this.quietly("record a step", async () => {
+      await this.sql.transaction([
+        guideRow,
         this.sql`
           insert into steps (guide_id, n, path, target_role, target_label, target_context, said, status, event, strayed, ms, ms_to_target, model)
           select ${guide}, ${request.step}, ${path}, ${target?.role ?? null}, ${target ? cleanText(target.label, 80) : null},
@@ -389,21 +464,47 @@ export class Store {
   /**
    * The first outcome reported is the one kept. Whether it helped can be said once the guide has ended.
    *
+   * "finished" is the outcome that is billed, so it is kept only when the
+   * steps this server recorded bear it out (`endingFor`). When they show
+   * another ending, that one is kept instead, and when they show none, nothing
+   * is kept. Every other outcome is free, and is kept as the widget reports it.
+   *
    * A guide's last step is written after its reply has gone out, and the
-   * widget reports the ending straight after that reply, so the report can
-   * arrive before the guide's row exists. It waits for this process's own
-   * write of that guide, then tries a few more times in case the step was
-   * answered by another process.
+   * widget reports the ending straight after that reply, as the page may be
+   * about to go. So the report can arrive before the guide's row exists, or
+   * before the row of the step that bears out "finished" does. It waits for
+   * this process's own writes for that guide, then looks a few more times in
+   * case the step was answered by another process.
    */
   report(site: SiteContext, guide: string, report: GuideReport): Promise<void> {
     return this.quietly("record how a guide ended", async () => {
       await this.writing.get(guide);
-      for (const wait of REPORT_RETRIES_MS) {
+      const waits = this.reportWaitsMs;
+      for (const [look, wait] of waits.entries()) {
         if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
-        const [found] = await this.sql`select outcome is null as open from guides where id = ${guide} and site_id = ${site.id}`;
+        // The kind of reply is read through to_jsonb, so a database without its column (db/migrations/0005) still answers.
+        const [found] = await this.sql`
+          select g.outcome is null as open, newest.n, newest.status, newest.pointed, newest.model, newest.mode, newest.reason, newest.blocked
+          from guides g
+          left join lateral (
+            select s.n, s.status, s.target_role is not null as pointed, s.model, to_jsonb(s)->>'mode' as mode, to_jsonb(s)->>'reason' as reason,
+              s.target_role is null and s.said = ${BLOCKED_SAY} as blocked
+            from steps s where s.guide_id = g.id order by s.n desc limit 1
+          ) newest on true
+          where g.id = ${guide} and g.site_id = ${site.id}`;
         if (!found) continue;
-        if (report.outcome && found.open) {
-          await this.sql`update guides set outcome = ${report.outcome}, ended_at = now() where id = ${guide} and site_id = ${site.id} and outcome is null`;
+        let outcome = report.outcome;
+        if (outcome === "finished" && found.open) {
+          const { n, status, pointed, model, mode, reason, blocked } = found;
+          outcome = endingFor(n === null ? undefined : { n, status, pointed: pointed === true, model, mode, reason, blocked: blocked === true });
+          // Nothing on record settles it yet, and the step that would may still be on its way here.
+          if (!outcome && look < waits.length - 1) continue;
+          if (outcome !== "finished") {
+            console.warn(`Guide ${guide} on ${site.id} was reported finished, which its steps on record do not bear out, so ${outcome ? `it is kept as ${outcome}` : "no ending is kept"}.`);
+          }
+        }
+        if (outcome && found.open) {
+          await this.sql`update guides set outcome = ${outcome}, ended_at = now() where id = ${guide} and site_id = ${site.id} and outcome is null`;
         }
         if (report.helped !== undefined) {
           await this.sql`update guides set helped = ${report.helped} where id = ${guide} and site_id = ${site.id}`;
@@ -414,7 +515,8 @@ export class Store {
         }
         return;
       }
-      console.error(`A report for guide ${guide} on ${site.id} came for a guide that was never recorded.`);
+      // Its first question was refused by the off switch or the budget, which records nothing, or it was never asked here.
+      console.warn(`A report for guide ${guide} on ${site.id} came for a guide that is not on record.`);
     });
   }
 

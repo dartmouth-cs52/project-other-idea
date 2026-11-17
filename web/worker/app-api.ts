@@ -27,6 +27,7 @@
 import { answersOn, cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
 import { ANSWERS_DOCS_BUDGET, DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
+import { signedInUrl } from "../lib/dashboard";
 import { pageControls } from "../lib/setup";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
@@ -369,6 +370,12 @@ function appearanceFrom(input: unknown, current: Appearance): Appearance {
     if (raw.position !== "bottom-right" && raw.position !== "bottom-left") throw new Refusal(400, "The corner must be bottom-right or bottom-left.", "position");
     next.position = raw.position;
   }
+  // The launcher's own colour. Null, or nothing, puts it back to Ink.
+  if (raw.launcher !== undefined) {
+    if (raw.launcher === null || raw.launcher === "") delete next.launcher;
+    else if (typeof raw.launcher !== "string" || !HEX.test(raw.launcher)) throw new Refusal(400, "The colour must be a hex value like #1E6EF4.", "launcher");
+    else next.launcher = raw.launcher.toUpperCase();
+  }
   if (raw.launcherLabel !== undefined) {
     const label = typeof raw.launcherLabel === "string" ? cleanText(raw.launcherLabel, 24) : "";
     if (!label) throw new Refusal(400, "Give the button a label, such as Ask.", "launcherLabel");
@@ -542,7 +549,7 @@ async function approve(request: Request, env: AppEnv, sql: Sql, url: URL) {
   } else {
     await sql`insert into approvals (email, company, request_key) values (${entry.email}, ${company}, ${key}) on conflict (email) do nothing`;
   }
-  // The sign-in link is their invitation. If it expires, they ask for another on the sign-in page.
-  const sent = await sendSignInLink(env, url.origin, entry.email, `${url.origin}/dashboard/`);
+  // The sign-in link is their invitation, and lands where every sign-in does. If it expires, they ask for another on the sign-in page.
+  const sent = await sendSignInLink(env, url.origin, entry.email, signedInUrl(url.origin));
   return { ok: true, scope, sent, email: entry.email };
 }

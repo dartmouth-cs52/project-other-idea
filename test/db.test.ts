@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Store } from "../src/server/db.ts";
+import { endingFor, Store, type LastStep } from "../src/server/db.ts";
 import type { TurnMeasure } from "../src/server/model.ts";
-import type { TurnRequest } from "../src/shared/types.ts";
+import { NO_MODEL, type SiteContext, type TurnRequest } from "../src/shared/types.ts";
 
 // These check what the server sends to the database, with a stand-in for the
 // query function. They do not check that Postgres accepts it: that takes a
@@ -137,3 +137,167 @@ test("an act step is recorded as a step, and its mode is not written where a gui
   assert.doesNotMatch(sent.map((query) => query.text).join("\n"), /set mode = |set unseen = /);
 });
 
+
+// How a guide ended ----------------------------------------------------------
+//
+// Only "finished" is billed, and the widget's report of it is the word of
+// whatever sent the request. The store keeps it only when the steps this
+// server recorded bear it out.
+
+const SITE = { id: "site_test" } as SiteContext;
+
+test("a guide is finished only on a step the model answered that said done, or pointed at a control the visitor could use", () => {
+  const step = (n: number, status: LastStep["status"], pointed: boolean, model = "claude-sonnet-5-5"): LastStep => ({ n, status, pointed, model });
+  // Every ending the widget reports as finished.
+  assert.equal(endingFor(step(3, "done", false)), "finished", "followed the steps and arrived");
+  assert.equal(endingFor(step(3, "done", true)), "finished", "the last pointer of a guide that got there");
+  assert.equal(endingFor(step(0, "done", true)), "finished", "the control a first answer pointed at, used");
+  assert.equal(endingFor(step(2, "continue", true)), "finished", "the click that commits, at the hand-over of Do it with me");
+  assert.equal(endingFor(step(1, "done", false, "mock")), "finished", "the stand-in model answers steps too");
+  // What the record shows ended another way is kept as that, and none of these is billed.
+  assert.equal(endingFor(step(0, "done", false)), "shown", "a first answer that only needed words");
+  assert.equal(endingFor(step(4, "stuck", false)), "nothing_to_point_at");
+  assert.equal(endingFor(step(4, "stuck", true)), "nothing_to_point_at");
+  assert.equal(endingFor(step(36, "done", false, NO_MODEL)), "step_limit", "the server's own cap on acting, which no model was asked for");
+  assert.equal(endingFor({ ...step(2, "done", false), blocked: true }), "blocked", "a control the site's owner ruled out");
+  // On a site with Answers on.
+  assert.equal(endingFor({ ...step(1, "done", true), mode: "answer" }), "answered", "an answer in words, also one that points");
+  assert.equal(endingFor({ ...step(2, "done", false), mode: "cannot_help", reason: "sensitive" }), "sensitive");
+  assert.equal(endingFor({ ...step(2, "done", false), mode: "cannot_help", reason: null }), "not_covered", "a reason not yet written");
+  assert.equal(endingFor({ ...step(1, "continue", true), mode: "answer" }), "finished", "an answer that points goes on as a guide, and the hand-over may follow it");
+  assert.equal(endingFor({ ...step(3, "done", false), mode: "guide" }), "finished", "a guide's step on a site with Answers on");
+  // And with nothing on record that ended, nothing is kept.
+  assert.equal(endingFor(undefined), undefined, "no step was ever answered");
+  assert.equal(endingFor(step(2, "continue", false)), undefined, "a step the visitor was still to do");
+});
+
+/**
+ * Stands in for the database when a report arrives: `looks` is what each look
+ * at the guide finds, in turn, and the last one is found from then on. A look
+ * that finds `undefined` finds no guide.
+ */
+function onRecord(...looks: (Record<string, unknown> | undefined)[]) {
+  const sent: Sent[] = [];
+  let look = 0;
+  const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
+    const query: Sent = { text: strings.join("?").replace(/\s+/g, " ").trim(), values };
+    sent.push(query);
+    if (!query.text.startsWith("select")) return Promise.resolve([]);
+    const found = looks[Math.min(look++, looks.length - 1)];
+    return Promise.resolve(found ? [found] : []);
+  };
+  const store = new Store(sql as unknown as ConstructorParameters<typeof Store>[0], 3, { reportWaitsMs: [0, 0, 0] });
+  /** What was written, without the looks. */
+  const written = () => sent.filter((query) => !query.text.startsWith("select"));
+  return { store, sent, written, looks: () => look };
+}
+
+/** The guide as a look finds it: still open, with its newest step. */
+const guideWith = (step?: { n: number; status: string; pointed: boolean; model?: string; mode?: string; reason?: string; blocked?: boolean }, open = true) =>
+  step
+    ? { open, model: "claude-sonnet-5-5", mode: null, reason: null, blocked: false, ...step }
+    : { open, n: null, status: null, pointed: null, model: null, mode: null, reason: null, blocked: null };
+
+const quiet = async (work: () => Promise<void>): Promise<string[]> => {
+  const said: string[] = [];
+  const { warn, error } = console;
+  console.warn = console.error = (...args: unknown[]) => void said.push(args.join(" "));
+  try {
+    await work();
+  } finally {
+    Object.assign(console, { warn, error });
+  }
+  return said;
+};
+
+test("a report of finished for a guide with no recorded step is not stored as finished", async () => {
+  // The question is on record and the model never answered a step of it.
+  const { store, written, looks } = onRecord(guideWith());
+  const said = await quiet(() => store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished" }));
+  assert.deepEqual(written(), [], "no ending is written, so the guide stays one that never reported one");
+  assert.equal(looks(), 3, "it looked again each time, in case the step was still on its way");
+  assert.match(said.join("\n"), /reported finished, which its steps on record do not bear out, so no ending is kept/);
+
+  // The same for a guide that is not on record at all: one whose first question the off switch or the budget refused.
+  const refused = onRecord(undefined);
+  const told = await quiet(() => refused.store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished" }));
+  assert.deepEqual(refused.written(), []);
+  assert.match(told.join("\n"), /came for a guide that is not on record/);
+});
+
+test("finished is stored when the guide's steps on record bear it out", async () => {
+  for (const step of [
+    { n: 2, status: "done", pointed: false },
+    { n: 0, status: "done", pointed: true },
+    { n: 3, status: "continue", pointed: true },
+  ]) {
+    const { store, written, looks } = onRecord(guideWith(step));
+    await store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished" });
+    assert.equal(looks(), 1);
+    assert.equal(written().length, 1);
+    assert.match(written()[0]!.text, /^update guides set outcome = \?, ended_at = now\(\) where id = \? and site_id = \? and outcome is null$/);
+    assert.deepEqual(written()[0]!.values, ["finished", GUIDE, SITE.id]);
+  }
+});
+
+test("a report that arrives before its step's row is written waits for it", async () => {
+  // The widget reports the ending the moment the last reply shows, and the step is written after that reply has gone.
+  // First there is no guide, then the guide with its earlier step, a key the visitor was to press, then the step that ended it.
+  const { store, written, looks } = onRecord(undefined, guideWith({ n: 0, status: "continue", pointed: false }), guideWith({ n: 1, status: "done", pointed: false }));
+  await store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished" });
+  assert.equal(looks(), 3);
+  assert.deepEqual(written().map((query) => query.values), [["finished", GUIDE, SITE.id]]);
+});
+
+test("a report of finished that the record contradicts is stored as the ending on record, at once", async () => {
+  const cases: [Parameters<typeof guideWith>[0], string][] = [
+    [{ n: 0, status: "done", pointed: false }, "shown"],
+    [{ n: 2, status: "stuck", pointed: false }, "nothing_to_point_at"],
+    [{ n: 36, status: "done", pointed: false, model: NO_MODEL }, "step_limit"],
+    [{ n: 1, status: "done", pointed: false, blocked: true }, "blocked"],
+    [{ n: 1, status: "done", pointed: true, mode: "answer" }, "answered"],
+    [{ n: 1, status: "done", pointed: false, mode: "cannot_help", reason: "off_topic" }, "off_topic"],
+  ];
+  for (const [step, kept] of cases) {
+    const { store, written, looks } = onRecord(guideWith(step));
+    const said = await quiet(() => store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished" }));
+    assert.equal(looks(), 1, "a later step would not change how this one ended");
+    assert.deepEqual(written().map((query) => query.values), [[kept, GUIDE, SITE.id]]);
+    assert.match(said.join("\n"), new RegExp(`it is kept as ${kept}`));
+  }
+});
+
+test("every other outcome is free, and is stored as the widget reports it, with whether it helped", async () => {
+  // None of these needs a step on record: "error" is what the widget reports when the first step failed.
+  for (const outcome of ["shown", "stopped", "nothing_to_point_at", "loop", "step_limit", "error", "answered", "not_covered", "blocked"] as const) {
+    const { store, written } = onRecord(guideWith());
+    await store.report(SITE, GUIDE, { site: SITE.id, outcome });
+    assert.deepEqual(written().map((query) => query.values), [[outcome, GUIDE, SITE.id]], outcome);
+  }
+  // The first outcome reported is the one kept: a guide that has ended is not ended again, as finished or as anything.
+  const ended = onRecord(guideWith({ n: 2, status: "done", pointed: false }, false));
+  await ended.store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished" });
+  assert.deepEqual(ended.written(), []);
+  // Whether it helped, and that the visitor went to a person, are kept with a finished report that is not.
+  const unproven = onRecord(guideWith());
+  await quiet(() => unproven.store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished", helped: true, handoff: true }));
+  assert.deepEqual(unproven.written().map((query) => query.text.replace(/ where.*/, "")), ["update guides set helped = ?", "update guides set handed_off = true"]);
+});
+
+test("a step the server answered by itself, without asking the model, never starts a guide's record", async () => {
+  // Past the cap on acting the server answers "done" for nothing. The widget chooses the guide's id and the question,
+  // so a step like that must not be able to make the guide's row.
+  const { sql, sent } = standIn();
+  const capped: TurnMeasure = { reply: { target: null, status: "done", say: "That's as far as I'll go on my own.", mode: "act", withheld: "cap" }, model: NO_MODEL, ms: 1, msToTarget: 1, wrote: "", broke: [], cited: [], usd: 0, acting: { capped: true } };
+  await new Store(sql).recordStep({ ...request, step: 100, mode: "act" }, capped, "https://app.test");
+  assert.equal(sent.length, 2);
+  assert.match(sent[0]!.text, /^update guides set last_step_at = now\(\), step_count = greatest\(step_count, \?\) where id = \? and site_id = \?$/);
+  assert.deepEqual(sent[0]!.values, [101, GUIDE, "site_test"]);
+  // The step itself is written only for a guide that is there.
+  assert.match(sent[1]!.text, /^insert into steps .* where exists \(select 1 from guides where id = \? and site_id = \?\)/);
+  assert.ok(sent.every((query) => !/insert into guides/.test(query.text)));
+  // A step the model answered starts the record as it always has.
+  const answered = standIn();
+  await new Store(answered.sql).recordStep(request, measure, "https://app.test");
+  assert.match(answered.sent[0]!.text, /^insert into guides/);
+});

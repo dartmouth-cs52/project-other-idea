@@ -79,7 +79,7 @@ function storeFor(env: Env): Store | undefined {
   if (!env.DATABASE_URL) return undefined;
   if (store?.url !== env.DATABASE_URL) {
     const online = { HAPTIC_LABEL_THRESHOLD: env.HAPTIC_LABEL_THRESHOLD, HAPTIC_NETWORK_THRESHOLD: env.HAPTIC_NETWORK_THRESHOLD, HAPTIC_PRODUCTION: "1" };
-    store = { url: env.DATABASE_URL, store: new Store(env.DATABASE_URL, labelThreshold(online), networkThreshold(online)) };
+    store = { url: env.DATABASE_URL, store: new Store(env.DATABASE_URL, labelThreshold(online), { labelNetworks: networkThreshold(online) }) };
   }
   return store.store;
 }

@@ -161,7 +161,7 @@ npm run eval -- --server https://widget.joinhaptic.com --yes
 
 `--models` calls each model from this machine, through the same code as the live server, so the setup that wins is switched on with `HAPTIC_MODEL`, `HAPTIC_EFFORT` and `HAPTIC_THINKING`. Each model can take settings after `@`: `low`, `medium` or `high` for effort, and `off` for no thinking before the answer. It needs `ANTHROPIC_API_KEY`.
 
-`--server` asks a Haptic server that is already running. It needs no key here, and it measures the setting visitors actually get. Each site has to be on that server first (`npm run site:publish -- <site id>`), and it stays under the server's limit of 30 steps a minute on a site, so it is slower.
+`--server` asks a Haptic server that is already running. It needs no key here, and it measures the setting visitors actually get. Each site has to be on that server first (`npm run site:publish -- <site id>`), and it stays under the server's limit of 30 steps a minute on a site, so it is slower. The server answers a step only for a request that names one of the site's allowed origins, as the widget's does from the site's pages, so each step names the first origin this machine's copy of the site allows. If the server's copy allows others, it answers 403, and the site needs publishing again.
 
 Every call is billed either way, so without `--yes` the command only prints how many calls it would make. `--cases demo,ui5` runs some of the files, `--split held-out` or `--split tuned` runs one side of the split below, and `npm run eval -- --help` lists the rest.
 
