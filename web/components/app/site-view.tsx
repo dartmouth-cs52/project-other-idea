@@ -75,10 +75,12 @@ export function SiteView({ me, row, view, onDeleted }: { me: Me; row: SiteRow; v
 
   const pages = useReading(site);
   const connected = site?.connected === true;
-  const { live, failing } = useLive(connected ? siteId : null);
+  // The pages that show questions, and so are kept current. Knowledge and Settings show none, and ask for nothing
+  // while they are open, unless a guide is open beside them.
+  const counted = view === "overview" || view === "questions" || view === "gaps";
+  const { live, failing } = useLive(connected && (counted || openGuide) ? siteId : null);
   // The numbers wait for the first live answer, so they are asked for once and not twice. If live can't be reached they go ahead without it.
   const stamp = live?.stamp ?? (failing ? "unreachable" : undefined);
-  const counted = view === "overview" || view === "questions" || view === "gaps";
   const numbers = useInsights(connected && counted && stamp ? siteId : null, days, stamp);
   const openIt = useCallback((guide: string) => set({ guide }, "push"), [set]);
 
