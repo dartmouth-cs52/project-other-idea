@@ -396,6 +396,10 @@ test("a guide that ends in words naming the goal's control, with no word that sa
   use([{ reply: { target: null, status: "done", say: demoStop } }, { reply: { target: null, status: "done", say: "The API keys are listed on this tab." } }], "ask");
   const stands = await measureTurn(site, atSecurity);
   assert.deepEqual(stands.reply, { target: null, status: "done", say: "The API keys are listed on this tab." });
+  // A guide that gives up while naming the goal's control as the place to try is the same contradiction (backstage, 16 November).
+  const gaveUp = use([{ reply: { target: null, status: "stuck", say: "I can't find a way to make a key here. Try Create API key in the API keys section." } }, { reply: pointsAtCreate }], "ask");
+  assert.deepEqual((await measureTurn(site, atSecurity)).reply, pointsAtCreate);
+  assert.equal(gaveUp.sent.length, 2);
   // With the check only logging, the reply goes as the model wrote it.
   const logged = use([{ reply: { target: null, status: "done", say: demoStop } }], "log");
   assert.equal((await measureTurn(site, atSecurity)).reply.target, null);

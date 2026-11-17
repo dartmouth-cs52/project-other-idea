@@ -300,14 +300,17 @@ const NOTHING_LEFT = /\b(?:already|nothing (?:left|more|else))\b/i;
 
 /**
  * The control a guide's last words name as the way to what the visitor asked for, when the guide ends there with
- * nothing pointed at: status "done", no target, a goal that wants the way (wantsTheWay), and a sentence that names,
+ * nothing pointed at: status "done" with no target, or "stuck" ("I can't find a streetlights API in the list here.
+ * Try the APIs page in the sidebar.", backstage, with the link APIs listed), a goal that wants the way (wantsTheWay), and a sentence that names,
  * with its own capitals, one listed control that is pressed (a button, link, tab or menu entry) and shares a word
  * with the goal. Undefined when the sentence says the thing is done or that nothing is left, when the name follows
  * a word that turns it round ("don't use"), when it names two such controls, and for any reply that
  * namedButNotPointed already finds.
  */
 export function namedForTheGoal(request: Pick<TurnRequest, "goal" | "snapshot">, reply: TurnReply): SnapElement | undefined {
-  if (reply.target !== null || reply.status !== "done" || !wantsTheWay(request.goal)) return undefined;
+  // "Stuck" ends a guide in words too, whatever it points at: the widget shows no pointer with it.
+  const endsInWords = (reply.status === "done" && reply.target === null) || reply.status === "stuck";
+  if (!endsInWords || !wantsTheWay(request.goal)) return undefined;
   const say = reply.say.replace(/[’‘]/g, "'");
   if (REACHED.test(say) || NOTHING_LEFT.test(say)) return undefined;
   const found: SnapElement[] = [];
@@ -329,7 +332,7 @@ export function namedForTheGoalNote(element: SnapElement): string {
   return (
     `Your reply ends the guide and names ${element.role} "${element.label}" (${element.id}), but its target is null, so nothing is pointed at. ` +
     `If the visitor still has to use it to do what they asked, reply again with ${element.id} as the target and status "continue". ` +
-    `If what they asked for is already done or showing, reply "done" with target null as before.`
+    `If what they asked for is already done or showing, or there is truly no way forward, reply as before with target null.`
   );
 }
 
