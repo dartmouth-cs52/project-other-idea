@@ -420,8 +420,8 @@ is Geist Medium in Ink, tracked in by 0.04em like other large type. The pointer
 is about as tall as a capital letter, centred on it, and half a capital's
 height to its left. `assets/logo-light.svg` and `assets/logo-dark.svg` are the
 lockup with the name drawn as outlines, for places that cannot load Geist, such
-as the README. The dark one is for dark backgrounds: the name is #F5F5F4 and
-the pointer is the dark-mode blue, #0091FF.
+as the README. The dark one is for dark backgrounds. Its name is #F5F5F4 and
+its pointer is the dark-mode blue, #0091FF.
 The line under the picture is "The AI guide that lives in your product".
 
 The pointer's tip sits in the lower right corner of whatever it points at, so
