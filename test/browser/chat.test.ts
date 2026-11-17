@@ -264,6 +264,39 @@ for (const name of BROWSERS) {
       assert.ok((await seen(tab)).includes("glow fade"), "it faded, and was not cut off");
     });
 
+    // The blend the glow asks for is no use unless the browser gives it across the top layer, where the glow is: laid
+    // over the page as plain colour, the same band would grey its words out. So this looks at the picture, not the style.
+    for (const [shade, ink, paper, blend] of [
+      ["light", "#000", "#fff", "multiply"],
+      ["dark", "#fff", "#0c0a09", "screen"],
+    ] as const) {
+      test(`on a ${shade} page the band colours the page and leaves its ink as it was`, async () => {
+        harness.pages.set(
+          `/${shade}-ink`,
+          page(
+            `<div style="position:fixed;left:0;top:0;width:40px;height:100vh;background:${ink}"></div>
+             <main style="font:14px system-ui;padding:40px 40px 40px 160px;min-height:100vh;box-sizing:border-box;background:${paper};color:${ink}"><button id="invite">Invite teammate</button></main>`,
+            "<style>body{margin:0}</style>",
+          ),
+        );
+        harness.script = () => new Promise(() => {});
+        await tab.goto(`${harness.url}/${shade}-ink`);
+        await part(tab, ".launcher").waitFor();
+        // Two strips down the page's left edge, clear of the chat: one of its ink, and one of bare page beside it.
+        const strip = (x: number) => tab.screenshot({ clip: { x, y: 0, width: 40, height: 700 } });
+        const before = { ink: await strip(0), paper: await strip(60) };
+        await ask(tab, "invite someone");
+        await tab.locator("haptic-veil .glow").waitFor({ state: "attached" });
+        assert.equal((await veil(tab)).blend, blend);
+        // Long enough for the band to be well down the page, with Haptic still thinking.
+        await sleep(900);
+        const during = { ink: await strip(0), paper: await strip(60) };
+        assert.equal(await guideState(tab), "asking");
+        assert.ok(!during.paper.equals(before.paper), "the band shows on the bare page");
+        assert.ok(during.ink.equals(before.ink), `the page's ink is untouched under it: the band is blended in (${blend}), not laid over`);
+      });
+    }
+
     test("the glow comes back for each spell of thinking, and not while the pointer shows a step", async () => {
       harness.script = async (request, index) => {
         await sleep(500);
