@@ -1,4 +1,6 @@
-import { cleanText, normalizePath, questionKey, routeKey, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { correctionsFor, isBlocked, type ControlName } from "../shared/corrections.ts";
+import { taughtFor } from "../shared/teach.ts";
+import { cleanText, normalizePath, questionKey, routeKey, type SiteContext, type SnapElement, type Snapshot, type TurnReply, type TurnRequest } from "../shared/types.ts";
 
 // Verified routes (issue 13). For a question on a screen, the control that was
 // right last time, so the same question on the same screen can be answered
@@ -28,6 +30,9 @@ export interface StoredRoute {
   confirmed: boolean;
 }
 
+/** The model on record for a step answered from a verified route. No model was asked, and the step cost nothing. */
+export const ROUTE_MODEL = "route";
+
 /** What the lookup found for a step. Kept with the step, so the dashboard can say how well routes would do. */
 export type RouteOutcome = "miss" | "unconfirmed" | "unmatched" | "agreed" | "disagreed" | "served";
 
@@ -36,16 +41,22 @@ export interface RouteResult {
   outcome: RouteOutcome;
 }
 
-/** The wording the widget uses when it asks again after a loop. A step asked that way is not a repeat of anything. */
-const LOOP_NUDGE = /again, but the user already used it/;
+/**
+ * The wording the widget uses when the model has pointed at the same control
+ * twice with nothing changing (`hintIfStuck` in src/widget/guide.ts), and the
+ * wording widgets used before it. A step asked that way is not a repeat of anything.
+ */
+const LOOP_NUDGE = /twice from this page and nothing changed|again, but the user already used it/;
 
 /**
  * The key to look a step up under, or undefined when this step should go to
  * the model whatever is stored: after a wrong click, when the widget is
- * correcting a loop, or for a later step whose previous control is unknown.
+ * correcting a loop, for a later step whose previous control is unknown, or
+ * when Haptic is to do the step itself (Do it with me), whose replies say what
+ * to do and not only where.
  */
 export function routeLookup(turn: TurnRequest): RouteLookup | undefined {
-  if (turn.offTrack || LOOP_NUDGE.test(turn.event ?? "")) return undefined;
+  if (turn.offTrack || turn.mode === "act" || LOOP_NUDGE.test(turn.event ?? "")) return undefined;
   // A guide's first step is the question with nothing done yet. Any later one is keyed on the control just used.
   const first = turn.step === 0 && !turn.event;
   if (!first && !turn.after) return undefined;
@@ -99,12 +110,29 @@ export function storable(lookup: RouteLookup, targetKey: string): boolean {
   return targetKey !== lookup.afterKey;
 }
 
-/** The reply a trusted route gives on this page, or undefined when it cannot be served here. */
-export function servedReply(route: StoredRoute | undefined, snapshot: Snapshot, lookup?: RouteLookup): TurnReply | undefined {
+/**
+ * The reply a trusted route gives on this page, or undefined when it cannot be
+ * served here. Never a control the site's owner ruled out (`blocked`), even
+ * one ruled out after the route was learned.
+ */
+export function servedReply(route: StoredRoute | undefined, snapshot: Snapshot, lookup?: RouteLookup, blocked?: ControlName[]): TurnReply | undefined {
   if (!route?.confirmed) return undefined;
   if (lookup && !storable(lookup, route.targetKey)) return undefined;
   const target = matchRoute(route, snapshot);
-  return target ? { target, status: route.status, say: route.say } : undefined;
+  if (!target || isBlocked(snapshot.elements.find((element) => element.id === target), blocked)) return undefined;
+  return { target, status: route.status, say: route.say };
+}
+
+/**
+ * True when the site's owner has said something about this step that a route
+ * learned before it would not know: a correction for this question or this
+ * page, or a route someone at the company taught for the same task. The model
+ * reads those with the question (src/server/prompt.ts), so such a step is
+ * answered by the model even in serve mode, and the route is only compared
+ * with its answer. A route the model then answers differently loses its trust.
+ */
+export function ownerSteers(site: Pick<SiteContext, "corrections" | "taught">, turn: TurnRequest): boolean {
+  return correctionsFor(site.corrections, turn.snapshot.path, turn.goal).length > 0 || taughtFor(site.taught, turn.goal) !== undefined;
 }
 
 // The query behind the dashboard card and `npm run routes:report` lives in

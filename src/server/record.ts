@@ -17,7 +17,7 @@ export async function recordTurn(request: TurnRequest, measure: TurnMeasure): Pr
   if (!RECORDING) return;
   try {
     await mkdir(RECORDINGS_DIR, { recursive: true });
-    const line = JSON.stringify({ at: new Date().toISOString(), request, reply: measure.reply, model: measure.model, ms: measure.ms });
+    const line = JSON.stringify({ at: new Date().toISOString(), request, reply: measure.reply, model: measure.model, ms: measure.ms, tokens: measure.tokens });
     await appendFile(`${RECORDINGS_DIR}${request.site}.jsonl`, line + "\n");
   } catch (error) {
     console.error(`Couldn't record a step for ${request.site}:`, error);

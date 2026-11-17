@@ -1,0 +1,739 @@
+import assert from "node:assert/strict";
+import { describe, test } from "node:test";
+import { developerEmail, emailText, INSTALL_FROM, UnsafeText } from "../web/worker/developer-email.ts";
+import {
+  TRIES_PER_PERSON,
+  EMAILS_PER_ADDRESS,
+  EMAILS_PER_MAILBOX,
+  EMAILS_PER_COMPANY,
+  EMAILS_PER_PERSON,
+  EMAILS_PER_SITE,
+  forgetOldEmails,
+  setupRoutes,
+  type SetupRequest,
+} from "../web/worker/setup-api.ts";
+import { exec, freshDatabase, psqlSql, TEST_DATABASE_URL, testDatabase } from "./psql.ts";
+
+/** This file's own database, when TEST_DATABASE_URL is set. */
+const DB = testDatabase("developer_email");
+
+// "Email it to my developer": only someone signed in to the company that owns
+// the site can send. In any 24 hours one mailbox gets at most 3, a site sends
+// at most 10, a company 20 and one person 10, counted in a table that deleting
+// a site doesn't touch. A retry of one press never sends twice, and a failure
+// says why and doesn't count. Signed out (401) and from another site (403) are
+// answered by app-api.ts first, and are tested in web/test/worker.test.ts.
+
+const ORG = { id: "00000000-0000-4000-8000-000000000001", name: "Example Co", role: "owner" };
+const OTHER_ORG = { id: "00000000-0000-4000-8000-000000000002", name: "Other Co", role: "owner" };
+const USER = { id: "00000000-0000-4000-8000-0000000000aa", email: "dana@example.com", name: "Dana Reyes", emailVerified: true };
+const COLLEAGUE = { id: "00000000-0000-4000-8000-0000000000bb", email: "sam@example.com", name: "Sam", emailVerified: true };
+const SITE = "site_a1b2c3d4e5f6";
+
+interface Row {
+  id: string;
+  company_id: string;
+  origin: string;
+  context: Record<string, unknown>;
+}
+
+/**
+ * The sites table in memory, for what happens before an email is counted: the
+ * site's company, and where the setup is. With `noTable`, the emails table is
+ * missing, as on a Worker deployed before db/migrations/0013 is applied.
+ */
+function fakeSql(rows: Row[], options: { noTable?: boolean } = {}) {
+  const find = (id: unknown, org: unknown) => rows.find((row) => row.id === id && row.company_id === org);
+  const query = async (text: string, params: unknown[] = []) => {
+    if (text.includes("developer_emails")) {
+      if (options.noTable) throw Object.assign(new Error('relation "developer_emails" does not exist'), { code: "42P01" });
+      throw new Error("The fake doesn't count emails. Those tests run against Postgres.");
+    }
+    const row = find(params[0], params[1]);
+    if (text.startsWith("select id, origin, context from sites")) return row ? [structuredClone(row)] : [];
+    if (text.includes("'{setup}'")) {
+      if (!row) return [];
+      row.context.setup = { ...(row.context.setup as object), ...JSON.parse(String(params[2])) };
+      return [{ setup: row.context.setup }];
+    }
+    throw new Error(`The fake doesn't know this query: ${text.slice(0, 80)}`);
+  };
+  return Object.assign(() => Promise.reject(new Error("not used")), { query, transaction: (queries: Promise<unknown>[]) => Promise.all(queries) });
+}
+
+interface Sent {
+  idempotency: string | null;
+  body: { from: string; to: string[]; reply_to: string; subject: string; html: string; text: string };
+}
+
+function resend(status = 200) {
+  const sent: Sent[] = [];
+  const fetcher = async (_url: string, init?: RequestInit) => {
+    sent.push({ idempotency: new Headers(init?.headers).get("idempotency-key"), body: JSON.parse(String(init?.body)) });
+    return status === 200 ? Response.json({ id: `email_${sent.length}` }) : Response.json({ message: "Domain not verified", name: "validation_error" }, { status });
+  };
+  return { sent, fetcher };
+}
+
+/**
+ * Resend, as its documentation describes idempotency keys: the same key with the same body answers as the
+ * first time without sending again, and the same key with a different body is a 409. It keeps who got what.
+ */
+function resendLikeTheDocs() {
+  const delivered: string[] = [];
+  const seen = new Map<string, { body: string; id: string }>();
+  const fetcher = async (_url: string, init?: RequestInit) => {
+    const key = new Headers(init?.headers).get("idempotency-key") ?? "";
+    const body = String(init?.body);
+    const before = seen.get(key);
+    if (before && before.body === body) return Response.json({ id: before.id });
+    if (before) return Response.json({ statusCode: 409, name: "invalid_idempotent_request", message: "Same idempotency key used with a different request payload." }, { status: 409 });
+    const id = `email_${delivered.length + 1}`;
+    seen.set(key, { body, id });
+    delivered.push((JSON.parse(body) as { to: string[] }).to[0]!);
+    return Response.json({ id });
+  };
+  return { delivered, fetcher };
+}
+
+/** Calls a route. A body that is a stream is sent as it is, and anything else as JSON. */
+function call(
+  sql: unknown,
+  body: unknown,
+  options: {
+    org?: typeof ORG;
+    user?: typeof USER;
+    site?: string;
+    fetcher?: SetupRequest["fetcher"];
+    key?: string | null;
+    method?: string;
+    what?: string;
+    query?: string;
+    headers?: HeadersInit;
+  } = {},
+) {
+  const what = options.what ?? "developer-email";
+  const site = options.site ?? SITE;
+  const url = new URL(`https://joinhaptic.com/api/app/sites/${site}/${what}${options.query ?? ""}`);
+  const sent = options.method === "GET" ? undefined : body instanceof ReadableStream ? body : JSON.stringify(body);
+  return setupRoutes({
+    request: new Request(url, { method: options.method ?? "POST", body: sent, headers: options.headers, duplex: "half" } as RequestInit),
+    env: { RESEND_API_KEY: options.key === null ? undefined : (options.key ?? "re_test"), WIDGET_URL: "https://widget.joinhaptic.com" },
+    sql: sql as SetupRequest["sql"],
+    org: options.org ?? ORG,
+    user: options.user ?? USER,
+    path: `/sites/${site}/${what}`,
+    url,
+    fetcher: options.fetcher,
+  });
+}
+
+const site = (): Row => ({ id: SITE, company_id: ORG.id, origin: "https://app.example.com", context: {} });
+
+/** What every limit says, naming no cause, so a refusal never tells a company what another company did. */
+const LIMIT = { error: "You've reached today's limit for install emails. Copy the link instead." };
+
+describe("before anything is counted", () => {
+  test("someone signed in to another company can't send for this site, and learns nothing about it", async () => {
+    const { sent, fetcher } = resend();
+    const answer = await call(fakeSql([site()]), { to: "dev@example.com", key: "a".repeat(16) }, { org: OTHER_ORG, fetcher });
+    assert.deepEqual(answer, { status: 404, body: { error: "No such site." } });
+    assert.equal(sent.length, 0);
+  });
+
+  test("an address that isn't one, or a missing key, is refused before anything else", async () => {
+    const sql = fakeSql([site()]);
+    assert.deepEqual(await call(sql, { to: "dev", key: "press-e0001" }), { status: 400, body: { error: "Enter a full email address, like name@company.com.", field: "to" } });
+    assert.deepEqual(await call(sql, { to: "dev@example.com" }), { status: 400, body: { error: "Send a key for this email." } });
+    assert.deepEqual(await call(sql, { to: "dev@example.com", key: "short" }), { status: 400, body: { error: "Send a key for this email." } });
+  });
+
+  test("with no Resend key on the server, nothing is tried, and the person is told to copy the link", async () => {
+    const { sent, fetcher } = resend();
+    const answer = await call(fakeSql([site()]), { to: "dev@example.com", key: "press-d0001" }, { fetcher, key: null });
+    assert.deepEqual(answer, { status: 503, body: { error: "Email isn't set up on this server yet. Copy the link and send it yourself." } });
+    assert.equal(sent.length, 0);
+  });
+
+  test("on a Worker deployed before the emails table exists, nothing is sent, and the person is told to copy the link", async () => {
+    const { sent, fetcher } = resend();
+    const answer = await call(fakeSql([site()], { noTable: true }), { to: "dev@example.com", key: "press-d0002" }, { fetcher });
+    assert.deepEqual(answer, { status: 503, body: { error: "Email isn't set up on this server yet. Copy the link and send it yourself." } });
+    assert.equal(sent.length, 0);
+  });
+});
+
+test("nothing that can carry a web address, an @ or an invisible character reaches an email from the site's own fields", () => {
+  assert.equal(emailText("app.example.com"), "app.example.com");
+  assert.equal(emailText("app\u202eexample.com\u200b"), "appexample.com", "right-to-left overrides and zero-width characters are taken out");
+  assert.equal(emailText("dana@example.com", { at: true }), "dana@example.com");
+  assert.throws(() => emailText("https://evil.example/h"), UnsafeText);
+  assert.throws(() => emailText("evil@example.com"), UnsafeText, "an @ where none belongs");
+  assert.throws(() => emailText("a@b.com@c.com", { at: true }), UnsafeText);
+  assert.throws(() => emailText("dana@example.com", { at: false }), UnsafeText);
+});
+
+test("the dashboard's numbers come for 7, 30 or 90 days, and anything else is refused", async () => {
+  const sql = fakeSql([site()]);
+  for (const days of ["1.5", "0", "-7", "365", "abc", "", "30.0001"]) {
+    assert.deepEqual(await call(sql, {}, { method: "GET", what: "metrics", query: `?days=${days}` }), { status: 400, body: { error: "Ask for 7, 30 or 90 days." } }, days);
+  }
+  assert.deepEqual(await call(sql, {}, { method: "GET", what: "metrics" }), { status: 400, body: { error: "Ask for 7, 30 or 90 days." } });
+  for (const days of ["7", "30", "90"]) assert.equal((await call(sql, {}, { method: "GET", what: "metrics", query: `?days=${days}`, org: OTHER_ORG }))?.status, 404, "a good range goes on to the site check");
+});
+
+test("a new address is checked like any other, and only for the company's own site", async () => {
+  const sql = fakeSql([site()]);
+  assert.deepEqual(await call(sql, { url: "acme" }, { method: "PUT", what: "address" }), { status: 400, body: { error: "That address is missing its domain, like .com.", field: "url" } });
+  assert.equal((await call(sql, { url: "www.example.com" }, { method: "PUT", what: "address", org: OTHER_ORG }))?.status, 404);
+});
+
+test("a long host is cut to its last 80 characters in the subject, which keep whose site it is, and given in full in the body", () => {
+  // The reviewer's: labels made up to look like someone else's site, in front of the domain that owns it.
+  const host = `accounts.google.com.sign-in.${"x".repeat(120)}.evil.example`;
+  const email = developerEmail({ to: "dev@example.com", sender: { email: "dana@example.com" }, siteOrigin: `https://${host}`, siteId: SITE, installOrigin: "https://joinhaptic.com", scriptUrl: "https://widget.joinhaptic.com/widget.js" });
+  const shown = email.subject.slice("dana@example.com asked you to add Haptic to ".length);
+  assert.equal(shown.length, 80);
+  assert.ok(shown.startsWith("…"), "the ellipsis is at the front");
+  assert.ok(shown.endsWith(".evil.example"), "the domain that owns the site is kept");
+  assert.ok(!shown.includes("accounts.google.com"), "the made-up labels are what is cut");
+  assert.ok(host.endsWith(shown.slice(1)));
+  assert.ok(email.text.includes(host), "the body has it all");
+  const short = developerEmail({ to: "dev@example.com", sender: { email: "dana@example.com" }, siteOrigin: "https://app.example.com", siteId: SITE, installOrigin: "https://joinhaptic.com", scriptUrl: "https://widget.joinhaptic.com/widget.js" });
+  assert.equal(short.subject, "dana@example.com asked you to add Haptic to app.example.com");
+});
+
+test("where the setup is: one step at a time, Finish later, done, and only for the company's own site", async () => {
+  const rows = [site()];
+  const sql = fakeSql(rows);
+  assert.deepEqual(await call(sql, { step: "install", later: false }, { method: "PUT", what: "setup" }), { status: 200, body: { setup: { step: "install", later: false } } });
+  assert.deepEqual(await call(sql, { later: true }, { method: "PUT", what: "setup" }), { status: 200, body: { setup: { step: "install", later: true } } });
+  const done = await call(sql, { finished: true }, { method: "PUT", what: "setup" });
+  assert.match((done?.body as { setup: { finishedAt: string } }).setup.finishedAt, /^\d{4}-\d\d-\d\dT/);
+  assert.equal((await call(sql, { step: "teleport" }, { method: "PUT", what: "setup" }))?.status, 400);
+  assert.equal((await call(sql, {}, { method: "PUT", what: "setup" }))?.status, 400);
+  assert.equal((await call(sql, { step: "connect" }, { method: "PUT", what: "setup", org: OTHER_ORG }))?.status, 404);
+  assert.equal(await call(sql, {}, { method: "GET", what: "setup" }), undefined, "anything else is left to app-api.ts");
+});
+
+/** A body made only as it is read, one chunk a pull, which counts what was read and whether the rest was cancelled. */
+function counted(next: (pull: number) => Uint8Array | undefined) {
+  const seen = { pulls: 0, bytes: 0, cancelled: false };
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        const chunk = next(seen.pulls++);
+        if (!chunk) return controller.close();
+        seen.bytes += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        seen.cancelled = true;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { body, seen };
+}
+
+test("a body too long for the setup, address or email routes reads as empty, and is not read in full", async () => {
+  // Each starts with JSON that gets further than an empty body. Sent alone it would be read; here it is followed by
+  // spaces, which JSON allows, up to 100 MB, Cloudflare's request limit, in 4 KiB chunks with no length given.
+  const routes = [
+    { what: "setup", method: "PUT", json: { step: "install" } },
+    { what: "address", method: "PUT", json: { url: "app.example.com" } },
+    { what: "developer-email", method: "POST", json: { to: "dev@example.com", key: "press-big01" } },
+  ];
+  const CHUNK = 4 * 1024;
+  const CHUNKS = (100 * 1024 * 1024) / CHUNK;
+  const spaces = new Uint8Array(CHUNK).fill(0x20);
+  const startingWith = (json: object) => {
+    const first = spaces.slice();
+    first.set(new TextEncoder().encode(JSON.stringify(json)));
+    return (pull: number) => (pull === 0 ? first : pull < CHUNKS ? spaces : undefined);
+  };
+  // With no Resend key, so the email the JSON asks for stops before anything is counted.
+  const send = (body: unknown, what: string, method: string, headers?: HeadersInit) => call(fakeSql([site()]), body, { what, method, key: null, headers });
+
+  for (const { what, method, json } of routes) {
+    const empty = await send({}, what, method);
+    assert.equal(empty?.status, 400, what);
+    assert.notDeepEqual(await send(json, what, method), empty, `${what}: the JSON alone is read`);
+
+    const chunked = counted(startingWith(json));
+    assert.deepEqual(await send(chunked.body, what, method), empty, what);
+    // 4,000 characters at three bytes each is 12,000 bytes. The third chunk goes past that, and nothing after it is pulled.
+    assert.equal(chunked.seen.pulls, 3, what);
+    assert.equal(chunked.seen.bytes, 3 * CHUNK, what);
+    assert.equal(chunked.seen.cancelled, true, what);
+
+    // A length given up front that is too long is enough: nothing is read.
+    const declared = counted(startingWith(json));
+    assert.deepEqual(await send(declared.body, what, method, { "content-length": String(CHUNKS * CHUNK) }), empty, what);
+    assert.equal(declared.seen.pulls, 0, what);
+  }
+});
+
+test("a body of 4,000 characters still reaches the setup routes at three bytes each, also in pieces that split them", async () => {
+  // Padded with "€", three bytes of UTF-8, to a given length in characters once written as JSON.
+  const SHELL = JSON.stringify({ step: "install", pad: "" }).length;
+  const padded = (chars: number) => ({ step: "install", pad: "€".repeat(chars - SHELL) });
+  const full = new TextEncoder().encode(JSON.stringify(padded(4_000)));
+  assert.equal(JSON.stringify(padded(4_000)).length, 4_000);
+  assert.ok(full.length > 11_900, "nearly three bytes a character");
+  const saved = { status: 200, body: { setup: { step: "install" } } };
+
+  assert.deepEqual(await call(fakeSql([site()]), padded(4_000), { method: "PUT", what: "setup" }), saved);
+  const pieces = counted((pull) => (pull * 7 < full.length ? full.subarray(pull * 7, (pull + 1) * 7) : undefined));
+  assert.deepEqual(await call(fakeSql([site()]), pieces.body, { method: "PUT", what: "setup" }), saved);
+  assert.equal(pieces.seen.bytes, full.length, "read to the end");
+
+  // One character more is still under 12,000 bytes, so it is the count of characters, checked once decoded, that turns it away.
+  const over = JSON.stringify(padded(4_001));
+  assert.ok(new TextEncoder().encode(over).length <= 12_000);
+  assert.deepEqual(await call(fakeSql([site()]), padded(4_001), { method: "PUT", what: "setup" }), { status: 400, body: { error: "Say which step, or Finish later." } });
+});
+
+// Sending and counting, with the real queries, against a real Postgres. CI runs these with a Postgres of its own.
+
+describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? false : "set TEST_DATABASE_URL to a local, empty database to run these" }, () => {
+  const addSite = (id: string, org = ORG.id) =>
+    exec(DB, `insert into sites (id, company_id, name, origin, allowed_origins, context) values ('${id}', '${org}', 'Example Co', 'https://app.example.com', '{https://app.example.com}', '{"pages": [{"path": "/"}]}')`);
+  const reset = () => {
+    freshDatabase(DB);
+    addSite(SITE);
+  };
+  const sql = () => psqlSql(DB);
+  const rows = async () => (await sql().query(`select * from developer_emails where kind = 'email' order by sent_at`)) as { key: string; company_id: string; site_id: string; sender: string; recipient: string; sent_at: string }[];
+  const context = async () => (await sql().query(`select context from sites where id = $1`, [SITE]))[0]!.context as Row["context"];
+  let presses = 0;
+  const press = () => `press-${String(++presses).padStart(6, "0")}`;
+
+  test("the email goes from install@joinhaptic.com with replies to the sender, and only a hash of the mailbox is kept, with the site, company, sender and time", async () => {
+    reset();
+    const { sent, fetcher } = resend();
+    const answer = await call(sql(), { to: " Dev@Example.com ", key: "press-0001" }, { fetcher });
+    assert.deepEqual(answer, { status: 200, body: { sent: true, to: "dev@example.com" } });
+    assert.equal(sent.length, 1);
+    const { body, idempotency } = sent[0]!;
+    assert.equal(body.from, INSTALL_FROM);
+    assert.deepEqual(body.to, ["dev@example.com"]);
+    assert.equal(body.reply_to, "dana@example.com");
+    assert.match(idempotency ?? "", new RegExp(`^developer-email/${SITE}/[0-9a-f]{32}$`), "the press's key, bound to the site and the address");
+    assert.ok(!idempotency?.includes("press-0001"));
+    const [row] = await rows();
+    assert.deepEqual(Object.keys(row!).sort(), ["company_id", "key", "kind", "recipient", "retried", "sender", "sent_at", "site_id", "state"]);
+    assert.equal((row as unknown as { state: string }).state, "sent");
+    assert.equal(row!.site_id, SITE);
+    assert.equal(row!.company_id, ORG.id);
+    assert.equal(row!.sender, USER.id);
+    assert.match(row!.recipient, /^[0-9a-f]{32}$/);
+    const all = await sql().query(`select * from developer_emails`);
+    assert.deepEqual(all.map((item) => (item as { kind: string }).kind).sort(), ["email", "try"], "the email, and its try");
+    assert.ok(!JSON.stringify(all).includes("example.com"), "the address itself is not kept, in either");
+    assert.deepEqual((await context()).pages, [{ path: "/" }], "the site is untouched");
+  });
+
+  /** The review's six hostile cases: whatever name the sender gave themselves, and whatever site they added. */
+  const hostile: [string, { name: string; email?: string; origin?: string }][] = [
+    ["plain", { name: "Dana Reyes" }],
+    ["html", { name: `"><img src=x onerror=alert(1)><a href='https://evil.example'>click</a>` }],
+    ["header", { name: "Dana\r\nBcc: evil@example.com\r\n\r\n<b>body</b> X\u0085Y\u202egnp.exe" }],
+    ["phish", { name: "Haptic Security: your account is locked. Verify now at https://evil.example/h", email: "attacker@evil.example", origin: "https://accounts.google.com" }],
+    ["no name", { name: "   " }],
+    ["long host", { name: "D", origin: `https://${"a".repeat(60)}.${"b".repeat(60)}.${"c".repeat(60)}.example.com:8443` }],
+  ];
+  for (const [name, input] of hostile) {
+    test(`the email carries no text the sender chose, only their sign-in address and the site's host: ${name}`, async () => {
+      reset();
+      const origin = input.origin ?? "https://app.example.com";
+      exec(DB, `update sites set origin = '${origin}' where id = '${SITE}'`);
+      const sender = { ...USER, name: input.name, email: input.email ?? USER.email };
+      const { sent, fetcher } = resend();
+      assert.equal((await call(sql(), { to: "dev@example.com", key: press() }, { fetcher, user: sender }))?.status, 200);
+      const { body } = sent[0]!;
+      const host = new URL(origin).host;
+      assert.equal(body.subject, `${sender.email} asked you to add Haptic to ${host.length > 80 ? `…${host.slice(-79)}` : host}`);
+      assert.equal(body.reply_to, sender.email);
+      for (const part of [body.subject, body.html, body.text]) {
+        if (input.name.trim().length > 1) assert.ok(!part.includes(input.name.trim()), "the name never appears");
+        assert.ok(!/evil\.example\/h|onerror|<b>body|Bcc:/i.test(part), "nothing from the name gets in");
+        assert.ok(!/[\u0085\u200b-\u200f\u202a-\u202e\u2066-\u2069]/.test(part), "no invisible or direction-changing characters");
+      }
+      assert.ok(!/[\u0000-\u001f]/.test(body.subject), "the subject is one line");
+      assert.ok(body.text.includes(`If you don't know ${sender.email}, ignore this email.`));
+      assert.ok(body.html.includes(`If you don&#39;t know ${sender.email}, ignore this email.`));
+      const hrefs = [...body.html.matchAll(/href="([^"]*)"/g)].map((match) => match[1]);
+      assert.deepEqual(hrefs, [`https://joinhaptic.com/install/?site=${SITE}`, "https://joinhaptic.com"], "the only links are Haptic's");
+    });
+  }
+
+  test("the email links the install page and carries the agent prompt and the tag, escaped", async () => {
+    reset();
+    const { sent, fetcher } = resend();
+    await call(sql(), { to: "dev@example.com", key: press() }, { fetcher });
+    const { html, text } = sent[0]!.body;
+    assert.ok(html.includes(`Add Haptic to this app. Fetch https://joinhaptic.com/install/${SITE}.md and follow it.`));
+    assert.ok(html.includes("&#60;script src=&#34;https://widget.joinhaptic.com/widget.js&#34; data-site=&#34;site_a1b2c3d4e5f6&#34; async&#62;&#60;/script&#62;"));
+    assert.ok(text.includes(`https://joinhaptic.com/install/?site=${SITE}`));
+    assert.ok(text.includes(`<script src="https://widget.joinhaptic.com/widget.js" data-site="${SITE}" async></script>`));
+  });
+
+  test("a retry of the same press is told it was sent, from the record, and counts once", async () => {
+    reset();
+    const { sent, fetcher } = resend();
+    await call(sql(), { to: "dev@example.com", key: "press-0002" }, { fetcher });
+    assert.deepEqual(await call(sql(), { to: "dev@example.com", key: "press-0002" }, { fetcher }), { status: 200, body: { sent: true, to: "dev@example.com" } });
+    assert.equal(sent.length, 1, "Resend is asked once");
+    assert.equal((await rows()).length, 1);
+  });
+
+  test("a key sent again with another address can't take an email off the count, so one address still gets at most 3", async () => {
+    reset();
+    const resend = resendLikeTheDocs();
+    for (let round = 0; round < 40; round++) {
+      const key = `probe-key-${String(round).padStart(4, "0")}`;
+      await call(sql(), { to: "victim@example.org", key }, { fetcher: resend.fetcher });
+      await call(sql(), { to: `x${round}@example.net`, key }, { fetcher: resend.fetcher });
+    }
+    assert.equal(resend.delivered.filter((to) => to === "victim@example.org").length, EMAILS_PER_ADDRESS);
+    assert.ok(resend.delivered.length <= EMAILS_PER_SITE, `${resend.delivered.length} delivered from one site`);
+  });
+
+  /** Resend, counting requests, that refuses any key it has had before, as it may when the team is over its rate. */
+  function refusesRepeats() {
+    const delivered: string[] = [];
+    const keys = new Set<string>();
+    let requests = 0;
+    const fetcher = async (_url: string, init?: RequestInit) => {
+      requests++;
+      const key = new Headers(init?.headers).get("idempotency-key") ?? "";
+      if (keys.has(key)) return Response.json({ statusCode: 429, name: "rate_limit_exceeded", message: "Too many requests." }, { status: 429 });
+      keys.add(key);
+      delivered.push((JSON.parse(String(init?.body)) as { to: string[] }).to[0]!);
+      return Response.json({ id: `email_${delivered.length}` });
+    };
+    return { delivered, fetcher, requests: () => requests };
+  }
+  const counted = async () => Number((await sql().query(`select count(*)::int as n from developer_emails where kind = 'email'`))[0]!.n);
+  /** Resend that never answers: the request that counted the email stops there, as a Worker cut off mid-request would. */
+  const hangs = () => new Promise<Response>(() => {});
+  const until = async (done: () => Promise<boolean>) => {
+    for (let i = 0; i < 100 && !(await done()); i++) await new Promise((resolve) => setTimeout(resolve, 50));
+  };
+
+  test("a retry of a delivered press is answered from the record, so a refused retry can't take the email off the count", async () => {
+    reset();
+    const resend = refusesRepeats();
+    for (let round = 0; round < 25; round++) {
+      const key = `retry-press-${String(round).padStart(4, "0")}`;
+      await call(sql(), { to: "victim@example.org", key }, { fetcher: resend.fetcher });
+      const again = await call(sql(), { to: "victim@example.org", key }, { fetcher: resend.fetcher });
+      if (round < EMAILS_PER_ADDRESS) assert.deepEqual(again, { status: 200, body: { sent: true, to: "victim@example.org" } }, "a retry of a press that went is told it went");
+    }
+    assert.equal(resend.delivered.length, EMAILS_PER_ADDRESS);
+    assert.equal(await counted(), EMAILS_PER_ADDRESS, "every email that went is still counted");
+    assert.equal(resend.requests(), EMAILS_PER_ADDRESS, "no retry reached Resend");
+  });
+
+  test("forty retries at once after each email change nothing", async () => {
+    reset();
+    const resend = refusesRepeats();
+    for (let round = 0; round < 6; round++) {
+      const key = `burst-press-${String(round).padStart(4, "0")}`;
+      await call(sql(), { to: "victim@example.org", key }, { fetcher: resend.fetcher });
+      await Promise.all(Array.from({ length: 40 }, () => call(sql(), { to: "victim@example.org", key }, { fetcher: resend.fetcher })));
+    }
+    assert.equal(resend.delivered.length, EMAILS_PER_ADDRESS);
+    assert.equal(await counted(), EMAILS_PER_ADDRESS);
+    assert.equal(resend.requests(), EMAILS_PER_ADDRESS);
+  });
+
+  test("one press sent sixty times makes one request to Resend", async () => {
+    reset();
+    const resend = refusesRepeats();
+    const answers = [];
+    for (let i = 0; i < 60; i++) answers.push((await call(sql(), { to: "dev@example.com", key: "one-press-0001" }, { fetcher: resend.fetcher }))?.status);
+    assert.ok(answers.every((status) => status === 200));
+    assert.equal(resend.requests(), 1);
+    assert.equal(await counted(), 1);
+  });
+
+  test("a press left half done, as by a crash between counting and sending, is retried once and only after a wait, and counts either way", async () => {
+    reset();
+    const { sent, fetcher } = resend();
+    const press = { to: "dev@example.com", key: "crashed-press-01" };
+    // The first request counted the email and stopped before it heard from Resend.
+    void call(sql(), press, { fetcher: hangs });
+    await until(async () => (await counted()) === 1);
+    const [row] = (await sql().query(`select state from developer_emails where kind = 'email'`)) as { state: string }[];
+    assert.equal(row?.state, "pending");
+    // Straight away: it may still be going, so nothing is sent again.
+    const soon = await call(sql(), press, { fetcher });
+    assert.equal(soon?.status, 409);
+    assert.equal(sent.length, 0);
+    // After the wait, once: the same request to Resend, which sends it if the first never got there.
+    exec(DB, `update developer_emails set sent_at = now() - interval '2 minutes' where kind = 'email'`);
+    assert.deepEqual(await call(sql(), press, { fetcher }), { status: 200, body: { sent: true, to: "dev@example.com" } });
+    assert.equal(sent.length, 1);
+    assert.equal(((await sql().query(`select state from developer_emails where kind = 'email'`))[0] as { state: string }).state, "sent");
+    assert.equal((await call(sql(), press, { fetcher }))?.status, 200);
+    assert.equal(sent.length, 1, "and from then on it is answered from the record");
+  });
+
+  test("a retry of a half-done press that Resend refuses leaves it counted, and it isn't tried again", async () => {
+    reset();
+    const press = { to: "dev@example.com", key: "crashed-press-02" };
+    void call(sql(), press, { fetcher: hangs });
+    await until(async () => (await counted()) === 1);
+    exec(DB, `update developer_emails set sent_at = now() - interval '2 minutes' where kind = 'email'`);
+    const refused = resend(500);
+    assert.equal((await call(sql(), press, { fetcher: refused.fetcher }))?.status, 502);
+    assert.equal(await counted(), 1, "only the request that counted an email may take it off");
+    assert.equal((await call(sql(), press, { fetcher: refused.fetcher }))?.status, 409);
+    assert.equal(refused.sent.length, 1, "retried once, never again");
+  });
+
+  test("a retry of a half-done press past the cap on tries is refused, stays counted, and keeps its one retry for when tries are back", async () => {
+    reset();
+    const press = { to: "dev@example.com", key: "crashed-press-03" };
+    const tries = async () => Number((await sql().query(`select count(*)::int as n from developer_emails where kind = 'try'`))[0]!.n);
+    void call(sql(), press, { fetcher: hangs });
+    await until(async () => (await tries()) === 1);
+    exec(DB, `update developer_emails set sent_at = now() - interval '2 minutes' where kind = 'email'`);
+    exec(DB, `insert into developer_emails (key, kind, company_id, site_id, sender, recipient)
+      select 'try earlier ' || n, 'try', '${ORG.id}', '${SITE}', '${USER.id}', 'r' from generate_series(2, ${TRIES_PER_PERSON}) n`);
+    const { sent, fetcher } = resend();
+    assert.deepEqual((await call(sql(), press, { fetcher }))?.body, LIMIT);
+    assert.equal(sent.length, 0);
+    assert.equal(await counted(), 1, "it stays counted");
+    // An hour on, the person has tries again, and the press still has its one retry.
+    exec(DB, `update developer_emails set sent_at = now() - interval '2 hours' where kind = 'try'`);
+    assert.deepEqual(await call(sql(), press, { fetcher }), { status: 200, body: { sent: true, to: "dev@example.com" } });
+    assert.equal(sent.length, 1);
+  });
+
+  test("one key sent with two addresses is two emails, each with its own key, each sent and counted", async () => {
+    reset();
+    const { sent, fetcher } = resend();
+    assert.equal((await call(sql(), { to: "first@example.org", key: "shared-press-01" }, { fetcher }))?.status, 200);
+    assert.equal((await call(sql(), { to: "second@example.net", key: "shared-press-01" }, { fetcher }))?.status, 200);
+    assert.deepEqual(sent.map((item) => item.body.to[0]), ["first@example.org", "second@example.net"], "the second address gets its own email, not the first one's answer");
+    assert.notEqual(sent[0]!.idempotency, sent[1]!.idempotency);
+    assert.equal((await rows()).length, 2);
+    // The same mailbox written another way is the same email, though: a retry.
+    assert.equal((await call(sql(), { to: "First@Example.org", key: "shared-press-01" }, { fetcher }))?.status, 200);
+    assert.equal(sent.length, 2);
+  });
+
+  test("Resend answering 409 for a key it has seen means the email went, so it stays counted and the person is told it was sent", async () => {
+    reset();
+    const conflict = async () => Response.json({ statusCode: 409, name: "invalid_idempotent_request", message: "Same idempotency key used with a different request payload." }, { status: 409 });
+    assert.deepEqual(await call(sql(), { to: "dev@example.com", key: "press-409x" }, { fetcher: conflict }), { status: 200, body: { sent: true, to: "dev@example.com" } });
+    assert.equal((await rows()).length, 1);
+  });
+
+  test("when Resend turns the email down or can't be reached, the person is told why, and it doesn't count", async () => {
+    reset();
+    assert.deepEqual(await call(sql(), { to: "dev@example.com", key: "press-c0001" }, { fetcher: resend(403).fetcher }), {
+      status: 502,
+      body: { error: "The email service turned it down, with status 403. Copy the link and send it yourself." },
+    });
+    const unreachable = await call(sql(), { to: "dev@example.com", key: "press-c0002" }, { fetcher: () => Promise.reject(new Error("timed out")) });
+    assert.equal(unreachable?.status, 502);
+    assert.match((unreachable?.body as { error: string }).error, /^The email service could not be reached\./);
+    assert.equal((await rows()).length, 0);
+  });
+
+  test("forty presses Resend turns down make at most 30 requests to it, and after that the person is told the limit", async () => {
+    reset();
+    const { sent, fetcher } = resend(403);
+    const answers: (number | undefined)[] = [];
+    for (let i = 0; i < 40; i++) answers.push((await call(sql(), { to: "dev@example.com", key: press() }, { fetcher }))?.status);
+    assert.equal(sent.length, 30, "every press that reached Resend counted, turned down or not");
+    assert.deepEqual(answers.slice(0, 30), Array(30).fill(502));
+    assert.deepEqual(answers.slice(30), Array(10).fill(429));
+    assert.deepEqual((await call(sql(), { to: "other@example.com", key: press() }, { fetcher }))?.body, LIMIT, "the same single limit message");
+    assert.equal(sent.length, 30);
+  });
+
+  test("the cap on tries leaves a normal day alone: a few turned down, then every email the person may send that day goes", async () => {
+    reset();
+    const down = resend(500);
+    for (let i = 0; i < 5; i++) assert.equal((await call(sql(), { to: `dev${i}@example.com`, key: press() }, { fetcher: down.fetcher }))?.status, 502);
+    const { sent, fetcher } = resend();
+    const keys = Array.from({ length: EMAILS_PER_PERSON }, () => press());
+    for (const [i, key] of keys.entries()) assert.equal((await call(sql(), { to: `dev${i}@example.com`, key }, { fetcher }))?.status, 200);
+    // Retries of presses already sent are answered from the record, never reach Resend, and so aren't tries.
+    for (const [i, key] of keys.entries()) assert.equal((await call(sql(), { to: `dev${i}@example.com`, key }, { fetcher }))?.status, 200);
+    assert.equal(sent.length, EMAILS_PER_PERSON);
+  });
+
+  test(`one mailbox gets at most ${EMAILS_PER_ADDRESS} a day, however its address is written`, async () => {
+    reset();
+    const { sent, fetcher } = resend();
+    const spellings = ["victim@gmail.com", "VICTIM@gmail.com", "victim+1@gmail.com", "v.ictim@gmail.com", "vic.tim+x@googlemail.com", "Victim@GoogleMail.com"];
+    const answers = [];
+    for (const to of spellings) answers.push((await call(sql(), { to, key: press() }, { fetcher }))?.status);
+    assert.deepEqual(answers, [200, 200, 200, 429, 429, 429]);
+    assert.equal(sent.length, EMAILS_PER_ADDRESS);
+    const elsewhere = await call(sql(), { to: "jane+news@example.org", key: press() }, { fetcher });
+    assert.equal(elsewhere?.status, 200, "another mailbox is still fine");
+    // A +tag on any domain is the same mailbox. Dots only count on Gmail.
+    for (const to of ["jane+a@example.org", "jane+b@example.org"]) assert.equal((await call(sql(), { to, key: press() }, { fetcher }))?.status, 200);
+    assert.equal((await call(sql(), { to: "jane+c@example.org", key: press() }, { fetcher }))?.status, 429);
+    assert.equal((await call(sql(), { to: "ja.ne@example.org", key: press() }, { fetcher }))?.status, 200);
+  });
+
+  test(`one company sends a mailbox ${EMAILS_PER_ADDRESS} a day, and everyone together ${EMAILS_PER_MAILBOX}, and a refusal names no cause`, async () => {
+    reset();
+    addSite("site_other0001", OTHER_ORG.id);
+    exec(DB, `insert into sites (id, company_id, name, origin, allowed_origins, context) values ('site_third0001', '00000000-0000-4000-8000-000000000003', 'C', 'https://c.example.com', '{https://c.example.com}', '{}')`);
+    const third = { org: { id: "00000000-0000-4000-8000-000000000003", name: "Third Co", role: "owner" }, site: "site_third0001", user: { ...COLLEAGUE, id: "00000000-0000-4000-8000-0000000000cc" } };
+    const other = { org: OTHER_ORG, site: "site_other0001", user: COLLEAGUE };
+    const { sent, fetcher } = resend();
+    for (let i = 0; i < EMAILS_PER_ADDRESS; i++) assert.equal((await call(sql(), { to: "dev@shared.example", key: press() }, { fetcher }))?.status, 200);
+    assert.deepEqual(await call(sql(), { to: "dev@shared.example", key: press() }, { fetcher }), { status: 429, body: LIMIT }, "this company has sent its three");
+    for (let i = 0; i < EMAILS_PER_ADDRESS; i++) assert.equal((await call(sql(), { to: "dev@shared.example", key: press() }, { fetcher, ...other }))?.status, 200, "another company still may");
+    assert.deepEqual(await call(sql(), { to: "dev@shared.example", key: press() }, { fetcher, ...third }), { status: 429, body: LIMIT }, "six in all, and the third is told no more than the others");
+    assert.equal(sent.length, EMAILS_PER_MAILBOX);
+  });
+
+  test(`a site sends at most ${EMAILS_PER_SITE} a day, and deleting it and adding it again doesn't reset that`, async () => {
+    reset();
+    const { sent, fetcher } = resend();
+    for (let i = 0; i < EMAILS_PER_SITE; i++) assert.equal((await call(sql(), { to: `dev${i}@example.com`, key: press() }, { fetcher }))?.status, 200, `email ${i + 1}`);
+    const refused = await call(sql(), { to: "another@example.com", key: press() }, { fetcher });
+    assert.equal(refused?.status, 429);
+    assert.deepEqual(refused?.body, LIMIT);
+    // What DELETE /api/app/sites/:id and then POST /api/app/sites do to the row.
+    exec(DB, `delete from sites where id = '${SITE}'`);
+    addSite(SITE);
+    assert.equal((await call(sql(), { to: "after@example.com", key: press() }, { fetcher }))?.status, 429);
+    assert.equal(sent.length, EMAILS_PER_SITE);
+  });
+
+  test(`a company sends at most ${EMAILS_PER_COMPANY} a day across its sites, and one person at most ${EMAILS_PER_PERSON}`, async () => {
+    reset();
+    for (let s = 1; s < 5; s++) addSite(`site_more000${s}`);
+    const { sent, fetcher } = resend();
+    // One person, across three sites: 10, then no more, though no site has had 10.
+    const mine = [];
+    for (let i = 0; i < 12; i++) mine.push((await call(sql(), { to: `p${i}@example.com`, key: press() }, { fetcher, site: i % 3 === 0 ? SITE : `site_more000${i % 3}` }))?.status);
+    assert.equal(mine.filter((status) => status === 200).length, EMAILS_PER_PERSON);
+    const person = await call(sql(), { to: "late@example.com", key: press() }, { fetcher, site: "site_more0004" });
+    assert.deepEqual(person?.body, LIMIT);
+    // A colleague, on the other sites: the company stops at 20 in all.
+    const theirs = [];
+    for (let i = 0; i < 12; i++) theirs.push((await call(sql(), { to: `c${i}@example.com`, key: press() }, { fetcher, user: COLLEAGUE, site: i % 2 ? "site_more0003" : "site_more0004" }))?.status);
+    assert.equal(theirs.filter((status) => status === 200).length, EMAILS_PER_COMPANY - EMAILS_PER_PERSON);
+    assert.deepEqual((await call(sql(), { to: "z@example.com", key: press() }, { fetcher, user: COLLEAGUE, site: "site_more0004" }))?.body, LIMIT);
+    assert.equal(sent.length, EMAILS_PER_COMPANY);
+  });
+
+  /**
+   * The real queries, with the insert held for 0.3 s after it has taken its view of the table, so presses at
+   * the same moment always overlap and none sees another's row: only the locks, taken in the statement
+   * before it, make them wait their turn. Take any lock out of setup-api.ts and these tests fail. With
+   * `only`, just the inserts that match it are held.
+   */
+  const slowWrites = (only?: RegExp) => {
+    const real = psqlSql(DB);
+    const slow = ((strings: TemplateStringsArray, ...values: unknown[]) => real(strings, ...values)) as typeof real;
+    slow.query = real.query;
+    slow.transaction = (queries) => {
+      const last = queries[queries.length - 1] as unknown as { text: string; params: unknown[] };
+      assert.match(last.text, /on conflict \(key\) do nothing/);
+      if (only && !only.test(last.text)) return real.transaction(queries);
+      const held = real.query(last.text.replace("on conflict (key) do nothing", "and pg_sleep(0.3)::text = '' on conflict (key) do nothing"), last.params);
+      return real.transaction([...queries.slice(0, -1), held]);
+    };
+    return slow;
+  };
+  const THIRD_ORG = { id: "00000000-0000-4000-8000-000000000003", name: "Third Co", role: "owner" };
+  const THIRD = { id: "00000000-0000-4000-8000-0000000000cc", email: "kai@third.example", name: "Kai", emailVerified: true };
+
+  test("the company's lock holds the site's limit when presses overlap", async () => {
+    reset();
+    const { sent, fetcher } = resend();
+    const answers = await Promise.all(Array.from({ length: 16 }, (_, i) => call(slowWrites(), { to: `race${i}@example.org`, key: press() }, { fetcher })));
+    assert.equal(answers.filter((answer) => answer?.status === 200).length, EMAILS_PER_SITE);
+    assert.equal(sent.length, EMAILS_PER_SITE);
+  });
+
+  test("the mailbox's lock holds the cap across companies when their presses overlap", async () => {
+    reset();
+    addSite("site_other0001", OTHER_ORG.id);
+    addSite("site_third0001", THIRD_ORG.id);
+    const { sent, fetcher } = resend();
+    const who = [{}, { org: OTHER_ORG, site: "site_other0001", user: COLLEAGUE }, { org: THIRD_ORG, site: "site_third0001", user: THIRD }];
+    // Each company may send it three, so only the cap across everyone holds them to six.
+    const answers = await Promise.all(Array.from({ length: 9 }, (_, i) => call(slowWrites(), { to: "shared@example.net", key: press() }, { fetcher, ...who[i % 3] })));
+    assert.equal(answers.filter((answer) => answer?.status === 200).length, EMAILS_PER_MAILBOX);
+    assert.equal(sent.length, EMAILS_PER_MAILBOX);
+  });
+
+  test("the person's lock holds the cap on tries when presses overlap", async () => {
+    reset();
+    // Five tries left this hour. Only the try is held, so ten presses reach it together.
+    const left = 5;
+    exec(DB, `insert into developer_emails (key, kind, company_id, site_id, sender, recipient)
+      select 'try earlier ' || n, 'try', '${ORG.id}', '${SITE}', '${USER.id}', 'r' from generate_series(1, ${TRIES_PER_PERSON - left}) n`);
+    const { sent, fetcher } = resend();
+    const answers = await Promise.all(Array.from({ length: 10 }, (_, i) => call(slowWrites(/'try'/), { to: `overlap${i}@example.org`, key: press() }, { fetcher })));
+    assert.equal(sent.length, left);
+    assert.equal(answers.filter((answer) => answer?.status === 200).length, left);
+    assert.deepEqual(answers.filter((answer) => answer?.status !== 200).map((answer) => answer?.body), Array(10 - left).fill(LIMIT));
+    assert.equal((await rows()).length, left, "the presses turned away are not counted as emails");
+  });
+
+  test("records older than a day are deleted with the next email, and by the daily run", async () => {
+    reset();
+    exec(DB, `insert into developer_emails (key, company_id, site_id, sender, recipient, sent_at) values ('old1', '${ORG.id}', '${SITE}', 'u', 'r', now() - interval '25 hours'), ('old2', '${ORG.id}', '${SITE}', 'u', 'r', now() - interval '2 days')`);
+    await call(sql(), { to: "dev@example.com", key: press() }, { fetcher: resend().fetcher });
+    assert.deepEqual((await rows()).map((row) => row.key).filter((key) => key.startsWith("old")), []);
+    exec(DB, `insert into developer_emails (key, company_id, site_id, sender, recipient, sent_at) values ('old3', '${ORG.id}', '${SITE}', 'u', 'r', now() - interval '30 hours')`);
+    await forgetOldEmails(sql() as unknown as SetupRequest["sql"]);
+    assert.equal((await rows()).length, 1);
+  });
+
+  test("a new address for a site the script has never called from changes it in place, keeping everything set up", async () => {
+    reset();
+    exec(
+      DB,
+      `update sites set allowed_origins = '{https://app.example.com,https://staging.example.com}', reading = '{"queue":[],"seen":["/"],"failed":[],"thin":[],"max":30,"startedAt":"2026-11-16T00:00:00Z","finishedAt":"2026-11-16T00:01:00Z"}',
+        context = '{"origin":"https://app.example.com","notes":"Invoices live under Billing.","docs":[{"title":"Help","source":"pasted:help","text":"x"}],"corrections":[{"id":"c1"}],"blocked":[{"label":"Delete"}],"pages":[{"path":"/old"}],"source":{"url":"https://app.example.com/","maxPages":30,"docs":[]},"setup":{"step":"reading"}}'
+        where id = '${SITE}'`,
+    );
+    const answer = await call(sql(), { url: "www.example.com/start" }, { method: "PUT", what: "address" });
+    assert.deepEqual(answer, { status: 200, body: { id: SITE, origin: "https://www.example.com" } });
+    const [row] = (await sql().query(`select origin, allowed_origins, reading, context from sites where id = $1`, [SITE])) as { origin: string; allowed_origins: string[]; reading: { queue: string[]; seen: string[]; finishedAt?: string }; context: Record<string, unknown> }[];
+    assert.equal(row!.origin, "https://www.example.com");
+    assert.deepEqual(row!.allowed_origins, ["https://www.example.com", "https://staging.example.com"], "the old address is replaced, the others kept");
+    assert.deepEqual(row!.reading.queue, ["https://www.example.com/start"]);
+    assert.equal(row!.reading.finishedAt, undefined, "reading starts again");
+    assert.deepEqual(row!.context.pages, [], "the old site's pages go");
+    assert.equal(row!.context.notes, "Invoices live under Billing.");
+    assert.deepEqual(row!.context.blocked, [{ label: "Delete" }]);
+    assert.deepEqual(row!.context.corrections, [{ id: "c1" }]);
+    assert.equal((row!.context.docs as unknown[]).length, 1);
+    assert.deepEqual(row!.context.setup, { step: "reading" });
+    assert.equal((row!.context.source as { url: string }).url, "https://www.example.com/start");
+  });
+
+  test("once the script has called from anywhere, the address can't change here, and nothing is touched", async () => {
+    reset();
+    exec(DB, `insert into site_origins (site_id, origin, allowed) values ('${SITE}', 'http://localhost:3000', false)`);
+    const answer = await call(sql(), { url: "www.example.com" }, { method: "PUT", what: "address" });
+    assert.equal(answer?.status, 409);
+    assert.match((answer?.body as { error: string }).error, /already run/);
+    assert.equal((await sql().query(`select origin from sites where id = $1`, [SITE]))[0]!.origin, "https://app.example.com");
+  });
+
+  test("the setup's step is kept in the site, beside what the reader wrote", async () => {
+    reset();
+    assert.deepEqual(await call(sql(), { step: "learned", later: false }, { method: "PUT", what: "setup" }), { status: 200, body: { setup: { step: "learned", later: false } } });
+    assert.deepEqual(await call(sql(), { later: true }, { method: "PUT", what: "setup" }), { status: 200, body: { setup: { step: "learned", later: true } } });
+    assert.deepEqual((await context()).pages, [{ path: "/" }]);
+  });
+});

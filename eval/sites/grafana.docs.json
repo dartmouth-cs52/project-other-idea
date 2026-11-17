@@ -1,0 +1,2412 @@
+{
+  "version": 1,
+  "id": "site_bench_grafana",
+  "name": "Grafana Play",
+  "origin": "https://play.grafana.org",
+  "allowedOrigins": [
+    "https://play.grafana.org"
+  ],
+  "appearance": {
+    "accent": "#1E6EF4",
+    "position": "bottom-right",
+    "launcherLabel": "Ask"
+  },
+  "notes": "",
+  "docs": [
+    {
+      "title": "View alert rules",
+      "source": "https://grafana.com/docs/grafana/latest/alerting/monitor-status/view-alert-rules/",
+      "text": "Documentation\nGrafana documentation\nAlerting\nMonitor alerts\nView alert rules\nGrafana Cloud\nEnterprise\nOpen source\nView alert rules\nThe Alert rules list view page lists all existing recording and alert rules. The rules are organized in a hierarchical structure, from folder -> rule group -> rules.\nTo access the Alert rules page, click Alerts & IRM -> Alerting -> Alert rules.\nSelect a group to expand it and view the list of alert rules within that group.\nThe list view includes a number of filters to simplify managing large volumes of alerts.\nFilter and save searches\nClick the Filter button to open the filter popup. You can filter by name, label, folder/namespace, evaluation group, data source, contact point, rule source, rule state, rule type, and the health of the alert rule from the popup menu. Click Apply at the bottom of the filter popup to enact the filters as you search.\nClick the Saved searches button to open the list of previously saved searches, or click + Save current search to add your current search to the saved searches list. You can also rename a saved search or set it as a default search. When you set a saved search as the default search, the Alert rules page opens with the search applied.\nSearch syntax\nThe search input accepts a structured key:value syntax. The key on the left of the colon is the filter type, and the value on the right is what you want to match. Use quotation marks around values that contain spaces, for example rule:\"High CPU usage\".\nThe following filter types are supported:\ndatasource\nnamespace\nlabel\ngroup\nrule\nstate\ntype\nhealth\nFor example:\nlabel:severity filters rules by the severity label.\nhealth:error filters rules whose health is in an error state.\nrule:\"High CPU usage\" filters rules by name.\nYou can combine multiple filters in a single search. Any text entered without a key: prefix is treated as a query that filters alert rules by name.\nMatch labels with regular expressions\nThe label filter accepts Prometheus-style matchers, so you can match label values with regular expressions instead of exact strings. The other filter types don’t support regular expressions.\nA label matcher uses the form label:<KEY><OPERATOR><VALUE>. The following operators are supported:\n=: matches rules whose label value is exactly equal to the value.\n!=: matches rules whose label value isn’t equal to the value.\n=~: matches rules whose label value matches the regular expression.\n!~: matches rules whose label value doesn’t match the regular expression.\nFor example:\nlabel:severity=~crit.* matches rules where the severity label matches the regular expression, such as critical or crit-high.\nlabel:team!~fe.* matches rules where the team label doesn’t start with fe.\nWrap the matcher in quotation marks when the key or value contains spaces or special characters, for example label:\"team=~fe.*devs\".\nRegular expressions use RE2 syntax and are fully anchored, so the pattern must match the entire label value. Use .* or .+ to match part of a value, for example label:severity=~.*crit.*. Matching is case-sensitive by default. To match without case sensitivity, add the (?i) inline flag, for example label:severity=~(?i)critical.\nLabel matchers apply to both the alert rule’s labels and the labels on its alert instances, so a rule matches when either set of labels satisfies the matcher. For labels whose values are set by Go templates, the matcher runs against the rendered static value, not the template expression, so you can’t use a template query to find a match.\nThe search input and the Filter popup are kept in sync, so changes made in either place are reflected in the other.\nChange alert rules list view\nYou can also change how the rule list is displayed using the View as option.\nGrouped: Displays rules grouped in a hierarchical structure, from folder/namespace, to evaluation group, to the individual rules. This is the default view.\nList: Displays all rules in a flat, unpaginated list.\nFor details on how rule states and alert instance states are displayed, refer to\nView alert state.\nView, compare and restore alert rules versions.\nTo view, compare, or restore previous versions for an alert rule, complete the following steps.\nNavigate to Alerts & IRM -> Alerting -> Alert rules.\nSelect an alert rule and click View.\nClick the Versions tab.\nThe page displays a list of the previous rule versions.\nOn the Alert rule’s Versions page you can view, compare and restore the previous rule versions.\nNote\nThe alert rule does not guarantee sequential version increases.\nIn Grafana OSS and Enterprise, the number of alert rule versions can be limited using the rule_version_record_limit option. In Grafana Cloud, free users are allowed a maximum of 10 alert rule versions, while paid users have a maximum of 100 stored alert rule versions.\nBulk pause or resume alert rules evaluations within a folder\nAdmin users can pause or resume all of the alert rules evaluations within a folder. To pause or resume all the alert rules evaluations in a folder, click the menu icon and select Pause all rule evaluation or Resume all rule evaluation.\nBulk delete all alert rules within a folder\nAdmin users can delete all of the alert rules within a folder. To delete all the alert rules in a folder, click the menu icon and select Delete. Then type “Delete” into the field and click Delete to confirm the bulk deletion.\nPermanently delete or restore deleted alert rules\nOnly users with an Admin role can restore deleted Grafana-managed alert rules. After an alert rule is restored, it is restored with a new, different UID from the one it had before.\nGo to Alerts & IRM -> Alerting -> Alert rules, then click the Recently deleted tab.\nClick the Restore button to restore the alert rule or click Delete permanently to delete the alert rule.\nNote\nDeleted alert rules are stored for 30 days. Grafana Enterprise and OSS users can adjust the length of time for which the rules are stored in the Grafana configuration file’s [unified_alerting].deleted_rule_retention field. For an example of how to modify the Grafana configuration file, refer to the documentation example here.\nWas this page helpful?\nYes\nNo\nSuggest an edit in GitHub\nCreate a GitHub issue\nEmail docs@grafana.com\nHelp and support\nCommunity\nRelated resources from Grafana Labs\nAdditional helpful documentation, links, and articles:\nVideo\nGetting started with managing your metrics, logs, and traces using Grafana\nIn this webinar, we’ll demo how to get started using the LGTM Stack: Loki for logs, Grafana for visualization, Tempo for traces, and Mimir for metrics.\nVideo\nGetting started with Grafana dashboard design\nIn this webinar, you'll learn how to design stylish and easily accessible Grafana dashboards that tell a story.\nVideo\nBuilding advanced Grafana dashboards\nIn this webinar, we’ll demo how to build and format Grafana dashboards."
+    },
+    {
+      "title": "Share dashboards and panels",
+      "source": "https://grafana.com/docs/grafana/latest/dashboards/share-dashboards-panels/",
+      "text": "Documentation\nGrafana documentation\nVisualize data\nDashboards\nSharing\nGrafana Cloud\nEnterprise\nOpen source\nShare dashboards and panels\nNote: Looking for prebuilt Grafana dashboards? Check out our full library of dashboards and more →\nGrafana enables you to share dashboards and panels with other users within your organization and in certain situations, publicly on the web. You can share using:\nDirect links with users in and outside of your organization\nSnapshots\nEmbeds\nPDFs\nPNG image files\nJSON files\nReports\nLibrary panels\nYou must have an authorized viewer permission to see an image rendered by a direct link. The same permission is also required to view embedded links unless you have anonymous access permission enabled for your Grafana instance.\nNote\nAnonymous access permission is not available in Grafana Cloud. This feature is only supported for Grafana Enterprise and Grafana Open Source.\nShare dashboards\nYou can share dashboards in the following ways:\nInternally with a link\nExternally with anyone or specific people\nAs a report\nAs a snapshot\nAs a PDF export\nAs a JSON file export\nAs an image export\nWhen you share a dashboard externally as a link or by email, those dashboards are included in a list of your shared dashboards. To view the list and manage these dashboards, navigate to Dashboards > Shared dashboards.\nNote\nIf you change a dashboard, ensure that you save the changes before sharing.\nShare an internal link\nTo share a customized, direct link to your dashboard within your organization, follow these steps:\nClick Dashboards in the main menu.\nClick the dashboard you want to share.\nClick the Share drop-down list in the top-right corner and select Share internally.\n(Optional) In the Share internally drawer that opens, set the following options:Lock time range - Change the current relative time range to an absolute time range. This option is enabled by default.\nShorten link - Shorten the dashboard link. This option is enabled by default.\nSelect the theme for the dashboard. Choose from Current, Dark, or Light.\nClick Copy link.\nSend the copied link to a Grafana user with authorization to view the link.\nClick the X at the top-right corner to close the share drawer.\nQuick-share an internal link\nAfter you’ve customized an internal link, you can share it quickly by following these steps:\nClick Dashboards in the main menu.\nClick the dashboard you want to share.\nClick the Share button, not the drop-down list icon, to copy a shortened link.\nThis link has any customizations, like time range locking or theme, that you’ve previously set. These are stored in the browser scope.\nShare an external link\nExternally shared dashboards allow you to share your Grafana dashboard with anyone. This is useful when you want to make your dashboard available to the world without requiring access to your Grafana organization.\nLearn how to configure and manage externally shared dashboards in\nExternally shared dashboards.\nSchedule a report\nNote\nThis feature is only available on Grafana Enterprise.\nTo share your dashboard as a report, follow these steps:\nClick Dashboards in the main menu.\nClick the dashboard you want to share.\nClick the Share drop-down list in the top-right corner and select Schedule a report.\nConfigure the report.\nDepending on your schedule settings, you’ll have different options at this step. Click either Schedule send or Send now.\nYou can also save the report as a draft.\nTo manage your reports, navigate to Dashboards > Reporting > Reports.\nShare a snapshot\nA dashboard snapshot publicly shares a dashboard while removing sensitive data such as queries and panel links, leaving only visible metrics and series names. Anyone with the link can access the snapshot.\nYou can publish snapshots to your local instance or to snapshots.raintank.io. The latter is a free service provided by Grafana Labs that enables you to publish dashboard snapshots to an external Grafana instance. Anyone with the link can view it. You can set an expiration time if you want the snapshot removed after a certain time period.\nNote\nThe snapshots.raintank.io option is disabled by default in Grafana Cloud. You can update your config file to enable this functionality.\nTo see the other snapshots shared from your organization, navigate to Dashboards > Snapshots in the main menu.\nTo share your dashboard with anyone as a snapshot, follow these steps:\nClick Dashboards in the main menu.\nClick the dashboard you want to share.\nClick the Share drop-down list in the top-right corner and select Share snapshot.\nIn the Share snapshot drawer that opens, enter a descriptive title for the snapshot in the Snapshot name field.\nSelect one of the following expiration options for the snapshot:\n1 Hour\n1 Day\n1 Week\nNever\nClick Publish snapshot or Publish to snapshots.raintank.io.\nGrafana generates the link of the snapshot. Note that you can’t publish dashboard snapshots containing custom panels to snapshot.raintank.io.\nClick Copy link, and share it either within your organization or publicly on the web.\nClick the X at the top-right corner to close the share drawer.\nDelete a dashboard snapshot\nTo delete dashboard snapshots, follow these steps:\nNavigate to Dashboards > Snapshots in the main menu.\nTo confirm which snapshot you’re about to delete, click View on the snapshot row.\nThe URLs for panel and dashboard snapshots from the same dashboard look similar and viewing them first can help you distinguish them.\nClick the red x next to the snapshot that you want to delete.\nThe snapshot is immediately deleted. You might need to clear your browser cache or use a private or incognito browser to confirm this.\nExport dashboards\nIn addition to sharing dashboards as links, reports, and snapshots, you can export them as PDFs or JSON files.\nExport a dashboard as PDF\nNote\nThis feature is only available on Grafana Enterprise.\nTo export a dashboard in its current state as a PDF, follow these steps:\nClick Dashboards in the main menu.\nOpen the dashboard you want to export.\nClick the Export drop-down in the toolbar and select Export as PDF.\nIn the Export dashboard PDF drawer that opens, select either Landscape or Portrait for the PDF orientation.\nSelect either Grid or Simple for the PDF layout.\nSet the Zoom level; zoom in to enlarge text, or zoom out to see more data (like table columns) per panel.\nClick Generate PDF.\nThe PDF opens in another tab where you can download it.\nClick the X at the top-right corner to close the share drawer.\nExport a dashboard as code\nExport a Grafana JSON file that contains everything you need, including layout, variables, styles, data sources, queries, and so on, so that you can later import the dashboard.\nTo export a JSON file, follow these steps:\nClick Dashboards in the main menu.\nOpen the dashboard you want to export.\nIn the toolbar, click the Export icon and select Export as code.\nThe Export dashboard drawer opens.\n(Optional) Click Advanced options to expand the section, and then make the following selections:\nModel: Choose from Classic or V2 Resource\nFormat: For the V2 Resource only, choose from JSON or YAML\n(Optional) Toggle the Share dashboard with another instance switch to remove details specific to your Grafana instance.\nClick Download file or Copy to clipboard.\nPaste the JSON in another location.\nClick the X at the top-right corner to close the share drawer.\nNote\nTo publish a dashboard to the Grafana community catalog, you must export it using the Classic model.\nFor steps on how to add dashboards to the Grafana community catalog, refer to the Publish a community dashboard.\nExport a dashboard as an image\nNote\nYou must have the\nGrafana Image Renderer service configured to export a dashboard as an image.\nTo export a dashboard in its current state as a PNG image file, follow these steps:\nClick Dashboards in the main menu.\nOpen the dashboard you want to export.\nClick the Export drop-down list in the toolbar and select Export as image.\nThe Export as image drawer opens.\nClick Generate image.\nThe image preview is displayed.\nClick Download image.\nClick the X at the top-right corner to close the share drawer.\nThe generated image reflects how the dashboard appears in your browser.\nTo change it, make changes to the dashboard or browser, like zooming in or out or resizing.\nPublish a community dashboard\nYou can share dashboards publicly by publishing them to the Grafana community catalog.\nPublished dashboards are available for anyone to discover and import.\nTo publish a dashboard to the community catalog, follow these steps:\nExport your dashboard using the Classic model.\nGo to Grafana and sign in to your Grafana Cloud account.\nNavigate to My dashboards and click Upload dashboard.\nUpload the Classic JSON file you exported from Grafana.\nFill in the required metadata fields, then click Save and Publish.\nNote\nAfter you select Save and Publish, it might take several hours for the public dashboard page to become available.\nDuring this time, the dashboard link might generate a 404 error.\nIf the dashboard is still unavailable the following day, contact Grafana Support.\nMetadata updates for published dashboards\nAfter you’ve published a dashboard, the catalog shows a Submit button instead of Save and Publish.\nClicking Submit saves and publishes your metadata changes, including screenshots, a logo, and the README content.\nShare panels\nYou can share a panels in the following ways:\nInternally with a link\nAs an embed\nAs a snapshot\nNote\nIf you change a panel, ensure that you save the changes before sharing.\nShare an internal link\nTo share a personalized, direct link to your panel within your organization, follow these steps:\nHover over any part of the panel you want to share to display the actions menu on the top right corner.\nClick the menu and select Share link.\n(Optional) In the Link settings drawer that opens, set the following options:\nLock time range - Change the current relative time range to an absolute time range. This option is enabled by default.\nShorten link - Shorten the panel link. This option is disabled by default.\nSelect the theme for the dashboard. Choose from Current, Dark, or Light.\nClick Copy link.\nSend the copied link to a Grafana user with authorization to view it.\n(Optional) To\ngenerate an image of the panel as a PNG file, customize the image settings:\nWidth - In pixels. The default and minimum is 1000.\nHeight - In pixels. The default and minimum is 500.\nScale factor - The default is 1.\nThere are minimums and maximums for width, height, and scale factor in the image renderer\nconfiguration options that you can customize if needed.\n(Optional) Click Generate image to see a preview of the panel image.\n(Optional) Click Download image.\nSend the copied image to a Grafana user with authorization to view it.\nClick the X at the top-right corner to close the share drawer.\nQuery string parameters for server-side rendered images\nWhen you click Generate image in the panel link settings, Grafana generates a PNG image of the panel with the following default parameters:\nExpand table\nParameterDescription\nwidthWidth in pixels. Default and minimum is 1000.\nheightHeight in pixels. Default and minimum is 500.\ntzTimezone in the format UTC%2BHH%3AMM where HH and MM are offset in hours and minutes after UTC.\ntimeoutNumber of seconds. The timeout can be increased if the query for the panel needs more than the default 30 seconds.\nscaleNumeric value to configure device scale factor. Default is 1. Use a higher value to produce more detailed images (higher DPI).\nNote\nThe image renderer enforces minimum dimensions of 1000px for width and 500px for height. You can customize these minimums in self-managed Grafana installations through the\nimage renderer configuration. In Grafana Cloud, the configuration is managed by Grafana and can’t be modified. If you encounter size-related errors when rendering images using the API, ensure your dimensions meet the minimum requirements.\nYou can also update these parameters in the\nimage rendering configuration.\nThe following example shows a link to a server-side rendered PNG:\nBash\nCopy\nhttps://play.grafana.org/render/d-solo/ktMs4D6Mk?from=2024-09-03T11:55:44.442Z&to=2024-09-03T17:55:44.442Z&panelId=panel-13&width=1000&height=500&tz=UTC\nShare an embed\nYou can share a panel by embedding it on another website using an iframe. Users must be signed into Grafana to view the panel unless you have anonymous access permission enabled for your Grafana instance.\nNote\nPanel embedding and anonymous access permissions are not available in Grafana Cloud, even for panels in\nexternally shared dashboards. These capabilities are only supported in Grafana Enterprise and Grafana Open Source.\nTo create a panel that can be embedded, follow these steps:\nHover over any part of the panel you want to share to display the actions menu on the top-right corner.\nClick the menu and select Share embed.\nThe Share embed drawer opens.\n(Optional) Toggle the Lock time range switch to set whether the panel uses the current relative time range or an absolute time range. This option is enabled by default.\nSelect the theme for the dashboard. Choose from Current, Dark, or Light.\n(Optional) Make any changes to the HTML that you need.\nClick Copy to clipboard.\nPaste the HTML code into your website code.\nClick the X at the top-right corner to close the share drawer.\nHere’s an example of what the HTML code might look like:\nHTML\nCopy\n<iframe\nsrc=\"https://snapshots.raintank.io/dashboard-solo/snapshot/y7zwi2bZ7FcoTlB93WN7yWO4aMiz3pZb?from=1493369923321&to=1493377123321&panelId=4\"\nwidth=\"650\"\nheight=\"300\"\nframeborder=\"0\"\n></iframe>\nThe result is an interactive Grafana visualization embedded in an iframe.\nShare a snapshot\nA panel snapshot shares an interactive panel publicly while removing sensitive data such as queries and panel links, leaving only visible metrics and series names. Anyone with the link can access the snapshot.\nYou can publish snapshots to your local instance or to snapshots.raintank.io. The latter is a free service provided by Grafana Labs that enables you to publish dashboard snapshots to an external Grafana instance. Anyone with the link can view it. You can set an expiration time if you want the snapshot removed after a certain time period.\nNote\nThe snapshots.raintank.io option is disabled by default in Grafana Cloud. You can update your config file to enable this functionality.\nTo see the other snapshots shared from your organization, navigate to Dashboards > Snapshots in the main menu.\nTo share your panel with anyone as a snapshot, follow these steps:\nHover over any part of the panel you want to share to display the actions menu on the top-right corner.\nClick the menu and select Share snapshot.\nIn the Share snapshot drawer that opens, enter a descriptive title for the snapshot in the Snapshot name field.\nSelect one of the following expiration options for the snapshot:\n1 Hour\n1 Day\n1 Week\nNever\nClick Publish snapshot or Publish to snapshots.raintank.io.\nGrafana generates the link of the snapshot. Note that you can’t publish snapshots that include custom panels to snapshot.raintank.io.\nClick Copy link, and share it either within your organization or publicly on the web.\nClick the X at the top-right corner to close the share drawer.\nDelete a panel snapshot\nTo delete panel snapshots, follow these steps:\nNavigate to Dashboards > Snapshots in the main menu.\nTo confirm which snapshot you’re about to delete, click View on the snapshot row.\nThe URLs for panel and dashboard snapshots from the same dashboard look similar and viewing them first can help you distinguish them.\nClick the red x next to the snapshot URL that you want to delete.\nThe snapshot is immediately deleted. You may need to clear your browser cache or use a private or incognito browser to confirm this.\nWas this page helpful?\nYes\nNo\nSuggest an edit in GitHub\nCreate a GitHub issue\nEmail docs@grafana.com\nHelp and support\nCommunity\nRelated resources from Grafana Labs\nAdditional helpful documentation, links, and articles:\nVideo\nGetting started with managing your metrics, logs, and traces using Grafana\nIn this webinar, we’ll demo how to get started using the LGTM Stack: Loki for logs, Grafana for visualization, Tempo for traces, and Mimir for metrics.\nVideo\nGetting started with Grafana dashboard design\nIn this webinar, you'll learn how to design stylish and easily accessible Grafana dashboards that tell a story.\nVideo\nBuilding advanced Grafana dashboards\nIn this webinar, we’ll demo how to build and format Grafana dashboards."
+    },
+    {
+      "title": "Use dashboards",
+      "source": "https://grafana.com/docs/grafana/latest/dashboards/use-dashboards/",
+      "text": "Documentation\nGrafana documentation\nVisualize data\nDashboards\nUse dashboards\nGrafana Cloud\nEnterprise\nOpen source\nUse dashboards\nNote: Looking for prebuilt Grafana dashboards? Check out our full library of dashboards and more →\nThis topic provides an overview of dashboard features and shortcuts, and describes how to use dashboard search.\nDashboard feature overview\nThe dashboard user interface provides a number of features that you can use to customize the presentation of your data.\nThe following image and descriptions highlight all dashboard features.\nHover your cursor over a number to display information about the dashboard element.\nDashboard folder\nClick the dashboard folder name to access the folder and perform other\nfolder management tasks.\nDashboard title\nCreate your own dashboard titles or have Grafana create them for you using\ngenerative AI features.\nMark as favorite\nMark the dashboard as one of your favorites to include it in your list of Starred dashboards in the main menu.\nPublic label\nExternally shared dashboards, it’s marked with the Public label.\nGrafana Assistant\nGrafana Assistant combines large language models with Grafana-integrated tools.\nInvite new users\nInvite new users to join your Grafana organization.\nVariables and filters\nUse\nvariables and\nfilters, to create more interactive and dynamic dashboards.\nDashboard links\nLink to other dashboards, panels, and external websites. Learn more about\ndashboard links.\nCurrent dashboard time range and time picker\nSelect relative time range options or set custom absolute time ranges.\nYou can also change the Timezone and Fiscal year settings by clicking the Change time settings button.\nTime range zoom out\nClick to zoom out the time range. Learn more about common time range controls.\nRefresh dashboard\nTrigger queries and refresh dashboard data.\nAuto refresh control\nSelect a dashboard auto refresh time interval.\nShare dashboard\nAccess\ndashboard sharing options.\nEdit\nEnter edit mode, so you can make changes and access dashboard settings.\nExport\nAccess\ndashboard exporting options.\nContent outline\nThe outline provides a tree-like structure that lets you quickly navigate the dashboard.\nFilters overview\nOpen the\nfilters overview drawer.\nDashboard insights\nView\ndashboard analytics including information about users, activity, query counts.\nHide\nClick to hide the sidebar and toolbar.\nToolbar\nThe dashboard toolbar.\nRow title\nA row is one way you can\ngroup panels in a dashboard.\nTab title\nA tab is one way you can\ngroup panels in a dashboard.\nPanel title\nCreate your own panel titles or have Grafana create them for you using\ngenerative AI features.\nDashboard panel\nThe\npanel is the primary building block of a dashboard.\nPanel legend\nChange series colors as well as y-axis and series visibility directly from the legend.\nKeyboard shortcuts\nGrafana has a number of keyboard shortcuts available. Press ? on your keyboard to display all keyboard shortcuts available in your version of Grafana.\nCtrl+S: Saves the current dashboard.\nf: Opens the dashboard finder / search.\nd+k: Toggle kiosk mode (hides the menu).\nd+e: Expand all rows.\nd+s: Dashboard settings.\nCtrl+K: Opens the command palette.\nEsc: Exits panel when in full screen view or edit mode. Also returns you to the dashboard from dashboard settings.\nFocused panel\nBy hovering over a panel with the mouse you can use some shortcuts that will target that panel.\ne: Toggle panel edit view\nv: Toggle panel full screen view\npu: Copy panel share link\npe: Open share panel embed configuration\nps: Open share panel snapshot configuration\npd: Duplicate panel\npr: Remove panel\nKiosk mode\nIn kiosk mode, the main menu and top navigation bar of a dashboard are hidden.\nThis can be useful if you want to display as much information as possible on the screen or use the dashboard to present information to a wider audience.\nTurn on kiosk mode: Click your user icon and select Enable kiosk mode.\nTurn off kiosk mode: Press Esc.\nSet dashboard time range\nGrafana provides several ways to manage the time ranges of the data being visualized, for dashboard, panels and also for alerting.\nThis section describes supported time units and relative ranges, the common time controls, dashboard-wide time settings, and panel-specific time settings.\nTime units and relative ranges\nGrafana supports the following time units: s (seconds), m (minutes), h (hours), d (days), w (weeks), M (months), Q (quarters) and y (years).\nThe minus operator enables you to step back in time, relative to the current date and time, or now. If you want to display the full period of the unit (day, week, month, etc…), append /<time unit> to the end. To view fiscal periods, use fQ (fiscal quarter) and fy (fiscal year) time units.\nThe plus operator enables you to step forward in time, relative to now. For example, you can use this feature to look at predicted data in the future.\nThe following table provides example relative ranges:\nExpand table\nExample relative rangeFrom:To:\nLast 5 minutesnow-5mnow\nThe day so farnow/dnow\nThis weeknow/wnow/w\nThis week so farnow/wnow\nThis monthnow/Mnow/M\nThis month so farnow/Mnow\nPrevious Monthnow-1M/Mnow-1M/M\nThis year so farnow/Ynow\nThis Yearnow/Ynow/Y\nPrevious fiscal yearnow-1y/fynow-1y/fy\nNote\nGrafana Alerting does not support the following syntaxes at this time:\nnow+n for future timestamps.\nnow-1n/n for “start of n until end of n” because this is an absolute timestamp.\nCommon time range controls\nThe dashboard and panel time controls have a common UI.\nThe following sections define common time range controls.\nCurrent time range\nThe current time range, also called the time picker, shows the time range currently displayed in the dashboard or panel you are viewing.\nHover your cursor over the field to see the exact time stamps in the range and their source (such as the local browser).\nClick the current time range to change it. You can change the current time using a relative time range, such as the last 15 minutes, or an absolute time range, such as 2020-05-14 00:00:00 to 2020-05-15 23:59:59.\nRelative time range\nSelect the relative time range from the Relative time ranges list. You can filter the list using the input field at the top. Some examples of time ranges include:\nLast 30 minutes\nLast 12 hours\nLast 7 days\nLast 2 years\nYesterday\nDay before yesterday\nThis day last week\nToday so far\nThis week so far\nThis month so far\nYou can enter a custom relative time range into the search at the top to quickly select, such as 13h to select a time range for the last 13 hours.\nAbsolute time range\nYou can set an absolute time range in the following ways:\nType values into the From and To fields. You can type exact time values or relative values, such as now-24h, and then click Apply time range.\nClick in the From or To field. Grafana displays a calendar. Click the day or days you want to use as the current time range and then click Apply time range.\nThis section also displays recently used absolute ranges.\nSemi-relative time range\nNote\nGrafana Alerting does not support semi-relative time ranges.\nYou can also use the absolute time range settings to set a semi-relative time range. Semi-relative time range dashboards are useful when you need to monitor the progress of something over time, but you also want to see the entire history from a starting point.\nSet a semi-relative time range by setting the start time to an absolute timestamp and the end time to a “now” that is relative to the current time. For example:\nStart time: 2023-05-01 00:00:00\nEnd time: now\nIf you wanted to track the progress of something during business hours, you could set a time range that covers the current day, but starting at 8am, like so:\nStart time: now/d+8h\nEnd time: now\nThis is equivalent to the Today so far time range preset, but it starts at 8:00am instead of 12:00am by appending +8h to the periodic start time.\nUsing a semi-relative time range, as time progresses, your dashboard will automatically and progressively zoom out to show more history and fewer details. At the same rate, as high data resolution decreases, historical trends over the entire time period will become more clear.\nCopy and paste time range\nYou can copy and paste the time range from a dashboard to Explore and vice versa, or from one dashboard to another.\nClick the Copy time range to clipboard icon to copy the current time range to the clipboard. Then paste the time range into Explore or another dashboard.\nYou can also copy and paste a time range using the keyboard shortcuts t+c and t+v respectively.\nZoom out\nClick the Zoom out icon to view a larger time range in the dashboard or panel visualizations\nDouble click on the panel graph area (time series family visualizations only)\nType the t- keyboard shortcut\nZoom in\nClick and drag horizontally in the panel graph area to select a time range (time series family visualizations only)\nType the t+ keyboard shortcut\nRefresh dashboard\nClick the Refresh dashboard icon to immediately run every query on the dashboard and refresh the visualizations. Grafana cancels any pending requests when you trigger a refresh.\nBy default, Grafana does not automatically refresh the dashboard. Queries run on their own schedule according to the panel settings. However, if you want to regularly refresh the dashboard, click the down arrow next to the Refresh dashboard icon, and then select a refresh interval.\nSelecting the Auto interval schedules a refresh based on the query time range and browser window width. Short time ranges update frequently, while longer ones update infrequently. There is no need to refresh more often then the pixels available to draw any updates.\nControl the time range using a URL\nYou can control the time range of a dashboard by providing the following query parameters in the dashboard URL:\nfrom - Defines the lower limit of the time range, specified in ms, epoch, or relative time.\nto - Defines the upper limit of the time range, specified in ms, epoch, or relative time.\ntime and time.window - Defines a time range from time-time.window/2 to time+time.window/2. Both parameters should be specified in ms. For example ?time=1500000000000&time.window=10000 results in a 10-second time range from 1499999995000 to 1500000005000`.\ntimezone - Defines the time zone. For example timezone=Europe/Madrid.\nSince these aren’t variables, they don’t require the var- prefix.\nThe following example shows a dashboard with the time range of the last five minutes:\nCopy\nhttps://${your-domain}/path/to/your/dashboard?from=now-5m&to=now\nFilter dashboard data\nFilters help you narrow the data displayed in a dashboard.\nAfter you’ve added a filter in the dashboard settings, you can create label/value filter pairs on the dashboard.\nThese filters are applied to all metric queries that use the specified data source and to all panels on the dashboard.\nTo learn more, refer to the\nFilter and Group by documentation.\nWas this page helpful?\nYes\nNo\nSuggest an edit in GitHub\nCreate a GitHub issue\nEmail docs@grafana.com\nHelp and support\nCommunity\nRelated resources from Grafana Labs\nAdditional helpful documentation, links, and articles:\nVideo\nGetting started with managing your metrics, logs, and traces using Grafana\nIn this webinar, we’ll demo how to get started using the LGTM Stack: Loki for logs, Grafana for visualization, Tempo for traces, and Mimir for metrics.\nVideo\nGetting started with Grafana dashboard design\nIn this webinar, you'll learn how to design stylish and easily accessible Grafana dashboards that tell a story.\nVideo\nBuilding advanced Grafana dashboards\nIn this webinar, we’ll demo how to build and format Grafana dashboards."
+    },
+    {
+      "title": "Get started with Explore",
+      "source": "https://grafana.com/docs/grafana/latest/explore/get-started-with-explore/",
+      "text": "Documentation\nGrafana documentation\nVisualize data\nExplore\nGet started with Explore\nGrafana Cloud\nEnterprise\nOpen source\nGet started with Explore\nExplore is your gateway for querying, analyzing, and aggregating data in Grafana. It allows you to visually explore and iterate until you develop a working query or set of queries for building visualizations and conducting data analysis. If your data source supports graph and table data, there’s no need to create a dashboard, as Explore can display the results in both formats. This facilitates quick, detailed, real-time data analysis.\nWith Explore you can:\nCreate visualizations to integrate into your dashboards.\nCreate queries using mixed data sources.\nCreate multiple queries within a single interface.\nUnderstand the shape of your data across various data sources.\nPerform real time data exploration and analysis.\nKey features include:\nQuery editor, based on specific data source, to create and iterate queries.\nQuery history to track and maintain your queries.\nQuery inspector to help troubleshoot query performance.\nWatch the following video to get started using Explore:\nTo try Explore with sample data, open it on Grafana Play:\nGive it a try using Grafana Play\nWith Grafana Play, you can explore and see how it works, learning from practical examples to accelerate your development.\nThis feature can be seen on Explore.\nTry it\nBefore you begin\nIn order to access Explore, you must have either the editor or administrator basic role or the data sources explore role. Refer to\nRole and permissions for more information on what each role can access.\nRefer to\nRole-based access control (RBAC) in Grafana Enterprise to understand how you can manage Explore with role-based permissions.\nExplore elements\nExplore consists of a toolbar, outline, query editor, the ability to add multiple queries, a query history and a query inspector.\nContent outline\nThe content outline is a side navigation bar that keeps track of the queries and visualizations you create in Explore.\nThe outline helps you quickly navigate between queries and visualizations.\nIt works in a split view, with a separate outline generated for each pane.\nTo open the content outline, click the Outline button in the top left corner of the Explore screen.\nYou can then click on any panel icon in the content outline to navigate to that panel.\nToolbar\nThe toolbar provides quick access to frequently used tools and settings.\nData source picker - Select a data source from the dropdown menu, or use absolute time.\nSplit - Click to compare visualizations side by side. Refer to Split and compare for additional detail.\nAdd - Click to add your exploration to a dashboard. You can also use this to declare an incident,create a forecast, detect outliers and to run an investigation.\nTime picker - Select a time range form the time picker. You can also enter an absolute time range. Refer to Time picker for more information.\nRun query - Click to run your query.\nTime picker\nUse the time picker to select a time range for your query. The default is last hour. You can select a different option from the dropdown or use an absolute time range. You can also change the timezone associated with the query, or use a fiscal year.\nClick Change time settings to change the timezone or apply a fiscal year.\nRefer to\nSet dashboard time range for more information on absolute and relative time ranges. You can also\ncontrol the time range using a URL.\nSplit and compare\nThe split view enables easy side-by-side comparison of visualizations or simultaneous viewing of related data on a single page.\nTo open the split view:\nClick the split button to duplicate the current query and split the page into two side-by-side queries.\nRun and re-run queries as often as needed.\nYou can select a different data source, or different metrics and label filters for the new query, allowing you to compare the same query across two different servers or compare the staging environment with the production environment.\nScreenshot of Explore screen splitYou can also link the time pickers for both panels by clicking on one of the time-sync buttons attached to the time pickers. When linked, changing the time in one panel automatically updates the other, keeping the start and end times synchronized. This ensures that both split panels display data for the same time interval.\nClick Close to quit split view.\nQuery editor\nThe query editor is the interface where you construct the query for a data source.\nEach data source’s query editor provides a customized user interface that helps you write queries that take advantage of its unique capabilities.\nTo run queries across multiple data sources you need to select Mixed from the data source picker.\nWhen you select Mixed, you can select a different data source for each new query that you add.\nYou can also reuse previously created queries with the saved queries feature.\nRefer to\nQuery editor in Explore for detailed information on the query editor.\nQuery history\nThe query history contains the list of queries that you created in Explore.\nYou can also add queries from the history to your saved queries.\nRefer to\nQuery history for detailed information on working with your query history.\nQuery inspector\nThe query inspector provides detailed statistics regarding your query.\nInspector functions as a kind of debugging tool that “inspects” your query.\nIt provides query statistics under Stats, request response time under Query, data frame details under {} JSON, and the shape of your data under Data.\nRefer to\nQuery inspector in Explore for additional information.\nAccess Explore\nTo access Explore:\nClick on Explore in the left side menu.\nTo start with an existing query from a dashboard panel, select the Explore option from the Panel menu in the upper right. This opens an Explore page with the panel’s query, enabling you to tweak or iterate the query outside your dashboard.\nPanel menu with Explore option\nSelect a data source from the drop-down in the upper left.\nUsing the query editor provided for the specific data source, begin writing your query. Each query editor differs based on each data source’s unique elements.\nSome query editors provide a Kick start your query option, which gives you a list of basic pre-written queries. Refer to\nUse query editors to see how to use various query editors. For general information on querying data sources in Grafana, refer to\nQuery and transform data.\nBased on specific data source, certain query editors allow you to select the label or labels to add to your query. Labels are fields that consist of key/value pairs representing information in the data. Some data sources allow for selecting fields.\nClick Run query in the upper right to run your query.\nShare Explore URLs\nWhen using Explore, the URL in the browser address bar updates as you make changes to the queries. You can share or bookmark this URL.\nNote\nExplore may generate long URLs, which some tools, like messaging or videoconferencing applications, might truncate due to fixed message lengths. In such cases, Explore displays a warning and loads a default state.\nIf you encounter issues when sharing Explore links in these applications, you can generate shortened links. See Share shortened link for more information.\nGenerate Explore URLs from external tools\nBecause Explore URLs have a defined structure, you can build a URL from external tools and open it in Grafana. The URL structure is:\nCopy\nhttp://<grafana_url>/explore?panes=<panes>&schemaVersion=<schema_version>&orgId=<org_id>\nwhere:\norg_id is the organization ID\nschema_version is the schema version (should be set to the latest version which is 1)\npanes is a URL-encoded JSON object of panes, where each key is the pane ID and each value is an object matching the following schema:\nCopy\n{\ndatasource: string; // the pane's root datasource UID, or `-- Mixed --` for mixed datasources\nqueries: {\nrefId: string; // an alphanumeric identifier for this query, must be unique within the pane, i.e. \"A\", \"B\", \"C\", etc.\ndatasource: {\nuid: string; // the query's datasource UID ie: \"AD7864H6422\"\ntype: string; // the query's datasource type-id, i.e: \"loki\"\n}\n// ... any other datasource-specific query parameters\n}[]; // array of queries for this pane\nrange: {\nfrom: string; // the start time, in milliseconds since epoch\nto: string; // the end time, in milliseconds since epoch\n}\n}\nNote\nThe from and to also accept relative ranges defined in\nTime units and relative ranges.\nShare shortened link\nThe Share shortened link capability allows you to create smaller and simpler URLs of the format /goto/:uid instead of using longer URLs with query parameters. To create a shortened link to the executed query, click the Share option in the Explore toolbar.\nShare shortened links with absolute time\nNote\nAvailable in Grafana 10.3 and later versions.\nShortened links have two options: relative time (e.g., from two hours ago to now) or absolute time (e.g., from 8am to 10am). By default, sharing a shortened link copies the selected time range, whether it’s relative or absolute.\nTo create a short link with an absolute time:\nClick the dropdown button next to the share shortened link button.\nSelect one of the options under Time-Sync URL Links.\nThis ensures that anyone receiving the link will see the same data you see, regardless of when they open it. Your selected time range will remain unaffected.\nNext steps\nNow that you are familiar with Explore you can:\nBuild dashboards\nCreate a wide variety of\nvisualizations\nWork with logs\nWork with traces\nCreate and use correlations\nWas this page helpful?\nYes\nNo\nSuggest an edit in GitHub\nCreate a GitHub issue\nEmail docs@grafana.com\nHelp and support\nCommunity\nRelated resources from Grafana Labs\nAdditional helpful documentation, links, and articles:\nVideo\nGetting started with managing your metrics, logs, and traces using Grafana\nIn this webinar, we’ll demo how to get started using the LGTM Stack: Loki for logs, Grafana for visualization, Tempo for traces, and Mimir for metrics.\nVideo\nGetting started with Grafana dashboard design\nIn this webinar, you'll learn how to design stylish and easily accessible Grafana dashboards that tell a story.\nVideo\nBuilding advanced Grafana dashboards\nIn this webinar, we’ll demo how to build and format Grafana dashboards."
+    }
+  ],
+  "pages": [
+    {
+      "path": "/a/grafana-assistant-app",
+      "title": "AI - Grafana",
+      "headings": [
+        "Good night",
+        "Jump back in"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "What's new See the latest features and improvemen…",
+          "to": "/a/grafana-assistant-app/whats-new"
+        },
+        {
+          "label": "recent conversations",
+          "to": "/"
+        },
+        {
+          "label": "Workspace",
+          "to": "/a/grafana-assistant-app/workspace"
+        },
+        {
+          "label": "Jump back in0",
+          "to": "/"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "AI",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/a/grafana-assistant-app/pages",
+      "title": "Pages",
+      "headings": [
+        "Pages from your organization",
+        "Trending",
+        "Browse by topic",
+        "New and updated"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "View all pages",
+          "to": "/a/grafana-assistant-app/pages?tab=all"
+        },
+        {
+          "label": "View recent pages",
+          "to": "/a/grafana-assistant-app/pages?sort=recent&tab=all"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Pages New!",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": [
+        "Search pages"
+      ]
+    },
+    {
+      "path": "/a/grafana-assistant-app/pages?sort=recent&tab=all",
+      "title": "Pages",
+      "headings": [
+        "Filters",
+        "Category",
+        "Tags",
+        "All pages"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace",
+        "Discover"
+      ],
+      "fields": [
+        "Search pages",
+        "Find tags",
+        "Grid",
+        "Folders",
+        "List"
+      ]
+    },
+    {
+      "path": "/a/grafana-assistant-app/pages?tab=all",
+      "title": "Pages",
+      "headings": [
+        "Filters",
+        "Category",
+        "Tags",
+        "All pages"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace",
+        "Discover"
+      ],
+      "fields": [
+        "Search pages",
+        "Find tags",
+        "Grid",
+        "Folders",
+        "List"
+      ]
+    },
+    {
+      "path": "/a/grafana-assistant-app/pages/:id",
+      "title": "",
+      "headings": [],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Pages",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Assistant Dashboards ✨",
+          "to": "/a/grafana-assistant-app/pages?tab=all&folder=assistant-dashboards"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Main menu",
+        "Dashboard Quest: A Grafana Dashboard Adventure Ga…",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace",
+        "Show canvas summary",
+        "Share page",
+        "Fullscreen",
+        "Page actions"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/a/grafana-assistant-app/whats-new",
+      "title": "What's New - Assistant - Grafana",
+      "headings": [
+        "What's New",
+        "Circle Check BigNow generally available",
+        "RocketPublic Preview"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Assistant",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "View",
+          "to": "/a/grafana-assistant-app?mode=learn"
+        },
+        {
+          "label": "View",
+          "to": "/a/grafana-assistant-app/workspace"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/a/grafana-metricsdrilldown-app/drilldown?to=now&timezone=utc",
+      "title": "All metrics - Metrics - Drilldown - Grafana",
+      "headings": [
+        "Something Went Weird. Let's Find It.",
+        "Prefix filters",
+        "forecasting",
+        "outliers"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown M…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Collapse section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": [
+        "Data source",
+        "Filters",
+        "Quick search metrics",
+        "Sort by",
+        "Grid",
+        "Rows",
+        "Search filter options",
+        "forecasting",
+        "outliers"
+      ]
+    },
+    {
+      "path": "/a/grafana-ml-app/home",
+      "title": "Machine learning - Grafana",
+      "headings": [
+        "Machine learning"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Manage forecasts",
+          "to": "/a/grafana-ml-app/metric-forecast"
+        },
+        {
+          "label": "Manage outliers",
+          "to": "/a/grafana-ml-app/outlier-detector"
+        },
+        {
+          "label": "Manage Sift investigations",
+          "to": "/a/grafana-ml-app/investigations"
+        },
+        {
+          "label": "Open Assistant",
+          "to": "/a/grafana-assistant-app"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Machine learning",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/a/grafana-pyroscope-app/explore?panelType=time-series&layout=grid",
+      "title": "Profiles - Drilldown - Grafana",
+      "headings": [
+        "Your Cloud Bill Called. It's Your Code.",
+        "account",
+        "accountingservice",
+        "adservice",
+        "audit",
+        "auth",
+        "balance",
+        "balance-verification"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": [
+        "grafanacloud-play-profiles",
+        "Profile type",
+        "Filter by label values...",
+        "Quick filter",
+        "Grid",
+        "Rows"
+      ]
+    },
+    {
+      "path": "/admin",
+      "title": "Administration - Grafana",
+      "headings": [
+        "Administration"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Plugins and data",
+          "to": "/admin/plugins"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Administration",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/alerts-and-incidents",
+      "title": "Alerts & IRM - Grafana",
+      "headings": [
+        "Alerts & IRM"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Service Center",
+          "to": "/a/grafana-servicecenter-app/home"
+        },
+        {
+          "label": "Alerting",
+          "to": "/alerting"
+        },
+        {
+          "label": "SLO",
+          "to": "/a/grafana-slo-app/home/insights"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Alerts & IRM",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/apps",
+      "title": "More apps - Grafana",
+      "headings": [
+        "More apps"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Session Replay",
+          "to": "/a/grafana-sessionreplay-app"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "More apps",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/connections",
+      "title": "- Connections - Grafana",
+      "headings": [
+        "Welcome to Connections"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Fleet Management",
+          "to": "/a/grafana-collector-app/fleet-management"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Connections",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/d/community-contributors/top-community-contributors?to=now&timezone=utc",
+      "title": "Top Community contributors - Grafana Stats - Dashboards - Grafana",
+      "headings": [
+        "🚀 How to contribute to grafana/grafana",
+        "Merged PRs (last 30 days)",
+        "Open issues",
+        "Open feature requests",
+        "🔥 Popular open issues",
+        "💡 Popular feature requests",
+        "🏆 Top Community contributors (last 30 days)",
+        "🏅 Top contributor"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Grafana Stats",
+          "to": "/dashboards/f/grafana-stats/grafana-stats"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace",
+        "Move 15d backward"
+      ],
+      "fields": [
+        "repo"
+      ]
+    },
+    {
+      "path": "/d/to6j8mh/grafana-play-home?to=now&timezone=utc",
+      "title": "Grafana Play Home - Examples - Dashboards - Grafana",
+      "headings": [
+        "Welcome to Grafana Play",
+        "🌟 Featured Grafana Contributor",
+        "🏆 Visualization of the Month",
+        "Dashboard Quest: A Grafana Dashboard Adventure Game",
+        "🏆 Top Community contributors (last 30 days)"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Examples",
+          "to": "/dashboards/f/examples/examples"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Dashboard Quest: A Grafana Dashboard Adventure Ga…",
+          "to": "/a/grafana-assistant-app/pages/:id"
+        },
+        {
+          "label": "Top Community Contributors",
+          "to": "/d/community-contributors/top-community-contributors"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace",
+        "Copy link"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/dashboard/recently-deleted",
+      "title": "Page not found - Grafana",
+      "headings": [
+        "Page not found"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": [
+        "Search for dashboards",
+        "Tag filter",
+        "Include panels",
+        "Sort"
+      ]
+    },
+    {
+      "path": "/dashboards",
+      "title": "Starred - Grafana",
+      "headings": [
+        "Your Data Deserves Better Than a Spreadsheet",
+        "Starred",
+        "Recently viewed"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Recently deleted",
+          "to": "/dashboard/recently-deleted"
+        },
+        {
+          "label": "Grafana Play Home",
+          "to": "/d/to6j8mh/grafana-play-home"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Starred",
+        "Expand section: Starred",
+        "Dashboards",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant"
+      ],
+      "fields": [
+        "Search for dashboards and folders",
+        "Tag filter",
+        "Owner filter",
+        "Include panels",
+        "Starred",
+        "Created by me",
+        "Sort"
+      ]
+    },
+    {
+      "path": "/dashboards/f/examples/examples",
+      "title": "Examples - Dashboards - Grafana",
+      "headings": [
+        "Your Data Deserves Better Than a Spreadsheet",
+        "Examples"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Recently deleted",
+          "to": "/dashboard/recently-deleted"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace",
+        "Close alert"
+      ],
+      "fields": [
+        "Search for dashboards and folders",
+        "Tag filter",
+        "Owner filter",
+        "Include panels",
+        "Starred",
+        "Created by me",
+        "Sort"
+      ]
+    },
+    {
+      "path": "/drilldown",
+      "title": "Drilldown - Grafana",
+      "headings": [
+        "Investigate First. Write the Query Later.",
+        "Drilldown"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Metrics",
+          "to": "/a/grafana-metricsdrilldown-app/drilldown"
+        },
+        {
+          "label": "Logs",
+          "to": "/a/grafana-lokiexplore-app/explore"
+        },
+        {
+          "label": "Traces",
+          "to": "/a/grafana-exploretraces-app"
+        },
+        {
+          "label": "Profiles",
+          "to": "/a/grafana-pyroscope-app/explore"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Drilldown",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    },
+    {
+      "path": "/explore",
+      "title": "Explore - -- Grafana -- - Grafana",
+      "headings": [
+        "Your Data Knows the Answer. Go Find It.",
+        "Explore",
+        "Graph",
+        "Table"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Explore",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": [
+        "Select a data source",
+        "Query type",
+        "Series count",
+        "Start value",
+        "Min",
+        "Max",
+        "Spread",
+        "Noise",
+        "Drop (%)",
+        "Lines",
+        "Bars",
+        "Points",
+        "Stacked lines",
+        "Stacked bars"
+      ]
+    },
+    {
+      "path": "/observability",
+      "title": "Observability - Grafana",
+      "headings": [
+        "Observability",
+        "Frontend (RUM)",
+        "Services",
+        "Databases",
+        "Pods",
+        "Nodes",
+        "Explore more solutions"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Testing & synthetics",
+          "to": "/testing-and-synthetics"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "View all",
+          "to": "/a/grafana-asserts-app/catalog?entityTypeFilter=Frontend"
+        },
+        {
+          "label": "View all",
+          "to": "/a/grafana-asserts-app/catalog?entityTypeFilter=Service"
+        },
+        {
+          "label": "View all",
+          "to": "/a/grafana-asserts-app/catalog?entityTypeFilter=Database"
+        },
+        {
+          "label": "View all",
+          "to": "/a/grafana-asserts-app/catalog?entityTypeFilter=Pod"
+        },
+        {
+          "label": "View all",
+          "to": "/a/grafana-asserts-app/catalog?entityTypeFilter=Node"
+        },
+        {
+          "label": "Incident Response & Management On-call scheduling…",
+          "to": "/plugins/grafana-irm-app"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Expand section: Testing & synthetics",
+        "Observability",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": [
+        "Ask the Assistant - 'Why is payments-svc erroring…"
+      ]
+    },
+    {
+      "path": "/testing-and-synthetics",
+      "title": "Testing & synthetics - Grafana",
+      "headings": [
+        "Testing & synthetics",
+        "Synthetic monitoring"
+      ],
+      "links": [
+        {
+          "label": "Skip to main content",
+          "to": "/"
+        },
+        {
+          "label": "Home",
+          "to": "/"
+        },
+        {
+          "label": "Grafana",
+          "to": "/"
+        },
+        {
+          "label": "Starred",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Dashboards",
+          "to": "/dashboards"
+        },
+        {
+          "label": "Pages New!",
+          "to": "/a/grafana-assistant-app/pages"
+        },
+        {
+          "label": "Explore",
+          "to": "/explore"
+        },
+        {
+          "label": "Drilldown",
+          "to": "/drilldown"
+        },
+        {
+          "label": "AI",
+          "to": "/a/grafana-assistant-app"
+        },
+        {
+          "label": "Alerts & IRM",
+          "to": "/alerts-and-incidents"
+        },
+        {
+          "label": "Machine learning",
+          "to": "/a/grafana-ml-app/home"
+        },
+        {
+          "label": "Observability",
+          "to": "/observability"
+        },
+        {
+          "label": "Connections",
+          "to": "/connections"
+        },
+        {
+          "label": "More apps",
+          "to": "/apps"
+        },
+        {
+          "label": "Administration",
+          "to": "/admin"
+        },
+        {
+          "label": "Sign in",
+          "to": "/login"
+        },
+        {
+          "label": "Open",
+          "to": "/a/grafana-synthetic-monitoring-app/home"
+        },
+        {
+          "label": "Create",
+          "to": "/a/grafana-synthetic-monitoring-app/checks/choose-type"
+        },
+        {
+          "label": "Manage",
+          "to": "/a/grafana-synthetic-monitoring-app/probes"
+        },
+        {
+          "label": "View",
+          "to": "/a/grafana-synthetic-monitoring-app/config/terraform"
+        }
+      ],
+      "buttons": [
+        "Close menu",
+        "Starred Dashboards Pages New! Explore Drilldown A…",
+        "Expand section: Starred",
+        "Expand section: Dashboards",
+        "Expand section: Drilldown",
+        "Expand section: AI",
+        "Expand section: Alerts & IRM",
+        "Expand section: Machine learning",
+        "Testing & synthetics",
+        "Expand section: Testing & synthetics",
+        "Expand section: Observability",
+        "Expand section: Connections",
+        "Expand section: More apps",
+        "Expand section: Administration",
+        "Undock menu",
+        "Search...",
+        "New",
+        "Help",
+        "Open Grafana Assistant",
+        "Workspace"
+      ],
+      "fields": []
+    }
+  ],
+  "source": {
+    "url": "https://play.grafana.org/",
+    "maxPages": 30,
+    "docs": [
+      "https://grafana.com/docs/grafana/latest/alerting/monitor-status/view-alert-rules/",
+      "https://grafana.com/docs/grafana/latest/dashboards/share-dashboards-panels/",
+      "https://grafana.com/docs/grafana/latest/dashboards/use-dashboards/",
+      "https://grafana.com/docs/grafana/latest/explore/get-started-with-explore/"
+    ],
+    "maxDepth": 3,
+    "reader": "browser"
+  },
+  "createdAt": "2026-11-15T06:58:11.075Z",
+  "updatedAt": "2026-11-15T23:04:00.799Z"
+}

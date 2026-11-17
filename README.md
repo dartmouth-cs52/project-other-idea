@@ -1,125 +1,226 @@
-# Haptic Labs
+<div align="center">
 
-![Team Photo](Insert a Team Photo URL here)
-[*how?*](https://help.github.com/articles/about-readmes/#relative-links-and-image-paths-in-readme-files)
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo-light.svg" width="300" alt="Haptic">
+  </picture>
+</h1>
 
-Haptic is an AI guide that software companies add to their web app with one script tag. A user asks how to do something, and a pointer walks them to the right buttons, step by step, across menus and pages.
+**The AI guide that lives in your product.**<br>
+People say what they want to do, and Haptic points to exactly where to click, step by step.
 
-## Status
+[Live site](https://joinhaptic.com) · [How it works](#how-it-works) · [Engineering](#engineering) · [Benchmark](#benchmark) · [Docs](#documentation)
 
-We're rebuilding Haptic from scratch on `main`. What's here so far is the core loop, with no accounts or dashboard yet:
+[![CI](https://github.com/dartmouth-cs52/project-other-idea/actions/workflows/ci.yml/badge.svg)](https://github.com/dartmouth-cs52/project-other-idea/actions/workflows/ci.yml)
+[![Live](https://img.shields.io/badge/live-joinhaptic.com-1E6EF4)](https://joinhaptic.com)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6)
+![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020)
 
-- **The widget** (`src/widget`): the script a customer adds to their site. It reads the page the visitor is on, asks the server for the next step, moves a pointer to the element, waits for the visitor to use it, and carries on, across page loads too.
-- **The server** (`src/server`): serves the widget and answers each step with one Claude call.
-- **Intake** (`src/intake`): a command that reads a customer's site and their help docs, saves what it learned, and prints the script tag.
-- **The website** (`web`): the landing page for joinhaptic.com, a static Next.js site. See [`web/README.md`](web/README.md).
+</div>
 
-The look of both the widget and the website is defined in [`DESIGN.md`](DESIGN.md).
+<br>
 
-The first version is on the [`v1`](../../tree/v1) branch, kept as a reference.
+![Haptic guiding a visitor from the privacy page to the request-access form on joinhaptic.com](docs/demo.gif)
 
-## Architecture
+<p align="center"><sub>A real, unscripted run on <a href="https://joinhaptic.com">joinhaptic.com</a> with the production model. The visitor asks one question, and Haptic leads them across a page load and through a form. To try it, click <b>Ask</b> on any page of the site.</sub></p>
 
-TypeScript on Node, with no framework. The widget is bundled into one file by esbuild.
+## Overview
 
-```
-npm run tag ──▶ data/sites/<id>.json ──▶ server ◀── widget.js on the customer's site
- (crawl + docs)   (the site's context)     │  POST /v1/turn: the page as a list of elements
-                                           ▼
-                                         Claude: "point at e12, then wait"
-```
+When someone gets stuck in a web app, the help on offer either sends them somewhere else or doesn't know what their screen looks like today.
 
-**What we keep about a site** (`SiteContext` in `src/shared/types.ts`):
+| | On the user's screen | Follows the current UI | Points to the exact control |
+|---|:---:|:---:|:---:|
+| Help center articles | ✗ | ✗ | ✗ |
+| Support chatbots | ✓ | ✗ | ✗ |
+| Scripted product tours | ✓ | ✗ | ✓ |
+| **Haptic** | ✓ | ✓ | ✓ |
 
-| Field | Where it comes from |
+A company installs Haptic with one script tag. It reads the page on every step, so it follows whatever the product looks like today. It learns the product from what the company already has, which is the site itself, its help docs and a few notes. Nobody authors a tour or maintains a selector.
+
+## At a glance
+
+| Claim | Evidence |
 |---|---|
-| `pages` | The crawl. For each page: title, headings, button and field labels, and which page each link leads to. Pages are nodes and links are edges, so this is already a graph of the site. |
-| `notes`, `docs` | The company: free-form notes and help docs (files, folders or URLs). |
-| `appearance`, `allowedOrigins` | The company: the widget's color, corner and label, and which origins it may run on. |
-| `source` | The inputs it was built from, so it can be rebuilt unattended. |
+| **Accurate** | Points at the right control on 97% of steps on Haptic's own sites, 85% on twelve real apps, and 86% on three apps held out of all tuning. [Method, results for each app and caveats.](eval/README.md#results) |
+| **Fast** | Replies are streamed, so the pointer moves as soon as the model names the control, about 0.8 s into a step. |
+| **Small** | One script, 60 KB gzipped, with no dependencies, isolated in a shadow root. The code for Do it with me and for teach mode loads only where it is used. |
+| **Safe on pages it has never seen** | Put into 107 public websites, it mounted on all 90 that could be tested and disturbed none of them while idle. It threw no errors, moved no elements and left the focus order as it was. [The same run lists what it still gets wrong.](eval/README.md#does-the-tag-work-on-any-website) |
+| **Private by construction** | What a user types is never sent. Email addresses and long numbers are masked in the browser, and again on the server before anything is stored. [Exactly what, and the exceptions.](docs/privacy.md) |
+| **Tested** | 77 test files, about 21,000 lines of tests for about 21,000 lines of widget and server code, including red-team pages and browser suites in Chromium, Firefox and WebKit. |
+| **In production** | The widget server runs on Cloudflare Workers with Postgres on Neon, deployed from `main` by GitHub Actions, behind an invite-only dashboard at [joinhaptic.com](https://joinhaptic.com). |
 
-**How a step works.** The widget lists every control on the page with a short id (`e12`), its role, label and state. It never reads what's typed into fields, and masks emails and long numbers. The model replies with the id to point at, a sentence to show, and whether to wait for the visitor. The reply is streamed, so the pointer moves as soon as the id is known, before the sentence is finished. After the visitor acts, the widget waits for the page to stop changing and sends the new page with a summary of what changed. If they click something else, Haptic says so and gives the step that gets them back. Guide state is kept in `sessionStorage`, so a click that loads a new page picks up where it left off.
+## How it works
 
-The crawl only sees HTML the server sends. Pages drawn by JavaScript or behind a login come back nearly empty, and the command says so when that happens. The widget reads each page live either way, so those sites lean on notes and docs for now.
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant W as Widget on the customer page
+    participant S as Haptic server on Cloudflare
+    participant C as Claude
+    U->>W: How do I request access?
+    loop Each step, until the task is done
+        W->>S: The page as a list of controls, private data masked
+        S->>C: Cached site knowledge, this page, progress so far
+        C-->>S: Streamed reply with target, caption and status
+        S-->>W: Target id, as soon as it is known
+        W->>U: Pointer and caption on that control
+        U->>W: Clicks or types
+        W->>W: Waits for the page to settle and notes what changed
+    end
+```
 
-## Setup
+1. **Snapshot.** The widget lists every interactive control on the page with a short id, its role, label, state and position, such as `nav` or `main › Billing`. When a dialog is open, only the dialog is listed.
+2. **Decide.** The server sends the snapshot, the goal and the progress so far to Claude. The site's knowledge is a cached prompt, so each step pays full price only for what changed. The reply has a strict schema, and a target that isn't on the page is dropped, so Haptic can only point at what the user can see.
+3. **Point.** The pointer moves the moment the target id arrives, before the caption has finished streaming.
+4. **Observe.** Once the user acts, the widget waits for the page to settle and reports what changed. If they click something else, Haptic notices and gives them the step that gets them back.
+5. **Carry on.** Guide state lives in `sessionStorage`, so a guide continues across full page loads.
+
+### What Haptic knows about a site
+
+A crawl turns the site into a **graph**. Each page's title, headings, buttons and field labels make a node, and the links between pages are the edges. The dashboard's reader uses a headless browser and also opens each menu, tab and accordion, so the map knows which control a link sits behind. Real visits fill in what a crawl can't reach. The widget reports the labels on each page it loads on, and a label joins the map once three different visitors have seen it. [How visits teach it.](docs/widget.md#learning-the-site-from-visits) Together with the company's notes and help docs, this gives the model a map it can plan routes through, to pages the user hasn't reached yet.
+
+## Engineering
+
+The pointer is the easy part. Most of the code is what makes it safe to put in front of someone else's customers.
+
+| Problem | How Haptic handles it |
+|---|---|
+| **A model that points at something that isn't there** | The model never returns coordinates or selectors, only the id of a control from the snapshot it was sent. The reply is checked against a strict schema, and a target that isn't on the page is dropped. |
+| **Pages that try to give the model orders** | Page content is fenced off in the prompt as untrusted data, and every outgoing sentence passes rules on the server that drop links, contact details, payment details and requests for secrets. In the benchmark's hostile cases, text planted on the page was followed 0 times in 10. |
+| **Private data on the page** | The widget sends labels, never field values, and leaves what a user typed out of every heading, label and option that repeats it. Email addresses, long numbers and phone and card numbers are masked in the browser and again on the server, by the same function. See [what is masked](docs/privacy.md) and [what is stored](docs/operations.md#what-is-recorded-about-visitors). |
+| **An unbounded model bill** | Each site's knowledge is prompt-cached. Each site has hourly and daily dollar budgets, enforced on every step by reserving the step's maximum cost up front and settling to the real cost afterwards. Optional limits for each visitor count against a daily-salted hash of their address. A kill switch takes Haptic off one site, or all of them, without a deploy. See [spend limits](docs/operations.md#what-a-site-can-spend). |
+| **Knowing whether a change made it better** | A [benchmark](eval/README.md) of 565 frozen steps with known right answers, scored for accuracy, latency and output hygiene, plus whole guides run start to finish in a browser. A staging copy of the server measures a prompt change against the real model before visitors get it. |
+| **Real apps are harder than demos** | [Northpine](testbed/README.md) is a fake spend-management app with about 60 routes and 10,000 transactions. It is built to contain every UI pattern known to break a pointing guide, among them virtualized tables, portals, nested dialogs and command palettes. It comes with 179 tasks. |
+| **Billing people can check** | Pricing charges only for finished guides. Finished has one definition shared by the widget, the database and the dashboard, which lists every billable guide with a download. |
+
+### Beyond pointing
+
+- **[Answers](docs/answers.md).** On a site with help docs, Haptic answers questions about what something does in words, citing the articles it drew on. The server, not the prompt, enforces the rules that matter. An answer must cite a real article. Prices, refunds and legal matters are never stated. A button an article names is checked against the page, so out-of-date docs get flagged instead of repeated.
+- **[Do it with me](docs/widget.md#do-it-with-me).** Off unless a site turns it on. Haptic clicks, types and chooses on the page while the user watches, then points at the last control, the one that saves, sends or pays, for the user to click. It never types passwords or payment details, types only what the user wrote in their question, and stops on Escape. The server checks every action with the same rules as the widget.
+- **[What people can't find](docs/corrections.md#what-people-cant-find-and-guide-health).** The dashboard leads with the questions people gave up on, and flags a common question whose guides stopped finishing, which is what a change to the product looks like.
+- **[Teach Haptic](docs/corrections.md#teach-haptic).** When Haptic gets a question wrong, someone at the company presses Teach Haptic the right way in the dashboard. Their app opens with a one-time link, and they do the task once while the widget records which controls they use, never what they type. They review the steps, and from then on a question for the same task, the same action on the same thing, is guided along that route. The model still checks each step against the live page.
+- **[Corrections](docs/corrections.md#point-here-instead).** When Haptic points at the wrong thing, the company picks the right control in the dashboard and the fix applies to similar questions from then on. A company can also list controls Haptic must never point at.
+- **[Hand-off to a person](docs/answers.md#the-way-to-a-person).** When Haptic can't help, it passes the conversation to the company's existing support through a webhook, a contact page, email or the site's own chat widget. The webhook can be HMAC-signed.
+
+## Benchmark
+
+565 frozen single steps with known right answers, 448 of them on twelve real apps, and whole guides run start to finish in a browser. Measured against the production server with Claude Sonnet 5.5, every case run once. [Full results and caveats.](eval/README.md#results)
+
+| Where | Single steps right | Whole guides that got there |
+|---|---|---|
+| Haptic's own demo app | 56 of 56 | 13 of 13 |
+| joinhaptic.com | 15 of 17 | 4 of 5 |
+| Hostile, off-topic, risky and badly asked questions on the demo app | 39 of 44, 89% | 3 of 3 |
+| Nine real apps, among them SAP UI5, Ant Design Pro, OrangeHRM, Grafana and Jira | 299 of 352, 85% | 45 of 85, 53% |
+| Three apps held out of all tuning, EspoCRM, GitLab and Moodle | 83 of 96, 86% | 21 of 29, 72% |
+
+The gap between single steps and whole guides on real apps is the finding. About half the guides that did not get there were lost to the widget before the model had a fair chance, to an empty page, a pick it never heard, or two unnamed fields taken for one. That gap is the work in progress.
+
+The production model was chosen earlier, from one run of the first 74 cases.
+
+| Model | Right control | Plausible range | Time to pointer | Typical full step |
+|---|---|---|---|---|
+| Claude Sonnet, in production | 73 of 74 | 93 to 100% | 831 ms | 1449 ms |
+| Claude Haiku | 73 of 74 | 93 to 100% | 949 ms | 1078 ms |
+| Claude Opus | 72 of 74 | 91 to 99% | 1318 ms | 1720 ms |
+
+Sonnet matches the best accuracy, names the control about half a second sooner than Opus, and costs about half as much per step. The ranges overlap, so the next step is more cases, especially from apps behind a login.
+
+## Repository
+
+| Path | What it is |
+|---|---|
+| [`src/widget`](src/widget) | The embeddable script, with the page snapshot, guide loop, pointer and panel |
+| [`src/server`](src/server) | One request handler, `app.ts`, shared by the local Node server and the production Worker. It does validation, prompts, model calls, rules, budgets and recording |
+| [`src/intake`](src/intake) | A CLI that crawls a site and its help docs, publishes it, and switches it on or off |
+| [`worker`](worker) | The Cloudflare Worker entry point for `widget.joinhaptic.com` |
+| [`web`](web) | [joinhaptic.com](https://joinhaptic.com) and the customer dashboard |
+| [`db/migrations`](db/migrations) | Postgres schema for sites, guides and steps |
+| [`eval`](eval) | The guide and Answers benchmarks, and the any-website sweep |
+| [`test`](test) | Unit tests, browser tests and the red-team pages |
+| [`testbed`](testbed) | Northpine, the stress-test app |
+| [`demo`](demo) | A small multi-page app for trying the widget locally |
+| [`DESIGN.md`](DESIGN.md) | The design system shared by the widget and the website |
+
+**Stack.** TypeScript, Claude through the Anthropic SDK, Cloudflare Workers with KV and Durable Objects, Neon Postgres and Neon Auth, Next.js, Tailwind CSS and shadcn/ui, React and Vite, Resend, esbuild, Playwright, `node:test` and GitHub Actions.
+
+## Quick start
+
+Requires Node 20.19+ or 22.9+. CI uses Node 22.
 
 ```bash
 npm install
-cp .env.example .env      # add ANTHROPIC_API_KEY, or set HAPTIC_MODEL=mock to run without one
-npm run dev               # http://localhost:4000, with a demo site at /demo/
+cp .env.example .env   # add ANTHROPIC_API_KEY, or set HAPTIC_MODEL=mock to run without one
+npm run dev            # http://localhost:4000, with a demo app at /demo/
 ```
 
-In another terminal, build the demo site's context and open http://localhost:4000/demo/:
+In a second terminal, teach Haptic the demo app.
 
 ```bash
 npm run tag -- --url http://localhost:4000/demo/ --id site_demo --name "Acme Console" \
-  --notes demo/notes.md --docs demo/help --accent "#2f3bd6"
+  --notes demo/notes.md --docs demo/help
 ```
 
-Click **Ask** and try "how do I change my billing info". With `HAPTIC_MODEL=mock` the answers come from a keyword matcher, which is only good for testing the plumbing.
+Open http://localhost:4000/demo/, click **Ask**, and try *how do I change my billing info*. Billing sits behind the account menu, so Haptic has to open that first. With `HAPTIC_MODEL=mock`, a keyword matcher stands in for the model, which is only good for testing the plumbing.
 
-For a real site:
+To build a context for any site, run `npm run tag -- --url https://app.example.com --name Example --notes notes.md --docs help/`. It prints the script tag to paste before `</body>`, and `npm run tag -- --help` lists every option.
+
+## Development
 
 ```bash
-npm run tag -- --url https://app.example.com --name Example --notes notes.md --docs help/ --docs https://example.com/faq
+npm test                          # unit tests (node:test)
+npm run typecheck                 # tsc, strict
+npm run build                     # bundle the widget to dist/widget.js, and the code that acts to dist/widget-act.js
+npm run eval -- --models mock     # the guide benchmark, no API key needed
+npm run eval:guides -- demo       # whole guides in a browser (needs the local server running)
+npm run test:browser              # page reading in Chromium, and the widget in Chromium, Firefox and WebKit
+npm run test:dashboard            # the built dashboard in Chromium, kept current from a real Postgres (see below)
+npm run test:widget               # guides, hearing, Do it with me, the gate and red-team pages, in Chromium
 ```
 
-It prints the tag to paste before `</body>`. `npm run tag -- --help` lists every option. To keep a site's context current, run `npm run tag -- refresh --all` on a schedule (a cron job): it re-reads each site and its docs from the saved inputs, and the server picks up the change without a restart.
+The browser tests need Playwright's browsers once, with `npx playwright install chromium firefox webkit`. The act tests on pages built from the real React, Radix and cmdk also need those libraries for the run, and are skipped without them. Install them with `npm install --no-save react@19 react-dom@19 radix-ui@1 cmdk@1`.
 
-`npm test` runs the unit tests and `npm run typecheck` checks types.
+The dashboard tests open the pages `next build` writes, so build the site first. They read every number from a local Postgres through the Worker's own queries, so they need `TEST_DATABASE_URL` set to an empty local database, never a real one. Run them with `cd web && npm run build && cd .. && TEST_DATABASE_URL=postgres://postgres@127.0.0.1:55432/haptic_test npm run test:dashboard`. A test writes a question and its steps to the database as the widget server does, and waits for the open page to show them by itself. Without the build or the database they are skipped, and say which is missing. `dashboard-tests.yml` runs them on every pull request that touches the dashboard.
 
-`npm run eval -- --models mock` runs the benchmark: 74 fixed steps with known right answers, on the demo app and on joinhaptic.com, scored for any model. See [`eval/README.md`](eval/README.md).
+`web/` and `testbed/` are separate packages with their own `npm run dev` and `npm run build`. On every push and pull request, CI typechecks, tests and builds the server, lints, tests and builds the website, and builds Northpine. A pull request that touches the widget also runs both browser suites, in `widget-tests.yml`. Pushes to `main` deploy the website and the widget server. The widget's deploy first runs the page-reading and widget browser tests and the acting-safety suites, which are the gate and the red-team pages. A [staging copy of the server](docs/operations.md#the-staging-server), with a small budget of its own, is for trying a change against the real model before visitors get it.
 
-## Deployment
+## Documentation
 
-The website deploys to Cloudflare from `web/`. See [`web/README.md`](web/README.md#deploying).
+| Doc | Covers |
+|---|---|
+| [Operations](docs/operations.md) | Deploying, the database, what is recorded about visitors, what Teach Haptic keeps, billing outcomes, the kill switch, spend limits, step costs and verified routes |
+| [Privacy](docs/privacy.md) | What leaves the browser, what is masked first, and the exceptions |
+| [The widget on a page](docs/widget.md) | Modal dialogs, covered controls, route changes, Do it with me, teach mode, learning the site from visits, and the browser tests |
+| [Correcting Haptic](docs/corrections.md) | What people can't find, guide health and its emails, Point here instead, Teach Haptic, and controls Haptic must never point at |
+| [Answers and hand-off](docs/answers.md) | Answering from help docs, the server-side rules, and hand-off to a person |
+| [Benchmark](eval/README.md) | How cases work, how to run them, and results |
+| [Website and dashboard](web/README.md) | Sign-in, approvals, the dashboard, and deploying the site |
+| [Northpine](testbed/README.md) | The stress-test app and its tasks |
+| [Design system](DESIGN.md) | Colour, type, radii and motion |
 
-The widget server runs as a Cloudflare Worker at `https://widget.joinhaptic.com`, the address in every customer's script tag. `worker/index.ts` is its entry point, and it gives the same answers as the Node server because both run `src/server/app.ts`. The settings are in `wrangler.jsonc`.
+## Status
 
-```bash
-npm run deploy                                        # builds the widget, then publishes the Worker
-npm run site:publish -- site_ab12cd34ef               # copies a site built with `npm run tag` to Neon
-npm run site:publish -- --from-kv site_joinhaptic     # moves a site from the old KV store to Neon
-```
+Haptic is in early access. It is running, by invitation, and free until billing starts. These are its known limits.
 
-Build a site for the online server with `HAPTIC_PUBLIC_URL=https://widget.joinhaptic.com npm run tag -- --url …`, so the tag it prints points there. A published site is picked up within a minute. Companies that sign up add their own sites from the dashboard on joinhaptic.com (see [`web/README.md`](web/README.md#sign-in-approval-and-the-dashboard)).
+- On real apps a single step is right about 85% of the time, and about half the whole guides get there. On Haptic's own sites it is 97% and nearly all of them.
+- The command-line crawler reads server-rendered HTML, so pages drawn by JavaScript or behind a login come back thin. The widget still reads every page as the user sees it, so those sites lean more on notes and docs.
+- Nothing inside a rich-text editor, a canvas or a frame from another origin can be pointed at. For editors this is deliberate, because the widget reads nothing inside an area the user writes in.
+- Answers has been run against a real model on one app, Northpine. Its own benchmark of 220 questions, 100 of them attacks, is built and has not yet been run against a real model.
+- Do it with me is off by default. It does not pick dates yet, so a date field is handed to the user.
 
-**The database.** Sites, and every guide and step, are kept in Neon, in the project called haptic. The tables are in `db/migrations`, and `npm run db:migrate` applies the ones a database is missing, to the database in `DATABASE_URL`. It talks to Neon over HTTPS. The Worker reads the connection string from a secret:
+## How it was built
 
-```bash
-npx wrangler secret put DATABASE_URL
-```
+Haptic is written with [Claude Code](https://claude.com/claude-code), and the commit history shows it. Most commits are authored by the agent. The team's work is what the agent is pointed at and what it is held to. We decide what to build, and we set the bar a change has to clear before it merges. That bar is the frozen benchmark, the red-team pages, the browser suites, and a staging server for measuring a change to the prompt against the real model before visitors get it. A large share of this repository is that bar and not the product, namely the benchmark, Northpine, the any-website sweep and about as many lines of tests as of code under test.
 
-A step of a guide never waits on the database for its site: the Worker answers from the copy it holds in memory, up to ten minutes old, and fetches a fresh one after the response (`src/server/site-cache.ts`). The widget loading on a page does wait for a fresh copy once the held one is a minute old, which is how a change made in the dashboard takes effect.
+## Team
 
-Without it the Worker still answers, from the KV store sites were kept in before Neon, and records nothing. With it, a site missing from Neon is still looked for in the KV store, until every site has moved.
+Haptic started in Dartmouth's CS 52, Full-Stack Web Development. It's built by three people.
 
-What is kept from visitors follows one rule: the question, each control pointed at, wrong clicks, how the guide ended, whether they said it helped, and timings. Emails and long numbers are masked. Page contents are not kept, and what people type is never read. The question is recorded when it arrives, before the model answers, so a guide whose first step fails is still on record. A guide that never reports an ending was abandoned.
+- **Charlie Peers**, [@charliepeers](https://github.com/charliepeers). The production server and its deployment, the benchmark, cost controls, Answers and hand-off, Do it with me, privacy masking, sign-in, the dashboard and onboarding flow, and joinhaptic.com.
+- **Theodore Chan**, [@TheoC26](https://github.com/TheoC26). Northpine, how the widget follows a page through dialogs, covered controls and route changes, learning a site from visits, corrections and guide health.
+- **Isaac Saxonov**, [@clewner](https://github.com/clewner). The first version of the widget, server and site crawler that the rest grew from, and mapping pages behind a sign-in.
 
-**Verified routes** (issue 13, `src/server/routes.ts`). For a question on a screen, the control that was right last time, so the same question on the same screen can be answered without the model. A route is keyed on the question (masked and normalized), the page, any open dialog and the control the previous step used. It is learned from the model's answer, trusted once a guide that used it finishes, and loses that trust when someone answers No to Did this help or the model answers differently. Each site has a mode, set from its dashboard:
+## Licence
 
-- **shadow**, the default: every step is looked up beside the model call, and the step records whether the model chose the same control. The visitor always gets the model's answer, so this costs nothing and adds no wait.
-- **serve**: a trusted route is answered without the model, but only when exactly one control on the live page matches it and it does not point again at the control just used. Anything else goes to the model. The lookup gets 250 ms before the model is asked anyway.
-- **off**: no lookups.
-
-How often questions repeat, and whether serving would be right, is on each site's dashboard and in a report across every site:
-
-```bash
-npm run routes:report                     # the last 7 days
-npm run routes:report -- --days 30 --site site_ab12cd34ef
-```
-
-"Had a route" is the repeat rate issue 13 asks for: the same question on the same screen at the same point. "Could be served" is the share of steps that would skip the model, and "model agreed" says whether doing so would have been right. Turn serving on for a site once both are high.
-
-**Which guides are finished.** Pricing on joinhaptic.com bills only finished guides, so the widget records "finished" exactly as pricing defines it: the visitor followed the steps and is now where they asked to be, or used the control the last answer pointed at. A first answer the visitor did not act on, or one that only needed words, ends as "shown". When the model finds no way forward it answers with the status "stuck", kept apart from "done", and the guide ends as "nothing to point at". Neither is billed. The dashboard lists every finished guide by month, with a download, so a bill can be checked. See `GUIDE_OUTCOMES` in `src/shared/types.ts`.
-
-The first time the script calls from an allowed origin is how the dashboard knows a site is connected, and a call from an origin that is not allowed is kept too, so the dashboard can say why an install looks dead.
-
-The online server calls the model named by `HAPTIC_MODEL` in `wrangler.jsonc`, which the benchmark chose (see [`eval/README.md`](eval/README.md), "Results"). Its key is the repository's `ANTHROPIC_API_KEY` secret, which the deploy workflow copies onto the Worker. Set `HAPTIC_MODEL` to `mock` to run it on the keyword stand-in, which needs no key.
-
-## Authors
-
-TODO: list of authors
-
-## Acknowledgments
+All rights reserved. The code is public so that it can be read, and the [LICENSE](LICENSE) allows nothing more without permission.

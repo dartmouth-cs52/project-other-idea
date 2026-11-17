@@ -1,0 +1,240 @@
+{
+  "articles": [
+    {
+      "file": "inviting-teammates.md",
+      "title": "Inviting teammates",
+      "updated": "2026-10-02",
+      "facts": [
+        "To invite someone, go to Team, type their address in Email address and press Send invite; the page then shows \"Invite sent.\"",
+        "Anyone in the workspace can send an invite, not only the owner.",
+        "The invite email holds a link that works for 7 days.",
+        "An invite is re-sent by entering the same address and pressing Send invite again, which gives a new 7-day link and stops the old link working.",
+        "The person must accept with the same email address the invite was sent to.",
+        "A person who accepts joins as a member and only then appears in the list on the Team page.",
+        "A pending invite does not count towards the number of people the plan allows.",
+        "If the workspace is full, the person cannot accept until a place is free or the workspace moves to a larger plan.",
+        "Only the workspace owner can remove people."
+      ]
+    },
+    {
+      "file": "roles-and-removing-people.md",
+      "title": "Roles and removing people",
+      "updated": "2024-05-14",
+      "facts": [
+        "There are two roles, owner and member.",
+        "A workspace has exactly one owner, the person who created it, marked \"(owner)\" in the list on the Team page.",
+        "Members can create projects, deploy to any project, invite teammates and see usage on the Overview page.",
+        "Only the owner can remove people, change the plan, update the payment method, change the workspace name and time zone, switch the two-factor requirement on or off, and create API keys.",
+        "A removed person loses access straight away and is signed out within a minute.",
+        "Projects a removed person created, and what they deployed, stay in the workspace and keep running.",
+        "Removing someone frees their place on the plan at once.",
+        "The owner cannot be removed, and a member cannot remove another member or themselves.",
+        "A removed person can be invited again and comes back as a member."
+      ]
+    },
+    {
+      "file": "projects-and-regions.md",
+      "title": "Projects and regions",
+      "updated": "2026-08-19",
+      "facts": [
+        "A project is one app or service, with its own deploys and its own web address.",
+        "A project is created on the Projects page with New project, then Project name, Region and Create project.",
+        "The two regions are US East, in Virginia, and EU West, in Ireland; US East is selected by default.",
+        "The region is where the project runs and where its data is kept.",
+        "A region cannot be changed after a project is created; the way to use the other region is a second project there.",
+        "A project's name becomes part of its web address and cannot be changed afterwards.",
+        "Any teammate can create a project.",
+        "A new project is added to the end of the list and is empty until its first deploy.",
+        "The number of projects a workspace can have depends on its plan."
+      ]
+    },
+    {
+      "file": "deploys.md",
+      "title": "Deploys",
+      "updated": "2026-06-23",
+      "facts": [
+        "A deploy puts a new version of a project live.",
+        "Deploys are started with the Acme command line tool and an API key; Acme Console has no button for starting one.",
+        "The Latest deploy card on the Overview page shows the most recent successful deploy across all projects and how long ago it went live.",
+        "A deploy usually takes about 2 minutes, and the live version keeps answering requests until the new one is ready.",
+        "If a deploy fails, the previous version stays live and the command line tool prints the reason.",
+        "Each project runs one deploy at a time; a second one waits for the first to finish.",
+        "The workspace owner gets an email for every deploy, with the time written in the workspace time zone.",
+        "Deploys do not count as requests, so you can still deploy after the monthly request limit is reached.",
+        "To go back to an earlier version, deploy that version again; there is no separate undo."
+      ]
+    },
+    {
+      "file": "api-keys.md",
+      "title": "API keys",
+      "updated": "2026-09-08",
+      "facts": [
+        "API keys are on the Security tab of Settings, reached from the round \"A\" button, and are made with Create API key.",
+        "A new key appears in the list as \"New key\" with when it was created, and the page shows \"API key created.\"",
+        "The list never shows a key's secret value.",
+        "The secret is sent once to the owner's email address as a link that opens one time within 24 hours, and cannot be read again afterwards, even by support.",
+        "A lost secret cannot be recovered; create another key instead.",
+        "A key belongs to the workspace, works for every project in both regions, and keeps working if the person using it leaves.",
+        "Keys do not expire and are not affected by the two-factor authentication requirement.",
+        "A key cannot be switched off in Acme Console; the owner writes to support, who switch it off, normally within one business day.",
+        "An API key is needed to deploy."
+      ]
+    },
+    {
+      "file": "two-factor-authentication.md",
+      "title": "Two-factor authentication",
+      "updated": "2026-07-14",
+      "facts": [
+        "The owner requires two-factor authentication by ticking Require two-factor authentication at the top of the Security tab of Settings.",
+        "The change applies as soon as the box is ticked; there is nothing to save.",
+        "Every teammate, including the owner, is asked to set it up at their next sign-in, and nobody is signed out when it is turned on.",
+        "People already signed in carry on until their session ends, at most 30 days later.",
+        "Anyone who joins afterwards sets it up the first time they sign in.",
+        "It uses a 6-digit code from any authenticator app; codes by text message are not supported.",
+        "Each person gets 10 backup codes during setup, and each works once.",
+        "Someone with no device and no backup codes needs the owner to ask support for a reset.",
+        "Unticking the box stops codes being asked for from each person's next sign-in."
+      ]
+    },
+    {
+      "file": "workspace-settings.md",
+      "title": "Workspace name and time zone",
+      "updated": "2024-11-20",
+      "facts": [
+        "The workspace name and time zone are on the General tab of Settings and are saved with Save changes.",
+        "Only the workspace owner can change them.",
+        "The time zone choices are UTC, Eastern and Pacific, and a new workspace starts on UTC.",
+        "The workspace name appears in invite emails and at the top of invoices.",
+        "Renaming the workspace does not affect projects, their web addresses, API keys or teammates, and invoices already issued keep the old name.",
+        "The time zone changes the time written in deploy emails and the dates on invoices.",
+        "There is one time zone for the whole workspace, so every teammate sees the same times.",
+        "The time zone does not change when usage resets or when invoices are issued; both happen at midnight UTC on the 1st.",
+        "Eastern and Pacific follow daylight saving time automatically."
+      ]
+    },
+    {
+      "file": "usage-and-limits.md",
+      "title": "Usage and limits",
+      "updated": "2026-10-21",
+      "facts": [
+        "Usage for the month is in the Usage this month card on the Overview page.",
+        "A request is one call received by any deployed project, and all projects in a workspace share one total.",
+        "Requests count whether they succeed or fail; deploys and actions in Acme Console do not count.",
+        "The count is updated about every 10 minutes.",
+        "Usage resets to zero on the 1st of each month at midnight UTC, and unused requests are not carried over.",
+        "Starter includes 5,000 requests, 1 project and 2 people; Team includes 50,000 requests, 10 projects and 10 people; Business includes 500,000 requests, 50 projects and 50 people.",
+        "The owner counts as one of the people.",
+        "Once the included requests are used, further requests are refused with a 429 response until the reset or a move to a larger plan.",
+        "The owner is emailed at 80% and at 100% of the included requests.",
+        "Moving to a larger plan raises the limit straight away, and requests already used still count."
+      ]
+    },
+    {
+      "file": "plans-and-billing.md",
+      "title": "Plans and billing",
+      "updated": "2026-11-03",
+      "facts": [
+        "There are three plans: Starter, Team and Business.",
+        "Starter is free, Team is $49 a month and Business is $199 a month, each for the whole workspace and before tax.",
+        "Only the workspace owner can change the plan, with Change plan in the Current plan section of the Plan and billing page.",
+        "A move to a larger plan takes effect straight away, and the difference for the rest of the month goes on the next invoice.",
+        "A move to a smaller plan takes effect on the 1st of the next month.",
+        "To stop paying, move to Starter.",
+        "Paid plans are charged in advance on the 1st of each month.",
+        "The first payment on a paid plan is refunded in full if the owner asks within 14 days; nothing is refunded after that.",
+        "After a failed charge on the 1st, the invoice must be paid within 10 days, by the 11th, or deploys are paused and requests refused until it is paid."
+      ]
+    },
+    {
+      "file": "payment-method-and-invoices.md",
+      "title": "Payment method and invoices",
+      "updated": "2026-09-29",
+      "facts": [
+        "Billing details are changed with Update payment method on the Plan and billing page, which asks for Name on card and Billing postcode.",
+        "Only the workspace owner can update the payment method.",
+        "Acme does not store full card numbers; the page shows only the card type and last four digits.",
+        "New billing details are used from the next charge, and a charge that failed earlier is tried again within an hour of saving.",
+        "The dialog does not take a card number; to pay with a different card the owner writes to support and gets a secure form that works once, for 24 hours.",
+        "A workspace has one payment method at a time, and Visa, Mastercard and American Express are accepted.",
+        "Invoices are emailed on the 1st of each month to the owner's email address, and each covers the month that is starting.",
+        "Download latest invoice gives the most recent invoice.",
+        "Earlier invoices are not on the page; they are in the monthly emails, and support can send a copy of any invoice from the last 12 months.",
+        "An invoice shows the workspace name, name on card and billing postcode as they were on the day it was issued."
+      ]
+    },
+    {
+      "file": "getting-around.md",
+      "title": "Getting around Acme Console",
+      "updated": "2026-04-07",
+      "facts": [
+        "Every page has a top bar with the name Acme Console, links to Overview, Projects and Team, and a round \"A\" button at the top right.",
+        "Everything about the account (settings, plan, payment, security) is under the round \"A\" button, whose menu has Settings, Plan and billing, and Sign out.",
+        "Overview shows how many projects and teammates the workspace has, plus the Usage this month and Latest deploy cards.",
+        "Settings has three tabs: General, Plan and billing, and Security.",
+        "The Plan and billing tab and the Plan and billing menu choice open the same page.",
+        "Sign out ends the session in the current browser only.",
+        "Without signing out, you stay signed in on a browser for 30 days.",
+        "Acme Console works in the current versions of Chrome, Firefox, Safari and Edge."
+      ]
+    },
+    {
+      "file": "contacting-support.md",
+      "title": "Contacting support",
+      "updated": "2026-05-12",
+      "facts": [
+        "Support is reached by email at support@acme.example, and a person reads every message.",
+        "Support is open Monday to Friday, 09:00 to 18:00 UTC, and closed on 25 December and 1 January.",
+        "Support replies within one business day, or within 4 working hours for workspaces on the Business plan.",
+        "A message should give the workspace name, the project, what you tried, what happened and when.",
+        "Switching off an API key, resetting a teammate's two-factor authentication, paying with a different card, and refund or unpaid-invoice questions are only accepted from the owner's email address.",
+        "Support never asks for a password, an API key's secret, a two-factor code or a full card number.",
+        "Support cannot read an API key's secret value and cannot change a project's region or name."
+      ]
+    }
+  ],
+  "two_article_questions": [
+    {
+      "question": "Our workspace requires two-factor authentication and I am about to invite a contractor. How long do they have to accept, and what will they have to do the first time they sign in?",
+      "needs": ["inviting-teammates.md", "two-factor-authentication.md"],
+      "answer": "The link in the invite email works for 7 days, and the invite can be sent again from the Team page if it runs out. Because the requirement is on, they set up two-factor authentication the first time they sign in, with an authenticator app that produces 6-digit codes, and they are given 10 single-use backup codes."
+    },
+    {
+      "question": "We have used all of this month's requests. Can we still deploy a fix, and when will our projects accept requests again?",
+      "needs": ["usage-and-limits.md", "deploys.md"],
+      "answer": "Yes, you can still deploy: deploys do not count as requests and keep working after the limit is reached. Requests to your projects are refused with a 429 response until usage resets on the 1st of the month at midnight UTC, or until the workspace moves to a larger plan, which raises the limit straight away."
+    },
+    {
+      "question": "We are removing a teammate whose API key our build system uses. Will our deploys stop, and what happens to the projects they created?",
+      "needs": ["roles-and-removing-people.md", "api-keys.md"],
+      "answer": "Deploys carry on: an API key belongs to the workspace, not to a person, and keeps working when the person who used it leaves. The projects they created and everything they deployed stay in the workspace and keep running. Only the workspace owner can remove people."
+    },
+    {
+      "question": "Our project is in US East and our customers are in Europe. Can we move it to EU West, and how do we get the app running there?",
+      "needs": ["projects-and-regions.md", "deploys.md"],
+      "answer": "A region cannot be changed after a project is created. Create a second project on the Projects page with Region set to EU West; it is empty until its first deploy. Then deploy to it with the Acme command line tool and an API key, which usually takes about 2 minutes. The first project keeps running as before."
+    }
+  ],
+  "never_state": [
+    "Starter is free.",
+    "Team is $49 a month.",
+    "Business is $199 a month.",
+    "The first payment on a paid plan is refunded in full if the owner asks within 14 days of the charge.",
+    "After that, payments are not refunded, including for part of a month.",
+    "If the charge on the 1st fails, the owner is emailed and the invoice must be paid within 10 days, by the 11th of the month.",
+    "If it is still unpaid on the 11th, deploys are paused and requests to your projects are refused until it is paid."
+  ],
+  "missing_control": {
+    "file": "roles-and-removing-people.md",
+    "label": "Remove",
+    "sentence": "To remove someone, go to Team and press Remove next to their name."
+  },
+  "left_out": [
+    "deleting a project",
+    "single sign-on",
+    "exporting data",
+    "transferring ownership of a workspace",
+    "a mobile app",
+    "webhooks",
+    "audit logs"
+  ]
+}

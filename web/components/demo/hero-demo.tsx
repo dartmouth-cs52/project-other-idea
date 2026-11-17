@@ -73,6 +73,10 @@ const REST: Scene = {
   caption: STEPS[2].say,
 };
 
+/** How long the demo thinks before its first step, and between steps. Shorter than the product, never too short to see the glow. */
+const THINK_FIRST_MS = 1700;
+const THINK_NEXT_MS = 1200;
+
 async function script({ wait, set, update, alive }: ScriptIO<Scene>) {
   await wait(1000);
 
@@ -84,7 +88,8 @@ async function script({ wait, set, update, alive }: ScriptIO<Scene>) {
   }
   await wait(450);
   set({ asked: true, typed: 0, composer: "thinking" });
-  await wait(1400);
+  // Long enough for the glow to cross the page as it does in the product: a real first step takes two seconds or more.
+  await wait(THINK_FIRST_MS);
 
   for (let i = 0; i < STEPS.length && alive(); i++) {
     const { target, say } = STEPS[i]!;
@@ -112,7 +117,8 @@ async function script({ wait, set, update, alive }: ScriptIO<Scene>) {
     set({ marked: false, caption: null });
     if (i < STEPS.length - 1) {
       set({ composer: "next" });
-      await wait(600);
+      // The glow between steps needs time to be seen at all. At 600 ms it was gone before it had come in.
+      await wait(THINK_NEXT_MS);
     }
   }
 
@@ -135,6 +141,7 @@ export function HeroDemo() {
         <MockWindow address={`${APP_DOMAIN}/${scene.view === "projects" ? "projects" : "settings/billing"}`}>
           <Stage
             pointing={scene}
+            status={STATUS[scene.composer]}
             layoutKey={`${scene.view}-${scene.menu}-${scene.form}-${scene.saved}`}
             // On a desktop the window fits the screen it is on, so the ask box in its corner is never
             // below the fold. 370px is what sits above the stage plus a margin under the window:
@@ -222,7 +229,7 @@ export function HeroDemo() {
               </div>
             </motion.div>
 
-            <div className="absolute right-5 bottom-5 z-10 w-[19rem] max-w-[calc(100%-2.5rem)]">{!scene.fading && <Chat view={chatView(scene)} />}</div>
+            <div className="absolute right-5 bottom-5 z-15 w-[19rem] max-w-[calc(100%-2.5rem)]">{!scene.fading && <Chat view={chatView(scene)} />}</div>
           </Stage>
         </MockWindow>
       </DemoFrame>

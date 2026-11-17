@@ -4,6 +4,7 @@
 
 declare class HTMLRewriter {
   on(selector: string, handlers: HTMLRewriterElementHandlers): HTMLRewriter;
+  onDocument(handlers: { text?(text: HTMLRewriterText): void | Promise<void> }): HTMLRewriter;
   transform(response: Response): Response;
 }
 

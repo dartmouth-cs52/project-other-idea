@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { widgetScriptUrl } from "@/lib/site";
 import { InstallOptions } from "./install-options";
-import { Card } from "./parts";
+import { Card, FailedCard } from "./parts";
 
 /**
  * The page a company sends to whoever looks after its code. It needs no
@@ -14,10 +14,11 @@ export function InstallPage() {
   const site = useSearchParams().get("site") ?? "";
   if (!/^site_[a-z0-9_]{3,40}$/.test(site)) {
     return (
-      <Card className="max-w-2xl">
-        <h1 className="text-2xl font-medium tracking-[-0.02em]">This install link is incomplete</h1>
-        <p className="text-base text-muted-foreground">Ask the person who sent it for the full link from their Haptic dashboard.</p>
-      </Card>
+      <FailedCard
+        className="max-w-2xl"
+        title="This install link is incomplete"
+        message="Ask the person who sent it for the full link from their Haptic dashboard."
+      />
     );
   }
   return (

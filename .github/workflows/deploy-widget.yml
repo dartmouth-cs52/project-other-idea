@@ -38,6 +38,7 @@ jobs:
   deploy:
     name: Deploy to Cloudflare
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -62,6 +63,34 @@ jobs:
 
       - run: npm test
 
+      # Tested in a real browser before anything is published: how the widget reads a
+      # page, that nothing a visitor typed leaves it, and main's widget tests (dialogs,
+      # covered controls, route changes, learning, ruled-out controls), in Chromium.
+      - name: Install a browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Test the widget in a browser
+        env:
+          BROWSERS: chromium
+        run: npm run test:browser
+
+      # "Do it with me" must never press what saves, sends, pays or deletes, nor type
+      # what it must not: the gate's tests and the red-team pages. About two minutes.
+      - name: Test that acting stays safe
+        run: npx tsx --test --test-concurrency=1 test/widget/gate.test.ts test/widget/acting-redteam.test.ts
+
+      # Before the publish, so new code finds its tables. Migrations only add, so the code
+      # already live keeps working on the migrated database.
+      - name: Apply database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::warning::There is no DATABASE_URL secret, so migrations were not applied. Run npm run db:migrate by hand."
+            exit 0
+          fi
+          npm run db:migrate
+
       # Builds the widget, packs it into the Worker and publishes it.
       - name: Build and publish
         run: npm run deploy
@@ -81,7 +110,8 @@ jobs:
       - name: Check the live server answers
         run: |
           for attempt in 1 2 3 4 5; do
-            if curl --fail --silent --show-error --output /dev/null https://widget.joinhaptic.com/widget.js; then
+            # Both of the widget's files: the second is the code that acts, loaded on sites with acting on.
+            if curl --fail --silent --show-error --output /dev/null https://widget.joinhaptic.com/widget.js && curl --fail --silent --show-error --output /dev/null https://widget.joinhaptic.com/widget-act.js; then
               echo "widget.joinhaptic.com is up."
               exit 0
             fi
