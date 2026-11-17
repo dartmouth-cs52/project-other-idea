@@ -657,6 +657,79 @@ test("a dialog is not named by a button in its title bar, and a select is named 
   ]);
 });
 
+// Options in a list a combobox opened ----------------------------------------------------
+
+/** One of cmdk's options, as cmdk 1.x draws it: what it says of being selected is that the keys are on it. */
+const cmdkItem = (id: string, name: string, hint: string, on: boolean) =>
+  `<div cmdk-item="" id="${id}" role="option" aria-disabled="false" aria-selected="${on}" data-disabled="false" data-selected="${on}" style="display:flex;gap:8px"><svg width="14" height="14" style="opacity:0"><path d="M2 7l3 3 7-7"/></svg><span>${name}</span><span>${hint}</span></div>`;
+
+/** Northpine's Owner field on /budgets/new, opened: a Radix popover with cmdk in it. The field still shows its placeholder. */
+const OWNER = `<main><h1>New budget</h1><form>
+  <label for="owner">Owner</label>
+  <button type="button" id="owner" role="combobox" aria-haspopup="dialog" aria-expanded="true" aria-controls="radix-r1" data-state="open"><span>Choose a person</span></button>
+</form></main>
+<div id="radix-r1" role="dialog" data-state="open" style="position:absolute;top:120px;left:20px;width:280px;background:#fff">
+  <div cmdk-root="" tabindex="-1">
+    <label cmdk-label="" for="cmdk-input" id="cmdk-label" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)"></label>
+    <input cmdk-input="" id="cmdk-input" role="combobox" type="text" placeholder="Search…" aria-autocomplete="list" aria-expanded="true" aria-controls="cmdk-list" aria-labelledby="cmdk-label" aria-activedescendant="cmdk-item-1">
+    <div cmdk-list="" id="cmdk-list" role="listbox" tabindex="-1" aria-label="Suggestions"><div cmdk-list-sizer=""><div cmdk-group="" role="presentation"><div cmdk-group-items="" role="group">
+      ${cmdkItem("cmdk-item-1", "Avery Stone", "Controller", true)}
+      ${cmdkItem("cmdk-item-2", "Blake Ito", "Analyst", false)}
+    </div></div></div></div>
+  </div>
+</div>`;
+
+test("an option cmdk highlights is not said to be selected (Northpine: \"Avery Stone is already selected as Owner\" while Owner showed \"Choose a person\")", { skip }, async () => {
+  assert.deepEqual(lines(await read(OWNER)), [
+    'combobox "Owner" (expanded) [form]',
+    'combobox "Search…" (expanded)',
+    'option "Avery Stone Controller" [list › Suggestions]',
+    'option "Blake Ito Analyst" [list › Suggestions]',
+  ]);
+  // A command menu of its own, opened by no field: cmdk is all there is to go by.
+  const palette = await read(`<div cmdk-root="">
+    <input cmdk-input="" role="combobox" aria-expanded="true" aria-controls="palette" aria-activedescendant="go-budgets" placeholder="Type a command…">
+    <div cmdk-list="" id="palette" role="listbox" aria-label="Suggestions">${cmdkItem("go-budgets", "Go to", "Budgets", true)}${cmdkItem("go-bills", "Go to", "Bills", false)}</div>
+  </div>`);
+  assert.deepEqual(lines(palette), ['combobox "Type a command…" (expanded)', 'option "Go to Budgets" [list › Suggestions]', 'option "Go to Bills" [list › Suggestions]']);
+});
+
+test("an option a combobox's list says is selected is not the chosen one when the combobox shows other words", { skip }, async () => {
+  // As the ARIA practices' combobox examples do it: aria-selected goes with aria-activedescendant, the option the keys are on.
+  // The class name that marks the same option does not make it the current one either.
+  const snapshot = await read(`<label id="owner-label">Owner</label>
+    <div role="combobox" tabindex="0" aria-labelledby="owner-label" aria-expanded="true" aria-controls="people" aria-activedescendant="p1">Choose a person</div>
+    <ul role="listbox" id="people" aria-labelledby="owner-label"><li role="option" id="p1" class="option option-current" aria-selected="true">Avery Stone</li><li role="option" id="p2" class="option" aria-selected="false">Blake Ito</li></ul>`);
+  assert.deepEqual(lines(snapshot), ['combobox "Owner" (expanded)', 'option "Avery Stone" [list › Owner]', 'option "Blake Ito" [list › Owner]']);
+});
+
+test("an option that is chosen is still selected: one its combobox shows, one of several chosen, one in a list of its own, a tab and a grid's cell", { skip }, async () => {
+  const snapshot = await read(`<div style="display:flex;gap:40px">
+    <div><button type="button" role="combobox" aria-label="Approver" aria-expanded="true" aria-controls="approvers"><span>Avery Stone</span></button>
+      <div role="listbox" id="approvers"><div role="option" aria-selected="true" style="display:flex;gap:8px"><span>Avery Stone</span><small>Controller</small></div><div role="option" aria-selected="false" style="display:flex;gap:8px"><span>Blake Ito</span><small>Analyst</small></div></div></div>
+    <div><button type="button" role="combobox" aria-label="Tags" aria-expanded="true" aria-controls="tags">Add tags</button>
+      <div role="listbox" id="tags" aria-multiselectable="true"><div role="option" aria-selected="true">Travel</div><div role="option" aria-selected="true">Meals</div><div role="option" aria-selected="false">Software</div></div></div>
+    <div role="listbox" aria-label="Currency" tabindex="0" aria-activedescendant="eur"><div role="option" id="usd" aria-selected="false">USD</div><div role="option" id="eur" aria-selected="true">EUR</div></div>
+    <div role="tablist" aria-label="Budget"><button role="tab" aria-selected="true">Overview</button><button role="tab" aria-selected="false">History</button></div>
+    <div role="grid" aria-label="March"><div role="row"><div role="gridcell" tabindex="0" aria-selected="true">14</div><div role="gridcell" tabindex="-1" aria-selected="false">15</div></div></div>
+  </div>`);
+  assert.deepEqual(lines(snapshot), [
+    'combobox "Approver" (expanded)',
+    // The option says more than the combobox shows of it.
+    'option "Avery Stone Controller" (selected) [list]',
+    'option "Blake Ito Analyst" [list]',
+    'combobox "Tags" (expanded)',
+    'option "Travel" (selected) [list]',
+    'option "Meals" (selected) [list]',
+    'option "Software" [list]',
+    'option "USD" [list › Currency]',
+    'option "EUR" (selected) [list › Currency]',
+    'tab "Overview" (selected) [tabs › Budget]',
+    'tab "History" [tabs › Budget]',
+    'clickable "14" (selected)',
+  ]);
+});
+
 // What changed ---------------------------------------------------------------------------
 
 test("scrolling a long page alone changes no control, though it changes which are listed", { skip }, async () => {
