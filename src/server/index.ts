@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { extname, normalize } from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { ACTING_FILE, buildWidget, WIDGET_FILE } from "../widget/build.ts";
+import { ACTING_FILE, buildWidget, TEACH_FILE, WIDGET_FILE } from "../widget/build.ts";
 import { createApp } from "./app.ts";
 import { describeAlert, MemoryBudget } from "./budget.ts";
 import { Store } from "./db.ts";
@@ -11,6 +11,8 @@ import { labelNeeds, MemoryLearned, withLearned } from "./learned.ts";
 import { SETTINGS } from "./model.ts";
 import { recordTurn } from "./record.ts";
 import { loadSite } from "./sites.ts";
+import { newTeachToken } from "../shared/teach.ts";
+import { MemoryTeachStore, NeonTeachStore } from "./teach.ts";
 
 // The Haptic server on Node, for running on your own machine: the answers in
 // app.ts, with sites kept as files, plus the demo site to try the widget on.
@@ -59,6 +61,10 @@ function learn(siteId: string, visitor: string, outline: Parameters<MemoryLearne
       .catch((error) => console.warn("Couldn't keep what was learned:", error instanceof Error ? error.message : error));
   }, 1000);
 }
+// Teach sessions are in Neon when there is one, where the dashboard makes them. Otherwise in memory, for trying teach
+// mode on this machine without the dashboard: GET /dev/teach?site=…&question=… makes one and answers with its token,
+// and GET /dev/teach/steps?token=… shows what the tab sent. Only when NODE_ENV is not production.
+const teach = process.env.DATABASE_URL ? new NeonTeachStore(process.env.DATABASE_URL) : new MemoryTeachStore();
 
 const app = createApp({
   loadSite: async (id) => {
@@ -69,8 +75,10 @@ const app = createApp({
   },
   widget: () => readFile(WIDGET_FILE, "utf8"),
   widgetActing: () => readFile(ACTING_FILE, "utf8"),
+  widgetTeaching: () => readFile(TEACH_FILE, "utf8"),
   widgetMaxAge: process.env.NODE_ENV === "production" ? 300 : 0,
   overLimit,
+  teach,
   isOff: () => process.env.HAPTIC_OFF === "1",
   localWebhooks: process.env.NODE_ENV !== "production",
   budget: new MemoryBudget(process.env),
@@ -121,6 +129,16 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     return res.end();
   }
 
+  // Teach sessions made by hand, when there is no dashboard and no database (see `teach` above).
+  if (req.method === "GET" && url.pathname.startsWith("/dev/teach") && teach instanceof MemoryTeachStore && process.env.NODE_ENV !== "production") {
+    if (url.pathname === "/dev/teach/steps") return json(res, 200, { steps: (await teach.stepsOf(url.searchParams.get("token") ?? "")) ?? null });
+    const site = url.searchParams.get("site") ?? "";
+    const question = (url.searchParams.get("question") ?? "").trim().slice(0, 300);
+    if (!site || !question) return json(res, 400, { error: "Give a site and a question." });
+    const token = await teach.create(site, question, newTeachToken());
+    return json(res, 200, { token, fragment: `#haptic-teach=${token}` });
+  }
+
   // The demo site, for trying the widget locally.
   if (req.method === "GET" && (url.pathname === "/" || url.pathname.startsWith("/demo"))) {
     if (url.pathname === "/" || url.pathname === "/demo") return res.writeHead(302, { Location: "/demo/" }).end();
@@ -145,5 +163,5 @@ function json(res: ServerResponse, status: number, body: unknown) {
 }
 
 const sizes = await buildWidget();
-console.log(`Built the widget (${(sizes.widget / 1024).toFixed(1)} KB, and ${(sizes.acting / 1024).toFixed(1)} KB for acting)`);
+console.log(`Built the widget (${(sizes.widget / 1024).toFixed(1)} KB, ${(sizes.acting / 1024).toFixed(1)} KB for acting and ${(sizes.teach / 1024).toFixed(1)} KB for teach mode)`);
 server.listen(PORT, () => console.log(`Haptic is running on http://localhost:${PORT} with model ${SETTINGS.model}. Demo: http://localhost:${PORT}/demo/`));

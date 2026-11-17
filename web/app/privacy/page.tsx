@@ -149,6 +149,21 @@ export default function Privacy() {
         until the company asks us to delete them. The company can switch this off.
       </p>
       <p>
+        A company can teach Haptic a task by doing it in its own product. Someone at the company starts it from the
+        dashboard, which opens the product with a link that works once, for half an hour, and only on that
+        company&apos;s site. While they do the task, Haptic notes which buttons, links, fields and lists they use,
+        each by its name and the section of the page it is in, which option they chose in a list, and the page&apos;s
+        address within the product. It
+        never reads what they type, and it masks email addresses and long numbers the same way as above. A control in a
+        table&apos;s row is kept by its name only when other rows have one of the same name, such as Edit, never by the
+        record&apos;s own name; a name elsewhere on the page can still be kept. The person reviews the steps in the dashboard before anything is used. Saving keeps only the steps they
+        kept, with the company&apos;s site, with any notes added and the name of who taught them, and deletes the
+        recording, with any steps they deleted. Haptic uses the saved steps to guide anyone who asks how to do the same
+        task, until the company removes them or teaches the task again, and then the record of that teaching is deleted
+        too. A recording the person discards is deleted at once, and one nobody saves is deleted once it is a week old,
+        by a check that runs every day. Teaching asks the AI nothing.
+      </p>
+      <p>
         From a visit where nobody asks Haptic anything, we keep nothing else about the visitor. For each web address
         the script loads on, we keep when it was first and last seen there and a rough count.
       </p>

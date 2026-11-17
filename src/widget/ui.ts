@@ -1874,7 +1874,7 @@ function lessMotion(): boolean {
  * policy on inline style does not reach. A browser without stylesheet objects
  * gets a <style> element instead, which works wherever the page allows inline style.
  */
-function adoptStyles(root: ShadowRoot, css: string) {
+export function adoptStyles(root: ShadowRoot, css: string) {
   try {
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(css);
@@ -1933,7 +1933,7 @@ function pageIsDark(): boolean {
 }
 
 /** One of our elements, with its attributes and what goes in it. Text goes in as text, never as markup. */
-function make<K extends keyof HTMLElementTagNameMap>(tag: K, attributes: Record<string, string> = {}, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
+export function make<K extends keyof HTMLElementTagNameMap>(tag: K, attributes: Record<string, string> = {}, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
   for (const [name, value] of Object.entries(attributes)) el.setAttribute(name, value);
   el.append(...children);
@@ -1984,7 +1984,7 @@ function shown(el: Element): boolean {
 }
 
 /** The browser's own modal dialog that is open on top, if any. Everything outside it is inert. */
-function topModal(): Element | undefined {
+export function topModal(): Element | undefined {
   let found: Element | undefined;
   try {
     document.querySelectorAll("dialog:modal").forEach((el) => (found = el));

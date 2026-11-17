@@ -779,9 +779,10 @@ let typedPattern: { of: string[]; pattern?: RegExp } = { of: [] };
  * that name is "Hello, [typed]", and a list's "Search for “divorce lawyer”"
  * while the search box holds it is "Search for “[typed]”". Every piece of text
  * a reading sends passes through it (`cleanText` below), so what the visitor
- * typed is never sent, wherever the page shows it again.
+ * typed is never sent, wherever the page shows it again. Outside a reading,
+ * and outside `withTyping`, it changes nothing.
  */
-function withoutTyping(text: string): string {
+export function withoutTyping(text: string): string {
   if (!typed.length || text.length < MIN_ECHO) return text;
   if (typedPattern.of !== typed) {
     const escaped = [...typed].sort((a, b) => b.length - a.length).map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+"));
@@ -790,6 +791,31 @@ function withoutTyping(text: string): string {
   return text.replace(typedPattern.pattern!, TYPED);
 }
 const cleanText = (text: string, max = 80): string => maskAndTrim(withoutTyping(text), max, own);
+
+/**
+ * Runs `read` with what the page's fields hold now in hand, as a reading has
+ * it, so a name read in it through this file (`nameOf`, `shownWords`,
+ * `withoutTyping`) has every place that repeats what a field holds put as
+ * "[typed]", before it is cut to length, as a reading's names have. A reading
+ * lets the fields' values go as it ends, so a name read after one otherwise
+ * keeps them. Teach mode (teach.ts) names a group, a list and a control the
+ * reading did not list itself, and passes every step through here before it
+ * keeps it. No question is given, so nothing a field holds is left readable.
+ * A reading taken inside `read` lets the values go as it ends, as any does.
+ */
+export function withTyping<T>(read: () => T): T {
+  const [ownBefore, askedBefore] = [own, asked];
+  own = new Set();
+  asked = "";
+  pageDocuments = documentsOfPage();
+  typed = typedValues();
+  try {
+    return read();
+  } finally {
+    typed = [];
+    [own, asked] = [ownBefore, askedBefore];
+  }
+}
 
 /**
  * Reads the page. `ignore` is Haptic's own element. `question` is what the

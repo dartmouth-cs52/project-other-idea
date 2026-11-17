@@ -1,4 +1,5 @@
 import type { ControlName, Correction } from "./corrections.ts";
+import type { TaughtRoute } from "./teach.ts";
 
 // Shapes shared by the widget (browser), the server and the intake CLI.
 // No DOM or Node APIs here.
@@ -47,6 +48,8 @@ export interface SiteContext {
   corrections?: Correction[];
   /** Controls Haptic must never point at, like "Delete workspace". Enforced by the server and the widget, not left to the prompt. */
   blocked?: ControlName[];
+  /** "Teach Haptic": routes someone at the company showed Haptic by doing the task in their app. See src/shared/teach.ts. */
+  taught?: TaughtRoute[];
   createdAt: string;
   updatedAt: string;
 }
