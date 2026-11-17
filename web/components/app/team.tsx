@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, type Me, type Team } from "@/lib/app-api";
+import { api, ApiError, type Me, type Team } from "@/lib/app-api";
 import { Card, CardTitle, DashboardSurface, DoneMark, FailedCard, PageHeader, Panel } from "./parts";
 
 const ROLE: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
@@ -54,8 +54,9 @@ export function TeamPage({ me }: { me: Me }) {
 
 function Loaded({ team, onChange }: { team: Team; onChange: (next: Team) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
-  // A change that didn't go through is said in the panel it was made in, the way a form says it.
-  const [failed, setFailed] = useState<{ at: "people" | "invites"; failure: Failure } | null>(null);
+  // A change that didn't go through is said in the panel it was made in, the way a form says it, with Try again when
+  // trying again could help: Haptic couldn't be reached or failed on its side. A refusal would only be refused again.
+  const [failed, setFailed] = useState<{ at: "people" | "invites"; failure: Failure; retry?: () => void } | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
 
   async function act(key: string, title: string, path: string, method: "PATCH" | "DELETE", body?: unknown) {
@@ -65,7 +66,12 @@ function Loaded({ team, onChange }: { team: Team; onChange: (next: Team) => void
       onChange(await api<Team>(path, { method, body }));
       setRemoving(null);
     } catch (failure) {
-      setFailed({ at: path.startsWith("/team/invites/") ? "invites" : "people", failure: failureFrom(title, failure) });
+      const passing = !(failure instanceof ApiError) || failure.status === 0 || failure.status >= 500;
+      setFailed({
+        at: path.startsWith("/team/invites/") ? "invites" : "people",
+        failure: failureFrom(title, failure),
+        retry: passing ? () => void act(key, title, path, method, body) : undefined,
+      });
     }
     setBusy(null);
   }
@@ -137,7 +143,7 @@ function Loaded({ team, onChange }: { team: Team; onChange: (next: Team) => void
         </ul>
         {failed?.at === "people" && (
           <div className="border-t px-5 py-3">
-            <FormAlert failure={failed.failure} />
+            <FormAlert failure={failed.failure} retry={failed.retry} />
           </div>
         )}
       </Panel>
@@ -164,7 +170,7 @@ function Loaded({ team, onChange }: { team: Team; onChange: (next: Team) => void
           </ul>
           {failed?.at === "invites" && (
             <div className="border-t px-5 py-3">
-              <FormAlert failure={failed.failure} />
+              <FormAlert failure={failed.failure} retry={failed.retry} />
             </div>
           )}
         </Panel>

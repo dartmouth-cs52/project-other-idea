@@ -293,9 +293,7 @@ looks stark.
 - **Done green (#008932):** The small round tick that says a task is finished.
   Blue means in progress and green means done, so on a visitor's page the two
   never share a screen. Not for buttons or bubbles. In the dashboard it also
-  says good, as set out under Dashboard, and confirms in one line that
-  something the person asked for went through, such as an email sent or a
-  person added.
+  says good, as set out under Dashboard.
 - **Error red (#DC2626):** Forms. The star on a required field, the outline
   and message on a field that failed its check, and the alert when sending
   fails. It is shadcn's destructive colour. In the dashboard it also says bad,
@@ -458,13 +456,8 @@ Icons are Lucide at their default stroke, 16px.
 Components are shadcn/ui, restyled only through tokens and variants.
 
 - **Button:** Pills. Primary is Ink with Paper text. Secondary is the Border
-  grey. 32px by default, 36px in the navigation, 44px for the hero and forms,
-  and 28px for an action inside a row of a list, such as Take back. A ghost
-  button, words with a Muted fill under the mouse, is a way out or a lesser
-  action beside another button, such as Keep them. One primary button per
-  view. A button or menu item that deletes or removes something is shadcn's
-  destructive variant, Error red words on a faint red fill, and is never the
-  primary button.
+  grey. 32px by default, 36px in the navigation, 44px for the hero and forms.
+  One primary button per view.
 - **Navigation:** 64px tall. Pointer mark and "Haptic" on the left, links and
   one primary button on the right.
 - **Demo window:** A browser frame on Card, with the three window dots in their
@@ -546,7 +539,7 @@ Components are shadcn/ui, restyled only through tokens and variants.
   to type, the first such field takes the focus, and the line goes as soon as
   the person starts typing. A failure that is not one field's fault uses
   shadcn's alert, with an icon, a short title, one line of detail and, where
-  trying again could help, a Try again button, under the form's buttons. Success replaces the form with a thank you. A form that adds to a list on the same page, such as adding someone to the team, stays where it is, with the new entry in the list and one line under the form saying it went through, so the next can be added. Every form on the
+  trying again could help, a Try again button, under the form's buttons. Success replaces the form with a thank you. Every form on the
   site and in the dashboard works this way, sign-in included, and so do the
   server's refusals: one that names a field shows under that field. The parts
   are in `web/components/form.tsx`. A page, or part of one, that could not load
@@ -585,15 +578,15 @@ changes is the frame, the size of the type and one rule about surfaces.
 **Frame.** A 56px bar runs across the top and reads as a path. The pointer mark
 and Haptic come first and lead to the list of sites. The site comes next, and
 is a menu of the company's sites, with All sites and Add a site under them. Who
-is signed in is on the right, in a menu that names their company and holds Team,
-Billing and Sign out. Inside a site its pages run down a 224px column on the left. Each is a
-32px row with a 16px icon. The page you are on is Border grey with Ink text,
-and the others are Muted text. The bar and the column are both fixed to the
-window, so they and their lines stay where they are however far the page
-scrolls, and when a Mac's trackpad pulls the page past its top or foot only the
-page moves under them. Below 1024px the column becomes a row under the bar that
-scrolls sideways, and the bar and the row stick to the top together. Content
-is up to 1152px wide (`max-w-6xl`).
+is signed in is on the right, in a menu that names their company and holds
+Team, Billing and Sign out. Inside a site its pages run down a 224px column on
+the left. Each is a 32px row with a 16px icon. The page you are on is Border
+grey with Ink text, and the others are Muted text. The bar and the column are
+both fixed to the window, so they and their lines stay where they are however
+far the page scrolls, and when a Mac's trackpad pulls the page past its top or
+foot only the page moves under them. Below 1024px the column becomes a row
+under the bar that scrolls sideways, and the bar and the row stick to the top
+together. Content is up to 1152px wide (`max-w-6xl`).
 
 **Pages.** A site has five, in this order, and no more are added without a
 reason a customer gave.
@@ -649,8 +642,8 @@ A card says how many questions the last seven days had and how many finished,
 the last fortnight as fourteen small bars, and the newest question. A site
 still waiting for its script says so in place of the numbers. A running site
 carries no badge to say it is running: the numbers say that, and the green
-tick on a card is kept for a guide that finished, so a card never has two ticks
-that mean different things. The whole card is the way in. Add a site leads to the
+tick is kept for a guide that finished, so a card never has two ticks that
+mean different things. The whole card is the way in. Add a site leads to the
 setup screens, which have a frame of their own.
 
 A site is shown with its own icon, the one its browser tab has, 20px in a 36px
@@ -709,8 +702,7 @@ What the person said outweighs how the guide ended, so one they said didn't
 help is red and one they said helped is green. Colour is never the only sign:
 the words beside every mark say the same, and the arrow beside a number points
 the way it moved. Colour stays on marks, arrows and the few words of a change.
-It is never a fill, a card, a bar or a button, except the button or menu item
-that deletes or removes something, set out under Components.
+It is never a fill, a card, a bar or a button.
 
 **Charts.** The two neutrals, and nothing else. Guides each day is a bar for
 each day of the range, in UTC, the same days the numbers above it count. Muted
@@ -876,8 +868,7 @@ stays. The rest below is proposed.
 - Don't replace the visitor's own mouse cursor.
 - Don't let the pointer or a caption cover the label it is pointing at.
 - Don't use Done green for anything but the finished mark, or Error red
-  outside a form, except to say good and bad in the dashboard, to confirm
-  there that something went through, and on a button that deletes or removes.
+  outside a form, except to say good and bad in the dashboard.
 - Don't add another colour, a gradient, an illustration or artwork. Paintings
   behind the demos were tried and turned down. The window dots on the demo
   frame and the thinking glow are the two exceptions.
