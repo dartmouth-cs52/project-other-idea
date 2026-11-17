@@ -92,7 +92,7 @@ function CloseBody({ periodKey, locked }: { periodKey: string; locked: boolean }
   const sections = [...new Set(CLOSE_TASKS.map((t) => t.section))];
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
       <Card
         title="Close checklist"
         description={`${done.length} of ${CLOSE_TASKS.length} done`}

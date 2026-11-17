@@ -166,7 +166,7 @@ export function FieldWithButton({
 }) {
   return (
     <Field id={id} label={label} required={required} hint={hint}>
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
         {children}
         <FieldError id={id} error={error} className="sm:col-start-1 sm:row-start-2" />
         <div className="grid sm:col-start-2 sm:row-start-1">{button}</div>

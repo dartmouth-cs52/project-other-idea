@@ -218,7 +218,7 @@ function Body({ tab }: { tab: Tab }) {
           )}
           toolbar={
             <>
-              <div className="relative w-60">
+              <div className="relative w-full sm:w-60">
                 <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-ink-3" />
                 <Input aria-label="Search reimbursements" placeholder="Search merchant, memo or person" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
               </div>

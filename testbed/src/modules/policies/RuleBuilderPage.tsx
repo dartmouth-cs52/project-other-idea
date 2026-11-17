@@ -153,7 +153,7 @@ function Builder({ rule }: { rule: PolicyRule | undefined }) {
       </div>
 
       {/* A disabled fieldset turns every control off for people without the role. */}
-      <fieldset disabled={!can.allowed} className="flex flex-col gap-5 pb-24">
+      <fieldset disabled={!can.allowed} className="flex min-w-0 flex-col gap-5 pb-24">
         <Card title="Name">
           <Field label="Rule name" error={tried ? errors.name : null}>
             {(id) => <Input id={id} value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="Meals over $150 need a manager" aria-invalid={tried && !!errors.name} className="max-w-md" />}
@@ -306,7 +306,8 @@ function ConditionRow({ c, index, error, onChange, onRemove }: { c: Condition; i
   }
   return (
     <div className="flex flex-col gap-1">
-      <div className="grid grid-cols-[48px_170px_130px_1fr_32px] items-center gap-2">
+      {/* One row on a computer. On a phone the value goes on a second line, under the field and the operator. */}
+      <div className="grid grid-cols-[48px_minmax(0,1fr)_minmax(0,1fr)_32px] items-center gap-2 sm:grid-cols-[48px_170px_130px_minmax(0,1fr)_32px]">
         <span className="text-[12.5px] font-medium text-ink-3">{index === 0 ? "When" : "and"}</span>
         <Select
           aria-label={`Condition ${n} field`}
@@ -315,8 +316,10 @@ function ConditionRow({ c, index, error, onChange, onRemove }: { c: Condition; i
           options={(Object.keys(FIELD_LABELS) as FieldName[]).map((f) => ({ value: f, label: FIELD_LABELS[f] }))}
         />
         <Select aria-label={`Condition ${n} operator`} value={c.op} onValueChange={(op: Condition["op"]) => onChange({ op })} options={OPS[c.field].map((o) => ({ value: o, label: OP_LABELS[o] }))} />
-        {input}
-        {onRemove ? <IconButton label={`Remove condition ${n}`} size="icon-sm" icon={<Trash2 />} onClick={onRemove} /> : <span />}
+        <div className="col-span-2 col-start-2 row-start-2 min-w-0 sm:col-span-1 sm:col-start-auto sm:row-start-auto">{input}</div>
+        <span className="col-start-4 row-start-1 sm:col-start-auto sm:row-start-auto">
+          {onRemove ? <IconButton label={`Remove condition ${n}`} size="icon-sm" icon={<Trash2 />} onClick={onRemove} /> : null}
+        </span>
       </div>
       {error ? <p className="pl-[56px] text-xs text-danger">{error}</p> : null}
     </div>

@@ -71,8 +71,8 @@ function MappingsBody() {
       <UnsavedGuard when={dirty} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         {unmapped ? (
-          <Badge tone="warn">
-            <AlertTriangle className="size-3" /> {unmapped} unmapped. Exports for these fail until you pick one.
+          <Badge tone="warn" className="whitespace-normal">
+            <AlertTriangle className="size-3 shrink-0" /> {unmapped} unmapped. Exports for these fail until you pick one.
           </Badge>
         ) : (
           <Badge tone="ok" dot>Everything is mapped</Badge>
@@ -84,65 +84,69 @@ function MappingsBody() {
       </div>
 
       <Card title="Expense categories" description="Each category posts to one GL account in Ledgerbook." bodyClassName="p-0">
-        <table className="w-full text-[13px]">
-          <thead className="bg-sunken text-left text-[12px] text-ink-3">
-            <tr>
-              <th className="px-4 py-2 font-medium">Category</th>
-              <th className="w-[340px] px-3 py-2 font-medium">GL account</th>
-              <th className="w-48 px-3 py-2 font-medium">Tax code</th>
-              <th className="w-32 px-3 py-2 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {categories
-              .filter((c) => !onlyUnmapped || catUnmapped(c.id))
-              .map((c) => {
-                const bad = catUnmapped(c.id);
-                return (
-                  <tr key={c.id} data-category={c.id} className={cn("border-b border-line last:border-0", bad && "bg-warn-soft")}>
-                    <td className="px-4 py-2 font-medium">{c.name}</td>
-                    <td className="px-3 py-2">
-                      <Combobox aria-label={`GL account for ${c.name}`} disabled={!can.allowed} value={gl[c.id] ?? null} onChange={(v) => setGl((m) => ({ ...m, [c.id]: v }))} options={glOptions} placeholder="Choose an account" searchPlaceholder="Search by code or name…" />
-                    </td>
-                    <td className="px-3 py-2">
-                      <Select aria-label={`Tax code for ${c.name}`} disabled={!can.allowed} value={tax[c.id] ?? "nontaxable"} onValueChange={(v) => setTax((m) => ({ ...m, [c.id]: v }))} options={TAX_CODES} />
-                    </td>
-                    <td className="px-3 py-2">{bad ? <Badge tone="warn">Unmapped</Badge> : <Badge tone="ok">Mapped</Badge>}</td>
-                  </tr>
-                );
-              })}
-          </tbody>
-        </table>
+        <div className="relative overflow-x-auto">
+          <table className="w-full min-w-[600px] text-[13px]">
+            <thead className="bg-sunken text-left text-[12px] text-ink-3">
+              <tr>
+                <th className="px-4 py-2 font-medium">Category</th>
+                <th className="w-[340px] px-3 py-2 font-medium">GL account</th>
+                <th className="w-48 px-3 py-2 font-medium">Tax code</th>
+                <th className="w-32 px-3 py-2 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories
+                .filter((c) => !onlyUnmapped || catUnmapped(c.id))
+                .map((c) => {
+                  const bad = catUnmapped(c.id);
+                  return (
+                    <tr key={c.id} data-category={c.id} className={cn("border-b border-line last:border-0", bad && "bg-warn-soft")}>
+                      <td className="px-4 py-2 font-medium">{c.name}</td>
+                      <td className="px-3 py-2">
+                        <Combobox aria-label={`GL account for ${c.name}`} disabled={!can.allowed} value={gl[c.id] ?? null} onChange={(v) => setGl((m) => ({ ...m, [c.id]: v }))} options={glOptions} placeholder="Choose an account" searchPlaceholder="Search by code or name…" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <Select aria-label={`Tax code for ${c.name}`} disabled={!can.allowed} value={tax[c.id] ?? "nontaxable"} onValueChange={(v) => setTax((m) => ({ ...m, [c.id]: v }))} options={TAX_CODES} />
+                      </td>
+                      <td className="px-3 py-2">{bad ? <Badge tone="warn">Unmapped</Badge> : <Badge tone="ok">Mapped</Badge>}</td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       <Card title="Departments" description="Departments report under a Ledgerbook class." bodyClassName="p-0">
-        <table className="w-full text-[13px]">
-          <thead className="bg-sunken text-left text-[12px] text-ink-3">
-            <tr>
-              <th className="px-4 py-2 font-medium">Department</th>
-              <th className="w-24 px-3 py-2 font-medium">Code</th>
-              <th className="w-[340px] px-3 py-2 font-medium">Class</th>
-              <th className="w-32 px-3 py-2 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {departments
-              .filter((d) => !onlyUnmapped || depUnmapped(d.id))
-              .map((d) => {
-                const bad = depUnmapped(d.id);
-                return (
-                  <tr key={d.id} className={cn("border-b border-line last:border-0", bad && "bg-warn-soft")}>
-                    <td className="px-4 py-2 font-medium" style={{ paddingLeft: d.parentId ? 32 : 16 }}>{d.name}</td>
-                    <td className="px-3 py-2 font-mono text-[12px] text-ink-3">{d.glCode}</td>
-                    <td className="px-3 py-2">
-                      <Combobox aria-label={`Class for ${d.name}`} disabled={!can.allowed} value={classes[d.id] ?? null} onChange={(v) => setClasses((m) => ({ ...m, [d.id]: v }))} options={classOptions} placeholder="Choose a class" />
-                    </td>
-                    <td className="px-3 py-2">{bad ? <Badge tone="warn">Unmapped</Badge> : <Badge tone="ok">Mapped</Badge>}</td>
-                  </tr>
-                );
-              })}
-          </tbody>
-        </table>
+        <div className="relative overflow-x-auto">
+          <table className="w-full min-w-[600px] text-[13px]">
+            <thead className="bg-sunken text-left text-[12px] text-ink-3">
+              <tr>
+                <th className="px-4 py-2 font-medium">Department</th>
+                <th className="w-24 px-3 py-2 font-medium">Code</th>
+                <th className="w-[340px] px-3 py-2 font-medium">Class</th>
+                <th className="w-32 px-3 py-2 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {departments
+                .filter((d) => !onlyUnmapped || depUnmapped(d.id))
+                .map((d) => {
+                  const bad = depUnmapped(d.id);
+                  return (
+                    <tr key={d.id} className={cn("border-b border-line last:border-0", bad && "bg-warn-soft")}>
+                      <td className="px-4 py-2 font-medium" style={{ paddingLeft: d.parentId ? 32 : 16 }}>{d.name}</td>
+                      <td className="px-3 py-2 font-mono text-[12px] text-ink-3">{d.glCode}</td>
+                      <td className="px-3 py-2">
+                        <Combobox aria-label={`Class for ${d.name}`} disabled={!can.allowed} value={classes[d.id] ?? null} onChange={(v) => setClasses((m) => ({ ...m, [d.id]: v }))} options={classOptions} placeholder="Choose a class" />
+                      </td>
+                      <td className="px-3 py-2">{bad ? <Badge tone="warn">Unmapped</Badge> : <Badge tone="ok">Mapped</Badge>}</td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       <SaveBar

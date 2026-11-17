@@ -30,7 +30,7 @@ export function Gaps({ siteId, data, onOpen }: { siteId: string; data: Insights 
     <>
       <CantFind siteId={siteId} days={data.days} rows={data.cantFind} onOpen={onOpen} />
       <GuideHealth groups={data.health} alerts={data.alerts} />
-      <div className="grid items-start gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
         <Panel title="Where people give up">
           {data.abandonedAt.length ? (
             <ul className="flex flex-col divide-y border-t">
@@ -89,7 +89,7 @@ function CantFind({ siteId, days, rows, onOpen }: { siteId: string; days: number
             const gaveUp = (row.visitors - row.found) / row.visitors;
             return (
               <li key={row.key} className="flex flex-col gap-2 px-5 py-4">
-                <div className="grid items-center gap-x-6 gap-y-1 text-sm sm:grid-cols-[minmax(0,1fr)_8rem_9rem]">
+                <div className="grid grid-cols-1 items-center gap-x-6 gap-y-1 text-sm sm:grid-cols-[minmax(0,1fr)_8rem_9rem]">
                   <span className="min-w-0">
                     <span className="font-medium">&ldquo;{row.question}&rdquo;</span>
                     <span className="text-muted-foreground">, asked by {people(row.visitors)}</span>

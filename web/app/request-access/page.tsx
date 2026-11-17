@@ -9,7 +9,7 @@ export default function RequestAccess() {
   return (
     <>
       <SiteNav />
-      <main className="mx-auto grid w-full max-w-5xl items-start gap-10 px-6 py-12 sm:py-20 md:grid-cols-2">
+      <main className="mx-auto grid grid-cols-1 w-full max-w-5xl items-start gap-10 px-6 py-12 sm:py-20 md:grid-cols-2">
         <div className="flex flex-col gap-8">
           <h1 className="text-4xl font-medium tracking-[-0.03em] text-balance">The AI guide that lives in your product.</h1>
           <div className="flex flex-col gap-4 rounded-xl border bg-muted p-6 text-base leading-7">

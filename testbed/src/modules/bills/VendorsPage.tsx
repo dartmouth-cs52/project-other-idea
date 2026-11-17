@@ -170,7 +170,7 @@ function VendorsBody() {
         onRowClick={(v) => navigate(`/bills/vendors/${v.id}`)}
         toolbar={
           <>
-            <Input aria-label="Search vendors" placeholder="Search by name or email" className="w-64" value={q} onChange={(e) => set("q", e.target.value || null)} />
+            <Input aria-label="Search vendors" placeholder="Search by name or email" className="w-full sm:w-64" value={q} onChange={(e) => set("q", e.target.value || null)} />
             <Select
               aria-label="Status"
               className="w-40"

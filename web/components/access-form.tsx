@@ -148,7 +148,7 @@ export function AccessForm() {
         </form>
       ) : (
         <form onSubmit={submit} noValidate className="mt-6 flex flex-col gap-5">
-          <div className="grid items-start gap-5 sm:grid-cols-2 sm:gap-4">
+          <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 sm:gap-4">
             <Field id={ID.firstName} label="First name" required error={errors.firstName}>
               <Input type="text" required autoFocus autoComplete="given-name" className={FIELD} {...bind("firstName")} />
             </Field>

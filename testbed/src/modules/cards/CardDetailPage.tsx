@@ -191,7 +191,7 @@ function CardDetail({ card }: { card: Card }) {
           </Callout>
         ) : null}
 
-        <div className="grid gap-5 lg:grid-cols-[380px_1fr]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[380px_1fr]">
           <div className="flex flex-col gap-4">
             <Panel bodyClassName="flex flex-col gap-4">
               <CardArt card={card} holderName={fullName(holder)} revealed={revealed} />

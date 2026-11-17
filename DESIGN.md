@@ -783,9 +783,13 @@ stays. The rest below is proposed.
   pointer goes with the mark between steps, and the next glide starts from
   where it was. The mark holds still when Haptic hands a step to the person
   too: no breathing, no halo.
-- **Say one thing.** A caption names the next action in a short sentence. It
-  carries no buttons. In the widget it carries a small × that stops the guide,
-  so there is a way out beside the pointer when the chat has been closed.
+- **Say one thing.** A caption names the next action and the control's label
+  in a few words: "Click Sign out." The pointer already shows where the
+  control is, so the caption never says where it is, what it looks like, or
+  what comes after it. A control with no label is named by what it opens:
+  "Open your account menu." It carries no buttons. In the widget it carries a
+  small × that stops the guide, so there is a way out beside the pointer when
+  the chat has been closed.
 - **Keep the conversation and the exit in view.** The chat stays open for the
   whole guide, with the question at the top and a stop button in the ask box.
   Once anything is in the chat, a turning arrow on the far side of the ask

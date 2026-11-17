@@ -75,7 +75,7 @@ export function PoliciesPage() {
         {() => (
           <div className="flex flex-col gap-5">
             <RulesCard />
-            <div className="grid gap-5 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               <ReceiptRules />
               <PerDiem />
             </div>
@@ -155,8 +155,9 @@ function RuleRow({ rule, index, last, canEdit, onMove }: { rule: PolicyRule; ind
       </button>
       <span className="tabular w-5 text-center text-[12.5px] text-ink-3">{index + 1}</span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex items-center gap-2">
-          <Link to={`/policies/${rule.id}`} className={cn("truncate text-[13.5px] font-medium hover:underline", !rule.enabled && "text-ink-3")}>
+        {/* The badges go under the name when there is no room beside it, as on a phone, rather than squeezing it to nothing. */}
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Link to={`/policies/${rule.id}`} className={cn("max-w-full truncate text-[13.5px] font-medium hover:underline", !rule.enabled && "text-ink-3")}>
             {rule.name}
           </Link>
           <Badge tone={rule.action === "block" ? "danger" : rule.action === "require_approval" ? "brand" : "neutral"}>{ACTION_LABELS[rule.action]}</Badge>
@@ -181,45 +182,47 @@ function ReceiptRules() {
   const can = useCan("policies.edit");
   return (
     <Card title="Receipt requirements" description="A receipt is required when a charge in the category is over this amount." bodyClassName="p-0">
-      <table className="w-full text-[13px]">
-        <thead>
-          <tr className="border-b border-line bg-sunken text-left text-[12px] text-ink-3">
-            <th className="px-4 py-2 font-medium">Category</th>
-            <th className="px-4 py-2 text-right font-medium">Receipt required over</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cats.map((c) => (
-            <tr key={c.id} className="border-b border-line last:border-0">
-              <td className="px-4 py-1.5">{c.name}</td>
-              <td className="px-4 py-1.5 text-right">
-                {can.allowed ? (
-                  // Click the number to edit it. Saves on Enter or when you click away.
-                  <InlineEdit
-                    label={`Receipt threshold for ${c.name}`}
-                    value={"$" + c.requiresReceiptOver}
-                    className="tabular ml-auto justify-end"
-                    onSave={(v) => {
-                      const n = Number(v.replace(/[$,]/g, ""));
-                      if (!Number.isFinite(n) || n < 0) {
-                        toast.error("Enter an amount in dollars, like 75.");
-                        return;
-                      }
-                      const before = c.requiresReceiptOver;
-                      act(() => patch("categories", c.id, { requiresReceiptOver: n }), {
-                        success: `${c.name} receipts now required over ${money(n)}`,
-                        undo: () => patch("categories", c.id, { requiresReceiptOver: before }),
-                      });
-                    }}
-                  />
-                ) : (
-                  <span className="tabular">{money(c.requiresReceiptOver)}</span>
-                )}
-              </td>
+      <div className="relative overflow-x-auto">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-line bg-sunken text-left text-[12px] text-ink-3">
+              <th className="px-4 py-2 font-medium">Category</th>
+              <th className="px-4 py-2 text-right font-medium">Receipt required over</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {cats.map((c) => (
+              <tr key={c.id} className="border-b border-line last:border-0">
+                <td className="px-4 py-1.5">{c.name}</td>
+                <td className="px-4 py-1.5 text-right">
+                  {can.allowed ? (
+                    // Click the number to edit it. Saves on Enter or when you click away.
+                    <InlineEdit
+                      label={`Receipt threshold for ${c.name}`}
+                      value={"$" + c.requiresReceiptOver}
+                      className="tabular ml-auto justify-end"
+                      onSave={(v) => {
+                        const n = Number(v.replace(/[$,]/g, ""));
+                        if (!Number.isFinite(n) || n < 0) {
+                          toast.error("Enter an amount in dollars, like 75.");
+                          return;
+                        }
+                        const before = c.requiresReceiptOver;
+                        act(() => patch("categories", c.id, { requiresReceiptOver: n }), {
+                          success: `${c.name} receipts now required over ${money(n)}`,
+                          undo: () => patch("categories", c.id, { requiresReceiptOver: before }),
+                        });
+                      }}
+                    />
+                  ) : (
+                    <span className="tabular">{money(c.requiresReceiptOver)}</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }
@@ -236,28 +239,30 @@ function PerDiem() {
   return (
     <PlanGate feature="perDiem" title="Per diem rates">
       <Card title="Per diem rates" description="Daily allowances for travelers, in USD. Used for per diem reimbursements." bodyClassName="p-0">
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-line bg-sunken text-left text-[12px] text-ink-3">
-              <th className="px-4 py-2 font-medium">Location</th>
-              <th className="px-4 py-2 text-right font-medium">Lodging</th>
-              <th className="px-4 py-2 text-right font-medium">Meals and incidentals</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rates.map((r) => (
-              <tr key={r.id} className="border-b border-line last:border-0">
-                <td className="px-4 py-1.5">{r.city}</td>
-                <td className="px-4 py-1.5 text-right tabular">
-                  {can.allowed ? <InlineEdit label={`Lodging rate for ${r.city}`} value={"$" + r.lodging} className="ml-auto" onSave={(v) => edit(r.id, "lodging", v, `Lodging for ${r.city}`)} /> : money(r.lodging)}
-                </td>
-                <td className="px-4 py-1.5 text-right tabular">
-                  {can.allowed ? <InlineEdit label={`Meals rate for ${r.city}`} value={"$" + r.meals} className="ml-auto" onSave={(v) => edit(r.id, "meals", v, `Meals for ${r.city}`)} /> : money(r.meals)}
-                </td>
+        <div className="relative overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-line bg-sunken text-left text-[12px] text-ink-3">
+                <th className="px-4 py-2 font-medium">Location</th>
+                <th className="px-4 py-2 text-right font-medium">Lodging</th>
+                <th className="px-4 py-2 text-right font-medium">Meals and incidentals</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rates.map((r) => (
+                <tr key={r.id} className="border-b border-line last:border-0">
+                  <td className="px-4 py-1.5">{r.city}</td>
+                  <td className="px-4 py-1.5 text-right tabular">
+                    {can.allowed ? <InlineEdit label={`Lodging rate for ${r.city}`} value={"$" + r.lodging} className="ml-auto" onSave={(v) => edit(r.id, "lodging", v, `Lodging for ${r.city}`)} /> : money(r.lodging)}
+                  </td>
+                  <td className="px-4 py-1.5 text-right tabular">
+                    {can.allowed ? <InlineEdit label={`Meals rate for ${r.city}`} value={"$" + r.meals} className="ml-auto" onSave={(v) => edit(r.id, "meals", v, `Meals for ${r.city}`)} /> : money(r.meals)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
     </PlanGate>
   );

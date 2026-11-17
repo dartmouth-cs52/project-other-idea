@@ -191,14 +191,14 @@ function BillDetail({ bill, vendor }: { bill: Bill; vendor: Vendor | undefined }
       />
 
       {/* Two panes that each scroll on their own, inside a page that also scrolls. On purpose. */}
-      <div className="grid h-[calc(100vh-13.5rem)] min-h-[520px] gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+      <div className="grid grid-cols-1 h-[calc(100vh-13.5rem)] min-h-[520px] gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
         <InvoicePreview bill={bill} vendor={vendor} />
 
         <div className="relative flex min-h-0 flex-col overflow-hidden rounded-lg border border-line bg-panel shadow-xs">
           <div className="min-h-0 flex-1 overflow-y-auto" data-pane="bill-form">
             <section className="border-b border-line p-5">
               <h2 className="mb-4 text-[14px] font-semibold">Details</h2>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Bill number">{(id) => <Input id={id} disabled={locked || !editCan.allowed} value={draft.number} onChange={(e) => setDraft({ ...draft, number: e.target.value })} />}</Field>
                 <Field label="Vendor">
                   <Link to={`/bills/vendors/${bill.vendorId}`} className="flex h-8 items-center truncate text-[13px] font-medium text-brand hover:underline">
@@ -367,7 +367,7 @@ function InvoicePreview({ bill, vendor }: { bill: Bill; vendor: Vendor | undefin
           <IconButton size="icon-sm" icon={<Plus />} label="Zoom in" onClick={() => setZoom((z) => Math.min(160, z + 10))} />
         </span>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto p-6" data-pane="invoice-preview">
+      <div className="relative min-h-0 flex-1 overflow-auto p-6" data-pane="invoice-preview">
         <div className="mx-auto flex flex-col gap-6" style={{ width: `${(zoom / 100) * 520}px` }}>
           <article aria-label="Invoice page 1" className="flex aspect-[8.5/11] flex-col gap-6 bg-white p-[7%] text-[11px] text-neutral-800 shadow-md" style={{ fontSize: `${(zoom / 100) * 11}px` }}>
             <header className="flex items-start justify-between">
@@ -380,7 +380,7 @@ function InvoicePreview({ bill, vendor }: { bill: Bill; vendor: Vendor | undefin
                 <p>{bill.number}</p>
               </div>
             </header>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
                 <p className="font-semibold text-neutral-500 uppercase">Bill to</p>
                 <p>{entity?.name}</p>

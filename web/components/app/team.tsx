@@ -12,13 +12,13 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, ApiError, type Me, type Team } from "@/lib/app-api";
+import { api, ApiError, type Team } from "@/lib/app-api";
 import { Card, CardTitle, DashboardSurface, FailedCard, PageHeader, Panel } from "./parts";
 
 const ROLE: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
 const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 
-export function TeamPage({ me }: { me: Me }) {
+export function TeamPage() {
   const [team, setTeam] = useState<Team | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -39,7 +39,7 @@ export function TeamPage({ me }: { me: Me }) {
 
   return (
     <DashboardSurface>
-      <PageHeader title="Team" note={me.organization ? `Everyone at ${me.organization.name}. Each of them sees every site.` : undefined} />
+      <PageHeader title="Team" />
       {failed && !team && <FailedCard title="The team didn't load" message={failed} retry={() => setAttempt((n) => n + 1)} level={2} />}
       {!team && !failed && (
         <div className="flex flex-col gap-6">
@@ -84,7 +84,7 @@ function Loaded({ team, onChange }: { team: Team; onChange: (next: Team) => void
       <Panel
         title="People"
         aside={<span className="text-sm text-muted-foreground">{team.members.length === 1 ? "1 person" : `${team.members.length} people`}</span>}
-        foot="Owners and admins can add people, change roles and manage billing. Members can do everything else. The owner is whoever signed in first, and can't be changed here."
+        foot="Everyone here sees every site. Owners and admins can add people, change roles and manage billing. Members can do everything else. The owner is whoever signed in first, and can't be changed here."
       >
         <ul className="flex flex-col divide-y border-t">
           {team.members.map((member) => {
@@ -237,7 +237,9 @@ function AddPerson({ onAdded }: { onAdded: (next: Team) => void }) {
     return (
       <Card>
         <div ref={thanks} tabIndex={-1} role="status" className="flex flex-col gap-4 outline-none">
-          <CardTitle>Added {state.email}</CardTitle>
+          <CardTitle>
+            Added <span className="[overflow-wrap:anywhere]">{state.email}</span>.
+          </CardTitle>
           <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
             {state.sent
               ? "They have an email to sign in, and join as a member when they do. You can make them an admin once they have."

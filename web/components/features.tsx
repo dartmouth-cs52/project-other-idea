@@ -35,7 +35,7 @@ export function Features() {
  */
 function Feature({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
-    <article className="grid items-center gap-6 rounded-xl border bg-muted p-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-4">
+    <article className="grid grid-cols-1 items-center gap-6 rounded-xl border bg-muted p-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-4">
       <div className="px-2 pt-4 text-2xl leading-8 tracking-[-0.02em] lg:px-6 lg:py-6">
         <h3 className="font-medium">{title}</h3>
         <p className="mt-1 text-muted-foreground">{description}</p>

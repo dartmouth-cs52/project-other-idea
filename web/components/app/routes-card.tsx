@@ -53,7 +53,7 @@ export function RoutesCard({ site, metrics, onChange }: { site: Site; metrics: R
         When the same question comes up on the same screen, Haptic can point from the route a finished guide confirmed, without asking the model. The
         pointer moves sooner and the step costs nothing.
       </p>
-      <dl className="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: "Asked before on the same page", value: share(metrics.repeated_guides, metrics.guides) },
           { label: "Steps with a saved route", value: share(metrics.repeats, metrics.looked_up) },

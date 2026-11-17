@@ -45,13 +45,13 @@ export function BillingPage() {
       <Loader loadKey="settings-billing" rows={10}>
         {() => (
           <div className="flex flex-col gap-5">
-            <div className="grid gap-5 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
               <CurrentPlan />
               <PaymentMethod />
             </div>
             <PlanTable />
             <Invoices />
-            <div className="grid gap-5 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               <BillingContact />
               <TaxDetails />
             </div>
@@ -196,7 +196,7 @@ function PlanTable() {
   const rank = (p: Plan) => PLANS.indexOf(p);
   return (
     <Card title="Compare plans" description="Changes apply right away. We prorate the difference on your next invoice." bodyClassName="p-0">
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full min-w-[640px] text-[13px]">
           <thead>
             <tr className="border-b border-line">
@@ -282,9 +282,9 @@ function Invoices() {
     <Card title="Invoices" description="Sent to your billing contact on the 1st." bodyClassName="p-0">
       <ul>
         {invoices.map((inv) => (
-          <li key={inv.id} className="flex items-center gap-4 border-b border-line px-4 py-2.5 text-[13px] last:border-0">
+          <li key={inv.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-4 py-2.5 text-[13px] last:border-0">
             <span className="w-32 font-mono text-[12.5px]">{inv.id}</span>
-            <span className="flex-1 text-ink-2">{format(inv.date, "MMMM yyyy")}</span>
+            <span className="min-w-0 flex-1 text-ink-2">{format(inv.date, "MMMM yyyy")}</span>
             <span className="tabular w-24 text-right">{money(inv.amount)}</span>
             <span className="w-24">
               <StatusBadge status={inv.status} />

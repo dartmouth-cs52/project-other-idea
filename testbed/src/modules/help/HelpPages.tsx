@@ -98,7 +98,7 @@ export function HelpHome() {
             <div className="flex flex-col gap-8">
               <section>
                 <h2 className="mb-3 text-[15px] font-semibold">Browse by topic</h2>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {CATEGORIES.map((c) => {
                     const Icon = ICONS[c.id] ?? BookOpen;
                     const count = ARTICLES.filter((a) => a.category === c.id).length;
@@ -114,7 +114,7 @@ export function HelpHome() {
                   })}
                 </div>
               </section>
-              <div className="grid gap-5 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
                 <Card title="Popular articles" className="min-w-0 lg:col-span-2" bodyClassName="p-0">
                   <ArticleList slugs={["issue-a-card", "upload-receipts", "two-factor", "api-keys", "approval-chains", "mileage"]} flat />
                 </Card>
@@ -194,7 +194,7 @@ export function ArticlePage() {
       <PageHeader crumbs={crumbs({ label: cat?.label ?? "", to: `/help?category=${article.category}` }, { label: article.title })} title={article.title} description={article.summary} meta={<span className="text-xs text-ink-3">Updated {format(parseISO(article.updated), "MMMM d, yyyy")}</span>} />
       <Loader loadKey={`help-${article.slug}`} rows={6}>
         {() => (
-          <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
             <article className="flex flex-col gap-5 rounded-lg border border-line bg-panel p-6 shadow-xs">
               <p className="text-[14px] leading-relaxed text-ink-2">{article.intro}</p>
               <ol className="flex flex-col gap-3">
@@ -372,7 +372,7 @@ export function ContactPage() {
           />
         </Card>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px]">
           <Card
             title="Send us a message"
             footer={

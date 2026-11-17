@@ -81,14 +81,14 @@ export function Dashboard() {
   if (view === "billing") {
     return (
       <Plain me={me}>
-        <BillingPage me={me} />
+        <BillingPage />
       </Plain>
     );
   }
   if (view === "team") {
     return (
       <Plain me={me}>
-        <TeamPage me={me} />
+        <TeamPage />
       </Plain>
     );
   }
