@@ -3,6 +3,7 @@ import { loadActing, type GateConfig } from "./acting-code.ts";
 import { Guide, type HandoffWay, type Reporter, type Watch } from "./guide.ts";
 import { startLearning, visitorId } from "./learn.ts";
 import { currentPath } from "./snapshot.ts";
+import { showSuggestions } from "./suggestions.ts";
 import { Ui } from "./ui.ts";
 
 // Entry point of the script customers paste into their site:
@@ -20,6 +21,9 @@ import { Ui } from "./ui.ts";
 // A page shown on a projector or a shared screen can ask for presentation
 // mode with data-present="1" on the script tag: a larger pointer, caption and
 // ring, and the question kept on show. It is never on otherwise.
+//
+// A site can suggest up to three questions, shown above the ask box while it
+// is open and empty (suggestions.ts).
 
 const script = document.currentScript as HTMLScriptElement | null;
 
@@ -163,6 +167,8 @@ async function boot() {
   };
   const blocked = Array.isArray(config.blocked) ? config.blocked : [];
   const guide = new Guide(ui, sendTurn, gateConfig, report, handoff, blocked);
+  // The company's suggested questions, above the ask box. A site with none gets nothing more.
+  showSuggestions(ui, config.suggestions);
   // A guide that was acting when the last page went carries on only once the code that acts is in.
   if (actingReady) void actingReady.then(() => guide.resume());
   else guide.resume();

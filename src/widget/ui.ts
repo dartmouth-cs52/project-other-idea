@@ -237,6 +237,40 @@ export interface UiActing {
   allowedHere: () => boolean;
 }
 
+/** A part of the widget that another module draws on the panel (`Ui.lend`), like the suggested questions. */
+export interface Lent {
+  el: HTMLElement;
+  /** The panel, the ask box or the guide may have changed: the part looks again at whether it shows. */
+  changed: () => void;
+  /** One of its buttons was pressed, with the mouse, a finger or the keyboard. */
+  press: (button: HTMLButtonElement) => void;
+}
+
+/** What a lent part may know of the ask box and do with it. */
+export interface AskBox {
+  /** Where the part's own styles go. */
+  root: ShadowRoot;
+  /** Presentation mode, where everything is drawn larger. */
+  present: boolean;
+  /** The box the visitor types in. */
+  field: HTMLElement & { readonly value: string };
+  /** The panel is open. */
+  open: () => boolean;
+  /**
+   * The box is open, empty and waiting for a question: nothing is typed, no
+   * guide runs, no pointer or sentence of Haptic's is up, and the visitor is
+   * not writing to a person.
+   */
+  waiting: () => boolean;
+  /**
+   * Asks a question exactly as if the visitor had typed it and pressed send.
+   * With `act` it is Do it instead, where Do it is on show: the site has acting
+   * on and allows it on this page. The first-use line and Go come first, as they
+   * do for Do it pressed by hand.
+   */
+  ask: (question: string, act: boolean) => void;
+}
+
 /** One line of "What I did", as the panel shows it. */
 export interface DidShown {
   name: string;
@@ -676,6 +710,7 @@ export class Ui {
    * neither is the case, so the timer stops then.
    */
   private keepPlaced() {
+    this.lent?.changed();
     this.placeSaid();
     const inUse = this.inUse();
     if (inUse && this.placing === undefined) this.placing = setInterval(this.place, 500);
@@ -811,6 +846,7 @@ export class Ui {
     const root = this.host.shadowRoot!;
     const buttonOf = (event: Event) => event.composedPath().find((node): node is HTMLButtonElement => node instanceof HTMLButtonElement);
     const act = (button: HTMLButtonElement) => {
+      if (this.lent?.el.contains(button)) return this.lent.press(button);
       if (button.classList.contains("line")) return this.onLine?.(Number(button.dataset.index));
       if (button.dataset.helped) return this.answerHelped(button.dataset.helped === "yes");
       if (button.classList.contains("person-open")) return this.onHandoff?.open();
@@ -1058,6 +1094,47 @@ export class Ui {
   closePanel() {
     this.panel.hidden = true;
     this.keepPlaced();
+  }
+
+  /** A part of the widget drawn on the panel by another module, like the suggested questions (suggestions.ts). */
+  private lent?: Lent;
+
+  /**
+   * Draws another module's part on the panel: its element goes first in the
+   * panel, so it opens and closes with the panel, comes before the ask box in
+   * the tab order, and Escape on it closes the panel as it does on the box. A
+   * press on one of its buttons is taken as a press on ours is (keepPressesOurs)
+   * and handed to `press`. `changed` is called whenever the panel, the ask box
+   * or the guide may have changed. What it may know of the ask box, and do with
+   * it, is what comes back.
+   */
+  lend(part: Lent): AskBox {
+    this.lent = part;
+    this.panel.prepend(part.el);
+    this.input.addEventListener("input", () => part.changed());
+    return {
+      root: this.host.shadowRoot!,
+      present: this.present,
+      field: this.input,
+      open: () => !this.panel.hidden,
+      waiting: () => {
+        const state = this.state;
+        const running = state === "asking" || state === "pointing" || state === "watching" || state === "acting" || state === "paused";
+        const writing = !this.handoff.hidden && this.handoff.querySelector<HTMLElement>(".person")?.hidden === false;
+        return !this.panel.hidden && !this.form.hidden && this.input.value === "" && !running && this.cursor.hidden && this.caption.hidden && !writing;
+      },
+      ask: (question, act) => {
+        const keyboard = part.el.contains(this.host.shadowRoot!.activeElement);
+        this.input.value = question;
+        // As if it had been typed: whatever listens to the box hears it, and Do it is shown or not for this page.
+        this.input.dispatchEvent(new Event("input"));
+        this.showActs();
+        if (!act || !this.panel.classList.contains("acts")) return this.buttons.send();
+        this.buttons.doit();
+        // The first time, Do it waits on the first-use line and Go. The keyboard goes where pressing Do it leaves it.
+        if (keyboard && !this.first.hidden) this.panel.querySelector<HTMLButtonElement>(".doit")?.focus();
+      },
+    };
   }
 
   /**
