@@ -50,6 +50,13 @@ export interface Session {
   status(): Promise<string>;
   /** The lines of "What I did" on show, as "name: value" with any aside, and its closing line. Empty when hidden. */
   did(): Promise<{ lines: string[]; closing: string }>;
+  /**
+   * From now on, has the page note each state the guide is put in, at the moment the widget sets it, so that a
+   * state lasting only a few milliseconds is never missed, as one read by `state()` now and then can be. Returns
+   * what the page now open has noted, in order, each state once for each change: starting from the state the guide
+   * was in when this was called, or from the widget's first, "idle", on a page loaded since.
+   */
+  recordStates(): Promise<() => Promise<GuideState[]>>;
   close(): Promise<void>;
 }
 
@@ -66,6 +73,34 @@ export async function closeBrowser(): Promise<void> {
   if (browser) await (await browser).close().catch(() => undefined);
   browser = undefined;
 }
+
+/**
+ * Has the page note each state the guide is put in, on `window.__guideStates`. The widget keeps its state as
+ * `guideState`, a property of its own element (`setState` in src/widget/ui.ts), so an accessor of that name on
+ * every HTML element is told of each one as it is set, and gives back what was set, as the property did. On a
+ * page the widget is on already, its element holds the property itself, which would hide the accessor, so it is
+ * handed over. Written as text for the reason `addTag` in eval/browser.ts gives.
+ */
+const RECORD_STATES = `(() => {
+  if (window.top !== window || window.__guideStates) return;
+  const states = (window.__guideStates = []);
+  const held = new WeakMap();
+  const note = (element, state) => {
+    held.set(element, state);
+    if (element.localName === "haptic-root" && states[states.length - 1] !== state) states.push(state);
+  };
+  Object.defineProperty(HTMLElement.prototype, "guideState", {
+    configurable: true,
+    get() { return held.get(this); },
+    set(state) { note(this, state); },
+  });
+  const host = document.querySelector("haptic-root");
+  if (host && Object.prototype.hasOwnProperty.call(host, "guideState")) {
+    const state = host.guideState;
+    delete host.guideState;
+    note(host, state);
+  }
+})();`;
 
 const page = (body: string) => `<!doctype html><html><head><meta charset="utf-8"><title>Test page</title><style>body{font:14px system-ui;margin:24px}</style></head><body>${body}</body></html>`;
 
@@ -152,7 +187,7 @@ export async function start(
       const page = opened.page;
       // A guide that ended leaves the ask box open when it asks whether it helped.
       if (!(await page.locator("haptic-root .panel").isVisible())) await page.locator("haptic-root .launcher").click();
-      await page.locator("haptic-root .ask input").fill(goal);
+      await page.locator("haptic-root .ask textarea").fill(goal);
       await page.locator("haptic-root .panel .doit").click();
       const go = page.locator("haptic-root .panel .first .go");
       if (how.go !== false && (await go.isVisible())) await go.click();
@@ -172,6 +207,12 @@ export async function start(
         });
         return { lines, closing: did.querySelector("p")?.textContent ?? "" };
       }),
+    recordStates: async () => {
+      // Before the scripts of every page loaded from now on, and in the page as it is.
+      await opened.page.addInitScript(RECORD_STATES);
+      await opened.page.evaluate(RECORD_STATES);
+      return () => opened.page.evaluate(() => (window as unknown as { __guideStates?: GuideState[] }).__guideStates ?? []);
+    },
     close: async () => {
       await opened.close().catch(() => undefined);
       await new Promise((resolve) => server.close(resolve));

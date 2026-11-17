@@ -273,7 +273,9 @@ looks stark.
 - **Muted text (#78716C):** Sub-copy and secondary labels. 4.6 to 1 on Paper.
 - **Border (#E7E5E4):** Hairlines and the secondary button.
 - **Pointer blue (#1E6EF4):** The pointer, the mark around its target, the
-  keyboard focus ring and the heart of the thinking glow. Nothing else.
+  keyboard focus ring and the heart of the thinking glow. Nothing else. It is
+  the same on every customer's site and is not a setting: the pointer is
+  Haptic's, and it has to be seen against the site, not blend into it.
 - **Thinking glow (#77D0FE, #5294FF, #8460EE):** One soft band over the page
   while Haptic thinks: sky at its trailing edge, a lighter Pointer blue through
   its middle, indigo at its leading edge. The three are the pointer's colour
@@ -474,12 +476,17 @@ Components are shadcn/ui, restyled only through tokens and variants.
   never over the next control.
 - **Launcher:** The pill in the bottom right corner that opens the chat. It
   is on the right on every site and only ever moves up that side, to clear a
-  control of the page's, never across to the left. Ink with Paper words. A company can give it its own site's colour, so it looks
-  like part of the site, the way a support button does. Its words are then
-  Paper or Ink, whichever reads better on that colour. The pointer never takes
-  the site's colour. The two have opposite jobs: the launcher belongs to the
-  site, and the pointer has to be seen against it. A green pointer on a green
-  sidebar was tried and could hardly be found.
+  control of the page's, never across to the left. It takes the site's own
+  colour, so it looks like part of the site, the way a support button does.
+  The colour is read from the site when it is added, from what its
+  stylesheets name as theirs, and the company can match it again or pick
+  another. A colour too light to stand out on a white page is darkened, with
+  its hue kept, until it is 3 to 1 against white, what accessibility
+  guidelines ask of a control. Its words are Paper or Ink, whichever reads
+  better on it. A site with no colour of its own gets Ink with Paper words.
+  The pointer never takes the site's colour. The two have opposite jobs: the
+  launcher belongs to the site, and the pointer has to be seen against it. A
+  green pointer on a green sidebar was tried and could hardly be found.
 - **Chat:** Haptic's home, in the bottom right corner where support chat
   usually lives. A Card panel holding the conversation and the ask box. It
   stays open from the first question to the last step. A 24px × in Muted
@@ -489,7 +496,11 @@ Components are shadcn/ui, restyled only through tokens and variants.
   it was.
 - **Ask box:** shadcn's input group: a Muted field with the text on top and a
   round Ink send button on a row beneath. While Haptic is guiding, send becomes
-  a stop button.
+  a stop button. The field is one line when empty. A longer question wraps,
+  and the field grows a line at a time, up to six, so the whole question can
+  be read as it is typed; past six it scrolls up and down, never sideways.
+  It is still one question: Enter sends it, and a line break pasted in is a
+  space.
 - **Bubbles and status:** shadcn's chat parts. The person's question is an Ink
   bubble on the right. Haptic's reply is a Muted bubble on the left. Status
   sits under them as one line. While Haptic thinks it is the word "Thinking"
@@ -512,7 +523,14 @@ Components are shadcn/ui, restyled only through tokens and variants.
   a bell with no flat top and no edge, a touch thicker in the middle of the
   page than at its sides, at about six tenths of full strength at its heart.
   It is multiplied into a light page, so the page's words stay dark and sharp
-  through it, and screened into a dark one. It takes no clicks.
+  through it, and screened into a dark one. It takes no clicks. It is for a
+  visitor who is waiting on Haptic, never over one who is using the page: a
+  press or a key of theirs on the page while Haptic thinks sends it off the
+  page the way the reply does, and it does not come back in that wait. A wait
+  that begins with them filling in a field or choosing from a dropdown has no
+  glow at all, so a form is never tinted while it is being filled in. The
+  thinking goes on either way, and the chat still says so. While Haptic acts,
+  it is the one in the fields, and its waits glow.
 - **Form:** Labels above 44px inputs and one primary button. A required field
   has an Error red star after its label, and a field with no star may be left
   empty. A step that has a way back puts a secondary Back button to the left of
@@ -534,7 +552,7 @@ Components are shadcn/ui, restyled only through tokens and variants.
 eases out with `cubic-bezier(.2, .8, .2, 1)`, quick to leave and slow to land,
 and takes 400 to 700ms depending on how far it travels. It and the thinking
 glow are the two movements allowed to run longer than 300ms: the eye has to
-follow the glide, and the glow lasts exactly as long as the wait. Everything
+follow the glide, and the glow lasts no longer than the wait. Everything
 else is a fade, a small scale or a height change of 150 to 250ms that eases
 out. Nothing grows from nothing: things arrive from within a few percent of
 their final size. A click is acknowledged like a pressed button, with the mark
@@ -586,18 +604,21 @@ reason a customer gave.
 - **Knowledge.** What Haptic reads and what the company has corrected. Notes,
   help docs, corrections, the routes taught by doing, the controls never to
   point at, and the pages read.
-- **Settings.** Three tabs. General holds the site's name, the widget's two
-  colours and deleting the site. Install holds the script and where it runs.
+- **Settings.** Three tabs. General holds the site's name, the Ask button's
+  colour and deleting the site. Install holds the script and where it runs.
   Usage holds the finished guides, month by month, which are what billing
   counts.
 
-A company chooses two colours. The Ask button's is the one to match: a
-secondary button, "Match website", reads the site's own colour from its first
-page and saves it in one press. A grey, a near white or a near black is never
-taken. The pointer's colour is Haptic's blue, and stays so unless the company
-changes it. When it is anything else, "Use Haptic blue" puts it back. The
-launcher sits bottom right on every site, where support chat usually lives,
-and that is not a setting. Deleting a site leads back to the list of sites.
+A company chooses one colour, the Ask button's, and it starts as the site's
+own: it is read from the site when the site is added, and the field says
+"Reading your website's colour" until it is in. A secondary button, "Match
+website", reads it again and saves it in one press, and the field takes any
+other. A grey, a near white or a near black is never read as the site's
+colour. One too light for a button is saved as it is drawn, darker, and the
+field says so before it is saved. The pointer is Haptic's blue on every site,
+and the card says so in one line instead of offering a field. The launcher
+sits bottom right on every site, where support chat usually lives, and that is
+not a setting. Deleting a site leads back to the list of sites.
 
 **Sites.** The first page after sign-in is the list, one card a site, for a
 company with one site as for one with several. A site opens when its card is
@@ -770,6 +791,13 @@ stays. The rest below is proposed.
   one." and names the step that gets the person back. It is plain text in the
   usual caption: no Error red, no alert. If the click also leads to the goal,
   Haptic carries on without comment.
+- **Finish a form before its button.** Haptic points at each field a form
+  needs, one a step, before it points at the button that sends it. Those are
+  the fields the page marks as required and, where a form marks only its
+  optional fields, the rest. If the form turns the person back, the next
+  caption names the field its message is about, and the guide carries on. A
+  form that already holds saved values is left alone, apart from the field the
+  person asked about.
 - **Finish plainly.** Haptic confirms in a sentence, shows the green tick in
   the chat, and the ask box is ready again. The tick is only for a guide the
   person followed to the end, the same ending that is billed. An answer in
@@ -833,6 +861,9 @@ stays. The rest below is proposed.
   frame and the thinking glow are the two exceptions.
 - Don't put the thinking glow on the chat, leave it on the page once the
   reply has arrived, or play it for anything but Haptic working on a reply.
+- Don't draw the glow over a visitor who is using the page: a press or a key
+  on it sends the glow away, and a wait that begins with them filling in a
+  field has none.
 - Don't give the glow an edge, a stripe or a second band. If it can be seen
   where it starts or stops, it is not smooth enough.
 - Don't use Bold, italics for emphasis, or text smaller than 12px.

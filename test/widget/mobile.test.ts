@@ -110,11 +110,11 @@ test("on a touch screen the ask box's words are 16px, so the phone does not zoom
   try {
     const sizes = await session.page.evaluate(() => {
       const root = document.querySelector("haptic-root")!.shadowRoot!;
-      return [".ask input", ".person input", ".person textarea"].map((s) => getComputedStyle(root.querySelector(s)!).fontSize);
+      return [".ask textarea", ".person input", ".person textarea"].map((s) => getComputedStyle(root.querySelector(s)!).fontSize);
     });
     assert.deepEqual(sizes, ["16px", "16px", "16px"]);
     await session.page.locator("haptic-root .launcher").tap();
-    await session.page.locator("haptic-root .ask input").tap();
+    await session.page.locator("haptic-root .ask textarea").tap();
     await session.page.waitForTimeout(300);
     assert.equal((await shown(session)).scale, 1, "the page zoomed in");
   } finally {

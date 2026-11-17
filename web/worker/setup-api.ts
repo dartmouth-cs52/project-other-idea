@@ -15,7 +15,7 @@
 import { checkAddress, checkEmail, isSetupStep, mailboxOf, NEEDS_SIGN_IN, pageControls, riskyControls, type SetupState } from "../lib/setup";
 import type { PageNode, SiteContext } from "../../src/shared/types";
 import { boundedText } from "./body";
-import type { Organization, Sql } from "./db";
+import { notMigrated, type Organization, type Sql } from "./db";
 import { developerEmail, UnsafeText } from "./developer-email";
 import { headline } from "./insights";
 import { sendEmail, type SendEnv } from "./sign-in-email";
@@ -212,12 +212,6 @@ async function hashOf(text: string): Promise<string> {
 
 const COPY_INSTEAD = "Copy the link and send it yourself.";
 const NOT_SET_UP = `Email isn't set up on this server yet. ${COPY_INSTEAD}`;
-
-/** True for Postgres saying a table or column is missing: a Worker deployed before db/migrations/0013 was applied. */
-function notMigrated(error: unknown): boolean {
-  const code = (error as { code?: string }).code;
-  return code === "42P01" || code === "42703";
-}
 
 /** Deletes the records of emails sent more than a day ago. Each send does it, and so does the Worker's daily schedule. */
 export async function forgetOldEmails(sql: Sql): Promise<void> {

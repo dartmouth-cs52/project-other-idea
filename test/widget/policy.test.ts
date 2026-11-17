@@ -96,8 +96,8 @@ for (const [name, policy] of Object.entries(POLICIES)) {
       assert.deepEqual(drawn.launcher, { height: 40, background: "rgb(28, 25, 23)", position: "fixed" }, "the launcher is not drawn with the widget's own styles");
 
       await page.locator("haptic-root .launcher").click();
-      await page.locator("haptic-root .ask input").fill("how do I export my orders");
-      await page.locator("haptic-root .ask input").press("Enter");
+      await page.locator("haptic-root .ask textarea").fill("how do I export my orders");
+      await page.locator("haptic-root .ask textarea").press("Enter");
       for (const until = Date.now() + 10_000; !asked.length && Date.now() < until; ) await page.waitForTimeout(50);
       assert.equal(asked.length, 1, "the question never reached Haptic");
       await page.locator("haptic-root .cursor").waitFor({ state: "visible", timeout: 5000 });
@@ -114,7 +114,9 @@ for (const [name, policy] of Object.entries(POLICIES)) {
           captionBackground: getComputedStyle(caption).backgroundColor,
         };
       });
-      assert.deepEqual(shown, { pointed: "export", ringBorder: "2px", ringPosition: "fixed", caption: "Click Export.", captionBackground: "rgb(28, 25, 23)" });
+      // The border and the caption's background are the widget's stylesheet. The ring is held to the page, as Export
+      // is, by a position the widget sets through the style object, which a policy with no inline style still allows.
+      assert.deepEqual(shown, { pointed: "export", ringBorder: "2px", ringPosition: "absolute", caption: "Click Export.", captionBackground: "rgb(28, 25, 23)" });
       assert.ok(violations.some((line) => line.startsWith("style-src-elem inline") && line.includes(PAGE)), `the page's own inline style was not reported: ${violations.join(" | ")}`);
       assert.deepEqual(violations.filter((line) => line.includes(HAPTIC)), [], "the policy reported something the widget did");
     } finally {
@@ -175,7 +177,7 @@ for (const [name, policy] of Object.entries(POLICIES)) {
       });
       await page.goto(`${PAGE}/expenses`);
       await page.locator("haptic-root .launcher").click();
-      await page.locator("haptic-root .ask input").fill("go on for me");
+      await page.locator("haptic-root .ask textarea").fill("go on for me");
       await page.locator("haptic-root .panel .doit").click();
       // Haptic follows the link itself, and carries on acting on the page it leads to.
       await page.waitForURL(`${PAGE}/expenses/2`, { timeout: 10_000 });

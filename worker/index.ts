@@ -3,9 +3,11 @@ import { describeAlert, meterFor, type Admission, type Ceiling, type Gate, type 
 import { Store } from "../src/server/db.ts";
 import { labelThreshold, networkThreshold } from "../src/server/learned.ts";
 import { configure } from "../src/server/model.ts";
+import type { RouteLookup } from "../src/server/routes.ts";
 import { createSiteCache } from "../src/server/site-cache.ts";
 import { NeonTeachStore } from "../src/server/teach.ts";
 import type { SiteContext } from "../src/shared/types.ts";
+import mapper from "../dist/map.txt";
 import widgetActing from "../dist/widget-act.txt";
 import widgetTeaching from "../dist/widget-teach.txt";
 import widget from "../dist/widget.txt";
@@ -224,6 +226,7 @@ export default {
       widget: async () => widget,
       widgetActing: async () => widgetActing,
       widgetTeaching: async () => widgetTeaching,
+      mapper: async () => mapper,
       widgetMaxAge: 300,
       overLimit: async (key) => (env.TURN_LIMIT ? !(await env.TURN_LIMIT.limit({ key })).success : false),
       overTeachLimit: async (key) => {
@@ -237,7 +240,7 @@ export default {
       background: (work) => ctx.waitUntil(work),
       onSeen: (site, origin, allowed) => later(db?.seenAt(site, origin, allowed)),
       onAsk: (turn, _site, origin) => later(db?.startGuide(turn, origin)),
-      onTurn: (turn, measure, site, origin) => {
+      onTurn: (turn, measure, site, origin, route) => {
         // One line of counts per step, with nothing from the visitor or their page, so that how guides and acting go on a site can be seen.
         try {
           console.log(JSON.stringify(turnCounts(turn, measure, site)));
@@ -245,11 +248,13 @@ export default {
           // A line that cannot be written must not cost the visitor their step.
         }
         // And the step on the guide's record, as the dashboard shows it (src/server/db.ts).
-        later(db?.recordStep(turn, measure, origin));
+        later(db?.recordStep(turn, measure, origin, route));
       },
+      ...(db ? { findRoute: (site: SiteContext, lookup: RouteLookup) => db.findRoute(site.id, lookup) } : {}),
       onReport: (site, guide, report) => later(db?.report(site, guide, report)),
       onCancel: (turn) => later(db?.cancelStep(turn)),
       onOutline: (site, visitor, outline, network) => later(db?.recordOutline(site, visitor, outline, network)),
+      ...(db ? { mapping: { allowed: (site, pass) => db.mappingAllowed(site.id, pass), save: (site, page) => db.saveMappedPage(site.id, page) } } : {}),
     });
     try {
       const response = await app(request, request.headers.get("CF-Connecting-IP") ?? "");

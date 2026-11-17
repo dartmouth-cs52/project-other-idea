@@ -123,6 +123,15 @@ body {
   outline-offset: 2px;
 }
 
+/* The search box at the top of a picker's list, and of the command palette, is
+   focused the moment the list opens, and the list shows where you are. Its
+   class asks for no outline, but the rule above is outside Tailwind's layers,
+   so it would beat `outline-none` and draw a green box round the search box
+   under Haptic's blue ring on an option. */
+[cmdk-input]:focus-visible {
+  outline: none;
+}
+
 /* A fieldset is as wide as its widest line unless told otherwise, which on a phone is wider than the screen. */
 fieldset {
   min-width: 0;

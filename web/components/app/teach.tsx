@@ -117,10 +117,20 @@ export function TeachButton({
   );
 }
 
-/** "Teach Haptic a task": the same, for a question typed here. */
-export function TeachTask({ siteId }: { siteId: string }) {
+/** "Teach Haptic a task": the same, for a question typed here. `unavailable` says why teaching can't start on this server. */
+export function TeachTask({ siteId, unavailable }: { siteId: string; unavailable?: string | null }) {
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState("");
+  if (unavailable) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Button variant="secondary" className="self-start" disabled>
+          Teach Haptic a task
+        </Button>
+        <p className="text-sm text-muted-foreground">{unavailable}</p>
+      </div>
+    );
+  }
   if (!open) {
     return (
       <Button variant="secondary" className="self-start" onClick={() => setOpen(true)}>
@@ -170,14 +180,19 @@ function StepDetails({ step }: { step: TaughtStep }) {
 /** Taught by doing: the routes taught so far, steps waiting for review, and a way to teach a new one. */
 export function TaughtRoutes({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
   const [sessions, setSessions] = useState<TeachSession[]>([]);
+  /** Why teaching can't start on this server, when the Worker says so. */
+  const [unavailable, setUnavailable] = useState<string | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [failedRemove, setFailedRemove] = useState<TaughtRoute | null>(null);
   const current = useActive();
   const taught = site.taught ?? [];
 
   const loadSessions = useCallback(() => {
-    api<{ sessions: TeachSession[] }>(`/sites/${site.id}/teach`).then(
-      (result) => setSessions(result.sessions),
+    api<{ sessions: TeachSession[]; unavailable?: string }>(`/sites/${site.id}/teach`).then(
+      (result) => {
+        setSessions(result.sessions);
+        setUnavailable(result.unavailable ?? null);
+      },
       () => setSessions([]),
     );
   }, [site.id]);
@@ -255,7 +270,7 @@ export function TaughtRoutes({ site, onChange }: { site: Site; onChange: (site: 
           which controls you use, never what you type.
         </p>
       )}
-      <TeachTask siteId={site.id} />
+      <TeachTask siteId={site.id} unavailable={unavailable} />
       <FormAlert failure={failure} retry={failedRemove ? () => remove(failedRemove) : undefined} />
     </div>
   );

@@ -1,9 +1,28 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { reportUsage } from "../shared/billing.ts";
 import { BLOCKED_SAY } from "../shared/corrections.ts";
-import { cleanText, normalizePath, NO_MODEL, questionKey, REASONS, type GuideOutcome, type GuideReport, type PageOutline, type SiteContext, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { mappingAllowed } from "../shared/mapping.ts";
+import {
+  cleanText,
+  normalizePath,
+  NO_MODEL,
+  questionKey,
+  REASONS,
+  routeKey,
+  ROUTES_MODES,
+  type GuideOutcome,
+  type GuideReport,
+  type PageNode,
+  type PageOutline,
+  type RoutesMode,
+  type SiteContext,
+  type TurnReply,
+  type TurnRequest,
+} from "../shared/types.ts";
+import { mergeMapped } from "./mapped.ts";
 import { MAX_VISITORS, openingRows, outlineRows, visitorHash, withLearned, type LearnedLabel, type LearnedOpening } from "./learned.ts";
 import type { TurnMeasure } from "./model.ts";
+import { contextOf, storable, type RouteLookup, type RouteResult, type StoredRoute } from "./routes.ts";
 
 // What the widget server keeps in Neon: each site, which origins the script has
 // called from, and every guide with its steps. The tables are in db/migrations.
@@ -22,11 +41,14 @@ export interface SiteRow {
   origin: string;
   allowed_origins: string[];
   context: SiteContext;
+  routes_mode?: string;
 }
 
 /** A site as the server answers with it. The columns win over the copy inside `context`, because the dashboard edits them. */
 export function siteFromRow(row: SiteRow): SiteContext {
-  return { ...row.context, id: row.id, name: row.name, origin: row.origin, allowedOrigins: row.allowed_origins };
+  const site: SiteContext = { ...row.context, id: row.id, name: row.name, origin: row.origin, allowedOrigins: row.allowed_origins };
+  if (ROUTES_MODES.includes(row.routes_mode as RoutesMode)) site.routes = row.routes_mode as RoutesMode;
+  return site;
 }
 
 /** The script calls from the same page many times a minute. One write a minute per origin is plenty to know it is live. */
@@ -150,7 +172,7 @@ export class Store {
    */
   async loadSite(id: string): Promise<SiteContext | undefined> {
     const [rows, labels, openings] = await Promise.all([
-      this.sql`select id, name, origin, allowed_origins, context from sites where id = ${id}` as unknown as Promise<SiteRow[]>,
+      this.sql`select id, name, origin, allowed_origins, context, routes_mode from sites where id = ${id}` as unknown as Promise<SiteRow[]>,
       this.learnedLabels(id),
       this.learnedOpenings(id),
     ]);
@@ -273,6 +295,28 @@ export class Store {
     });
   }
 
+  /** Whether `pass` lets its holder map this site right now. Read from the database each time: the pass may be seconds old. */
+  async mappingAllowed(site: string, pass: string): Promise<boolean> {
+    const rows = (await this.sql`select context->'mapping' as mapping from sites where id = ${site}`) as { mapping: SiteContext["mapping"] | null }[];
+    return mappingAllowed(site, rows[0]?.mapping ?? undefined, pass);
+  }
+
+  /**
+   * Puts one mapped page into a site's pages. The widget sends one page at a
+   * time and waits for each, so reading the pages and writing them back is
+   * not raced by another page from the same tab.
+   */
+  async saveMappedPage(site: string, page: PageNode): Promise<void> {
+    const rows = (await this.sql`select context->'pages' as pages from sites where id = ${site}`) as { pages: PageNode[] | null }[];
+    if (!rows[0]) return;
+    const pages = rows[0].pages ?? [];
+    const merged = mergeMapped(pages, page);
+    if (merged === pages) return;
+    await this.sql`
+      update sites set context = jsonb_set(jsonb_set(context, '{pages}', ${JSON.stringify(merged)}::jsonb), '{updatedAt}', to_jsonb(now()::text)), updated_at = now()
+      where id = ${site}`;
+  }
+
   /**
    * Saves a site built by `npm run tag`. A site the team made by hand has no company until one claims it.
    * Corrections, controls never to point at and taught routes are made in the dashboard, so a publish keeps them unless it brings its own.
@@ -348,12 +392,32 @@ export class Store {
   }
 
   /** Records one step, and the guide it belongs to if this is its first. A step asked again (after a loop or a page change) replaces the earlier try. */
-  recordStep(request: TurnRequest, measure: TurnMeasure, origin: string | undefined): Promise<void> | undefined {
+  recordStep(request: TurnRequest, measure: TurnMeasure, origin: string | undefined, route?: RouteResult): Promise<void> | undefined {
     const guide = request.guide;
     if (!guide) return undefined;
     const { reply } = measure;
     const target = reply.target ? request.snapshot.elements.find((element) => element.id === reply.target) : undefined;
     const path = normalizePath(request.snapshot.path || "/");
+    const targetKey = target ? routeKey(target) : null;
+    // The model's answer becomes the stored route for this question on this screen (routes.ts). A different answer
+    // replaces the route and takes its trust away, until a finished guide confirms the new one. Only a guide's step
+    // is kept: an answer in words is shown in the panel, and a route's reply is shown beside the pointer.
+    const learn =
+      route && route.outcome !== "served" && target && targetKey && reply.status !== "stuck" && (!reply.mode || reply.mode === "guide") && storable(route.lookup, targetKey)
+        ? [
+            this.sql`
+              insert into routes (site_id, goal_key, path, dialog, after_key, target_key, target_context, target_role, target_label, say, status)
+              values (${request.site}, ${route.lookup.goalKey}, ${route.lookup.path}, ${route.lookup.dialog}, ${route.lookup.afterKey},
+                ${targetKey}, ${contextOf(target)}, ${target.role}, ${cleanText(target.label, 80)}, ${cleanText(reply.say, 600)}, ${reply.status})
+              on conflict (site_id, goal_key, path, dialog, after_key) do update set
+                repairs = routes.repairs + (case when routes.target_key = excluded.target_key and routes.target_context = excluded.target_context then 0 else 1 end),
+                confirmed = routes.confirmed and routes.target_key = excluded.target_key and routes.target_context = excluded.target_context,
+                confirmed_at = case when routes.target_key = excluded.target_key and routes.target_context = excluded.target_context then routes.confirmed_at end,
+                say = case when routes.confirmed and routes.target_key = excluded.target_key and routes.target_context = excluded.target_context then routes.say else excluded.say end,
+                target_key = excluded.target_key, target_context = excluded.target_context, target_role = excluded.target_role,
+                target_label = excluded.target_label, status = excluded.status, updated_at = now()`,
+          ]
+        : [];
     // A step the server answered by itself cost nothing to ask for, and the widget chooses the guide's id and the
     // question. So it is added to a guide already on record and never starts one: otherwise anything that can send
     // a request could put questions of its choosing on a site's dashboard without the model ever being called.
@@ -371,14 +435,18 @@ export class Store {
       await this.sql.transaction([
         guideRow,
         this.sql`
-          insert into steps (guide_id, n, path, target_role, target_label, target_context, said, status, event, strayed, ms, ms_to_target, model)
+          insert into steps (guide_id, n, path, target_role, target_label, target_context, said, status, event, strayed, ms, ms_to_target, model,
+            target_key, after_key, dialog, route)
           select ${guide}, ${request.step}, ${path}, ${target?.role ?? null}, ${target ? cleanText(target.label, 80) : null},
             ${target?.context ? cleanText(target.context, 120) : null}, ${cleanText(reply.say, 600)}, ${reply.status},
-            ${request.event ? cleanText(request.event, 600) : null}, ${request.offTrack === true}, ${measure.ms}, ${measure.msToTarget}, ${measure.model}
+            ${request.event ? cleanText(request.event, 600) : null}, ${request.offTrack === true}, ${measure.ms}, ${measure.msToTarget}, ${measure.model},
+            ${targetKey}, ${route?.lookup.afterKey ?? null}, ${route?.lookup.dialog ?? null}, ${route?.outcome ?? null}
           where exists (select 1 from guides where id = ${guide} and site_id = ${request.site})
           on conflict (guide_id, n) do update set path = excluded.path, target_role = excluded.target_role, target_label = excluded.target_label,
             target_context = excluded.target_context, said = excluded.said, status = excluded.status, event = excluded.event,
-            strayed = steps.strayed or excluded.strayed, ms = excluded.ms, ms_to_target = excluded.ms_to_target, model = excluded.model, created_at = now()`,
+            strayed = steps.strayed or excluded.strayed, ms = excluded.ms, ms_to_target = excluded.ms_to_target, model = excluded.model,
+            target_key = excluded.target_key, after_key = excluded.after_key, dialog = excluded.dialog, route = excluded.route, created_at = now()`,
+        ...learn,
       ]);
     });
     this.track(guide, write);
@@ -521,12 +589,16 @@ export class Store {
         }
         if (outcome && found.open) {
           await this.sql`update guides set outcome = ${outcome}, ended_at = now() where id = ${guide} and site_id = ${site.id} and outcome is null`;
+          // Only an ending the record bears out confirms the routes behind its steps.
+          if (outcome === "finished") await this.quietly("trust a finished guide's routes", () => this.trustRoutes(site.id, guide));
           // A finished guide is billed. It goes to Stripe now if its company pays by usage, and only if the database kept it as finished.
           // The site's hourly sweep catches any that don't get through.
           if (outcome === "finished" && this.stripeKey) await reportUsage(this.sql, this.stripeKey, { guide });
         }
         if (report.helped !== undefined) {
           await this.sql`update guides set helped = ${report.helped} where id = ${guide} and site_id = ${site.id}`;
+          // A person saying it did not help is doubt enough: none of this guide's routes is served again until another guide confirms it.
+          if (report.helped === false) await this.quietly("take a guide's routes out of use", () => this.distrustRoutes(site.id, guide));
         }
         // Last, because the column came later (db/migrations/0006): if it is missing, what is above is already written.
         if (report.handoff) {
@@ -537,6 +609,47 @@ export class Store {
       // Its first question was refused by the off switch or the budget, which records nothing, or it was never asked here.
       console.warn(`A report for guide ${guide} on ${site.id} came for a guide that is not on record.`);
     });
+  }
+
+  /** The route stored for a question on a screen, if any. */
+  async findRoute(siteId: string, lookup: RouteLookup): Promise<StoredRoute | undefined> {
+    const rows = (await this.sql`
+      select target_key, target_context, say, status, confirmed from routes
+      where site_id = ${siteId} and goal_key = ${lookup.goalKey} and path = ${lookup.path} and dialog = ${lookup.dialog} and after_key = ${lookup.afterKey}`) as {
+      target_key: string;
+      target_context: string;
+      say: string;
+      status: "continue" | "done";
+      confirmed: boolean;
+    }[];
+    const row = rows[0];
+    return row ? { targetKey: row.target_key, targetContext: row.target_context, say: row.say, status: row.status, confirmed: row.confirmed } : undefined;
+  }
+
+  /**
+   * A finished guide confirms the route behind each of its steps that the
+   * visitor followed: every step whose next step was not a wrong click, and
+   * its last step. Only steps that were looked up count.
+   */
+  private async trustRoutes(siteId: string, guide: string): Promise<void> {
+    await this.sql`
+      update routes r set confirmed = true, confirmed_at = coalesce(r.confirmed_at, now()), uses = r.uses + 1, updated_at = now()
+      from steps s
+      join guides g on g.id = s.guide_id
+      left join steps next on next.guide_id = s.guide_id and next.n = s.n + 1
+      where g.id = ${guide} and g.site_id = ${siteId} and s.route is not null and s.target_key is not null and s.status <> 'stuck'
+        and (next.n is null or not next.strayed)
+        and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
+        and r.after_key = coalesce(s.after_key, '') and r.target_key = s.target_key and r.target_context = coalesce(s.target_context, '')`;
+  }
+
+  private async distrustRoutes(siteId: string, guide: string): Promise<void> {
+    await this.sql`
+      update routes r set confirmed = false, confirmed_at = null, updated_at = now()
+      from steps s join guides g on g.id = s.guide_id
+      where g.id = ${guide} and g.site_id = ${siteId} and s.route is not null and s.target_key is not null
+        and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
+        and r.after_key = coalesce(s.after_key, '') and r.target_key = s.target_key`;
   }
 
   private async quietly(what: string, work: () => Promise<void>): Promise<void> {

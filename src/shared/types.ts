@@ -44,15 +44,39 @@ export interface SiteContext {
   handoff?: Handoff;
   /** False stops the widget sending outlines of the pages it sees, so the site map is the crawl's alone. On unless set. */
   learn?: boolean;
+  /**
+   * The last time the launcher's colour was read from the site, and for which address. A new address is read again.
+   * `done` is false while a read is under way. Set by matchLauncher in web/worker/brand.ts.
+   */
+  launcherMatch?: { origin: string; at: string; done: boolean };
+  /** True once a person set the launcher's colour in the dashboard. It is then never read from the site on its own again. */
+  launcherChosen?: boolean;
   /** "Point here instead": steps the site's owner fixed from the dashboard. See src/shared/corrections.ts. */
   corrections?: Correction[];
   /** Controls Haptic must never point at, like "Delete workspace". Enforced by the server and the widget, not left to the prompt. */
   blocked?: ControlName[];
   /** "Teach Haptic": routes someone at the company showed Haptic by doing the task in their app. See src/shared/teach.ts. */
   taught?: TaughtRoute[];
+  /** Verified routes: "shadow" when not set. See src/server/routes.ts. */
+  routes?: RoutesMode;
+  /**
+   * Set while someone at the company may map the app from their own signed-in
+   * browser (src/widget/map.ts). Only a hash of the pass is kept, and it stops
+   * working at `expires`.
+   */
+  mapping?: { hash: string; expires: string };
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * Whether steps are answered from verified routes (issue 13).
+ * - off: no lookups
+ * - shadow: each step is looked up and compared with the model's answer, which is what the visitor gets
+ * - serve: a trusted route that matches exactly one control on the live page is answered without the model
+ */
+export const ROUTES_MODES = ["off", "shadow", "serve"] as const;
+export type RoutesMode = (typeof ROUTES_MODES)[number];
 
 export interface SiteSource {
   url: string;
@@ -73,7 +97,11 @@ export interface SiteSource {
 }
 
 export interface Appearance {
-  /** Hex color for the pointer and its highlight. Blue unless the company changes it, so it stands out on any page. */
+  /**
+   * Not used. The pointer and its ring are Haptic's blue on every site (POINTER_BLUE in src/shared/colour.ts), so
+   * this is no longer a setting. Kept so settings saved before still read, and the widget server sends the blue here
+   * for a widget still in a browser's cache from when it was read.
+   */
   accent: string;
   /**
    * Always bottom right: the launcher is on the right on every site, and the
@@ -84,9 +112,9 @@ export interface Appearance {
   position: "bottom-right";
   launcherLabel: string;
   /**
-   * Hex color for the launcher, the button people press to ask. Not set means Ink.
-   * This is the part of the widget a company matches to its own site: the launcher
-   * should look like it belongs there, and the pointer should not.
+   * Hex color for the launcher, the button people press to ask: the site's own colour, read from the site when it
+   * is added (web/worker/brand.ts) or chosen in the dashboard. Not set means Ink. It is drawn through
+   * launcherColour in src/shared/colour.ts, which darkens one too light to see on a white page.
    */
   launcher?: string;
 }
@@ -139,9 +167,12 @@ export interface PageNode {
   /**
    * What each menu, tab or accordion showed when the reader opened it. These
    * are the edges that take two clicks: the control first, then what it shows.
-   * Only a reader that runs the page in a browser can fill this in.
+   * Only a reader that runs the page in a browser can fill this in: the one
+   * at signup, or the widget while the company maps its own app.
    */
   opens?: PageOpening[];
+  /** Set on a page mapped from a signed-in browser at the company, which a later reading of the public pages must not replace. */
+  mapped?: true;
 }
 
 export interface PageOpening {
@@ -151,6 +182,16 @@ export interface PageOpening {
   links: { label: string; to: string }[];
   /** Buttons, tabs and menu items that appeared. */
   buttons: string[];
+  /** Labels of the fields that appeared, when what opened was a dialog with a form in it. */
+  fields?: string[];
+}
+
+/** What the widget posts to /v1/map while someone at the company maps their app. Without a page it only asks whether the pass is good. */
+export interface MapReport {
+  site: string;
+  /** The pass from the dashboard's link. The server keeps only a hash of it. */
+  pass: string;
+  page?: PageNode;
 }
 
 /**
@@ -386,6 +427,8 @@ export interface TurnRequest {
    * or later, on a site with acting on at this path. Absent: a guide.
    */
   mode?: "act";
+  /** The route key of the control the previous step pointed at, when the visitor used it. Part of a verified route's key. */
+  after?: string;
   snapshot: Snapshot;
 }
 
@@ -827,6 +870,18 @@ export function cleanText(text: string, max = 80, own?: ReadonlySet<string>): st
   const cut = masked.slice(0, max - 1);
   const space = cut.lastIndexOf(" ");
   return (space >= max * 0.6 ? cut.slice(0, space) : cut).trimEnd() + "…";
+}
+
+/**
+ * A control as verified routes store it (src/server/routes.ts): role, label,
+ * icon and link target, with the label masked, so a route never holds an
+ * email or a long number. Not unique when two controls share a label: where
+ * a control sits is kept beside it. The widget's own `elementKey` in
+ * src/widget/snapshot.ts also has the row a control is in, to tell controls
+ * apart within one page. This one stays as routes were first stored with it.
+ */
+export function routeKey(element: Pick<SnapElement, "role" | "label" | "icon" | "href">): string {
+  return `${element.role}|${cleanText(element.label, 80)}|${element.icon ?? ""}|${element.href ?? ""}`;
 }
 
 /** How an element is named in events, history and change summaries. */

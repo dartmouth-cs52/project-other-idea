@@ -107,10 +107,47 @@ for (const name of BROWSERS) {
       const about = part(tab, ".about");
       assert.equal((await about.textContent())?.trim(), "Haptic is an AI guide and can be wrong.");
       assert.equal(await about.locator("a").getAttribute("href"), "https://joinhaptic.com/privacy/");
-      await part(tab, ".ask input").fill("invite someone");
-      await part(tab, ".ask input").press("Enter");
+      await part(tab, ".ask textarea").fill("invite someone");
+      await part(tab, ".ask textarea").press("Enter");
       assert.ok(await ringAround(tab, "#invite"));
       assert.equal(await about.isVisible(), true, "it is still there while the pointer shows a step");
+    });
+
+    test("a question longer than the ask box wraps onto more lines, never sideways, up to six, and Enter sends it whole", async () => {
+      harness.script = () => done("Card users are added from Team.");
+      const question = "lets add Theo as a card user he will 50 dollars for his trip to japan";
+      /** How the ask box is drawn: its height, and whether its words go past it either way. */
+      const drawn = () =>
+        part(tab, ".ask textarea").evaluate((field: HTMLTextAreaElement) => ({
+          height: Math.round(field.getBoundingClientRect().height),
+          sideways: field.scrollWidth > field.clientWidth || field.scrollLeft > 0,
+          upAndDown: field.scrollHeight > field.clientHeight,
+          typed: field.value,
+        }));
+      await part(tab, ".launcher").click();
+      assert.equal((await drawn()).height, 40, "an empty ask box is one line");
+      await tab.keyboard.type(question);
+      const typed = await drawn();
+      assert.deepEqual({ ...typed, height: undefined }, { height: undefined, sideways: false, upAndDown: false, typed: question }, "the question is not all in sight");
+      assert.ok(typed.height >= 60, `the ask box did not grow to a second line: ${typed.height}px`);
+      // Its limit, 300 characters: far more than six lines, so it stops growing and scrolls up and down, still never sideways.
+      // The last words are typed, and the line they are typed on stays in sight.
+      const long = `${question} `.repeat(5).slice(0, 300);
+      await part(tab, ".ask textarea").fill(long.slice(0, 290));
+      await tab.keyboard.type(long.slice(290));
+      assert.deepEqual(await drawn().then(({ typed, ...rest }) => ({ ...rest, length: typed.length })), { height: 140, sideways: false, upAndDown: true, length: 300 });
+      const end = await part(tab, ".ask textarea").evaluate((field: HTMLTextAreaElement) => field.scrollHeight - field.clientHeight - field.scrollTop);
+      assert.ok(end <= 1, `the line being typed on is ${end}px out of sight`);
+      // A change at its start shows the start, where the caret is, not the end. The first line starts under 13px of space,
+      // and the browsers bring the caret's line into sight but not all the space above it: 14px down, in each of the three.
+      await part(tab, ".ask textarea").evaluate((field: HTMLTextAreaElement) => field.setSelectionRange(0, 0));
+      await tab.keyboard.press("Delete");
+      const top = await part(tab, ".ask textarea").evaluate((field: HTMLTextAreaElement) => ({ scrolled: field.scrollTop, caret: field.selectionStart, length: field.value.length }));
+      assert.deepEqual({ ...top, scrolled: top.scrolled <= 15 }, { scrolled: true, caret: 0, length: 299 }, `the caret's line is out of sight, scrolled ${top.scrolled}px down`);
+      await part(tab, ".ask textarea").fill(question);
+      await tab.keyboard.press("Enter");
+      assert.equal((await turns(harness, 1))[0]!.goal, question);
+      assert.deepEqual(await drawn(), { height: 40, sideways: false, upAndDown: false, typed: "" }, "the ask box is not back to one empty line");
     });
 
     test("closes from the × at its top right, without minimizing the launcher or stopping a guide", async () => {
@@ -163,7 +200,7 @@ for (const name of BROWSERS) {
       await untilState(tab, "asking");
       assert.equal(await part(tab, ".question").textContent(), "invite someone");
       assert.equal(await statusLine(tab), "thinking: Thinking");
-      assert.equal(await part(tab, ".ask input").inputValue(), "", "the ask box is empty again, and still there");
+      assert.equal(await part(tab, ".ask textarea").inputValue(), "", "the ask box is empty again, and still there");
       assert.equal(await part(tab, ".ask").isVisible(), true);
       assert.equal(await part(tab, ".stop").isVisible(), true, "its button is the way to stop");
       assert.equal(await part(tab, ".send").isVisible(), false);
@@ -273,8 +310,8 @@ for (const name of BROWSERS) {
       await part(tab, ".launcher").click();
       assert.equal((await veil(tab)).display, "none", "with no glow on, its element is not displayed");
       await watchClasses(tab);
-      await part(tab, ".ask input").fill("invite someone");
-      await part(tab, ".ask input").press("Enter");
+      await part(tab, ".ask textarea").fill("invite someone");
+      await part(tab, ".ask textarea").press("Enter");
       const glow = tab.locator("haptic-veil .glow");
       await glow.waitFor({ state: "attached" });
       assert.equal(await guideState(tab), "asking");
@@ -392,7 +429,94 @@ for (const name of BROWSERS) {
       await glow.waitFor({ state: "detached", timeout: 1000 });
     });
 
-    test("the glow is Haptic's blue on every site, whatever the site's accent", async () => {
+    test("a press or a key on the page while Haptic thinks sends the glow away for the rest of that wait, and Haptic goes on thinking", async () => {
+      harness.script = async (request, index) => {
+        await sleep(1200);
+        return point(idOf(request, index === 0 ? "Invite teammate" : "Send invite"), "Click it.");
+      };
+      await ask(tab, "invite someone");
+      const glow = tab.locator("haptic-veil .glow");
+      await glow.waitFor({ state: "attached" });
+      // The chat is ours, not the page: using it leaves the glow where it is.
+      await part(tab, '.ask [aria-label="Ask a question"]').click();
+      await sleep(100);
+      assert.equal(await glow.count(), 1, "a press in the chat is not a press on the page");
+      // A press on the page, on nothing the guide is waiting for.
+      await tab.click("h1");
+      await glow.waitFor({ state: "detached", timeout: 1000 });
+      assert.equal((await veil(tab)).display, "none", "nothing is left over the page");
+      assert.equal(await guideState(tab), "asking", "Haptic is still thinking");
+      assert.equal(await statusLine(tab), "thinking: Thinking", "and the chat still says so");
+      await sleep(300);
+      assert.equal(await glow.count(), 0, "it does not come back in that wait");
+      assert.ok(await ringAround(tab, "#invite"), "the reply was not called off");
+
+      // The next wait has its glow again. A modifier on its own is not using the page; a key is, the same as a press.
+      await tab.click("#invite");
+      await glow.waitFor({ state: "attached", timeout: 1000 });
+      await tab.keyboard.press("Shift");
+      await sleep(100);
+      assert.equal(await glow.count(), 1, "Shift alone leaves it");
+      await tab.keyboard.press("j");
+      await glow.waitFor({ state: "detached", timeout: 1000 });
+      assert.equal(await guideState(tab), "asking");
+      assert.ok(await ringAround(tab, "#send"));
+    });
+
+    // The page in the screenshot that asked for this: the visitor fills in the invite's fields, some of them ahead of the
+    // step on show, while Haptic works out the next one. A band of colour over the form they are filling in is in their way.
+    test("a wait that begins with the visitor filling in a field or choosing from a dropdown has no glow, and one after a button does", async () => {
+      harness.pages.set(
+        "/form",
+        page(`
+          <main style="font:14px system-ui;padding:40px">
+            <h1>Invite people</h1>
+            <button id="start" onclick="document.getElementById('email').focus()">Start an invite</button>
+            <p><label>Email <input id="email" type="email"></label>
+            <label style="margin-left:24px">Entity <select id="entity"><option>Northpine Inc.</option><option>Northpine Ltd</option><option>Northpine GmbH</option></select></label></p>
+            <button id="send">Send invite</button>
+          </main>`),
+      );
+      harness.script = async (request, index) => {
+        if (index > 0) await sleep(700);
+        return point(idOf(request, ["Start an invite", "Email"][index] ?? "Send invite"), "Do this.");
+      };
+      await tab.goto(`${harness.url}/form`);
+      await part(tab, ".launcher").waitFor();
+      const glow = tab.locator("haptic-veil .glow");
+      await ask(tab, "invite someone");
+      assert.ok(await ringAround(tab, "#start"));
+      await glow.waitFor({ state: "detached", timeout: 1000 });
+      // A button, after which the page puts the keyboard in a field of its own accord: the visitor is waiting, so it glows.
+      await tab.click("#start");
+      await glow.waitFor({ state: "attached", timeout: 1000 });
+      assert.equal(await tab.evaluate(() => document.activeElement?.id), "email");
+      assert.ok(await ringAround(tab, "#email"));
+      await glow.waitFor({ state: "detached", timeout: 1000 });
+
+      await watchClasses(tab);
+      // Typing in the field on show: Haptic works out the next step once the typing pauses, with the visitor still in the field.
+      await tab.click("#email");
+      await tab.locator("#email").pressSequentially("theo@example.com");
+      await untilState(tab, "asking");
+      assert.equal(await statusLine(tab), "thinking: Thinking");
+      assert.equal(await glow.count(), 0, "no glow over the field they are filling in");
+      assert.ok(await ringAround(tab, "#send"));
+
+      // Choosing from a dropdown that is not the step on show, as in the screenshot.
+      await tab.click("#entity");
+      await tab.keyboard.press("ArrowDown");
+      await tab.keyboard.press("Enter");
+      await untilState(tab, "asking");
+      assert.equal(await statusLine(tab), "thinking: Finding the way from here");
+      await sleep(300);
+      assert.equal(await glow.count(), 0, "no glow over the dropdown they are choosing from");
+      await turns(harness, 4);
+      assert.ok(await ringAround(tab, "#send"));
+      assert.ok(!(await seen(tab)).some((classes) => classes.split(" ").includes("glow")), `no glow at all while they filled in the form: ${(await seen(tab)).join(", ")}`);
+    });
+
+    test("the glow and the pointer's ring are Haptic's blue on every site, whatever colour the site saved", async () => {
       harness.script = () => new Promise(() => {});
       const band = async () => {
         await ask(tab, "invite someone");
@@ -401,12 +525,12 @@ for (const name of BROWSERS) {
       };
       const blue = await band();
       for (const colour of ["rgb(119, 208, 254)", "rgb(82, 148, 255)", "rgb(132, 96, 238)"]) assert.ok(blue.includes(colour), `${colour} in ${blue}`);
-      // A site whose accent is green: its pointer is green, and the glow is the same blue.
+      // A site that saved green for its pointer, back when that was a setting: the glow and the ring are still blue.
       harness.config = { ...harness.config, appearance: { ...harness.config.appearance, accent: "#16a34a" } };
       await tab.reload();
       await part(tab, ".launcher").waitFor();
       assert.equal(await band(), blue);
-      assert.equal(await part(tab, ".ring").evaluate((ring) => getComputedStyle(ring).borderTopColor), "rgb(22, 163, 74)");
+      assert.equal(await part(tab, ".ring").evaluate((ring) => getComputedStyle(ring).borderTopColor), "rgb(30, 110, 244)");
     });
 
     test("Send and Do it pressed with nothing typed say what to do, under the ask box, and ask nothing", async () => {
@@ -418,24 +542,24 @@ for (const name of BROWSERS) {
       await part(tab, ".doit").click();
       assert.equal(await hint.textContent(), "Type what you want Haptic to do first, then press Do it.");
       assert.equal(await hint.isVisible(), true);
-      assert.equal(await tab.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.activeElement?.matches(".ask input")), true, "the keyboard is in the ask box");
+      assert.equal(await tab.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.activeElement?.matches(".ask textarea")), true, "the keyboard is in the ask box");
       // Typing takes it away.
-      await part(tab, ".ask input").pressSequentially("in");
+      await part(tab, ".ask textarea").pressSequentially("in");
       assert.equal(await hint.isVisible(), false);
-      await part(tab, ".ask input").fill("");
-      await part(tab, ".ask input").press("Enter");
+      await part(tab, ".ask textarea").fill("");
+      await part(tab, ".ask textarea").press("Enter");
       assert.equal(await hint.textContent(), "Type what you want to do first, then send it.");
       await part(tab, ".send").click();
       assert.equal(await hint.isVisible(), true);
       // Read out to a screen reader, and named as what the box needs.
       assert.equal(await hint.getAttribute("aria-live"), "polite");
-      assert.equal(await part(tab, ".ask input").getAttribute("aria-describedby"), await hint.getAttribute("id"));
+      assert.equal(await part(tab, ".ask textarea").getAttribute("aria-describedby"), await hint.getAttribute("id"));
       await sleep(300);
       assert.equal(harness.turns.length, 0, "nothing was asked");
       // A question sent takes it away.
       harness.script = () => new Promise(() => {});
-      await part(tab, ".ask input").fill("invite someone");
-      await part(tab, ".ask input").press("Enter");
+      await part(tab, ".ask textarea").fill("invite someone");
+      await part(tab, ".ask textarea").press("Enter");
       await turns(harness, 1);
       assert.equal(await hint.isVisible(), false);
     });

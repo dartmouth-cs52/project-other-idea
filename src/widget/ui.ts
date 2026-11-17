@@ -1,4 +1,6 @@
+import { inkOn, INK, launcherColour, POINTER_BLUE } from "../shared/colour.ts";
 import type { Appearance, Source, TurnReply } from "../shared/types.ts";
+import { isField } from "./snapshot.ts";
 import { counterScale, inSight, type Box, type View } from "./view.ts";
 
 // Everything Haptic draws: the launcher, the chat with its ask box, the
@@ -7,9 +9,10 @@ import { counterScale, inSight, type Box, type View } from "./view.ts";
 // ours can't leak out. Model text is only ever set as textContent.
 
 // Colours, radii and motion come from DESIGN.md, and the chat is the one in
-// the website's home page demo (web/components/demo/kit.tsx). The accent
-// colours the pointer, its ring and the heart of the thinking glow.
-// Everything else is ink on white. The pointer shape is assets/pointer.svg,
+// the website's home page demo (web/components/demo/kit.tsx). Haptic's blue
+// colours the pointer and its ring on every site, whatever the site saved: it
+// is not a setting (src/shared/colour.ts says why). The launcher takes the
+// site's own colour. Everything else is ink on white. The pointer shape is assets/pointer.svg,
 // with its tip at POINTER_TIP.
 //
 // The thinking glow is the one thing drawn over the page itself. It has an
@@ -47,12 +50,13 @@ export const EMPTY_SEND = "Type what you want to do first, then send it.";
 /** Under the ask box, when Do it is pressed with nothing typed. */
 export const EMPTY_DOIT = "Type what you want Haptic to do first, then press Do it.";
 
-// The thinking glow. It is on the page only while Haptic waits for the model.
-// A soft band the width of the page comes in at the top edge and falls
-// towards the bottom, once for each wait. How long the wait will be is not
-// known, so the band is paced to it: quick at first and slower the longer the
-// wait goes on, always on its way down and never at the bottom before the
-// reply. The moment the reply arrives it goes the rest of the way and off the
+// The thinking glow. It is on the page only while Haptic waits for the model
+// and the visitor waits for Haptic: never over a visitor who is using the
+// page (see Ui.onHand). A soft band the width of the page comes in at the top
+// edge and falls towards the bottom, once for each wait. How long the wait
+// will be is not known, so the band is paced to it: quick at first and slower
+// the longer the wait goes on, always on its way down and never at the bottom
+// before the reply. The moment the reply arrives it goes the rest of the way and off the
 // page, fading, so every wait is one pass from top to bottom and the page is
 // clear by the time the pointer lands.
 /**
@@ -66,6 +70,10 @@ const FALL_EASE = "cubic-bezier(.14, 1, .3, 1)";
 /** How long the glow takes to come in, and to leave by the bottom once the reply has arrived. */
 const GLOW_IN_MS = 300;
 const GLOW_OUT_MS = 450;
+/** A key that does nothing on the page on its own, like the Command of Command-Tab. Pressing one is not using the page. */
+const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock", "Fn", "AltGraph", "OS"]);
+/** Roles of the page's own controls that a visitor fills in or picks a value from, as a text field and a dropdown are. */
+const FILLED_IN_ROLES = new Set(["textbox", "searchbox", "combobox", "listbox", "spinbutton"]);
 
 // The band's strength across its thickness: a bell with no flat top and no
 // edge, which is what makes it read as light and not as a stripe. A gradient
@@ -181,7 +189,12 @@ button { font: inherit; cursor: pointer; }
 [hidden] { display: none !important; }
 .ask { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 10px; background: #f5f5f4; }
 .ask:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
-.ask input { width: 100%; height: 40px; font: inherit; color: inherit; padding: 4px 12px 0; border: 0; background: transparent; outline: none; }
+/* One line when empty. A longer question wraps, and the box grows a line at a time, up to six (see fit in the Ui class).
+   It never scrolls sideways, and up and down only once the words are more than six lines hold (.full): a scroll bar
+   that could show before then, where scroll bars take room as on Windows, would narrow the words onto a line more. */
+.ask textarea { display: block; width: 100%; height: 40px; max-height: 140px; font: inherit; line-height: 20px; color: inherit; padding: 13px 12px 7px;
+  border: 0; background: transparent; outline: none; resize: none; overflow: hidden; overflow-wrap: anywhere; }
+.ask textarea.full { overflow-y: auto; }
 .panel ::placeholder { color: #78716c; }
 .panel .row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 6px 10px 8px; }
 .panel .send { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0;
@@ -261,9 +274,9 @@ button { font: inherit; cursor: pointer; }
   border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; pointer-events: auto; }
 .caption .where:hover { background: rgba(250,250,249,.25); }
 .caption .where svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
-.caption .where.down svg { transform: rotate(180deg); }
-.caption .where.left svg { transform: rotate(-90deg); }
-.caption .where.right svg { transform: rotate(90deg); }
+.caption .where[data-way="down"] svg { transform: rotate(180deg); }
+.caption .where[data-way="left"] svg { transform: rotate(-90deg); }
+.caption .where[data-way="right"] svg { transform: rotate(90deg); }
 .helped { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 2px 8px 12px; }
 .helped span { margin-right: auto; color: #78716c; }
 .helped button { display: inline-flex; align-items: center; justify-content: center; height: 32px; border: 0; border-radius: 999px; padding: 0 14px;
@@ -298,7 +311,7 @@ button { font: inherit; cursor: pointer; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 24px rgba(0,0,0,.22); pointer-events: none; }
 .asked.top { bottom: auto; top: 16px; }
 /* A phone zooms the page in when a field with words smaller than 16px takes the keyboard, and leaves it zoomed. */
-@media (pointer: coarse) { .ask input, .person input, .person textarea { font-size: 16px; } }
+@media (pointer: coarse) { .ask textarea, .person input, .person textarea { font-size: 16px; } }
 @media (prefers-reduced-motion: reduce) { .cursor, .launcher, .launcher svg, .launcher span, .hide, .panel .restart { transition: none; } .panel .restart:active { transform: none; } .ring, .ring.press, .caption, .cursor.press svg { animation: none; }
   .status.thinking span { color: #78716c; background: none; animation: none; } }
 `;
@@ -457,7 +470,7 @@ export class Ui {
   readonly host: HTMLElement;
   private readonly panel: HTMLElement;
   private readonly form: HTMLFormElement;
-  private readonly input: HTMLInputElement;
+  private readonly input: HTMLTextAreaElement;
   private readonly status: HTMLElement;
   private readonly statusText: HTMLElement;
   private readonly ring: HTMLElement;
@@ -500,10 +513,20 @@ export class Ui {
   private target?: Element;
   /** Whether `target` has been chosen with the control on screen, where what lies at its middle can be seen. */
   private aimed = false;
+  /** Whether `target` moves with the page as a whole, held to nothing that stays in the window (see `movesWithPage`). */
+  private withPage = false;
+  /** Whether our element is held to the page, as the control it points at is, rather than to the window (see `anchor`). */
+  private onPage = false;
+  /** How far our element's place on the page is from the page's corner, for when something other than the page holds it. */
+  private pageOffset = { x: 0, y: 0 };
   /** When the guide last pointed at a new control. */
   private pointedTime = -Infinity;
   /** The control is out of the window, and the way to it, while the pointer is put away and its sentence waits at the window's edge. */
   private outOfView?: "up" | "down" | "left" | "right" | "unseen";
+  /** Whether the visitor can scroll to the control out of the window, and the caption shows the way back to it. */
+  private wayBack = false;
+  /** The boxes around the target that clip it, as last looked up, and when. */
+  private clips?: { el: Element; at: number; list: Clip[] };
   /** Where in the target's box the tip went, for the box it was found for, so the page is looked at only when the box moves. */
   private tip?: { box: string; dx: number; dy: number };
   /** The caption is above the control rather than below it, because something opened where it was. */
@@ -574,17 +597,27 @@ export class Ui {
   private readonly blend: (rule: string) => void;
   /** The glow that is on the page while Haptic thinks. */
   private glow?: HTMLElement;
+  /**
+   * The visitor's hands are on the page in this wait: they pressed or typed on it while Haptic thought, or the wait
+   * began with them in the middle of filling in a field. No glow is drawn over them until the wait is over.
+   */
+  private handsOn = false;
+  /** The visitor's last press or key on the page, while a guide runs, went to a field they fill in or to a dropdown's list. */
+  private filling = false;
+  /** The visitor's presses and keys are heard: only while a guide runs. */
+  private hearing = false;
 
   constructor(appearance: Appearance, handlers: UiHandlers, acting?: UiActing, options: { present?: boolean } = {}) {
     this.present = options.present === true;
     this.tipIn = this.present ? { x: POINTER_TIP.x * PRESENT_SCALE, y: POINTER_TIP.y * PRESENT_SCALE } : POINTER_TIP;
     this.glideMs = this.present ? PRESENT_GLIDE_MS : GLIDE_MS;
     this.host = document.createElement("haptic-root");
-    this.host.style.setProperty("--accent", this.present ? strongAccent(appearance.accent) : appearance.accent);
-    // The launcher takes the site's own colour when the company chose one. Only a six-digit hex is used: a property
-    // set to anything a browser can't read would leave the launcher with no background at all.
-    const launcher = /^#[0-9a-f]{6}$/i.test(appearance.launcher ?? "") ? appearance.launcher! : undefined;
-    if (launcher) {
+    // The pointer is Haptic's blue on every site. A colour a site saved for it before is not used.
+    this.host.style.setProperty("--accent", this.present ? strongAccent(POINTER_BLUE) : POINTER_BLUE);
+    // The launcher takes the site's own colour, darkened if it is too light to see on a white page. Anything that
+    // is not a six-digit hex is Ink: a property set to something a browser can't read would leave no background at all.
+    const launcher = launcherColour(appearance.launcher);
+    if (launcher !== INK) {
       this.host.style.setProperty("--launcher", launcher);
       this.host.style.setProperty("--launcher-ink", inkOn(launcher));
     }
@@ -641,8 +674,18 @@ export class Ui {
           make(
             "form",
             { class: "ask" },
-            // Empty, it is left to right, so the placeholder sits on the left as on any page. It turns with the first letter typed.
-            make("input", { type: "text", placeholder: "What do you want to do", "aria-label": "Ask a question", "aria-describedby": "haptic-empty", maxlength: "300", ...theirs }),
+            // A field of several lines, so a long question wraps where it can all be read rather than running off sideways. It is
+            // still one line of words: Enter sends it, and a line break pasted in is a space. Empty, it is left to right, so the
+            // placeholder sits on the left as on any page. It turns with the first letter typed.
+            make("textarea", {
+              rows: "1",
+              placeholder: "What do you want to do",
+              "aria-label": "Ask a question",
+              "aria-describedby": "haptic-empty",
+              maxlength: "300",
+              enterkeyhint: "send",
+              ...theirs,
+            }),
             make(
               "div",
               { class: "row" },
@@ -667,7 +710,7 @@ export class Ui {
     const pick = <T extends Element>(selector: string) => root.querySelector(selector) as T;
     this.panel = pick(".panel");
     this.form = pick(".ask");
-    this.input = pick(".ask input");
+    this.input = pick(".ask textarea");
     this.thread = pick(".thread");
     this.handoff = pick(".handoff");
     this.status = pick(".status");
@@ -743,7 +786,10 @@ export class Ui {
         this.keepPlaced();
         // Nothing kept our element in place while it was not in use. A dialog may have opened since.
         this.place();
-        if (!this.panel.hidden) this.input.focus();
+        if (this.panel.hidden) return;
+        // A question left half typed is shown on as many lines as before, or as the window's width now gives it.
+        this.fit();
+        this.input.focus();
       },
       hide: () => {
         // From the keyboard, the button that is about to go has the keyboard, which then goes to the dot. A press with
@@ -783,13 +829,30 @@ export class Ui {
       if (question) this.send(handlers, question, false);
       else this.askFirst(EMPTY_SEND);
     });
-    // Ctrl or Cmd and Enter is Do it. The visitor's own words only colour the button.
+    // Enter sends the question, with or without Shift, as it did when the ask box was one line: a question is one line
+    // of words however many it wraps onto. Ctrl or Cmd and Enter is Do it. Not while an input method is putting a word
+    // together, as for Japanese or Chinese, where Enter takes the word: Safari tells of that only by the key's code, 229.
     this.input.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" || !(event.ctrlKey || event.metaKey) || !this.panel.classList.contains("acts")) return;
+      if (event.key !== "Enter" || event.isComposing || event.keyCode === 229) return;
       event.preventDefault();
-      this.doIt(handlers);
+      if ((event.ctrlKey || event.metaKey) && this.panel.classList.contains("acts")) this.doIt(handlers);
+      else this.form.requestSubmit();
     });
+    // Some phone keyboards send no Enter key, only the new line it would make. That is a send too.
+    this.input.addEventListener("beforeinput", (event) => {
+      if (event.inputType !== "insertLineBreak" && event.inputType !== "insertParagraph") return;
+      event.preventDefault();
+      if (!event.isComposing) this.form.requestSubmit();
+    });
+    // The visitor's own words only colour the Do it button.
     this.input.addEventListener("input", () => {
+      // Lines pasted or dropped in run on as one, with the caret where it was: each break becomes one space.
+      if (this.input.value.includes("\n")) {
+        const [from, to] = [this.input.selectionStart, this.input.selectionEnd];
+        this.input.value = this.input.value.replace(/\n/g, " ");
+        this.input.setSelectionRange(from, to);
+      }
+      this.fit();
       this.panel.classList.toggle("nudged", !!this.acting && asksToDo(this.input.value));
       this.first.hidden = true;
       this.askFirst("");
@@ -858,9 +921,12 @@ export class Ui {
       const resized = this.resized;
       this.resized = false;
       try {
-        const scale = this.fitted.k;
+        const { k: scale, w: width } = this.fitted;
         this.dockAt(this.spot);
         this.placeSaid();
+        // The chat is narrower in a narrow window, or with less of the page in sight, so a question in the ask box may
+        // wrap onto more lines or fewer.
+        if (resized || this.fitted.w !== width) this.fit();
         if (resized) this.findHome();
         // Zoomed in or out, the launcher's corner is a different size on the page: its place is looked for again once
         // the pinch is over, not at every step of it.
@@ -1327,6 +1393,8 @@ export class Ui {
     this.under = undefined;
     this.mark(undefined);
     cancelAnimationFrame(this.frame);
+    // The pointer rests where it is in the window, and Haptic's next glide starts from there.
+    this.anchor();
     this.ring.hidden = true;
     this.caption.hidden = true;
   }
@@ -1360,10 +1428,30 @@ export class Ui {
     if (shown !== !this.empty.hidden) this.keepPlaced();
   }
 
+  /**
+   * Fits the ask box to what it holds: the lines a question wraps onto, up to the box's greatest height in CSS, past
+   * which it scrolls. Empty, it is one line again. A box not drawn, in a closed chat, has nothing to measure and is
+   * left at one line until something is typed in it. The words are measured with no scroll bar, at the width they are
+   * shown at, and the box has none until they are more than it holds at its tallest. With one allowed sooner, Chrome
+   * can keep one in a box the words fit exactly, and then they wrap onto a line more and the last is out of sight.
+   * Typing at the end of a full box, the box is scrolled right to its end, with the space under the last line: Firefox
+   * and Safari would show only the line itself, flush with the bottom edge, where Chrome shows the space too.
+   */
+  private fit() {
+    const box = this.input;
+    box.style.removeProperty("height");
+    box.classList.remove("full");
+    const needed = box.scrollHeight;
+    if (!box.value || needed <= box.clientHeight) return;
+    box.style.setProperty("height", `${needed}px`);
+    if (box.classList.toggle("full", needed > box.clientHeight) && box.selectionEnd === box.value.length) box.scrollTop = box.scrollHeight;
+  }
+
   /** Sends a question. It shows as a bubble in the chat from here on, so the ask box is emptied for the next one. */
   private send(handlers: UiHandlers, question: string, act: boolean) {
     this.askFirst("");
     this.input.value = "";
+    this.fit();
     this.panel.classList.remove("nudged");
     // The ask box gives up the keyboard as the question goes: what the visitor does next, they do on the page. With the
     // keyboard still in it, a field of the page's taking the keyboard would be read as the page pulling it away.
@@ -1535,15 +1623,69 @@ export class Ui {
     this.captionText.textContent = text;
     this.caption.hidden = text === "";
     this.cursor.hidden = false;
+    // Held to the page or to the window first, so where our drawing starts is measured where it will be.
+    this.anchor();
     // Paint once at the old spot so the transition has somewhere to start from.
     const here = this.measure();
     this.drawCursor(here);
     // The ring goes round the control now, and is not left for the next frame as the pointer's glide is. On a machine
     // that draws slowly the next frame is a while off, and a guide that says it is pointing has its ring up.
     const target = this.target;
-    if (target?.isConnected && target.getClientRects().length) this.ringAt(target.getBoundingClientRect(), here);
+    if (target?.isConnected && target.getClientRects().length) {
+      const sight = this.sight(target, target.getBoundingClientRect());
+      if ("shown" in sight) this.ringAt(sight.shown, here);
+      else this.ring.hidden = true;
+    }
     cancelAnimationFrame(this.frame);
     this.frame = requestAnimationFrame(this.track);
+  }
+
+  /**
+   * Holds our element where the control pointed at is held, so the ring, the
+   * pointer and the caption go with it however the page moves. Each frame puts
+   * them back on the control, but the page can move with none of ours running:
+   * a Mac's trackpad pulls the page past its top and lets it spring back with
+   * its scroll position still 0, and the browser scrolls between two of our
+   * frames. Held to the window, they stayed where the control had been: on
+   * Northpine's Issue a card the ring went round Cardholder's label.
+   *
+   * For a control that moves with the page, our element is held to the page:
+   * it is put on the page where the window is, the window's size, so every
+   * place in it is still a place in the window, and moving it does not make
+   * the page any longer. It stays in the top layer, above the page, and what
+   * of ours is fixed to the window, the launcher and the chat, stays there.
+   * For anything else, with nothing pointed at, and while the control is out
+   * of the window and its caption waits at the window's edge (`offView`), it
+   * is fixed to the window.
+   */
+  private anchor() {
+    const parts = [this.ring, this.cursor, this.caption];
+    const host = this.host.style;
+    if (!this.target || !this.withPage || this.outOfView) {
+      if (!this.onPage) return;
+      this.onPage = false;
+      for (const name of ["position", "inset", "left", "top", "width", "height", "overflow"]) host.removeProperty(name);
+      for (const part of parts) part.style.removeProperty("position");
+      return;
+    }
+    if (!this.onPage) {
+      this.onPage = true;
+      this.pageOffset = { x: 0, y: 0 };
+      host.setProperty("position", "absolute");
+      host.setProperty("inset", "auto");
+      // Cut off at the window's edge, as the window cuts off what is fixed to it: the pointer next to a row at the foot or
+      // the side of the page would otherwise make the page longer or wider. Clip, where the browser has it, so nothing
+      // can scroll our element; hidden where it has not.
+      host.setProperty("overflow", "hidden");
+      host.setProperty("overflow", "clip");
+      for (const part of parts) part.style.setProperty("position", "absolute");
+    }
+    // The window's size without its scroll bars, as `inset: 0` gives when fixed, so it never reaches past the page.
+    const page = document.documentElement;
+    host.setProperty("left", `${window.scrollX + this.pageOffset.x}px`);
+    host.setProperty("top", `${window.scrollY + this.pageOffset.y}px`);
+    host.setProperty("width", `${page.clientWidth}px`);
+    host.setProperty("height", `${page.clientHeight}px`);
   }
 
   /** Puts the ring round a box of the page, or puts it away when the box is not where it can be seen, and says which. */
@@ -1650,6 +1792,8 @@ export class Ui {
     this.dockAt(this.home);
     this.mark(undefined);
     cancelAnimationFrame(this.frame);
+    // Held to the window again, where what is said with nothing to point at goes, and where a press plays out.
+    this.anchor();
     this.ring.hidden = true;
     this.cursor.hidden = true;
   }
@@ -1676,6 +1820,7 @@ export class Ui {
     this.first.hidden = true;
     this.done.hidden = true;
     this.input.value = "";
+    this.fit();
     this.panel.classList.remove("nudged");
     this.panel.hidden = false;
     this.showActs();
@@ -1722,9 +1867,14 @@ export class Ui {
   setState(state: GuideState) {
     (this.host as HTMLElement & { guideState?: GuideState }).guideState = state;
     this.showStatus();
-    // "asking" is the wait for the model, and the only time the glow is on the page.
+    this.hearHand(state === "asking" || state === "pointing" || state === "watching" || state === "acting" || state === "paused");
+    // "asking" is the wait for the model, and the only time the glow is on the page. A wait the visitor spent with
+    // their hands on the page is over with it, and the next one starts with a glow again.
     if (state === "asking") this.glowOn();
-    else this.glowOff();
+    else {
+      this.handsOn = false;
+      this.glowOff();
+    }
     this.keepPlaced();
     this.showAsked();
   }
@@ -1735,7 +1885,15 @@ export class Ui {
    * motion on there is no glow at all.
    */
   private glowOn() {
-    if (this.glow || lessMotion()) return;
+    if (this.glow || this.handsOn || lessMotion()) return;
+    // A wait that begins with the visitor filling in a form, typing in a field or choosing from a dropdown, has no glow:
+    // they are using the page, not waiting for Haptic, and the next step comes all the same. A wait that begins after
+    // a button or a link has one, even when the page then puts the keyboard in a field of its own accord. Not while
+    // Haptic acts: it is the one in the fields then, and the glow is how it shows it is working.
+    if (!this.actingNow && this.filling && this.fillingNow()) {
+      this.handsOn = true;
+      return;
+    }
     try {
       // A page that swapped out its own document took the glow's element with it. It is put back, under ours.
       if (!this.veil.isConnected) {
@@ -1778,6 +1936,54 @@ export class Ui {
   }
 
   /**
+   * Hears the visitor's presses and keys while a guide runs, and no longer: nothing of ours listens to the page's
+   * presses when no guide is running. On the window, in the capture phase, so it is heard before the page or the
+   * guide hears it, and so before a press that ends a step can start the next wait.
+   */
+  private hearHand(on: boolean) {
+    if (on === this.hearing) return;
+    this.hearing = on;
+    this.filling = false;
+    for (const type of ["pointerdown", "keydown"]) {
+      if (on) window.addEventListener(type, this.onHand, { capture: true, passive: true });
+      else window.removeEventListener(type, this.onHand, { capture: true });
+    }
+  }
+
+  /**
+   * The visitor pressed or typed. Only what the browser marks as the visitor's own counts: what Haptic dispatches as
+   * it acts, and what the page's scripts dispatch, does not. A press or a key in our element is the visitor using
+   * the chat, not the page. One on the page while Haptic thinks sends the glow away, the way the reply does, and it
+   * does not come back for the rest of that wait: the visitor has gone on without it, and the chat still says Haptic
+   * is thinking. Haptic goes on thinking: the reply is not called off.
+   */
+  private onHand = (event: Event) => {
+    try {
+      if (!event.isTrusted) return;
+      if (event.type === "keydown" && MODIFIERS.has((event as KeyboardEvent).key ?? "")) return;
+      const path = event.composedPath();
+      if (path.includes(this.host)) {
+        this.filling = false;
+        return;
+      }
+      this.filling = path.some((node) => node instanceof Element && fillsIn(node));
+      if (this.state !== "asking" || this.handsOn) return;
+      this.handsOn = true;
+      this.glowOff();
+    } catch (error) {
+      console.warn("[Haptic]", error);
+    }
+  };
+
+  /** The keyboard is in a field of the page's that the visitor fills in, or in a dropdown: not in our element. */
+  private fillingNow(): boolean {
+    let active = document.activeElement;
+    if (!active || active === this.host) return false;
+    while (active.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+    return fillsIn(active);
+  }
+
+  /**
    * Keeps the control the pointer is on readable from outside, as a property
    * of our own element. Nothing on the customer's page is touched. Tests and
    * the benchmark use it to act on what a visitor is being shown.
@@ -1789,9 +1995,10 @@ export class Ui {
   /** Chooses what the pointer goes on for the control `el`, and says so in `pointedAt`. */
   private aim(el: Element) {
     const rect = el.getBoundingClientRect();
-    const view = inSight();
-    this.aimed = rect.bottom > view.top && rect.top < view.bottom && rect.right > view.left && rect.left < view.right;
+    // On show in the window, and in every box around it that clips it, like a list it may be scrolled out of.
+    this.aimed = "shown" in this.sight(el, rect);
     this.target = partToClick(el, this.aimed);
+    this.withPage = movesWithPage(this.target);
     this.mark(this.target);
     // The ring's corners follow the control's own, a little rounder for standing off it. Presentation mode has its own.
     if (!this.present) this.ring.style.setProperty("border-radius", `${Math.min((parseFloat(getComputedStyle(this.target).borderTopLeftRadius) || 6) + 4, (rect.height + 8) / 2 || 10)}px`);
@@ -1825,10 +2032,16 @@ export class Ui {
       this.cursor.hidden = false;
       this.caption.hidden = this.captionText.textContent === "";
     }
+    // Before anything is measured, so the page is laid out once a frame.
+    this.anchor();
     const here = this.measure();
     const { view } = here;
-    let rect = el.getBoundingClientRect();
-    if (!this.ringAt(rect, here)) return this.offView(rect, here);
+    let whole = el.getBoundingClientRect();
+    let sight = this.sight(el, whole);
+    // Everything below goes round the part of the control on show: a box that scrolls can hide the rest of it.
+    if (!("shown" in sight)) return this.offView(whole, here, sight);
+    let rect = sight.shown;
+    if (!this.ringAt(rect, here)) return this.offView(whole, here);
     if (this.outOfView) {
       this.backInView();
       this.cursor.hidden = false;
@@ -1838,13 +2051,16 @@ export class Ui {
     if (!this.aimed && this.pointed) {
       this.aim(this.pointed);
       if (this.target !== el) return;
-      rect = el.getBoundingClientRect();
+      whole = el.getBoundingClientRect();
+      sight = this.sight(el, whole);
+      if (!("shown" in sight)) return;
+      rect = sight.shown;
       this.ringAt(rect, here);
     }
 
     // As `ringAt` stands the ring off the control.
     const pad = this.present ? 10 : 4;
-    this.pointedBox = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+    this.pointedBox = { left: whole.left, top: whole.top, right: whole.right, bottom: whole.bottom };
 
     this.at = this.held ?? this.tipOn(el, rect);
     this.drawCursor(here);
@@ -1870,6 +2086,13 @@ export class Ui {
     const now = performance.now();
     if (now - this.looked < 200) return;
     this.looked = now;
+    // A page can fix a bar to the window once it has scrolled, or let it go. The next frame holds our element as it is held.
+    this.withPage = movesWithPage(el);
+    if (this.onPage) {
+      // Held to the page, our element is where the window is, unless something positioned around it is not the page's corner.
+      const at = this.host.getBoundingClientRect();
+      if (Math.abs(at.left) > 0.5 || Math.abs(at.top) > 0.5) this.pageOffset = { x: this.pageOffset.x - at.left, y: this.pageOffset.y - at.top };
+    }
     const caption = this.caption.hidden ? undefined : { left, top, right: left + box.width, bottom: top + box.height };
     this.keepLauncherOff(rect, view, caption);
     if (caption) this.keepCaptionOff(el, caption);
@@ -1877,53 +2100,69 @@ export class Ui {
   }
 
   /**
-   * The control is out of the window. The pointer and its caption are drawn
-   * over the window, not the page, so left where they were they would point
-   * at whatever scrolled under them. The pointer is put away, and the caption
-   * waits at the edge of the window the control went off, led by a button
-   * that brings it back, until the control is in the window again. Just after
-   * the guide pointed at a control out of the window, while its own scroll
-   * brings it in, neither shows. A point Haptic is about to press, while it
-   * acts, is where it is in the window whatever the control does, and stays.
+   * The control is out of view: out of the window, or scrolled out of a box
+   * inside the page, like a sidebar or a list. The pointer and its caption are
+   * drawn over the window, not the page, so left where they were they would
+   * point at whatever scrolled under them. The pointer is put away, and the
+   * caption waits at the edge the control went out of, led by a button that
+   * brings it back where the visitor could scroll to it, until the control is
+   * in view again. Just after the guide pointed at a control out of view,
+   * while its own scroll brings it in, neither shows. A point Haptic is about
+   * to press, while it acts, is where it is in the window whatever the control
+   * does, and stays.
    */
-  private offView(rect: DOMRect, here: Here) {
+  private offView(rect: DOMRect, here: Here, away?: Away) {
+    this.ring.hidden = true;
     if (this.held) return;
     const { view } = here;
-    const way = rect.bottom <= view.top ? "up" : rect.top >= view.bottom ? "down" : rect.right <= view.left ? "left" : rect.left >= view.right ? "right" : undefined;
+    const way = away?.way;
     const arriving = !this.aimed && performance.now() - this.pointedTime < ARRIVE_MS;
     const where = this.caption.querySelector<HTMLElement>(".where")!;
     this.cursor.hidden = true;
     if (!way || arriving || this.captionText.textContent === "") {
       // Not yet in, or nowhere to say it is: nothing is left floating over the page meanwhile.
       this.outOfView = "unseen";
+      this.anchor();
       this.caption.hidden = true;
       where.hidden = true;
       return;
     }
-    if (this.outOfView !== way) {
+    if (this.outOfView !== way || this.wayBack !== away!.back) {
       this.outOfView = way;
+      // The caption now waits at an edge, placed in the window: our element is fixed to the window again, so a caption at
+      // the window's edge stays there however the page moves.
+      this.anchor();
       const label = `Scroll ${way} to it`;
       where.setAttribute("aria-label", label);
       where.title = label;
-      for (const side of ["down", "left", "right"]) where.classList.toggle(side, way === side);
+      where.dataset.way = way;
+      // Only where the visitor could scroll to it themselves: a box that only clips, like a strip of slides moved by its
+      // own arrows, or a menu parked past the side of a page that does not scroll across, gets no way back.
+      this.wayBack = away!.back;
       // What lay under the caption beside the control says nothing about what lies under it at the edge, or once it is back.
       if (!this.under?.moved) this.under = undefined;
     }
-    where.hidden = false;
+    where.hidden = !this.wayBack;
     this.caption.hidden = false;
     const box = this.caption.getBoundingClientRect();
-    const margin = 12;
-    const across = (x: number) => Math.min(Math.max(view.left + margin, x), view.right - box.width - margin);
-    const down = (y: number) => Math.min(Math.max(view.top + margin, y), view.bottom - box.height - margin);
-    // At the edge the control went off, beside where it is: above or below it across the screen, or level with it at the side.
-    const left = way === "left" ? view.left + margin : way === "right" ? view.right - box.width - margin : across(rect.left);
-    const top = way === "up" ? view.top + margin : way === "down" ? view.bottom - box.height - margin : down(rect.top);
+    const { left, top } = edgePlace(away!, rect, box, view);
     this.caption.style.left = `${left - here.x}px`;
     this.caption.style.top = `${top - here.y}px`;
     const now = performance.now();
     if (now - this.looked < 200) return;
     this.looked = now;
     this.keepLauncherOff(rect, view, { left, top, right: left + box.width, bottom: top + box.height });
+  }
+
+  /**
+   * The part of a control on show, or which way it went out of view. The
+   * boxes around it that clip it are looked up again every half second, as a
+   * page can make a box scroll once its content grows.
+   */
+  private sight(el: Element, rect: DOMRect): Sight {
+    const now = performance.now();
+    if (this.clips?.el !== el || now - this.clips.at > 500) this.clips = { el, at: now, list: clipsOf(el) };
+    return seeIn(rect, this.clips.list, el);
   }
 
   /** The control is in the window again, or the pointer has moved on: the caption's way back to it goes. */
@@ -1937,7 +2176,7 @@ export class Ui {
   private bringBack() {
     const el = this.target;
     if (!el?.isConnected) return;
-    el.scrollIntoView({ block: "center", inline: "nearest", behavior: lessMotion() ? "auto" : "smooth" });
+    scrollInto(el, !lessMotion());
   }
 
   /** The box the pointer is drawn in, round its tip, at the size it is drawn. */
@@ -2139,10 +2378,16 @@ export class Ui {
    */
   private dockAt(spot: Spot) {
     this.spot = spot;
-    const here = this.measure();
+    const { view, k } = this.measure();
+    // The dock is fixed to the window whether our element is fixed to it or held to the page (`anchor`). Where that
+    // window's corner is, measured as the page's boxes are, is read from the dock's own box and where it is set now.
+    const now = this.dock.getBoundingClientRect();
+    const set = getComputedStyle(this.dock);
+    const right = now.right + (parseFloat(set.right) || 0);
+    const bottom = now.bottom + (parseFloat(set.bottom) || 0);
     // Set through the element's style object, which a page's policy on inline style does not reach.
-    this.dock.style.setProperty("right", `${here.right - here.view.right + EDGE * here.k}px`);
-    this.dock.style.setProperty("bottom", `${here.bottom - here.view.bottom + spot.y}px`);
+    this.dock.style.setProperty("right", `${right - view.right + EDGE * k}px`);
+    this.dock.style.setProperty("bottom", `${bottom - view.bottom + spot.y}px`);
   }
 
   /**
@@ -2188,6 +2433,227 @@ function lessMotion(): boolean {
   } catch {
     return false;
   }
+}
+
+/** How wide the window is where the page is drawn: without a scroll bar down its side, which covers what is under it. */
+function windowWidth(): number {
+  return document.documentElement.clientWidth || window.innerWidth;
+}
+
+/** Whether a box lies wholly to the left or the right of what can be seen, as on a page wider than the window or a phone. */
+export function outAcross(rect: DOMRect): boolean {
+  const view = inSight();
+  return rect.right <= view.left || rect.left >= view.right;
+}
+
+/**
+ * Whether a visitor can scroll across to an element: a box around it scrolls
+ * across, or the page does. A box counts only where it is in the window
+ * itself, or can be scrolled into it the same way: a strip of tabs that
+ * scrolls, inside a menu parked past the side of the page, brings nothing
+ * into the window. A page that hides what overflows it across, as one with
+ * such a menu does, cannot be scrolled across by the visitor, though a script
+ * could still shove it aside.
+ */
+export function scrollsAcrossTo(el: Element): boolean {
+  for (let at = parentOf(el); at && at !== document.body && at !== document.documentElement; at = parentOf(at)) {
+    const overflow = getComputedStyle(at).overflowX;
+    if ((overflow === "auto" || overflow === "scroll") && at.scrollWidth > at.clientWidth + 1) return !outAcross(at.getBoundingClientRect()) || scrollsAcrossTo(at);
+  }
+  const page = document.scrollingElement ?? document.documentElement;
+  if (page.scrollWidth <= page.clientWidth + 1) return false;
+  // The window takes the root's overflow, or the body's when the root leaves its own as it is.
+  const root = getComputedStyle(document.documentElement).overflowX;
+  const view = root === "visible" && document.body ? getComputedStyle(document.body).overflowX : root;
+  return view !== "hidden" && view !== "clip";
+}
+
+/** The element an element is drawn in: the slot it is put into, its parent, or, out of a shadow root, its host. */
+function parentOf(el: Element): Element | null {
+  return el.assignedSlot ?? el.parentElement ?? ((el.getRootNode() as Partial<ShadowRoot>).host ?? null);
+}
+
+/**
+ * Scrolls a control into the window: its middle to the window's, down, and
+ * across only as far as it takes, unless it lies wholly to one side where the
+ * visitor could scroll to it, when it goes to the middle across too, clear of
+ * both edges.
+ */
+function scrollInto(el: Element, smooth: boolean) {
+  const across = outAcross(el.getBoundingClientRect()) && scrollsAcrossTo(el);
+  el.scrollIntoView({ block: "center", inline: across ? "center" : "nearest", behavior: smooth ? "smooth" : "auto" });
+}
+
+/**
+ * As the guide points at a control, brings it into the window when it is out
+ * of it: when the page's reading listed it as above or below, or when it lies
+ * wholly to one side, which the reading does not list, where the visitor could
+ * scroll to it.
+ */
+export function bringIn(el: Element, listedAway: boolean) {
+  if (listedAway || cutOff(el) || (outAcross(el.getBoundingClientRect()) && scrollsAcrossTo(el))) scrollInto(el, true);
+}
+
+/**
+ * Whether a control is only partly on the screen: in sight, but cut off by its
+ * top or bottom edge, like a form's last button half under the foot of a
+ * phone's screen. The page's reading calls a control out of view only when
+ * none of it shows. A control cut off is brought to the middle too, so the
+ * visitor sees all of it, with room for the pointer and its sentence. One
+ * taller than the screen is left as it is.
+ */
+function cutOff(el: Element): boolean {
+  const rect = el.getBoundingClientRect();
+  const view = inSight();
+  if (rect.height === 0 || rect.height > view.height - 40) return false;
+  const showing = rect.bottom > view.top && rect.top < view.bottom;
+  return showing && (rect.top < view.top - 1 || rect.bottom > view.bottom + 1);
+}
+
+type Way = "up" | "down" | "left" | "right";
+/** Which way a control went out of view, the part of the window it went out of, and whether the visitor can scroll it back. */
+type Away = { way: Way; edge: Box; back: boolean };
+/** Where a control is as the visitor sees it: the part of it on show, or the way it went out of view. */
+type Sight = { shown: DOMRect } | Away;
+/** A box around a control that clips it, down, across or both, and whether the visitor can scroll it each way. */
+interface Clip {
+  el: Element;
+  down: boolean;
+  across: boolean;
+  scrollsDown: boolean;
+  scrollsAcross: boolean;
+}
+
+/**
+ * The boxes around an element that clip it, nearest first, up to the page's
+ * own, which is the window's. A box clips only what is laid out from it: one
+ * positioned absolutely, from a box that is positioned itself; one fixed to
+ * the window, from none but a box with a transform, a filter or containment,
+ * as the page's reading has it.
+ */
+function clipsOf(el: Element): Clip[] {
+  const clips: Clip[] = [];
+  let position = getComputedStyle(el).position;
+  for (let node = parentOf(el), depth = 0; node && depth < 100; node = parentOf(node), depth++) {
+    if (node === document.body || node === document.documentElement) break;
+    const style = getComputedStyle(node);
+    const makesBlock = style.transform !== "none" || style.filter !== "none" || /paint|layout|strict|content/.test(style.contain) || style.willChange.includes("transform");
+    if (position === "fixed" ? !makesBlock : position === "absolute" && style.position === "static" && !makesBlock) continue;
+    position = style.position;
+    // Overflow does nothing to a box that is a run of text, or not a box at all, though its style may say otherwise.
+    if (style.display === "inline" || style.display === "contents" || /^table-(row|column|header|footer)/.test(style.display)) continue;
+    const down = style.overflowY !== "visible";
+    const across = style.overflowX !== "visible";
+    if (!down && !across) continue;
+    clips.push({
+      el: node,
+      down,
+      across,
+      scrollsDown: scrollsBy(style.overflowY) && node.scrollHeight > node.clientHeight + 1,
+      scrollsAcross: scrollsBy(style.overflowX) && node.scrollWidth > node.clientWidth + 1,
+    });
+  }
+  return clips;
+}
+
+const scrollsBy = (overflow: string) => overflow === "auto" || overflow === "scroll";
+
+/** What a box shows of what is inside it: inside its borders and any scroll bar. A drawing's box is all of it. */
+function clipBox(el: Element): Box {
+  const rect = el.getBoundingClientRect();
+  if (!(el instanceof HTMLElement)) return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+  const left = rect.left + el.clientLeft;
+  const top = rect.top + el.clientTop;
+  return { left, top, right: left + el.clientWidth, bottom: top + el.clientHeight };
+}
+
+/** The way from inside a box to something wholly outside it: up or down before across. */
+function wayTo(part: Box, box: Box): Way {
+  return part.bottom <= box.top ? "up" : part.top >= box.bottom ? "down" : part.right <= box.left ? "left" : "right";
+}
+
+/** What of `part` lies in `box`, along the ways the box clips, or nothing. A side of no size, like a line's, counts where it lies. */
+function cutBy(part: Box, box: Box, down = true, across = true): Box | undefined {
+  const cut = {
+    left: across ? Math.max(part.left, box.left) : part.left,
+    top: down ? Math.max(part.top, box.top) : part.top,
+    right: across ? Math.min(part.right, box.right) : part.right,
+    bottom: down ? Math.min(part.bottom, box.bottom) : part.bottom,
+  };
+  const wide = cut.right > cut.left || (part.right === part.left && cut.right >= cut.left);
+  const tall = cut.bottom > cut.top || (part.bottom === part.top && cut.bottom >= cut.top);
+  return wide && tall ? cut : undefined;
+}
+
+/**
+ * The part of a box on show through the boxes that clip it and the window,
+ * or, when none of it is, the way to it from the first that hides it all and
+ * the part of that one on show, where its caption waits. A box that is itself
+ * out of view counts as the way to the control.
+ */
+function seeIn(rect: Box, clips: Clip[], el: Element): Sight {
+  let part = rect;
+  for (let i = 0; i < clips.length; i++) {
+    const clip = clips[i]!;
+    const box = clipBox(clip.el);
+    const cut = cutBy(part, box, clip.down, clip.across);
+    if (cut) {
+      part = cut;
+      continue;
+    }
+    const way = wayTo(part, box);
+    const back = way === "up" || way === "down" ? clip.scrollsDown : clip.scrollsAcross;
+    const outer = seeIn(box, clips.slice(i + 1), el);
+    return "shown" in outer ? { way, edge: outer.shown, back } : outer;
+  }
+  // Last, what the visitor can see of the page, which on a phone can be less than the window (see view.ts).
+  const { left, top, right, bottom } = inSight();
+  const view = { left, top, right, bottom };
+  const shown = cutBy(part, view);
+  if (shown) return { shown: new DOMRect(shown.left, shown.top, shown.right - shown.left, shown.bottom - shown.top) };
+  const way = wayTo(part, view);
+  // Up and down the page always scrolls. Across, only a page or a box that scrolls across does.
+  return { way, edge: view, back: way === "up" || way === "down" || scrollsAcrossTo(el) };
+}
+
+/**
+ * Where a caption waits for a control out of view: at the edge of the part of
+ * the window it went out of, just outside it when there is room there, as
+ * under a list it was scrolled down out of, and inside it otherwise, as at the
+ * window's own edge. At the top or the bottom it starts where the control
+ * does across; at a side, it is level with the control.
+ */
+function edgePlace(away: Away, rect: DOMRect, caption: DOMRect, view: View): { left: number; top: number } {
+  const { way, edge } = away;
+  const margin = 12;
+  const gap = 8;
+  const within = (value: number, low: number, high: number) => Math.min(Math.max(low, value), high);
+  let left: number;
+  let top: number;
+  if (way === "up" || way === "down") {
+    left = within(rect.left, edge.left + margin, edge.right - caption.width - margin);
+    if (way === "up") top = edge.top - gap - caption.height >= view.top + margin ? edge.top - gap - caption.height : edge.top + margin;
+    else top = edge.bottom + gap + caption.height <= view.bottom - margin ? edge.bottom + gap : edge.bottom - caption.height - margin;
+  } else {
+    top = within(rect.top + rect.height / 2 - caption.height / 2, edge.top + margin, edge.bottom - caption.height - margin);
+    if (way === "left") left = edge.left - gap - caption.width >= view.left + margin ? edge.left - gap - caption.width : edge.left + margin;
+    else left = edge.right + gap + caption.width <= view.right - margin ? edge.right + gap : edge.right - caption.width - margin;
+  }
+  // Never out of what can be seen, whatever the part it waits at.
+  return {
+    left: within(left, view.left + margin, view.right - caption.width - margin),
+    top: within(top, view.top + margin, view.bottom - caption.height - margin),
+  };
+}
+
+/**
+ * A control of the page's that a visitor fills in or picks a value from: a field text is typed into, a dropdown, a
+ * slider, or the list a dropdown drawn by the page opens. A label stands for its field. A button, a link, a tick box
+ * and a menu are used with one press, and are not.
+ */
+function fillsIn(el: Element): boolean {
+  if (el instanceof HTMLLabelElement) return !!el.control && isField(el.control);
+  return isField(el) || FILLED_IN_ROLES.has(el.getAttribute("role") ?? "");
 }
 
 /**
@@ -2408,6 +2874,24 @@ function isModal(el: Element): boolean {
   }
 }
 
+/**
+ * Whether an element moves with the page as a whole: it is in the page
+ * itself, not a frame, and neither it nor anything it is drawn inside is
+ * fixed to the window, on the top layer (a modal dialog, an open popover) or
+ * sticky. A sticky bar counts as held to the window: once it has stuck it
+ * stays put while the page scrolls under it, which happens far more often
+ * than the page springing back past its top.
+ */
+function movesWithPage(el: Element): boolean {
+  if (el.ownerDocument !== document) return false;
+  // Up the boxes it is drawn in: through the slot it is shown in, and out of a shadow root to its host.
+  for (let at: Element | null = el; at; at = at.assignedSlot ?? at.parentElement ?? ((at.getRootNode() as ShadowRoot).host || null)) {
+    const position = getComputedStyle(at).position;
+    if (position === "fixed" || position === "sticky") return false;
+  }
+  return true;
+}
+
 /** Whether an element is drawn over the page on its own: positioned against the window or a box, or on the top layer. */
 function isLayer(el: Element): boolean {
   if (el.hasAttribute("popover")) {
@@ -2424,24 +2908,6 @@ function isLayer(el: Element): boolean {
 /** Whether two boxes are the same, to the pixel. */
 function sameBox(a: Box, b: Box): boolean {
   return Math.abs(a.left - b.left) < 1 && Math.abs(a.top - b.top) < 1 && Math.abs(a.right - b.right) < 1 && Math.abs(a.bottom - b.bottom) < 1;
-}
-
-/** How bright a six-digit hex colour is, from 0 for black to 1 for white, as contrast is worked out from. */
-function luminance(hex: string): number {
-  const light = (channel: number) => {
-    const value = channel / 255;
-    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-  };
-  const [r, g, b] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)) as [number, number, number];
-  return 0.2126 * light(r) + 0.7152 * light(g) + 0.0722 * light(b);
-}
-
-/** The words and mark on a launcher of this colour: Paper or Ink, whichever is easier to read on it. */
-export function inkOn(hex: string): string {
-  const fill = luminance(hex);
-  const onPaper = (luminance("#fafaf9") + 0.05) / (fill + 0.05);
-  const onInk = (fill + 0.05) / (luminance("#1c1917") + 0.05);
-  return onPaper >= onInk ? "#fafaf9" : "#1c1917";
 }
 
 /**

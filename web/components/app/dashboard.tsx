@@ -11,6 +11,7 @@ import { SITES_HREF, viewFrom } from "./nav";
 import { Card, FailedCard, leaveFor } from "./parts";
 import { Plain } from "./shell";
 import { BillingPage } from "./billing";
+import { TeamPage } from "./team";
 import { SiteView } from "./site-view";
 import { SitesIndex } from "./sites-index";
 
@@ -76,11 +77,18 @@ export function Dashboard() {
 
   const sites = me.sites ?? [];
   const view = params.get("view");
-  // Billing is the company's, not a site's, so it has the plain frame. A company with no site can reach it too.
+  // Billing and the team are the company's, not a site's, so they have the plain frame. A company with no site can reach them too.
   if (view === "billing") {
     return (
       <Plain me={me}>
         <BillingPage me={me} />
+      </Plain>
+    );
+  }
+  if (view === "team") {
+    return (
+      <Plain me={me}>
+        <TeamPage me={me} />
       </Plain>
     );
   }

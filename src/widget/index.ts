@@ -1,7 +1,9 @@
 import { actingAllowedAt, DEFAULT_APPEARANCE, localDate, MODES, STREAM_TYPE, TURN_VERSION, type Mode, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { POINTER_BLUE } from "../shared/colour.ts";
 import { loadActing, type GateConfig } from "./acting-code.ts";
 import { Guide, type HandoffWay, type Reporter, type Watch } from "./guide.ts";
 import { startLearning, visitorId } from "./learn.ts";
+import { loadMapper, mappingAsked } from "./map-pass.ts";
 import { loadTeaching, takeTeachToken, teachingHeld } from "./teach-code.ts";
 import { showNotice } from "./teach-notice.ts";
 import { currentPath } from "./snapshot.ts";
@@ -24,6 +26,8 @@ import { Ui } from "./ui.ts";
 // ring, and the question kept on show. It is never on otherwise.
 
 const script = document.currentScript as HTMLScriptElement | null;
+// True in a tab where someone at the company is mapping their app (map.ts).
+const mapping = mappingAsked();
 
 async function boot() {
   const site = script?.dataset.site;
@@ -40,7 +44,7 @@ async function boot() {
     if (response.status === 403 || response.status === 404) {
       const error = (await response.json()).error;
       // Someone who opened a teaching link is told why nothing can be taught here. A visitor is not.
-      if (teachToken !== undefined) showNotice(`Haptic can't be taught here: ${error}`, DEFAULT_APPEARANCE.accent);
+      if (teachToken !== undefined) showNotice(`Haptic can't be taught here: ${error}`, POINTER_BLUE);
       return console.warn(`[Haptic] ${error}`);
     }
     if (response.ok) config = await response.json();
@@ -49,7 +53,7 @@ async function boot() {
   }
   // Switched off for this site. Nothing is drawn, and nothing is said about it on the customer's page, except to someone who came to teach.
   if (config.off) {
-    if (teachToken !== undefined) showNotice("Haptic is switched off on this site, so it can't be taught here. Switch it on in your Haptic dashboard first.", config.appearance.accent);
+    if (teachToken !== undefined) showNotice("Haptic is switched off on this site, so it can't be taught here. Switch it on in your Haptic dashboard first.", POINTER_BLUE);
     return;
   }
 
@@ -63,9 +67,9 @@ async function boot() {
         teachToken !== undefined
           ? "Haptic's teach mode couldn't be loaded on this page. Reload the page, or start again from your Haptic dashboard."
           : "Haptic's teach mode couldn't be loaded on this page. Your steps so far are kept in this tab: reload the page to carry on.",
-        config.appearance.accent,
+        POINTER_BLUE,
       );
-    } else if (await teach.startTeaching(api, site, teachToken, config.appearance.accent)) return;
+    } else if (await teach.startTeaching(api, site, teachToken, POINTER_BLUE)) return;
   }
 
   // The reply comes as lines of JSON. The first lines say what kind of reply
@@ -191,6 +195,8 @@ async function boot() {
   };
   const blocked = Array.isArray(config.blocked) ? config.blocked : [];
   const guide = new Guide(ui, sendTurn, gateConfig, report, handoff, blocked);
+  // A tab that is mapping the app does only that: no guide is picked up, and its presses are not learned from as a visitor's would be.
+  if (mapping) return loadMapper({ api, site, host: ui.host, blocked });
   // A guide that was acting when the last page went carries on only once the code that acts is in.
   if (actingReady) void actingReady.then(() => guide.resume());
   else guide.resume();

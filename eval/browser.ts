@@ -453,8 +453,8 @@ export async function saysOrWhy(page: Page, says: Says, sentence: string, atStar
  */
 export async function ask(page: Page, goal: string): Promise<void> {
   if (!(await page.locator("haptic-root .panel").isVisible())) await page.locator("haptic-root .launcher").click();
-  await page.locator("haptic-root .ask input").fill(goal);
-  await page.locator("haptic-root .ask input").press("Enter");
+  await page.locator("haptic-root .ask textarea").fill(goal);
+  await page.locator("haptic-root .ask textarea").press("Enter");
 }
 
 let bundled: Promise<{ widget: string; acting: string }> | undefined;

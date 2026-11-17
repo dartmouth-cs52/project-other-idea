@@ -78,7 +78,7 @@ sequenceDiagram
 
 ### What Haptic knows about a site
 
-A crawl turns the site into a **graph**. Each page's title, headings, buttons and field labels make a node, and the links between pages are the edges. The dashboard's reader uses a headless browser and also opens each menu, tab and accordion, so the map knows which control a link sits behind. Real visits fill in what a crawl can't reach. The widget reports the labels on each page it loads on, and a label joins the map once three different visitors have seen it. [How visits teach it.](docs/widget.md#learning-the-site-from-visits) Together with the company's notes and help docs, this gives the model a map it can plan routes through, to pages the user hasn't reached yet.
+A crawl turns the site into a **graph**. Each page's title, headings, buttons and field labels make a node, and the links between pages are the edges. The dashboard's reader uses a headless browser and also opens each menu, tab and accordion, so the map knows which control a link sits behind. Real visits fill in what a crawl can't reach. The widget reports the labels on each page it loads on, and a label joins the map once three different visitors have seen it. [How visits teach it.](docs/widget.md#learning-the-site-from-visits) And someone at the company can have Haptic go through their signed-in app by itself, from the dashboard, which adds what each button, menu and dialog leads to. [How mapping works.](docs/widget.md#mapping-the-signed-in-app) Together with the company's notes and help docs, this gives the model a map it can plan routes through, to pages the user hasn't reached yet.
 
 ## Engineering
 
@@ -183,15 +183,15 @@ The browser tests need Playwright's browsers once, with `npx playwright install 
 
 The dashboard tests open the pages `next build` writes, so build the site first. They read every number from a local Postgres through the Worker's own queries, so they need `TEST_DATABASE_URL` set to an empty local database, never a real one. Run them with `cd web && npm run build && cd .. && TEST_DATABASE_URL=postgres://postgres@127.0.0.1:55432/haptic_test npm run test:dashboard`. A test writes a question and its steps to the database as the widget server does, and waits for the open page to show them by itself. Without the build or the database they are skipped, and say which is missing. `dashboard-tests.yml` runs them on every pull request that touches the dashboard.
 
-`web/` and `testbed/` are separate packages with their own `npm run dev` and `npm run build`. On every push and pull request, CI typechecks, tests and builds the server, lints, tests and builds the website, and builds Northpine. A pull request that touches the widget also runs both browser suites, in `widget-tests.yml`. Pushes to `main` deploy the website and the widget server. The widget's deploy first runs the page-reading and widget browser tests and the acting-safety suites, which are the gate and the red-team pages. A [staging copy of the server](docs/operations.md#the-staging-server), with a small budget of its own, is for trying a change against the real model before visitors get it.
+`web/` and `testbed/` are separate packages with their own `npm run dev` and `npm run build`. On every push and pull request, CI typechecks, tests and builds the server, lints, tests and builds the website, and builds Northpine. A pull request that touches the widget also runs both browser suites, in `widget-tests.yml`. Pushes to `main` deploy the website and the widget server. Each applies the database migrations before it publishes, and stops if the `DATABASE_URL` secret is missing ([the database](docs/operations.md#the-database)). The widget's deploy first runs the page-reading and widget browser tests and the acting-safety suites, which are the gate and the red-team pages. A [staging copy of the server](docs/operations.md#the-staging-server), with a small budget of its own, is for trying a change against the real model before visitors get it.
 
 ## Documentation
 
 | Doc | Covers |
 |---|---|
-| [Operations](docs/operations.md) | Deploying, the database, what is recorded about visitors, what Teach Haptic keeps, billing outcomes, the kill switch, spend limits and step costs |
+| [Operations](docs/operations.md) | Deploying, the database, what is recorded about visitors, what Teach Haptic keeps, billing outcomes, the kill switch, spend limits, step costs and verified routes |
 | [Privacy](docs/privacy.md) | What leaves the browser, what is masked first, and the exceptions |
-| [The widget on a page](docs/widget.md) | Modal dialogs, covered controls, route changes, Do it with me, teach mode, learning the site from visits, and the browser tests |
+| [The widget on a page](docs/widget.md) | Modal dialogs, covered controls, what a form needs before its button, route changes, Do it with me, teach mode, learning the site from visits, mapping the signed-in app, and the browser tests |
 | [Correcting Haptic](docs/corrections.md) | What people can't find, guide health and its emails, Point here instead, Teach Haptic, and controls Haptic must never point at |
 | [Answers and hand-off](docs/answers.md) | Answering from help docs, the server-side rules, and hand-off to a person |
 | [Benchmark](eval/README.md) | How cases work, how to run them, and results |
