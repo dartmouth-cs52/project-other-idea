@@ -392,7 +392,7 @@ for (const name of BROWSERS) {
       await glow.waitFor({ state: "detached", timeout: 1000 });
     });
 
-    test("the glow is Haptic's blue on every site, whatever the site's accent", async () => {
+    test("the glow and the pointer's ring are Haptic's blue on every site, whatever colour the site saved", async () => {
       harness.script = () => new Promise(() => {});
       const band = async () => {
         await ask(tab, "invite someone");
@@ -401,12 +401,12 @@ for (const name of BROWSERS) {
       };
       const blue = await band();
       for (const colour of ["rgb(119, 208, 254)", "rgb(82, 148, 255)", "rgb(132, 96, 238)"]) assert.ok(blue.includes(colour), `${colour} in ${blue}`);
-      // A site whose accent is green: its pointer is green, and the glow is the same blue.
+      // A site that saved green for its pointer, back when that was a setting: the glow and the ring are still blue.
       harness.config = { ...harness.config, appearance: { ...harness.config.appearance, accent: "#16a34a" } };
       await tab.reload();
       await part(tab, ".launcher").waitFor();
       assert.equal(await band(), blue);
-      assert.equal(await part(tab, ".ring").evaluate((ring) => getComputedStyle(ring).borderTopColor), "rgb(22, 163, 74)");
+      assert.equal(await part(tab, ".ring").evaluate((ring) => getComputedStyle(ring).borderTopColor), "rgb(30, 110, 244)");
     });
 
     test("Send and Do it pressed with nothing typed say what to do, under the ask box, and ask nothing", async () => {

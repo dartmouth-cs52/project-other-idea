@@ -1,11 +1,11 @@
 // What a site looks like from outside: its icon, and the one colour it calls
-// its own. The dashboard shows the icon beside the site's name, and "Match my
-// site" in Settings sets the pointer to the colour.
+// its own. The dashboard shows the icon beside the site's name. The colour is
+// the launcher's: it is read once when a site is added (matchLauncher, at the
+// end of this file), and again whenever someone presses "Match website" in
+// Settings. The pointer never takes it. See src/shared/colour.ts.
 //
 // Both are read from the site's first page and the stylesheets it links, the
-// same public files any visitor's browser fetches. Nothing is kept here: the
-// dashboard asks when it needs to, and the colour is saved only when the
-// person presses the button.
+// same public files any visitor's browser fetches.
 //
 // The colour is looked for where a site says it outright, in this order:
 //   1. a custom property named for it, such as --brand, --primary or --accent
@@ -13,9 +13,12 @@
 //   3. theme_color in the web app manifest
 //   4. the fill of an SVG icon
 //   5. failing all of those, the colour the stylesheets use most
-// A grey, a near white or a near black is never the answer, because the
-// pointer has to be seen on any page. A site whose only colours are those gets
-// no answer, and the dashboard says so.
+// A grey, a near white or a near black is never the answer: a launcher in one
+// would read as part of the page around it, not as the site's own button. A
+// site whose only colours are those gets no answer, and its launcher is Ink.
+
+import { INK, launcherColour } from "../../src/shared/colour";
+import type { SiteContext } from "../../src/shared/types";
 
 const USER_AGENT = "HapticReader/1.0 (+https://joinhaptic.com)";
 const TIMEOUT_MS = 8_000;
@@ -139,9 +142,9 @@ export function colourToHex(input: string): string | null {
 }
 
 /**
- * Whether a colour would do for the pointer: a real colour, not a grey, and
- * neither so light nor so dark that it is lost against a page. The pointer's
- * white border and shadow do the rest.
+ * Whether a colour is one a site calls its own: a real colour, not a grey, and
+ * neither so light nor so dark that it reads as the page itself. One a little
+ * too light for a button is darkened when it is drawn (launcherColour).
  */
 export function isBrandColour(hex: string): boolean {
   const [r, g, b] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16) / 255) as [number, number, number];
@@ -276,4 +279,75 @@ export async function siteBrand(origin: string): Promise<Brand> {
   if (drawn) return { icon, colour: drawn, from: "icon" };
   const common = commonColourFromCss(css);
   return common ? { icon, colour: common, from: "stylesheet" } : { icon, colour: null, from: null };
+}
+
+// Matching the launcher to the site ---------------------------------------------
+
+/** How long a read of a site's colour may take before another request may start it again, in case the first was cut off. */
+const MATCH_STALE_MS = 60_000;
+
+/** What the launcher's colour is waiting on, and where it came from, worked out from the site as it is saved. */
+export interface LauncherState {
+  /** Whether a read of the site's colour should be started now. */
+  start: boolean;
+  /** True until the colour has been read for this address or a person has chosen one. The dashboard says it is matching meanwhile. */
+  waiting: boolean;
+  /** Where the colour came from: read from the site, or chosen in the dashboard. Null for Ink nobody chose. */
+  source: "matched" | "chosen" | null;
+}
+
+type LauncherContext = Pick<SiteContext, "appearance" | "launcherMatch" | "launcherChosen">;
+
+/**
+ * Whether a site's launcher should be matched to the site. It is read once
+ * for each address the site has, and never once a person has chosen a colour.
+ * A site saved with a launcher colour before matching existed counts as one a
+ * person chose, so nothing they picked is replaced.
+ */
+export function launcherState(context: LauncherContext, origin: string, now = Date.now()): LauncherState {
+  const match = context.launcherMatch;
+  const chosen = context.launcherChosen === true || (!match && Boolean(context.appearance?.launcher));
+  const here = match?.origin === origin;
+  const done = here && match!.done;
+  const running = here && !match!.done && now - Date.parse(match!.at) < MATCH_STALE_MS;
+  return {
+    start: !chosen && !done && !running,
+    waiting: !chosen && !done,
+    source: chosen ? "chosen" : done && context.appearance?.launcher ? "matched" : null,
+  };
+}
+
+/** The same test as launcherState's `start`, written for the database, so two requests at once start one read and not two. */
+const STARTABLE = `not coalesce((context->>'launcherChosen')::boolean, false)
+  and not coalesce(context->'launcherMatch'->>'origin' = $2
+    and ((context->'launcherMatch'->>'done')::boolean or (context->'launcherMatch'->>'at')::timestamptz > now() - make_interval(secs => ${MATCH_STALE_MS / 1000})), false)
+  and (context->'launcherMatch' is not null or coalesce(context->'appearance'->>'launcher', '') = '')`;
+
+type Query = (text: string, params: unknown[]) => PromiseLike<Record<string, unknown>[]>;
+
+/**
+ * Reads a site's colour and gives its launcher that colour, darkened if too
+ * light, or Ink when the site has none. It runs once for each address: it
+ * claims the read first, so a second request at the same moment does nothing.
+ * When the colour is back, it is saved only if the address is still the one
+ * read and no person has chosen a colour meanwhile. Returns the colour saved,
+ * Ink, or undefined when there was nothing to do.
+ */
+export async function matchLauncher(sql: { query: Query }, id: string, origin: string, read: (origin: string) => Promise<Brand> = siteBrand): Promise<string | undefined> {
+  const claimed = await sql.query(
+    `update sites set context = context || jsonb_build_object('launcherMatch', jsonb_build_object('origin', $2::text, 'at', now(), 'done', false))
+    where id = $1 and origin = $2 and ${STARTABLE} returning id`,
+    [id, origin],
+  );
+  if (!claimed.length) return undefined;
+  const brand = await read(origin).catch(() => null);
+  const colour = brand?.colour ? launcherColour(brand.colour) : INK;
+  await sql.query(
+    `update sites set context = jsonb_set(context, '{appearance}', (coalesce(context->'appearance', '{}'::jsonb) - 'launcher')
+        || case when $3::text = $4::text then '{}'::jsonb else jsonb_build_object('launcher', $3::text) end)
+      || jsonb_build_object('launcherMatch', jsonb_build_object('origin', $2::text, 'at', now(), 'done', true))
+    where id = $1 and origin = $2 and context->'launcherMatch'->>'origin' = $2 and not coalesce((context->>'launcherChosen')::boolean, false)`,
+    [id, origin, colour, INK],
+  );
+  return colour;
 }
