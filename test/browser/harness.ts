@@ -198,8 +198,8 @@ export async function launch(name: string, how: { full?: boolean } = {}): Promis
 /** Opens the panel, types the question and sends it. */
 export async function ask(tab: Page, question: string): Promise<void> {
   await tab.locator("haptic-root .launcher").click();
-  await tab.locator("haptic-root .ask input").fill(question);
-  await tab.locator("haptic-root .ask input").press("Enter");
+  await tab.locator("haptic-root .ask textarea").fill(question);
+  await tab.locator("haptic-root .ask textarea").press("Enter");
 }
 
 /** Waits until the widget has asked for at least `count` steps. */

@@ -10,6 +10,8 @@ import { Store } from "./db.ts";
 import { labelNeeds, MemoryLearned, withLearned } from "./learned.ts";
 import { SETTINGS } from "./model.ts";
 import { recordTurn } from "./record.ts";
+import type { RouteLookup } from "./routes.ts";
+import type { SiteContext } from "../shared/types.ts";
 import { loadSite, saveSite } from "./sites.ts";
 import { mergeMapped } from "./mapped.ts";
 import { newTeachToken } from "../shared/teach.ts";
@@ -85,10 +87,11 @@ const app = createApp({
   localWebhooks: process.env.NODE_ENV !== "production",
   budget: new MemoryBudget(process.env),
   onAlert: (site, alert) => console.warn(describeAlert(site, alert)),
-  onTurn: (request, measure, _site, origin) => {
+  onTurn: (request, measure, _site, origin, route) => {
     void recordTurn(request, measure);
-    void store?.recordStep(request, measure, origin);
+    void store?.recordStep(request, measure, origin, route);
   },
+  ...(store ? { findRoute: (site: SiteContext, lookup: RouteLookup) => store.findRoute(site.id, lookup) } : {}),
   onCancel: (request) => void store?.cancelStep(request),
   onOutline: (site, visitor, outline, network) => (store ? void store.recordOutline(site, visitor, outline, network) : learn(site.id, visitor, outline, network)),
   // With a database, a pass comes from the dashboard as it does online. Without one, a site

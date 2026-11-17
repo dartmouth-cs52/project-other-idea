@@ -28,7 +28,7 @@
 // id, which is public, is never enough to read or change someone's data.
 
 import { MAPPING_FRAGMENT, MAPPING_PASS_MS, mappingHash, newMappingPass } from "../../src/shared/mapping";
-import { answersOn, cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
+import { answersOn, cleanText, DEFAULT_APPEARANCE, ROUTES_MODES, type Appearance, type Doc, type PageNode, type RoutesMode, type SiteContext } from "../../src/shared/types";
 import { ANSWERS_DOCS_BUDGET, DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
 import { signedInUrl } from "../lib/dashboard";
@@ -278,11 +278,12 @@ interface SiteRow {
   allowed_origins: string[];
   context: SiteContext;
   reading: Reading | null;
+  routes_mode: RoutesMode;
   created_at: string;
 }
 
 async function ownedSite(sql: Sql, org: Organization, id: string): Promise<SiteRow> {
-  const rows = (await sql`select id, name, origin, allowed_origins, context, reading, created_at from sites where id = ${id} and company_id = ${org.id}`) as SiteRow[];
+  const rows = (await sql`select id, name, origin, allowed_origins, context, reading, routes_mode, created_at from sites where id = ${id} and company_id = ${org.id}`) as SiteRow[];
   if (!rows[0]) throw new Refusal(404, "No such site.");
   return rows[0];
 }
@@ -379,6 +380,7 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string, 
     name: site.name,
     origin: site.origin,
     allowedOrigins: site.allowed_origins,
+    routesMode: site.routes_mode,
     createdAt: site.created_at,
     scriptUrl: `${widget}/widget.js`,
     // Connected means the script has called from an origin the site allows. Seen but refused is the other common failure.
@@ -539,9 +541,11 @@ async function changeSite(sql: Sql, env: AppEnv, org: Organization, id: string, 
   if (input.answers !== undefined && typeof input.answers !== "boolean") throw new Refusal(400, "answers must be true or false.");
   // Switching Answers keeps how long an answer's article may go before it is marked as possibly out of date.
   const answers = typeof input.answers === "boolean" ? { ...site.context.answers, enabled: input.answers } : null;
+  const routesMode = input.routesMode === undefined ? site.routes_mode : (input.routesMode as RoutesMode);
+  if (!ROUTES_MODES.includes(routesMode)) throw new Refusal(400, "routesMode is off, shadow or serve.");
   // Only the fields given change, inside the context too, so a page read finishing meanwhile keeps its pages.
   await sql`
-    update sites set name = ${name}, allowed_origins = ${origins},
+    update sites set name = ${name}, allowed_origins = ${origins}, routes_mode = ${routesMode},
       context = jsonb_set(jsonb_set(context, '{appearance}', coalesce(${appearance === null ? null : JSON.stringify(appearance)}::jsonb, context->'appearance', '{}'::jsonb)),
         '{notes}', coalesce(to_jsonb(${notes}::text), context->'notes', '""'::jsonb))
         || jsonb_strip_nulls(jsonb_build_object('answers', ${answers === null ? null : JSON.stringify(answers)}::jsonb, 'launcherChosen', ${chosen}::boolean)),

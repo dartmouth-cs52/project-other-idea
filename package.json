@@ -29,7 +29,8 @@
     "eval:sweep": "tsx eval/sweep/run.ts",
     "eval:answers": "tsx --env-file-if-exists=.env eval/answers-run.ts",
     "eval:answers:record": "tsx eval/answers-record.ts",
-    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts"
+    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts",
+    "routes:report": "tsx --env-file-if-exists=.env src/db/routes-report.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

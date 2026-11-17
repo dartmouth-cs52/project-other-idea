@@ -221,6 +221,21 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     });
   });
 
+  test("the Overview says how often questions come up again, and turns answering from routes on", async () => {
+    const tab = await dash.open();
+    await closing(tab, async () => {
+      const card = tab.locator("section", { hasText: "Questions asked again" });
+      await card.waitFor({ timeout: 15_000 });
+      const mode = (name: string) => card.getByRole("button", { name });
+      assert.equal(await mode("Watch only").getAttribute("aria-pressed"), "true", "a site starts out watching");
+      await mode("Answer from routes").click();
+      await eventually(async () => (await mode("Answer from routes").getAttribute("aria-pressed")) === "true", "Answer from routes should be on");
+      assert.equal((await dash.site()).routesMode, "serve");
+      await mode("Watch only").click();
+      await eventually(async () => (await dash.site()).routesMode === "shadow", "the site should be back to watching");
+    });
+  });
+
   test("renaming a site changes its name in the bar, and its address goes once the name is its own", async () => {
     const tab = await dash.open(`/dashboard/?site=${SITE}&view=settings`);
     await closing(tab, async () => {
