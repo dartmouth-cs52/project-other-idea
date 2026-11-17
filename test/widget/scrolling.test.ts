@@ -154,3 +154,89 @@ test("the way back puts a control from the middle of the page in the middle of t
     await session.close();
   }
 });
+
+// A page wider than the window scrolls across as well as down. A control off to the side is brought into view when
+// the guide points at it, and once the visitor scrolls it away again the sentence waits at that side of the window.
+const WIDE = `<div style="position:relative;width:3200px;height:900px">
+    <button id="near" type="button" style="position:absolute;left:40px;top:300px">Filters</button>
+    <button id="far" type="button" style="position:absolute;left:2600px;top:300px">Settings</button>
+  </div>`;
+
+test("a control off to the right is scrolled into view, and once scrolled away its sentence waits at the right edge", async () => {
+  const session = await start(WIDE, (request, index) => (index === 0 ? point(request, "Settings", "Click Settings.") : words("Settings are open.")));
+  try {
+    await session.ask("open settings");
+    await session.untilState("pointing");
+    // The guide brings it into the window, across.
+    await session.until(async () => !!(await drawn(session)).ring && !!(await drawn(session)).pointer, "the pointer and ring to go round Settings", 3000);
+    const width = await session.page.evaluate(() => document.documentElement.clientWidth);
+    const brought = await box(session, "#far");
+    assert.ok(brought.left >= 0 && brought.right <= width, `Settings is not in the window: it spans ${brought.left} to ${brought.right} of ${width}`);
+
+    await session.page.evaluate(() => window.scrollTo(0, window.scrollY));
+    await session.page.waitForTimeout(300);
+    assert.ok((await box(session, "#far")).left >= width, "Settings is still in the window");
+    const away = await drawn(session);
+    assert.equal(away.ring, undefined, "the ring is still drawn");
+    assert.equal(away.pointer, undefined, "the pointer is left in the window");
+    assert.ok(away.caption, "the sentence went away");
+    assert.equal(away.way, "Scroll right to it");
+    assert.ok(away.caption.right >= width - 16, `the sentence is not at the right edge: its right is at ${away.caption.right} of ${width}`);
+    const far = await box(session, "#far");
+    assert.ok(away.caption.top <= far.bottom && away.caption.bottom >= far.top, "the sentence is not level with Settings");
+
+    await session.page.locator("haptic-root .caption .where").click();
+    await session.until(async () => !(await drawn(session)).way, "the way back to go once Settings is in the window", 3000);
+    await session.page.waitForTimeout(800);
+    const back = await box(session, "#far");
+    assert.ok(back.left >= 0 && back.right <= width, `Settings was not brought into the window: it spans ${back.left} to ${back.right}`);
+    const ring = (await drawn(session)).ring;
+    assert.ok(ring && Math.abs(ring.left + 4 - back.left) < 2, "the ring is not round Settings");
+    await session.page.locator("#far").click();
+    const second = await session.untilAsked(2);
+    assert.match(second.event ?? "", /^The user clicked button "Settings"\./);
+  } finally {
+    await session.close();
+  }
+});
+
+test("a control scrolled away off the left waits at the left edge", async () => {
+  const session = await start(WIDE, (request, index) => (index === 0 ? point(request, "Filters", "Click Filters.") : words("Filtered.")));
+  try {
+    await session.ask("filter this");
+    await session.untilState("pointing");
+    await session.until(async () => !!(await drawn(session)).ring, "the ring to go round Filters", 3000);
+    await session.page.evaluate(() => window.scrollTo(1800, window.scrollY));
+    await session.page.waitForTimeout(300);
+    assert.ok((await box(session, "#near")).right <= 0, "Filters is still in the window");
+    const away = await drawn(session);
+    assert.equal(away.pointer, undefined, "the pointer is left in the window");
+    assert.ok(away.caption, "the sentence went away");
+    assert.equal(away.way, "Scroll left to it");
+    assert.ok(away.caption.left <= 16, `the sentence is not at the left edge: its left is at ${away.caption.left}`);
+  } finally {
+    await session.close();
+  }
+});
+
+test("a control parked off the side of a page that cannot scroll across is not scrolled to, and gets no way back", async () => {
+  // A menu that slides in from the right, parked past the window's edge while closed, on a page that hides what
+  // overflows across: a visitor cannot scroll to it, so neither does Haptic, which would shove the whole page aside.
+  const page = `<style>html, body { overflow-x: hidden }</style>
+    <nav style="position:absolute;top:80px;left:calc(100vw + 40px);width:240px"><a id="billing" href="#billing">Billing</a></nav>
+    <button id="menu" type="button">Menu</button><h1>Dashboard</h1>`;
+  const session = await start(page, (request, index) => (index === 0 ? point(request, "Billing", "Click Billing in the menu.") : words("Done.")));
+  try {
+    await session.ask("go to billing");
+    await session.untilState("pointing");
+    await session.page.waitForTimeout(2000);
+    assert.equal(await session.page.evaluate(() => (document.scrollingElement ?? document.documentElement).scrollLeft), 0, "the page was scrolled across");
+    const shown = await drawn(session);
+    assert.equal(shown.pointer, undefined, "the pointer is drawn outside the window");
+    assert.equal(shown.way, undefined, "a way back is offered to a control no scrolling reaches");
+    assert.ok(shown.caption, "the sentence went away");
+    assert.equal(shown.caption.text, "Click Billing in the menu.");
+  } finally {
+    await session.close();
+  }
+});

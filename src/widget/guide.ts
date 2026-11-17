@@ -25,7 +25,7 @@ import { hear, isOwn, keyName, keysAsked, nothingHeard, OUTCOME_WINDOW_MS, OWN_T
 import { onAddressChange } from "./navigation.ts";
 import { isDrawn, POPUP_ROLES, watchPopups } from "./popups.ts";
 import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, sameView, statesOf, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
-import { ACTING_WORDS, type DidShown, type Ui, SHOWING } from "./ui.ts";
+import { ACTING_WORDS, bringIn, type DidShown, type Ui, SHOWING } from "./ui.ts";
 
 // Runs one guide: ask the model for a step, point at it, wait for the visitor
 // to act, let the page settle, and go again until the model has nothing more
@@ -813,7 +813,7 @@ export class Guide {
       const listed = page.snapshot.elements.find((element) => element.id === id);
       // A control the site's owner ruled out gets no pointer, not even for a moment.
       if (isBlocked(listed, this.blocked)) return;
-      if (listed?.offscreen) el.scrollIntoView({ block: "center", behavior: "smooth" });
+      bringIn(el, !!listed?.offscreen);
       ui.pointAt(el, "");
       if (acting) {
         pointedEarly = el;
@@ -1065,7 +1065,7 @@ export class Guide {
     const target = el;
     if (early?.el !== target) {
       dropEarly();
-      if (listed?.offscreen) target.scrollIntoView({ block: "center", behavior: "smooth" });
+      bringIn(target, !!listed?.offscreen);
     }
     // If they have already used it, the caption would only flash. An answer's words are in the panel, so its pointer goes alone.
     if (!acted) ui.pointAt(target, inPanel ? "" : reply.say);

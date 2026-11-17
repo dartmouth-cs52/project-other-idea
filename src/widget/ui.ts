@@ -239,7 +239,9 @@ button { font: inherit; cursor: pointer; }
   border-radius: 999px; background: rgba(250,250,249,.15); color: #fafaf9; pointer-events: auto; }
 .caption .where:hover { background: rgba(250,250,249,.25); }
 .caption .where svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
-.caption .where.down svg { transform: rotate(180deg); }
+.caption .where[data-way="down"] svg { transform: rotate(180deg); }
+.caption .where[data-way="left"] svg { transform: rotate(-90deg); }
+.caption .where[data-way="right"] svg { transform: rotate(90deg); }
 .helped { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 2px 8px 12px; }
 .helped span { margin-right: auto; color: #78716c; }
 .helped button { display: inline-flex; align-items: center; justify-content: center; height: 32px; border: 0; border-radius: 999px; padding: 0 14px;
@@ -469,7 +471,9 @@ export class Ui {
   /** When the guide last pointed at a new control. */
   private pointedTime = -Infinity;
   /** The control is out of the window, and the way to it, while the pointer is put away and its sentence waits at the window's edge. */
-  private outOfView?: "up" | "down" | "unseen";
+  private outOfView?: "up" | "down" | "left" | "right" | "unseen";
+  /** Whether the visitor can scroll to the control out of the window, and the caption shows the way back to it. */
+  private wayBack = false;
   /** Where in the target's box the tip went, for the box it was found for, so the page is looked at only when the box moves. */
   private tip?: { box: string; dx: number; dy: number };
   /** The caption is above the control rather than below it, because something opened where it was. */
@@ -1466,7 +1470,7 @@ export class Ui {
 
   /** Puts the ring round a box of the page, or puts it away when the box is not in the window, and says which. */
   private ringAt(rect: DOMRect): boolean {
-    const onScreen = rect.bottom > 0 && rect.top < window.innerHeight && rect.width + rect.height > 0;
+    const onScreen = rect.bottom > 0 && rect.top < window.innerHeight && !outAcross(rect) && rect.width + rect.height > 0;
     this.ring.hidden = !onScreen;
     if (!onScreen) return false;
     // In presentation mode the ring is thicker, and stands further out so it does not cover the control's edge.
@@ -1733,7 +1737,7 @@ export class Ui {
       this.caption.hidden = this.captionText.textContent === "";
     }
     let rect = el.getBoundingClientRect();
-    if (!this.ringAt(rect)) return this.offView(rect);
+    if (!this.ringAt(rect)) return this.offView(el, rect);
     if (this.outOfView) {
       this.backInView();
       this.cursor.hidden = false;
@@ -1791,9 +1795,12 @@ export class Ui {
    * brings it in, neither shows. A point Haptic is about to press, while it
    * acts, is where it is in the window whatever the control does, and stays.
    */
-  private offView(rect: DOMRect) {
+  private offView(el: Element, rect: DOMRect) {
     if (this.held) return;
-    const way = rect.bottom <= 0 ? "up" : rect.top >= window.innerHeight ? "down" : undefined;
+    // Down before across: a control both above the window and off to its side is said to be above, and its sentence
+    // waits at the top. Scrolling to it brings it in both ways.
+    const width = windowWidth();
+    const way = rect.bottom <= 0 ? "up" : rect.top >= window.innerHeight ? "down" : rect.right <= 0 ? "left" : rect.left >= width ? "right" : undefined;
     const arriving = !this.aimed && performance.now() - this.pointedTime < ARRIVE_MS;
     const where = this.caption.querySelector<HTMLElement>(".where")!;
     this.cursor.hidden = true;
@@ -1806,19 +1813,30 @@ export class Ui {
     }
     if (this.outOfView !== way) {
       this.outOfView = way;
-      const label = way === "up" ? "Scroll up to it" : "Scroll down to it";
+      const label = `Scroll ${way} to it`;
       where.setAttribute("aria-label", label);
       where.title = label;
-      where.classList.toggle("down", way === "down");
+      where.dataset.way = way;
+      // Up and down the page always scrolls. Across, a control parked past the side of a page that does not scroll
+      // across, like a closed menu, has its sentence at that side and no way back that would shove the page aside.
+      this.wayBack = way === "up" || way === "down" || scrollsAcrossTo(el);
       // What lay under the caption beside the control says nothing about what lies under it at the edge, or once it is back.
       if (!this.under?.moved) this.under = undefined;
     }
-    where.hidden = false;
+    where.hidden = !this.wayBack;
     this.caption.hidden = false;
     const box = this.caption.getBoundingClientRect();
     const margin = 12;
-    const left = Math.min(Math.max(margin, rect.left), window.innerWidth - box.width - margin);
-    const top = way === "up" ? margin : window.innerHeight - box.height - margin;
+    const height = window.innerHeight;
+    // At the top or the bottom, it starts where the control does across. At a side, it is level with the control.
+    const left =
+      way === "left" ? margin : way === "right" ? width - box.width - margin : Math.min(Math.max(margin, rect.left), width - box.width - margin);
+    const top =
+      way === "up"
+        ? margin
+        : way === "down"
+          ? height - box.height - margin
+          : Math.min(Math.max(margin, rect.top + rect.height / 2 - box.height / 2), height - box.height - margin);
     this.caption.style.left = `${left}px`;
     this.caption.style.top = `${top}px`;
     const now = performance.now();
@@ -1838,7 +1856,7 @@ export class Ui {
   private bringBack() {
     const el = this.target;
     if (!el?.isConnected) return;
-    el.scrollIntoView({ block: "center", inline: "nearest", behavior: lessMotion() ? "auto" : "smooth" });
+    scrollInto(el, !lessMotion());
   }
 
   /** The box the pointer is drawn in, round its tip, at the size it is drawn. */
@@ -1999,6 +2017,61 @@ function lessMotion(): boolean {
   } catch {
     return false;
   }
+}
+
+/** How wide the window is where the page is drawn: without a scroll bar down its side, which covers what is under it. */
+function windowWidth(): number {
+  return document.documentElement.clientWidth || window.innerWidth;
+}
+
+/** Whether a box lies wholly to the left or the right of the window, as on a page wider than it. */
+export function outAcross(rect: DOMRect): boolean {
+  return rect.right <= 0 || rect.left >= windowWidth();
+}
+
+/**
+ * Whether a visitor can scroll across to an element: a box around it scrolls
+ * across, or the page does. A page that hides what overflows it across, as
+ * one with a menu parked past its side does, cannot be scrolled across by the
+ * visitor, though a script could still shove it aside.
+ */
+export function scrollsAcrossTo(el: Element): boolean {
+  for (let at = parentOf(el); at && at !== document.body && at !== document.documentElement; at = parentOf(at)) {
+    const overflow = getComputedStyle(at).overflowX;
+    if ((overflow === "auto" || overflow === "scroll") && at.scrollWidth > at.clientWidth + 1) return true;
+  }
+  const page = document.scrollingElement ?? document.documentElement;
+  if (page.scrollWidth <= page.clientWidth + 1) return false;
+  // The window takes the root's overflow, or the body's when the root leaves its own as it is.
+  const root = getComputedStyle(document.documentElement).overflowX;
+  const view = root === "visible" && document.body ? getComputedStyle(document.body).overflowX : root;
+  return view !== "hidden" && view !== "clip";
+}
+
+/** The element around one, out of a shadow root to its host. */
+function parentOf(el: Element): Element | null {
+  return el.parentElement ?? ((el.getRootNode() as Partial<ShadowRoot>).host ?? null);
+}
+
+/**
+ * Scrolls a control into the window: its middle to the window's, down, and
+ * across only as far as it takes, unless it lies wholly to one side where the
+ * visitor could scroll to it, when it goes to the middle across too, clear of
+ * both edges.
+ */
+function scrollInto(el: Element, smooth: boolean) {
+  const across = outAcross(el.getBoundingClientRect()) && scrollsAcrossTo(el);
+  el.scrollIntoView({ block: "center", inline: across ? "center" : "nearest", behavior: smooth ? "smooth" : "auto" });
+}
+
+/**
+ * As the guide points at a control, brings it into the window when it is out
+ * of it: when the page's reading listed it as above or below, or when it lies
+ * wholly to one side, which the reading does not list, where the visitor could
+ * scroll to it.
+ */
+export function bringIn(el: Element, listedAway: boolean) {
+  if (listedAway || (outAcross(el.getBoundingClientRect()) && scrollsAcrossTo(el))) scrollInto(el, true);
 }
 
 /**
