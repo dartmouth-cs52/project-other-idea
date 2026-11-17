@@ -13,6 +13,8 @@ import { ask, BROWSERS, idOf, launch, page, point, startHarness, turns, type Har
 // (Autofill.trigger), so the events are the ones Chrome really sends: on each
 // field a focus, a keydown with no key, an input that is a plain Event, a
 // change, a keyup and a blur, with the field already in the :autofill state.
+// Chrome fills the field the autofill was started from first, then the rest of the
+// form, so a visitor who picks a suggestion in Last name fills in First name too.
 // Firefox and WebKit have no such switch, so this runs in Chromium only, and
 // in the whole of Chromium: the headless shell Playwright runs by default has
 // no autofill, and answers "'Autofill.trigger' wasn't found".
@@ -96,10 +98,31 @@ describe("the browser's autofill", { skip: !BROWSERS.includes("chromium") && "on
     assert.notEqual(second!.offTrack, true, "not off track");
   });
 
-  test("clicking another field before anything is in the pointed one is still a wrong click", async () => {
-    await tab.click("#details");
+  test("picking a suggestion in another field fills in the pointed one, and is the step", async () => {
+    // The visitor clicks into Last name, not First name, and picks one of Chrome's suggestions there.
+    await tab.click("#last");
+    await sleep(300);
+    assert.equal(harness.turns.length, 1, "a click into another field asks nothing yet");
+    await autofill(cdp, "#last");
     const [, second] = await turns(harness, 2, 4000);
-    assert.match(second!.event ?? "", /instead of .*"First name"/);
+    assert.match(second!.event ?? "", /^The user filled in .*"First name" with the browser's autofill, which may have filled in other fields of the form too\./);
+    assert.notEqual(second!.offTrack, true, "not off track");
+  });
+
+  test("typing in another field is a wrong click, heard at the first letter", async () => {
+    await tab.click("#details");
+    await sleep(300);
+    assert.equal(harness.turns.length, 1, "the click into it asks nothing yet");
+    await tab.keyboard.type("H");
+    const [, second] = await turns(harness, 2, 4000);
+    assert.match(second!.event ?? "", /^The user clicked "Additional details" instead of .*"First name"\./);
+    assert.equal(second!.offTrack, true);
+  });
+
+  test("a button clicked before anything is in the pointed field is a wrong click at once", async () => {
+    await tab.click("button[type=submit]");
+    const [, second] = await turns(harness, 2, 4000);
+    assert.match(second!.event ?? "", /^The user clicked .*"Request access" instead of .*"First name"/);
     assert.equal(second!.offTrack, true);
   });
 });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hear, isOwn, keysAsked, markOwn, nothingHeard, OWN_TYPING_PAUSE_MS, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "../src/widget/observe.ts";
+import { AUTOFILL_DONE_MS, hear, isOwn, keysAsked, markOwn, nothingHeard, OWN_TYPING_PAUSE_MS, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "../src/widget/observe.ts";
 
 // "Was that the step?" decided from sequences of plain events, with no page.
 // The sequences are the ones real apps produced: a list that acts as the mouse
@@ -264,4 +264,40 @@ test("another control clicked before anything was typed in the pointed field is 
   assert.equal(run(FIELD, [press(0, TARGET), release(40), click(41, TARGET), press(600, DETAILS), release(650), click(651, DETAILS)]).verdict?.how, "other");
   // Nor is a value the page's script wrote there.
   assert.equal(run(FIELD, [{ type: "input", at: 10, inTarget: true, byPage: true }, press(600, DETAILS), release(650), click(651, DETAILS)]).verdict?.how, "other");
+});
+
+// The same form, with the pointer on First name and the visitor clicking into Last name to pick one of Chrome's
+// suggestions there. Chrome fills the field it was started from first, then the rest of the form, First name too.
+const LAST = where({ controls: [5], name: "Last name", field: true });
+const intoLast: Seen[] = [press(0, LAST), release(40), click(41, LAST)];
+const input = (at: number, inTarget: boolean, over: Partial<Extract<Seen, { type: "input" }>> = {}): Seen => ({ type: "input", at, inTarget, ...over });
+
+test("a click into another field is not a wrong click until the visitor types there, and autofill started there that fills the pointed field is the step", () => {
+  // Clicking into Last name decides nothing yet.
+  assert.equal(run(FIELD, [...intoLast, tick(500), tick(5000)]).verdict, undefined);
+  // Chrome's autofill from Last name: Last name, then First name.
+  const filled = run(FIELD, [...intoLast, input(900, false, { autofill: true }), input(901, true, { autofill: true })]);
+  assert.deepEqual(filled.verdict, { how: "filled", onTarget: true, strayed: false, autofill: true });
+  assert.equal(filled.at, 901);
+  // Typing in Last name is using the wrong field, heard at the first letter.
+  assert.deepEqual(run(FIELD, [...intoLast, input(900, false)]).verdict, { how: "other", name: "Last name", onTarget: false, strayed: true });
+});
+
+test("autofill started in another field that leaves the pointed field empty is the other field used", () => {
+  const events = [...intoLast, input(900, false, { autofill: true })];
+  const heard = run(FIELD, events).heard;
+  assert.equal(waiting(heard, 950), true, "looked at again soon");
+  assert.equal(run(FIELD, [...events, tick(900 + AUTOFILL_DONE_MS - 1)]).verdict, undefined);
+  assert.deepEqual(run(FIELD, [...events, tick(900 + AUTOFILL_DONE_MS)]).verdict, { how: "other", name: "Last name", onTarget: false, strayed: true });
+});
+
+test("after a click into another field, coming back to the pointed one, a button, or the page's own script each count as before", () => {
+  // Back into First name and typing there: filled in, with nothing held against them.
+  assert.equal(run(FIELD, [...intoLast, press(600, TARGET), release(640), click(641, TARGET), input(800, true), tick(2100)]).verdict?.how, "filled");
+  // On to a button: that button is the wrong click.
+  assert.deepEqual(run(FIELD, [...intoLast, press(600, OTHER), release(640), click(641, OTHER)]).verdict, { how: "other", name: "Cancel", onTarget: false, strayed: true });
+  // The page writing into Last name is not the visitor typing there.
+  assert.equal(run(FIELD, [...intoLast, input(900, false, { byPage: true }), tick(2000)]).verdict, undefined);
+  // A field clicked while the pointer is on a button is still a wrong click at once.
+  assert.deepEqual(run(BUTTON, intoLast).verdict, { how: "other", name: "Last name", onTarget: false, strayed: true });
 });
