@@ -3,7 +3,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { checkAction } from "../shared/act-rules.ts";
 import { BLOCKED_SAY, isBlocked } from "../shared/corrections.ts";
-import { ACTING_LIMITS, ACTS, actionsAllowed, MODES, REASONS, type Act, type Mode, type Reason, type SiteContext, type SnapElement, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { ACTING_LIMITS, ACTS, actionsAllowed, MODES, NO_MODEL, REASONS, type Act, type Mode, type Reason, type SiteContext, type SnapElement, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { actingFor, type NotActing } from "./acting.ts";
 import { declinedReply, finishAnswer, neverDecided, type Finished, type ModelReply, type Overruled } from "./answers.ts";
 import type { Ceiling } from "./budget.ts";
@@ -349,7 +349,7 @@ export async function measureTurn(
   if (acting.act && request.step > actionsAllowed(acting.settings) + ACTING_LIMITS.stepAllowance) {
     const reply: TurnReply = { target: null, status: "done", say: ACT_CAP_SAY, mode: "act", withheld: "cap" };
     const ms = Date.now() - started;
-    return { reply, model: "none", ms, msToTarget: ms, wrote: reply.say, broke: [], cited: [], usd: 0, acting: { ...actingMeasure, capped: true } };
+    return { reply, model: NO_MODEL, ms, msToTarget: ms, wrote: reply.say, broke: [], cited: [], usd: 0, acting: { ...actingMeasure, capped: true } };
   }
 
   let msToTarget: number | undefined;
