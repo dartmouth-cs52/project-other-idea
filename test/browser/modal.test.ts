@@ -73,6 +73,14 @@ for (const name of BROWSERS) {
 
       await tab.click("#open");
       await movedTo(tab, "settings");
+      // The glow's element goes into the dialog too, just under ours, so it is drawn over the dialog and under the chat.
+      assert.deepEqual(
+        await tab.evaluate(() => {
+          const veil = document.querySelector("haptic-veil")!;
+          return [veil.parentElement?.id, veil.nextElementSibling?.localName, veil.matches(":popover-open")];
+        }),
+        ["settings", "haptic-root", true],
+      );
       const [, second] = await turns(harness, 2);
       assert.equal(second!.snapshot.dialog, "Settings", "the next step sees only the dialog");
       assert.ok(!second!.snapshot.elements.some((element) => element.label === "Save page"), "nothing behind the dialog is listed");

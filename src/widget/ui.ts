@@ -9,6 +9,10 @@ import type { Appearance, Source, TurnReply } from "../shared/types.ts";
 // the website's home page (web/components/demo/kit.tsx). The accent colours
 // the pointer, its mark and the start of the thinking glow. Everything else is
 // ink on white. The pointer shape is assets/pointer.svg, with its tip at POINTER_TIP.
+//
+// The thinking glow is the one thing drawn over the page itself. It has an
+// element of its own, under ours, so it can be blended into the page while the
+// chat and the pointer stay as they are.
 const POINTER_PATH =
   "M3.271 4.871A1.678 1.678 0 0 1 5.604 2.907L19.822 9.597A1.678 1.678 0 0 1 19.705 12.684L13.956 14.875A.622.622 0 0 0 13.643 15.139L10.506 20.431A1.678 1.678 0 0 1 7.444 20.021Z";
 const POINTER_TIP = { x: 3.81, y: 3.14 };
@@ -22,24 +26,57 @@ const PRESS_MS = 240;
 /** How long the mark, the caption and the pointer take to fade when they go. */
 const LEAVE_MS = 150;
 
-// The thinking glow. While Haptic waits for the model, a pool of the accent
-// colour gathers along the bottom of the chat. When the reply arrives it
-// breaks away: it swells into a dome, rises through the chat turning violet
-// and then pink, and is gone. The timings are measured from the animation it
-// is modelled on: 0.6s to gather, then 1.6s to rise and fade.
+// The thinking glow. While Haptic waits for the model, the accent colour
+// gathers along the top edge of the page. When the reply arrives it breaks
+// away as a soft band the width of the page, and falls to the bottom turning
+// violet and then pink, and is gone. The timings and the path are measured
+// from the animation it is modelled on: 0.6s to gather, then 2.45s to cross
+// the page, quick at first and slowing as it fades.
 const GATHER_MS = 600;
-const BLOOM_MS = 1600;
+const SWEEP_MS = 2450;
 const FADE_MS = 250;
 
-const CSS = `
-:host { all: initial; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
-  font: 14px/20px system-ui, -apple-system, "Segoe UI", sans-serif; color: #1c1917; --glide: cubic-bezier(.2,.8,.2,1);
+// The glow's own element. It covers the page under the chat and the pointer,
+// takes no clicks, and is not displayed at all unless a glow is on. How it is
+// blended into the page is set when a glow starts (see Ui.gather).
+//
+// Three soft layers, each an ellipse wider than the page so it reads as a band
+// that is a little thicker in the middle: the accent trailing, violet in the
+// middle and pink leading. They start centred on the page's top edge, and the
+// element that holds them carries them down.
+const VEIL_CSS = `
+:host { all: initial; display: none; position: fixed; inset: 0; z-index: 2147483646; overflow: hidden; pointer-events: none;
   --glow-a: #668cf7; --glow-b: #a953fb; --glow-c: #f69beb; }
 /* The glow starts in the site's accent and turns from there, so it suits whatever colour the pointer is. */
 @supports (color: oklch(from red l c h)) {
   :host { --glow-a: oklch(from var(--accent) .66 calc(c * .8) calc(h + 4)); --glow-b: oklch(from var(--accent) .62 calc(c * 1.25) calc(h + 44));
     --glow-c: oklch(from var(--accent) .8 calc(c * .72) calc(h + 74)); }
 }
+.glow { position: absolute; inset: 0; }
+.glow i { position: absolute; left: -150%; width: 400%; height: 100%; opacity: 0;
+  background: radial-gradient(50% 37% at 50% 50%, var(--c), color-mix(in srgb, var(--c) 78%, transparent) 30%, color-mix(in srgb, var(--c) 34%, transparent) 62%,
+    color-mix(in srgb, var(--c) 9%, transparent) 84%, transparent); }
+.glow .a { --c: var(--glow-a); top: -59%; animation: pool ${GATHER_MS}ms ease-out forwards, lap 1.8s ease-in-out ${GATHER_MS}ms infinite alternate; }
+.glow .b { --c: var(--glow-b); top: -50%; }
+.glow .c { --c: var(--glow-c); top: -41%; }
+.glow.sweep { animation: fall ${SWEEP_MS}ms linear forwards; }
+.glow.sweep .a { animation: sweep-a ${SWEEP_MS}ms forwards; }
+.glow.sweep .b { animation: sweep-b ${SWEEP_MS}ms forwards; }
+.glow.sweep .c { animation: sweep-c ${SWEEP_MS}ms forwards; }
+.glow.fade { opacity: 0; transition: opacity ${FADE_MS}ms ease-out; }
+@keyframes pool { from { opacity: 0; transform: none; } to { opacity: .45; transform: translateY(12%); } }
+@keyframes lap { from { opacity: .45; transform: translateY(12%); } to { opacity: .58; transform: translateY(15%); } }
+@keyframes fall { 0% { transform: none; } 8% { transform: translateY(8%); } 16% { transform: translateY(20%); } 24% { transform: translateY(36%); } 41% { transform: translateY(55.5%); }
+  53% { transform: translateY(66.5%); } 69% { transform: translateY(79%); } 86% { transform: translateY(90%); } 100% { transform: translateY(98%); } }
+@keyframes sweep-a { 0% { opacity: .45; transform: translateY(12%); } 10% { opacity: .9; transform: translateY(8%); } 25% { opacity: .9; transform: none; } 40% { opacity: .55; }
+  55% { opacity: .15; } 65%, 100% { opacity: 0; transform: none; } }
+@keyframes sweep-b { 0% { opacity: 0; } 8% { opacity: .35; } 18% { opacity: .8; } 28% { opacity: 1; } 45% { opacity: .95; } 60% { opacity: .7; } 75% { opacity: .4; } 90% { opacity: .12; } 100% { opacity: 0; } }
+@keyframes sweep-c { 0% { opacity: 0; } 20% { opacity: .2; } 35% { opacity: .5; } 50% { opacity: .85; } 65% { opacity: .9; } 80% { opacity: .7; } 92% { opacity: .35; } 100% { opacity: 0; } }
+`;
+
+const CSS = `
+:host { all: initial; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
+  font: 14px/20px system-ui, -apple-system, "Segoe UI", sans-serif; color: #1c1917; --glide: cubic-bezier(.2,.8,.2,1); }
 * { box-sizing: border-box; }
 button { font: inherit; cursor: pointer; }
 [hidden] { display: none !important; }
@@ -78,8 +115,8 @@ button { font: inherit; cursor: pointer; }
 .launch:hover .hide, .launch:focus-within .hide { opacity: 1; transform: none; pointer-events: auto; }
 .launch.mini .hide { display: none; }
 
-/* The chat. It stays open from the question to the last step. isolation keeps the glow's blending inside it. */
-.panel { position: relative; isolation: isolate; width: min(320px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 14px;
+/* The chat. It stays open from the question to the last step. */
+.panel { width: min(320px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 14px;
   padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.16); animation: arrive .2s ease-out; }
 .panel ::placeholder { color: #78716c; opacity: 1; }
 .thread { display: flex; flex-direction: column; gap: 8px; max-height: min(360px, calc(100vh - 260px)); overflow-y: auto; padding: 4px 4px 0; margin-bottom: 12px; }
@@ -133,31 +170,6 @@ button { font: inherit; cursor: pointer; }
 .note a { color: inherit; text-decoration: none; }
 .note a:hover, .note a:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
 
-/* The thinking glow. It is drawn over the chat and multiplied into it, so words and buttons stay sharp through it.
-   Three soft layers, each two lobes wide: the accent along the bottom, violet above it and pink above that. Each
-   reaches well below the chat's bottom edge, so no edge shows as they rise. */
-.glows { position: absolute; inset: 0; z-index: 1; overflow: hidden; border-radius: 13px; pointer-events: none; mix-blend-mode: multiply; }
-.glow { position: absolute; inset: 0; }
-.glow i { position: absolute; left: 0; top: 0; width: 100%; height: 160%; opacity: 0; transform-origin: 50% 62.5%; will-change: transform, opacity;
-  --fall: var(--c), color-mix(in srgb, var(--c) 78%, transparent) 30%, color-mix(in srgb, var(--c) 34%, transparent) 62%, color-mix(in srgb, var(--c) 9%, transparent) 84%, transparent;
-  background: radial-gradient(37% 25% at var(--l) var(--y), var(--fall)), radial-gradient(37% 25% at var(--r) var(--y), var(--fall)); }
-.glow .a { --c: var(--glow-a); --l: 34%; --r: 62%; --y: 62.5%; animation: pool ${GATHER_MS}ms ease-out forwards, lap 1.8s ease-in-out ${GATHER_MS}ms infinite alternate; }
-.glow .b { --c: var(--glow-b); --l: 38%; --r: 66%; --y: 50%; }
-.glow .c { --c: var(--glow-c); --l: 36%; --r: 64%; --y: 37.5%; }
-.glow.bloom { animation: rise ${BLOOM_MS}ms forwards; }
-.glow.bloom .a { animation: bloom-a ${BLOOM_MS}ms forwards; }
-.glow.bloom .b { animation: bloom-b ${BLOOM_MS}ms forwards; }
-.glow.bloom .c { animation: bloom-c ${BLOOM_MS}ms forwards; }
-.glow.fade { opacity: 0; transition: opacity ${FADE_MS}ms ease-out; }
-@keyframes pool { from { opacity: 0; transform: scale(.75, .1); } to { opacity: .6; transform: scale(.9, .8); } }
-@keyframes lap { from { opacity: .6; transform: scale(.9, .8); } to { opacity: .72; transform: scale(.96, .9); } }
-@keyframes rise { 0% { transform: none; animation-timing-function: ease-in; } 38% { transform: translateY(-8%); animation-timing-function: linear; } 100% { transform: translateY(-40%); } }
-@keyframes bloom-a { 0% { opacity: .6; transform: scale(.9, .8); } 12% { opacity: .92; transform: scale(1, .9); } 25% { opacity: .9; } 38% { opacity: .6; transform: none; } 50% { opacity: .2; }
-  58%, 100% { opacity: 0; transform: none; } }
-@keyframes bloom-b { 0% { opacity: 0; transform: scale(.9, .5); } 12% { opacity: .35; } 25% { opacity: .75; } 38% { opacity: 1; transform: none; } 55% { opacity: .8; } 68% { opacity: .35; }
-  82%, 100% { opacity: 0; transform: none; } }
-@keyframes bloom-c { 0% { opacity: 0; transform: scale(.9, .6); } 25% { opacity: .25; } 38% { opacity: .55; transform: none; } 55% { opacity: .9; } 70% { opacity: .85; } 85% { opacity: .5; }
-  100% { opacity: 0; transform: scale(1.05); } }
 @keyframes shimmer { to { background-position: 0 0; } }
 @keyframes arrive { from { opacity: 0; transform: translateY(6px); } }
 
@@ -189,7 +201,6 @@ button { font: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .cursor, .launcher, .launcher svg, .launcher span, .hide, .ask, .send { transition: none; }
   .panel, .reply, .mark, .mark div, .cursor, .cursor svg, .caption { animation: none !important; }
-  .glows { display: none; }
   .state.thinking span { color: inherit; background: none; animation: none; }
 }
 `;
@@ -244,7 +255,12 @@ export class Ui {
   private readonly send: HTMLButtonElement;
   private readonly state: HTMLElement;
   private readonly stateText: HTMLElement;
-  private readonly glows: HTMLElement;
+  /** The glow's element. It sits in the page beside ours and under it, and is blended into the page. */
+  private readonly veil: HTMLElement;
+  /** Where the glows are drawn, inside it. */
+  private readonly glass: ShadowRoot;
+  /** Its second stylesheet, which shows it and says how it is blended while a glow is on, and is empty otherwise. */
+  private readonly veilMode: HTMLStyleElement;
   private readonly mark: HTMLElement;
   private readonly cursor: HTMLElement;
   private readonly caption: HTMLElement;
@@ -273,20 +289,28 @@ export class Ui {
   private asideFor?: Element;
   /** The visitor closed the chat themselves. It stays closed until there is something to read in it. */
   private shut = false;
-  /** The pool of colour gathering while Haptic thinks, and when it started. */
+  /** The glow gathering at the top of the page while Haptic thinks, and when it started. */
   private pool?: { el: HTMLElement; since: number };
   private readonly fading = new Map<HTMLElement, Animation>();
 
   constructor(appearance: Appearance, handlers: UiHandlers) {
     this.host = document.createElement("haptic-root");
     this.host.style.setProperty("--accent", appearance.accent);
+    // Nothing in the glow's element is for the page's scripts, a screen reader or Haptic's own reading of the page.
+    this.veil = document.createElement("haptic-veil");
+    this.veil.style.setProperty("--accent", appearance.accent);
+    this.veil.setAttribute("aria-hidden", "true");
+    this.veil.setAttribute("data-haptic-ignore", "");
+    this.veil.setAttribute("popover", "manual");
+    this.glass = this.veil.attachShadow({ mode: "open" });
+    this.glass.innerHTML = `<style>${VEIL_CSS}</style><style></style>`;
+    this.veilMode = this.glass.lastElementChild as HTMLStyleElement;
     const root = this.host.attachShadow({ mode: "open" });
     this.side = appearance.position === "bottom-left" ? "left" : "right";
     // The dock comes first, so the pointer, its mark and the caption are drawn over the chat.
     root.innerHTML = `<style>${CSS}</style>
       <div class="dock ${this.side}">
         <div class="panel" hidden>
-          <div class="glows" aria-hidden="true"></div>
           <div class="thread" hidden>
             <p class="asked"></p>
             <div class="reply" hidden><p></p><ul class="sources" hidden></ul><p class="missing" hidden></p></div>
@@ -324,7 +348,6 @@ export class Ui {
     this.handoff = pick(".handoff");
     this.state = pick(".state");
     this.stateText = pick(".state span");
-    this.glows = pick(".glows");
     this.mark = pick(".mark");
     this.cursor = pick(".cursor");
     this.caption = pick(".caption");
@@ -422,13 +445,17 @@ export class Ui {
       // :modal unsupported, so there's no top layer to compete with.
     }
     const home = modal ?? document.documentElement;
-    if (this.host.parentNode === home && raise !== true) return;
-    if (this.host.parentNode !== home) home.appendChild(this.host);
+    if (this.host.parentNode === home && this.veil.parentNode === home && raise !== true) return;
+    // The glow's element goes wherever ours does, just before it.
+    if (this.host.parentNode !== home || this.veil.parentNode !== home) home.append(this.veil, this.host);
     try {
       // Being a popover puts us in the top layer too, above anything the page stacks with z-index.
-      // The last element shown is the one on top, so a popover that is already showing is shown again.
-      if (this.host.matches(":popover-open")) this.host.hidePopover();
-      this.host.showPopover();
+      // The last element shown is the one on top, so a popover that is already showing is shown again:
+      // the glow first, then ours over it.
+      for (const part of [this.veil, this.host]) {
+        if (part.matches(":popover-open")) part.hidePopover();
+        part.showPopover();
+      }
     } catch {
       // No popover support. The fixed position and z-index still apply.
     }
@@ -447,13 +474,14 @@ export class Ui {
     }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["open"] });
     // Some pages swap out the whole document's children. Put ourselves back.
     new MutationObserver(() => {
-      if (!this.host.isConnected) this.place();
+      if (!this.host.isConnected || !this.veil.isConnected) this.place();
     }).observe(document.documentElement, { childList: true });
     // A popover or dialog the page opens goes on top of us. Go back on top.
     document.addEventListener(
       "toggle",
       (event) => {
-        const opened = event.target instanceof Element && event.target !== this.host && (event as ToggleEvent).newState === "open";
+        const ours = event.target === this.host || event.target === this.veil;
+        const opened = event.target instanceof Element && !ours && (event as ToggleEvent).newState === "open";
         // <details> fires the same event, and is not in the top layer.
         if (opened && (event.target as Element).matches("[popover], dialog")) this.place(true);
       },
@@ -514,7 +542,7 @@ export class Ui {
   /** Shows Haptic thinking, with a word for what it is doing. With no text, it goes back to waiting for a question. */
   setBusy(text: string) {
     if (!text) {
-      // Nothing came of the thinking, so the pool drains away where it is.
+      // Nothing came of the thinking, so the glow fades where it is.
       this.release(false);
       return this.setState("idle");
     }
@@ -632,7 +660,7 @@ export class Ui {
     const fresh = el !== this.target;
     this.target = el;
     this.captionText.textContent = text;
-    // The reply has arrived, so the pool breaks away as the pointer sets off.
+    // The reply has arrived, so the glow breaks away as the pointer sets off.
     this.release(true);
     this.setState("pointing");
     if (fresh) {
@@ -763,38 +791,53 @@ export class Ui {
     fade.onfinish = () => this.fading.get(part) === fade && this.hide(part);
   }
 
-  /** Starts the pool of colour along the bottom of the chat. It laps there for as long as Haptic thinks. */
+  /**
+   * Starts the glow: the accent gathers along the top edge of the page, and
+   * laps there for as long as Haptic thinks. With reduced motion on there is
+   * no glow at all.
+   */
   private gather() {
-    if (this.pool) return;
+    if (this.pool || this.still) return;
     const el = document.createElement("div");
     el.className = "glow";
+    // Painted pink, violet, accent, so the accent is on top where they overlap.
     el.append(...["c", "b", "a"].map((layer) => Object.assign(document.createElement("i"), { className: layer })));
-    // One breaking away and one gathering is the most there is to see at once.
-    while (this.glows.childElementCount > 1) this.glows.firstElementChild?.remove();
-    this.glows.append(el);
+    // One falling and one gathering is the most there is to see at once.
+    const glows = this.glass.querySelectorAll(".glow");
+    for (let i = 0; i < glows.length - 1; i++) glows[i]?.remove();
+    this.glass.append(el);
+    // The glow is multiplied into a light page, so the page's words stay dark and sharp through it, and screened into
+    // a dark one, where multiplying would lose the colour. Set in the element's own stylesheet and not on the element,
+    // so the page sees nothing change.
+    this.veilMode.textContent = `:host { display: block; mix-blend-mode: ${pageIsDark() ? "screen" : "multiply"}; }`;
     this.pool = { el, since: performance.now() };
   }
 
   /**
-   * Ends the pool. When the reply has arrived it breaks away and rises through
-   * the chat. Otherwise it fades where it is: a guide that was stopped, or a
-   * reply that failed, is not marked with colour. The pool always finishes
-   * gathering first, however fast the reply was. That holds nothing up, since
-   * the pointer and the reply have already gone ahead.
+   * Ends the gathering. When the reply has arrived the glow breaks away and
+   * falls down the page. Otherwise it fades where it is: a guide that was
+   * stopped, or a reply that failed, is not marked with colour. The glow
+   * always finishes gathering first, however fast the reply was. That holds
+   * nothing up, since the pointer and the reply have already gone ahead.
    */
   private release(arrived: boolean) {
     const pool = this.pool;
     if (!pool) return;
     this.pool = undefined;
     const { el } = pool;
+    const gone = () => {
+      el.remove();
+      // With no glow left, the element is not displayed, and the page is not blended with anything.
+      if (!this.glass.querySelector(".glow")) this.veilMode.textContent = "";
+    };
     if (!arrived) {
       el.classList.add("fade");
-      return void setTimeout(() => el.remove(), FADE_MS);
+      return void setTimeout(gone, FADE_MS);
     }
     setTimeout(
       () => {
-        el.classList.add("bloom");
-        setTimeout(() => el.remove(), BLOOM_MS);
+        el.classList.add("sweep");
+        setTimeout(gone, SWEEP_MS);
       },
       Math.max(0, GATHER_MS - (performance.now() - pool.since)),
     );
@@ -890,6 +933,29 @@ function tipOn(rect: DOMRect): Point {
 
 function translate(tip: Point): string {
   return `translate(${tip.x - POINTER_TIP.x}px, ${tip.y - POINTER_TIP.y}px)`;
+}
+
+/**
+ * Whether the page is dark where the glow will fall, going by the first
+ * background that is not see-through behind three spots on it. A page that
+ * gives nothing to go on is taken to be light.
+ */
+function pageIsDark(): boolean {
+  const spots: [number, number][] = [[0.5, 0.12], [0.5, 0.5], [0.2, 0.8]];
+  let dark = 0;
+  let known = 0;
+  for (const [x, y] of spots) {
+    let el: Element | null = document.elementFromPoint(window.innerWidth * x, window.innerHeight * y);
+    for (let depth = 0; el && depth < 16; el = el.parentElement, depth++) {
+      const colour = /^rgba?\(([^)]+)\)/.exec(getComputedStyle(el).backgroundColor);
+      const [r = 0, g = 0, b = 0, alpha = 1] = (colour?.[1] ?? "").split(/[\s,/]+/).filter(Boolean).map(Number);
+      if (!colour || alpha < 0.5) continue;
+      known++;
+      if (0.2126 * r + 0.7152 * g + 0.0722 * b < 110) dark++;
+      break;
+    }
+  }
+  return known > 0 && dark * 2 > known;
 }
 
 /** One article under an answer: its title, linked when it has an address, and when it was last changed. */

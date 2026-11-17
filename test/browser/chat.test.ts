@@ -8,8 +8,9 @@ import { ask, BROWSERS, done, idOf, launch, markAround, page, point, reachable, 
 // question to the last step: the question is a bubble at the top, one line
 // under it says what Haptic is doing, and the ask box's button stops the
 // guide. A click on the control is answered with a press, a guide followed to
-// the end finishes with the green tick, and thinking shows as a pool of colour
-// that rises through the chat when the reply arrives.
+// the end finishes with the green tick. Thinking shows on the page, not in the
+// chat: colour gathers along the page's top edge, and falls to the bottom as a
+// band when the reply arrives.
 
 const PAGE = page(`
   <main style="font:14px system-ui;padding:40px">
@@ -28,15 +29,31 @@ const reports = (harness: Harness) => harness.posts.filter((post) => post.path.e
 /** Notes every class the pointer, the mark and the glow are given, so a test can ask what was shown, however briefly. */
 const watchClasses = (tab: Page) =>
   tab.evaluate(() => {
-    const root = document.querySelector("haptic-root")!.shadowRoot!;
     const seen = ((window as unknown as { seen: string[] }).seen = [] as string[]);
     // Written out in one piece: a helper function in here would not survive the trip into the page.
-    new MutationObserver((records) => {
-      for (const record of records) {
-        if (record.type === "attributes") seen.push((record.target as Element).className.trim());
-        for (const added of record.addedNodes) if (added instanceof Element) seen.push(added.className.trim());
-      }
-    }).observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] });
+    // The glow has an element of its own, so both are watched.
+    for (const host of [document.querySelector("haptic-root")!, document.querySelector("haptic-veil")!]) {
+      new MutationObserver((records) => {
+        for (const record of records) {
+          if (record.type === "attributes") seen.push((record.target as Element).className.trim());
+          for (const added of record.addedNodes) if (added instanceof Element && added.className) seen.push(added.className.trim());
+        }
+      }).observe(host.shadowRoot!, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] });
+    }
+  });
+/** The glow's element, as the browser has it: whether it is displayed, how it is blended into the page, and where it sits. */
+const veil = (tab: Page) =>
+  tab.evaluate(() => {
+    const veil = document.querySelector("haptic-veil")!;
+    const style = getComputedStyle(veil);
+    const box = veil.getBoundingClientRect();
+    return {
+      display: style.display,
+      blend: style.mixBlendMode,
+      clicks: style.pointerEvents,
+      covers: box.width === window.innerWidth && box.height === window.innerHeight,
+      underOurs: veil.nextElementSibling === document.querySelector("haptic-root"),
+    };
   });
 const seen = (tab: Page) => tab.evaluate(() => (window as unknown as { seen: string[] }).seen);
 
@@ -196,26 +213,48 @@ for (const name of BROWSERS) {
       assert.deepEqual(reports(harness).map((report) => report.outcome).filter(Boolean), ["shown"]);
     });
 
-    test("thinking gathers a pool of colour, which rises through the chat when the reply arrives and is then gone", async () => {
+    test("thinking gathers colour along the top of the page, which falls to the bottom when the reply arrives and is then gone", async () => {
       harness.script = async (request) => {
         await sleep(300);
         return point(idOf(request, "Invite teammate"), "Click Invite teammate.");
       };
       await part(tab, ".launcher").click();
+      assert.equal((await veil(tab)).display, "none", "with no glow on, its element is not displayed");
       await watchClasses(tab);
       await part(tab, ".ask input").fill("invite someone");
       await part(tab, ".ask input").press("Enter");
-      await part(tab, ".glow").waitFor({ state: "attached" });
-      assert.equal(await part(tab, ".glow.bloom").count(), 0, "it only gathers while Haptic thinks");
-      await part(tab, ".glow.bloom").waitFor({ state: "attached", timeout: 3000 });
-      // The reply took 300ms. The pool still gathers for its full 600ms before it breaks away, and the pointer does not wait for it.
+      const glow = tab.locator("haptic-veil .glow");
+      await glow.waitFor({ state: "attached" });
+      assert.equal(await tab.locator("haptic-veil .glow.sweep").count(), 0, "it only gathers while Haptic thinks");
+
+      // It is on the page: the whole of it, under the chat and the pointer, multiplied in so the page's words stay sharp.
+      assert.deepEqual(await veil(tab), { display: "block", blend: "multiply", clicks: "none", covers: true, underOurs: true });
+      assert.equal(await part(tab, ".panel .glow").count(), 0, "and not in the chat");
+      // It gathers along the top edge: the layer that shows is centred within a few percent of it.
+      const centre = await glow.locator(".a").evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return (box.top + box.height / 2) / window.innerHeight;
+      });
+      assert.ok(centre > -0.12 && centre < 0.1, `gathers at the top edge: ${centre}`);
+      // The page under it still takes a click.
+      await tab.locator("#send").click({ trial: true, timeout: 1000 });
+
+      await tab.locator("haptic-veil .glow.sweep").waitFor({ state: "attached", timeout: 3000 });
+      // The reply took 300ms. The glow still gathers for its full 600ms before it breaks away, and the pointer does not wait for it.
       const classes = await seen(tab);
-      assert.ok(classes.indexOf("state pointing") < classes.indexOf("glow bloom"), `the pointer set off first: ${classes.join(", ")}`);
-      await part(tab, ".glow").waitFor({ state: "detached", timeout: 3000 });
-      assert.equal(await part(tab, ".glows").evaluate((el) => el.childElementCount), 0, "nothing is left behind");
+      assert.ok(classes.indexOf("state pointing") < classes.indexOf("glow sweep"), `the pointer set off first: ${classes.join(", ")}`);
+      // It falls: a second and a half on, the band is past the middle of the page.
+      await sleep(1500);
+      const fallen = await glow.locator(".b").evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return (box.top + box.height / 2) / window.innerHeight;
+      });
+      assert.ok(fallen > 0.5, `the band is on its way down: ${fallen}`);
+      await glow.waitFor({ state: "detached", timeout: 3000 });
+      assert.equal((await veil(tab)).display, "none", "and nothing is left over the page");
     });
 
-    test("a reply that says Haptic is resting fades the pool where it is, with no rise", async () => {
+    test("a reply that says Haptic is resting fades the glow where it is, and it does not fall", async () => {
       harness.script = async () => {
         await sleep(200);
         return { reply: { target: null, status: "stuck", say: "Haptic is resting for a while.", paused: true } };
@@ -226,11 +265,20 @@ for (const name of BROWSERS) {
       await part(tab, ".ask input").press("Enter");
       await part(tab, ".reply").waitFor();
       assert.equal(await part(tab, ".reply p").first().textContent(), "Haptic is resting for a while.");
-      await part(tab, ".glow").waitFor({ state: "detached", timeout: 2000 });
+      await tab.locator("haptic-veil .glow").waitFor({ state: "detached", timeout: 2000 });
       const classes = await seen(tab);
       assert.ok(classes.includes("glow fade"), `it faded: ${classes.join(", ")}`);
-      assert.ok(!classes.includes("glow bloom"), "and did not rise");
+      assert.ok(!classes.includes("glow sweep"), "and did not fall");
       assert.equal(await stateOf(tab), "");
+    });
+
+    test("on a dark page the glow is screened in, so its colour shows", async () => {
+      harness.pages.set("/dark", page(`<main style="font:14px system-ui;padding:40px;min-height:100vh;background:#0c0a09;color:#e7e5e4"><h1>Team</h1><button id="invite">Invite teammate</button></main>`, "<style>body{margin:0}</style>"));
+      harness.script = () => new Promise(() => {});
+      await tab.goto(`${harness.url}/dark`);
+      await ask(tab, "invite someone");
+      await tab.locator("haptic-veil .glow").waitFor({ state: "attached" });
+      assert.equal((await veil(tab)).blend, "screen");
     });
 
     test("steps aside when it would cover the control, and comes back when the pointer leaves", async () => {
@@ -293,7 +341,8 @@ for (const name of BROWSERS) {
       await quiet.goto(`${harness.url}/`);
       await ask(quiet, "invite someone");
       assert.equal(await stateOf(quiet), "thinking: Thinking", "the word still says what Haptic is doing");
-      assert.equal(await part(quiet, ".glows").evaluate((el) => getComputedStyle(el).display), "none");
+      assert.equal(await quiet.locator("haptic-veil .glow").count(), 0, "nothing is drawn over the page");
+      assert.equal(await quiet.evaluate(() => getComputedStyle(document.querySelector("haptic-veil")!).display), "none");
       assert.ok(await markAround(quiet, "#invite"));
       assert.equal(await part(quiet, ".cursor").evaluate((el) => getComputedStyle(el).transitionDuration), "0s", "the pointer jumps to the control");
       await still.close();
