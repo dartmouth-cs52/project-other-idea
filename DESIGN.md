@@ -414,6 +414,15 @@ logo mark and the favicon, where it is Ink with a white border.
 **The link preview.** When a link to the site is shared in a message, the
 picture is the pointer and the name Haptic on Paper, and nothing else. The
 pointer there is the live one, Pointer blue with its white border and shadow.
+
+**The lockup.** That same pair, the live pointer beside the name, is the lockup,
+and it is what stands for Haptic anywhere there is room for the name. The name
+is Geist Medium in Ink, tracked in by 0.04em like other large type. The pointer
+is about as tall as a capital letter, centred on it, and half a capital's
+height to its left. `assets/logo-light.svg` and `assets/logo-dark.svg` are the
+lockup with the name drawn as outlines, for places that cannot load Geist, such
+as the README. The dark one is for dark backgrounds. Its name is #F5F5F4 and
+its pointer is the dark-mode blue, #0091FF.
 The line under the picture is "The AI guide that lives in your product".
 
 The pointer's tip sits in the lower right corner of whatever it points at, so
