@@ -35,6 +35,18 @@ const CONNECTED_MS = 60_000;
 
 type SiteRow = NonNullable<Me["sites"]>[number];
 
+/** Northpine, Haptic's own demo app. Its overview does not ask to be mapped. */
+const NOT_ASKED_TO_MAP = new Set(["demo.joinhaptic.com"]);
+
+/** Whether the overview asks for the signed-in screens. Every site but Northpine is asked until it has been mapped once. */
+function asksToMap(site: Site): boolean {
+  try {
+    return !NOT_ASKED_TO_MAP.has(new URL(site.origin).hostname);
+  } catch {
+    return true;
+  }
+}
+
 const SETTINGS_TABS = [
   { value: "general", name: "General" },
   { value: "install", name: "Install" },
@@ -169,7 +181,7 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
           {range}
         </PageHeader>
         {/* Asked for first until it has been done once: without it Haptic knows only the public pages. */}
-        {site.mapped === 0 && <MapApp site={site} reload={load} />}
+        {site.mapped === 0 && asksToMap(site) && <MapApp site={site} reload={load} />}
         <Overview siteId={site.id} origin={site.origin} days={days} stamp={stamp} data={numbers.data} live={live} onOpen={openIt} />
         {numbers.data?.routes && <RoutesCard site={site} metrics={numbers.data.routes} onChange={setSite} />}
       </>
