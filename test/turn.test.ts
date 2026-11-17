@@ -172,7 +172,13 @@ test("a field marked invalid is printed as sent, and the rules say not to move o
     },
   });
   assert.ok(page.includes('e1 textbox "Email address 1" (invalid) [dialog › Invite people]'));
-  assert.match(rules, /A field marked "invalid" holds something the page or the browser won't accept, like an email address with no @: when the field they just typed in is marked "invalid", don't move on\. Point at it again and say what it needs/);
+  // Every prompt a step can be asked with carries the rule: the guide's, the one for a site with help docs (Answers on,
+  // as Northpine is), and the act variant for Do it. The Answers one lacked it at first, so a pointer guide on such a site
+  // still went on from "charlie".
+  const rule = /A field marked "invalid" holds something the page or the browser won't accept, like an email address with no @: when the field they just typed in is marked "invalid", don't move on\. Point at it again and say what it needs/;
+  const withAnswers = buildSystemPrompt({ ...site, answers: { enabled: true } });
+  assert.notEqual(withAnswers, rules, "the site did not get the Answers prompt");
+  for (const [name, prompt] of [["guide", rules], ["answers", withAnswers], ["act", buildSystemPrompt(site, "act")]] as const) assert.match(prompt, rule, name);
 });
 
 test("the question asked after the last step is worded as a closing one", () => {
