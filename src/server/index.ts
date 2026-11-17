@@ -7,7 +7,7 @@ import { ACTING_FILE, buildWidget, WIDGET_FILE } from "../widget/build.ts";
 import { createApp } from "./app.ts";
 import { describeAlert, MemoryBudget } from "./budget.ts";
 import { Store } from "./db.ts";
-import { labelThreshold, MemoryLearned, withLearned } from "./learned.ts";
+import { labelNeeds, MemoryLearned, withLearned } from "./learned.ts";
 import { SETTINGS } from "./model.ts";
 import { recordTurn } from "./record.ts";
 import { loadSite } from "./sites.ts";
@@ -35,9 +35,10 @@ function overLimit(key: string): boolean {
 // With DATABASE_URL set, sites come from Neon as they do online (falling back
 // to data/sites), and guides and steps are recorded there for the dashboard.
 // What traffic has taught Haptic is kept in Neon when there is one, and in memory when there isn't.
-// On a developer's machine one visitor is enough for a label to reach the prompt (HAPTIC_LABEL_THRESHOLD).
-const threshold = labelThreshold(process.env);
-const store = process.env.DATABASE_URL ? new Store(process.env.DATABASE_URL, threshold) : undefined;
+// On a developer's machine one visitor is enough for a label to reach the prompt, and where they called
+// from is not counted (HAPTIC_LABEL_THRESHOLD, HAPTIC_NETWORK_THRESHOLD).
+const needs = labelNeeds(process.env);
+const store = process.env.DATABASE_URL ? new Store(process.env.DATABASE_URL, needs.visitors, { labelNetworks: needs.networks }) : undefined;
 const learned = new MemoryLearned();
 // Without a database, what was learned is kept in data/learned.json, so a restart doesn't forget the site.
 const LEARNED_FILE = fileURLToPath(new URL("../../data/learned.json", import.meta.url));
@@ -49,8 +50,8 @@ if (!store) {
     // Nothing learned yet, or a file from an older version. Learning starts again.
   }
 }
-function learn(siteId: string, visitor: string, outline: Parameters<MemoryLearned["record"]>[2]) {
-  learned.record(siteId, visitor, outline);
+function learn(siteId: string, visitor: string, outline: Parameters<MemoryLearned["record"]>[2], network?: string) {
+  learned.record(siteId, visitor, outline, network);
   clearTimeout(saving);
   saving = setTimeout(() => {
     mkdir(fileURLToPath(new URL("../../data/", import.meta.url)), { recursive: true })
@@ -64,7 +65,7 @@ const app = createApp({
     const fromStore = await store?.loadSite(id);
     if (fromStore) return fromStore;
     const site = await loadSite(id);
-    return site && withLearned(site, learned.labels(id), threshold, learned.openings(id));
+    return site && withLearned(site, learned.labels(id), needs, learned.openings(id));
   },
   widget: () => readFile(WIDGET_FILE, "utf8"),
   widgetActing: () => readFile(ACTING_FILE, "utf8"),
@@ -79,7 +80,7 @@ const app = createApp({
     void store?.recordStep(request, measure, origin);
   },
   onCancel: (request) => void store?.cancelStep(request),
-  onOutline: (site, visitor, outline) => (store ? void store.recordOutline(site, visitor, outline) : learn(site.id, visitor, outline)),
+  onOutline: (site, visitor, outline, network) => (store ? void store.recordOutline(site, visitor, outline, network) : learn(site.id, visitor, outline, network)),
   onSeen: (site, origin, allowed) => void store?.seenAt(site, origin, allowed),
   onAsk: (request, _site, origin) => void store?.startGuide(request, origin),
   onReport: (site, guide, report) => void store?.report(site, guide, report),
