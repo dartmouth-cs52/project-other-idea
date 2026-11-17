@@ -53,6 +53,16 @@ export async function labelsOf(tab: Page, body: string, before?: string): Promis
   });
 }
 
+/** Shows this markup in a fresh page and returns each listed control's states by its label, like { "Email": ["required"] }. A control with none gets an empty list. */
+export async function statesOf(tab: Page, body: string, head = ""): Promise<Record<string, string[]>> {
+  await tab.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}</style>${head}</head><body>${body}</body></html>`);
+  await tab.addScriptTag({ content: await snapshotBundle() });
+  return tab.evaluate(() => {
+    const snapshot = (window as unknown as { hapticSnapshot(ignore: Element): import("../../src/shared/types.ts").Snapshot }).hapticSnapshot(document.createElement("div"));
+    return Object.fromEntries(snapshot.elements.map((element) => [element.label, element.state ?? []]));
+  });
+}
+
 /** How the scripted server answers one step. */
 export interface Answer {
   reply: TurnReply;

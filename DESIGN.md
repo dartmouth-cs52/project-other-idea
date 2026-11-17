@@ -787,6 +787,13 @@ stays. The rest below is proposed.
   one." and names the step that gets the person back. It is plain text in the
   usual caption: no Error red, no alert. If the click also leads to the goal,
   Haptic carries on without comment.
+- **Finish a form before its button.** Haptic points at each field a form
+  needs, one a step, before it points at the button that sends it. Those are
+  the fields the page marks as required and, where a form marks only its
+  optional fields, the rest. If the form turns the person back, the next
+  caption names the field its message is about, and the guide carries on. A
+  form that already holds saved values is left alone, apart from the field the
+  person asked about.
 - **Finish plainly.** Haptic confirms in a sentence, shows the green tick in
   the chat, and the ask box is ready again. The tick is only for a guide the
   person followed to the end, the same ending that is billed. An answer in

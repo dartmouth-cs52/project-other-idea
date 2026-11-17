@@ -1,4 +1,5 @@
 import { TASKS, type Task } from "../../testbed/src/tasks/index.ts";
+import { any, button, DONE as TASK_DONE, type Step as TaskStep } from "../../testbed/src/tasks/types.ts";
 import type { Kind } from "../cases.ts";
 import { DONE, type Guide, type GuideSet, type Reached, type Says, type Step } from "../guide.ts";
 
@@ -28,6 +29,9 @@ import { DONE, type Guide, type GuideSet, type Reached, type Says, type Step } f
 //
 // NORTHPINE_SITE names another site id to run them as, like one built with the
 // help docs as testbed/README.md has it, so that Answers is on.
+//
+// Three more guides, in FORMS below, are about what a form needs before its
+// submit button. They are the ones eval/cases/northpine.json was recorded from.
 
 const ORIGIN = process.env.NORTHPINE_URL || "http://localhost:4200";
 const SITE = process.env.NORTHPINE_SITE || "site_testbed";
@@ -210,7 +214,94 @@ const REACHED: Record<string, Reached> = {
   "help-forgot-password": { text: "Check your email" },
   "help-sso-signin": { url: "://[^/]+/(\\?|$)" },
   "help-onboarding-skip-bank": { text: "Invite your team" },
+  invite: { text: "Invite sent" },
+  "invite-turned-back": { text: "Invite sent" },
+  "company-website": { text: "Company details saved" },
 };
+
+/** Every department in the invite's list, and the box that searches it. The question names none, so any of them is a right answer. */
+const A_DEPARTMENT = [
+  "Search departments…",
+  "Executive",
+  "Engineering",
+  "Platform in Engineering",
+  "Mobile in Engineering",
+  "Data in Engineering",
+  "Sales",
+  "Enterprise Sales in Sales",
+  "Sales Development in Sales",
+  "Marketing",
+  "Brand in Marketing",
+  "Finance",
+  "People",
+  "Customer Success",
+  "Legal",
+].map(any);
+
+const OPEN_INVITE: TaskStep = { expect: [button("Invite people")], act: { click: 'role=button[name="Invite people"]' } };
+const DEPARTMENT: TaskStep = { expect: [any("Department")], act: { click: 'role=dialog >> role=combobox[name="Department"]' }, say: "Choose the department they'll join." };
+const PICK_ONE: TaskStep = { expect: A_DEPARTMENT, act: { click: "role=option[name=/^Platform/]" }, say: "Pick their department from the list." };
+const SEND: TaskStep = { expect: [button("Send invite")], act: { click: 'role=button[name="Send invite"]' } };
+
+/**
+ * What a form needs before its submit button. Northpine marks a field that may
+ * be left empty with "(optional)" and marks nothing on the ones it needs, as
+ * most products do. These check that Haptic takes the visitor through what
+ * the invite needs before it points at Send invite, that it reads a form being
+ * turned back, and that it does not then walk someone through a form that
+ * already holds saved values. Not in testbed/src/tasks, so the testbed's own
+ * checks of its tasks are left as they are.
+ */
+const FORMS: Task[] = [
+  {
+    // The question says nothing about a department. After the email, the next step is Department, not Send invite.
+    id: "invite",
+    start: "/people",
+    goal: "how do I invite a new hire",
+    covers: ["overlay-modal", "form-combobox"],
+    steps: [
+      OPEN_INVITE,
+      { expect: [any("Email address 1")], act: { fill: ['role=textbox[name="Email address 1"]', "jamie.ortiz@northpine.example"] }, say: "Type their email address." },
+      DEPARTMENT,
+      PICK_ONE,
+      SEND,
+      TASK_DONE,
+    ],
+  },
+  {
+    // The visitor types half an address and presses Send invite early. The form turns them back with two messages,
+    // and marks the email as invalid. The guide is not over: both fields have to be put right first.
+    id: "invite-turned-back",
+    start: "/people",
+    goal: "invite someone to Northpine",
+    covers: ["overlay-modal", "form-combobox", "form-validation"],
+    steps: [
+      OPEN_INVITE,
+      { expect: [any("Email address 1")], act: { fill: ['role=textbox[name="Email address 1"]', "cas"] }, say: "Type their email address." },
+      { expect: [any("Department")], act: { click: 'role=button[name="Send invite"]' }, say: "Choose the department they'll join." },
+      { expect: [any("Email address 1"), any("Department")], act: { fill: ['role=textbox[name="Email address 1"]', "cas.lindgren@northpine.example"] }, say: "Type their full email address." },
+      DEPARTMENT,
+      PICK_ONE,
+      SEND,
+      TASK_DONE,
+    ],
+  },
+  {
+    // A form that already holds saved values, with one field marked optional. Asked to change one thing in it,
+    // the guide points at that field and then at Save changes, and leaves Legal name and the address alone.
+    id: "company-website",
+    start: "/settings/company",
+    goal: "change our company website",
+    // Northpine draws a page's body a moment after its frame. A visitor asks once the form is there, so the wait is switched off.
+    lab: { latency: "none" },
+    covers: ["form-save-bar"],
+    steps: [
+      { expect: [any("Website")], act: { fill: ['role=textbox[name="Website"]', "https://www.northpine.example/company"] }, say: "Type the new address." },
+      { expect: [button("Save changes")], act: { click: 'role=region[name="Unsaved changes"] >> role=button[name="Save changes"]' } },
+      TASK_DONE,
+    ],
+  },
+];
 
 const RISKY = ["danger-delete", "danger-irreversible"];
 
@@ -264,5 +355,5 @@ export default {
   hasTag: true,
   about: "Northpine, a made-up spend management dashboard (cards, expenses, approvals, bill pay, accounting, people, settings) built to hold every pattern that has made a pointing guide fail. Its data lives in each visitor's own browser.",
   sandbox: true,
-  guides: TASKS.map(guideOf),
+  guides: [...TASKS, ...FORMS].map(guideOf),
 } satisfies GuideSet;

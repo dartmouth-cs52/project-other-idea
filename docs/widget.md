@@ -1,6 +1,6 @@
 # How the widget follows a page
 
-The widget runs on pages it doesn't control. This covers how it keeps up with them: how it reads a page and hears what the visitor does, its chat and the glow that shows it is thinking, dialogs, controls something else covers, single-page apps that change the address, Do it with me, what it learns about a site from visits, what it leaves running, and how to test it in real browsers. For the project overview, see the [README](../README.md).
+The widget runs on pages it doesn't control. This covers how it keeps up with them: how it reads a page and hears what the visitor does, its chat and the glow that shows it is thinking, dialogs, controls something else covers, what a form needs before its button, single-page apps that change the address, Do it with me, what it learns about a site from visits, what it leaves running, and how to test it in real browsers. For the project overview, see the [README](../README.md).
 
 ## Reading the page and hearing the visitor
 
@@ -41,6 +41,16 @@ A page's modal `<dialog>` makes everything outside it inert, Haptic's own elemen
 ## Covered controls
 
 A control on screen that something else covers, like a button under a stack of cards or the page behind a full-screen overlay, is left out of the snapshot, because a visitor can't click it. The browser's own hit test decides, at the control's middle, then around it, then at the middle of each line of a control that wraps (`keepReachable` in `src/widget/snapshot.ts`). A control only scrolled out of its scroll box stays in and is said to be above or below, and so does one under a sticky header or a bar pinned to the window, since pointing scrolls it into view. One under a list, a menu or a box the page opened over it stays too: it is only under it while that is open. A see-through field drawn by a box around it, like a styled tick box, counts as that box, and a layer over the whole window, like a wall of cookie choices, is then all of the page that can be used.
+
+## What a form needs before its button
+
+A field is listed as `required` or `invalid` as described under [Reading the page](#reading-the-page-and-hearing-the-visitor) (`isRequired`, `markRequiredByOptional` and `isInvalid` in `src/widget/snapshot.ts`). `required` comes from the page's markup and words, never from what is in the field, so an empty required field and a filled one are listed the same: the marks say what a form asks for, not how far along the visitor is.
+
+The model uses them to decide what a form needs before its submit button (`FORM_RULES` in `src/server/prompt.ts`): every field or group marked required, which includes the unmarked fields of a form that marks only its optional ones. It takes the visitor to each one they have not filled in during the guide, one a step, then to the button. Three things follow from its not seeing into fields:
+
+- A required field the visitor filled in before they asked is pointed at all the same. Pressing the form's button instead moves the guide on.
+- A form that already holds saved values, like a settings page, is not walked through. Asked to change one thing in it, the model points at that field and then at save.
+- After a submit, a field marked invalid, or an error message that appeared, means the form was turned back. The guide goes to the field the message is about and does not end.
 
 ## Route changes
 
