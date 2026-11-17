@@ -229,10 +229,10 @@ export default {
       background: (work) => ctx.waitUntil(work),
       onSeen: (site, origin, allowed) => later(db?.seenAt(site, origin, allowed)),
       onAsk: (turn, _site, origin) => later(db?.startGuide(turn, origin)),
-      onTurn: (turn, measure, _site, origin) => {
+      onTurn: (turn, measure, site, origin) => {
         // One line of counts per step, with nothing from the visitor or their page, so that how guides and acting go on a site can be seen.
         try {
-          console.log(JSON.stringify(turnCounts(turn, measure)));
+          console.log(JSON.stringify(turnCounts(turn, measure, site)));
         } catch {
           // A line that cannot be written must not cost the visitor their step.
         }

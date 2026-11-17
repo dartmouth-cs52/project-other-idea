@@ -21,6 +21,7 @@ import { parseOutlineReport, visitorHash } from "./learned.ts";
 import { ceilingFor, measureTurn, TurnCancelled, TurnError } from "./model.ts";
 import type { TurnMeasure } from "./model.ts";
 import { teachCall, type TeachStore } from "./teach.ts";
+import { taughtFor } from "../shared/teach.ts";
 
 // What the Haptic server answers: the widget file, each site's public
 // settings, and the one endpoint the widget calls for every step of a guide.
@@ -410,8 +411,11 @@ const LISTED_ROLES = new Set([
  * mode (or why not), what the model said to do, whether the server took
  * over a click the model had left to the visitor, what the server's check
  * left and why it removed the rest, and whether the step was the hand-over.
+ * With `site`, whether a route the company taught was in the step's prompt
+ * (`taught`), which is how a route can be seen to be used, or not, for a
+ * question; the route itself is not logged.
  */
-export function turnCounts(request: TurnRequest, measure: TurnMeasure): TurnCounts {
+export function turnCounts(request: TurnRequest, measure: TurnMeasure, site?: Pick<SiteContext, "taught">): TurnCounts {
   const { reply } = measure;
   const counts: TurnCounts = {
     haptic: "turn",
@@ -427,6 +431,7 @@ export function turnCounts(request: TurnRequest, measure: TurnMeasure): TurnCoun
     // "pointed": the server pointed at the control the sentence named. "asked": the model was asked again. "logged": neither.
     recheck: measure.recheck ? (measure.recheck.pointed ? "pointed" : measure.recheck.asked ? "asked" : "logged") : "none",
   };
+  if (site) counts.taught = taughtFor(site.taught, request.goal) !== undefined;
   if (!measure.acting) return counts;
   counts.acting = reply.mode === "act" ? "on" : (measure.acting.refused ?? "off");
   if (reply.mode !== "act") return counts;

@@ -329,6 +329,16 @@ test("on a site with Answers on, the route is in the Answers prompt's question, 
   assert.equal(buildSystemPrompt(answering), buildSystemPrompt({ ...answering, taught: [] }), "the cached part does not change");
 });
 
+test("the server's count line for each step says whether a taught route was in its prompt, and nothing of the route", async () => {
+  const { turnCounts } = await import("../src/server/app.ts");
+  const measure = { reply: { target: "e1", status: "continue" as const, say: "Press it." }, model: "mock", ms: 1, msToTarget: 1, wrote: "", broke: [], cited: [], usd: 0 };
+  const taught = { taught: [ROUTE] };
+  assert.equal(turnCounts(ask("how do I add a budget"), measure, taught).taught, true);
+  assert.equal(turnCounts(ask("how do I delete a budget"), measure, taught).taught, false);
+  assert.equal(turnCounts(ask("how do I add a budget"), measure).taught, undefined, "without the site, nothing is said");
+  assert.ok(!JSON.stringify(turnCounts(ask("how do I add a budget"), measure, taught)).includes("New budget"));
+});
+
 test("in Do it with me a taught route may be followed, but the click it leaves for the visitor stays theirs", () => {
   const acting = { ...site, acting: { enabled: true }, taught: [ROUTE] };
   assert.deepEqual(leftForVisitor(ROUTE), ["Add budget"]);
