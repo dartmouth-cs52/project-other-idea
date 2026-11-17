@@ -82,6 +82,24 @@ describe("the dashboard's top numbers", { skip: TEST_DATABASE_URL ? false : "set
     assert.equal(result.before.started, 1, "the earlier one counts in the days before");
   });
 
+  test("a guide finished today that started days before the range is in the tiles and the chart alike, whatever the hour", async () => {
+    // Started ten days ago, so before the chart's first day less one, which the chart used to leave out
+    // while the tiles counted it. With guides that start a little over a week ago, that showed only in
+    // the first hour of a UTC day.
+    exec(
+      DB,
+      `insert into sites (id, name, origin, allowed_origins, context) values ('site_metrics05', 'E', 'https://e.test', '{https://e.test}', '{}');
+      insert into guides (id, site_id, question, question_key, started_path, started_at, ended_at, outcome) values
+        ('00000000-0000-4000-8000-000000000201', 'site_metrics05', 'q', 'q', '/',
+          date_trunc('day', now() at time zone 'utc') at time zone 'utc' - interval '10 days', now(), 'finished');`,
+    );
+    const sql = psqlSql(DB) as unknown as Parameters<typeof headline>[0];
+    const result = await headline(sql, "site_metrics05", 7);
+    assert.equal(result.now.finished, 1);
+    assert.equal(result.daily.reduce((sum, day) => sum + day.finished, 0), 1, "the chart has it too");
+    assert.equal(result.daily.at(-1)!.finished, 1, "on the day it finished");
+  });
+
   test("a site no one has asked anything yet says so, with zeros and empty days, not made-up numbers", async () => {
     const sql = psqlSql(DB) as unknown as Parameters<typeof headline>[0];
     const result = await headline(sql, EMPTY, 30);

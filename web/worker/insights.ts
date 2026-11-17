@@ -222,14 +222,15 @@ export async function headline(sql: Sql, site: string, days: number): Promise<He
         from guides g where g.site_id = $1 and g.started_at >= $3::timestamptz group by 1
       ),
       finished as (
+        -- The same guides the tiles count as finished: started no earlier than theirs, a day before the range before.
         select date_trunc('day', g.ended_at at time zone 'utc') as day, count(*)::int as n
         from guides g where g.site_id = $1 and g.outcome = 'finished' and g.ended_at >= $3::timestamptz
-          and g.started_at >= $3::timestamptz - interval '1 day' group by 1
+          and g.started_at >= $4::timestamptz - interval '1 day' group by 1
       )
       select to_char(days.day, 'YYYY-MM-DD') as day, coalesce(started.n, 0) as started, coalesce(finished.n, 0) as finished
       from days left join started on started.day = days.day left join finished on finished.day = days.day
       order by days.day`,
-      [site, days, since],
+      [site, days, since, before],
     ),
   ]);
   const row = (totals[0] ?? {}) as Record<string, number | boolean | null>;
