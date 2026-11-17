@@ -297,6 +297,41 @@ for (const name of BROWSERS) {
       });
     }
 
+    // Blending the band into the page is work for the browser, and where there is no graphics card to do it, frames
+    // come slowly while it fades. The ring does not wait for one.
+    test("the ring is round the control the moment the guide says it is pointing, however slowly the page is drawn", async () => {
+      const slow = await browser.newContext({ viewport: { width: 1000, height: 700 } });
+      try {
+        // Every frame comes a third of a second late.
+        await slow.addInitScript(() => {
+          const frame = window.requestAnimationFrame.bind(window);
+          window.requestAnimationFrame = (callback) => window.setTimeout(() => frame(callback), 300);
+          window.cancelAnimationFrame = (id) => window.clearTimeout(id);
+        });
+        const late = await slow.newPage();
+        await late.goto(`${harness.url}/`);
+        await part(late, ".launcher").waitFor();
+        harness.script = (request) => point(idOf(request, "Invite teammate"), "Click Invite teammate.");
+        await ask(late, "invite someone");
+        // Asked in one go, so nothing can happen between the two answers.
+        const seenAt = await late.waitForFunction(
+          () => {
+            const host = document.querySelector("haptic-root") as (Element & { guideState?: string }) | null;
+            if (host?.guideState !== "pointing") return false;
+            const ring = host.shadowRoot!.querySelector<HTMLElement>(".ring")!;
+            const box = ring.getBoundingClientRect();
+            const button = document.querySelector("#invite")!.getBoundingClientRect();
+            return { hidden: ring.hidden, round: box.left <= button.left && box.right >= button.right && box.top <= button.top && box.bottom >= button.bottom };
+          },
+          undefined,
+          { timeout: 8000, polling: 10 },
+        );
+        assert.deepEqual(await seenAt.jsonValue(), { hidden: false, round: true });
+      } finally {
+        await slow.close();
+      }
+    });
+
     test("the glow comes back for each spell of thinking, and not while the pointer shows a step", async () => {
       harness.script = async (request, index) => {
         await sleep(500);

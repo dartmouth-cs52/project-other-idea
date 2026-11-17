@@ -1376,8 +1376,26 @@ export class Ui {
     this.cursor.hidden = false;
     // Paint once at the old spot so the transition has somewhere to start from.
     this.cursor.style.transform = `translate(${this.at.x - this.tipIn.x}px, ${this.at.y - this.tipIn.y}px)`;
+    // The ring goes round the control now, and is not left for the next frame as the pointer's glide is. On a machine
+    // that draws slowly the next frame is a while off, and a guide that says it is pointing has its ring up.
+    const target = this.target;
+    if (target?.isConnected && target.getClientRects().length) this.ringAt(target.getBoundingClientRect());
     cancelAnimationFrame(this.frame);
     this.frame = requestAnimationFrame(this.track);
+  }
+
+  /** Puts the ring round a box of the page, or puts it away when the box is not in the window, and says which. */
+  private ringAt(rect: DOMRect): boolean {
+    const onScreen = rect.bottom > 0 && rect.top < window.innerHeight && rect.width + rect.height > 0;
+    this.ring.hidden = !onScreen;
+    if (!onScreen) return false;
+    // In presentation mode the ring is thicker, and stands further out so it does not cover the control's edge.
+    const pad = this.present ? 10 : 4;
+    this.ring.style.left = `${rect.left - pad}px`;
+    this.ring.style.top = `${rect.top - pad}px`;
+    this.ring.style.width = `${rect.width + pad * 2}px`;
+    this.ring.style.height = `${rect.height + pad * 2}px`;
+    return true;
   }
 
   /** Show text with nothing to point at, above the launcher. */
@@ -1607,23 +1625,18 @@ export class Ui {
       this.caption.hidden = this.captionText.textContent === "";
     }
     let rect = el.getBoundingClientRect();
-    const onScreen = rect.bottom > 0 && rect.top < window.innerHeight && rect.width + rect.height > 0;
-    this.ring.hidden = !onScreen;
-    if (!onScreen) return;
+    if (!this.ringAt(rect)) return;
     // A control pointed at while it was scrolled out of view is looked at again once it is in view.
     if (!this.aimed && this.pointed) {
       this.aim(this.pointed);
       if (this.target !== el) return;
       rect = el.getBoundingClientRect();
+      this.ringAt(rect);
     }
 
-    // In presentation mode the ring is thicker, and stands further out so it does not cover the control's edge.
+    // As `ringAt` stands the ring off the control.
     const pad = this.present ? 10 : 4;
     this.pointedBox = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
-    this.ring.style.left = `${rect.left - pad}px`;
-    this.ring.style.top = `${rect.top - pad}px`;
-    this.ring.style.width = `${rect.width + pad * 2}px`;
-    this.ring.style.height = `${rect.height + pad * 2}px`;
 
     this.at = this.held ?? this.tipOn(el, rect);
     this.cursor.style.transform = `translate(${this.at.x - this.tipIn.x}px, ${this.at.y - this.tipIn.y}px)`;
