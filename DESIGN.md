@@ -386,8 +386,8 @@ padding guesses.
 
 Flat. Hierarchy comes from the step between Paper and Card and from 1px borders,
 not from shadows. Four things are allowed a shadow, because they float above
-content: the demo window (`shadow-sm`), the widget's launcher and ask box, the
-pointer with its caption, and in the dashboard a menu and the card a chart
+content: the demo window (`shadow-sm`), the widget's launcher and ask box with
+the suggested questions above it, the pointer with its caption, and in the dashboard a menu and the card a chart
 shows under the mouse (`shadow-sm`). No gradients, no blur, no glass.
 
 The pointer's shadow is two layers, a tight one and a soft one:
@@ -466,6 +466,18 @@ Components are shadcn/ui, restyled only through tokens and variants.
 - **Ask box:** shadcn's input group: a Muted field with the text on top and a
   round Ink send button on a row beneath. While Haptic is guiding, send becomes
   a stop button.
+- **Suggested questions:** Up to three questions the company chose, for a
+  first-time visitor to press. While the ask box is open and empty they float
+  above the panel, 12px over it, stacked 8px apart and lined up with its edge
+  on the launcher's side. Each is its own Card white pill, 14px Medium Ink
+  words on one line, with a hairline edge and a soft shadow. There is no box
+  around them and no tag or label on them, not even on one that Haptic does.
+  Under the mouse or the keyboard a pill turns the launcher's colour, Ink unless
+  the site matched it, with Paper or Ink words to suit, and the keyboard's
+  focus ring stands outside it. They go when the visitor types, while a guide
+  runs and when the panel closes. They never cover a control the page keeps in
+  place, and a short window shows fewer or none. In presentation mode the words
+  are 20px.
 - **Bubbles and status:** shadcn's chat parts. The person's question is an Ink
   bubble on the right. Haptic's reply is a Muted bubble on the left. Status
   sits under them as one line. While Haptic thinks it is the word "Thinking"
@@ -539,7 +551,7 @@ reason a customer gave.
 - **Knowledge.** What Haptic reads and what the company has corrected. Notes,
   help docs, corrections, the controls never to point at, and the pages read.
 - **Settings.** Three tabs. General holds the site's name, the widget's two
-  colours and deleting the site. Install holds the script and where it runs.
+  colours, the suggested questions and deleting the site. Install holds the script and where it runs.
   Usage holds the finished guides, month by month, which are what billing
   counts.
 
@@ -550,6 +562,11 @@ taken. The pointer's colour is Haptic's blue, and stays so unless the company
 changes it. When it is anything else, "Use Haptic blue" puts it back. The
 launcher sits bottom right on every site, where support chat usually lives,
 and that is not a setting. Deleting a site leads back to the list of sites.
+
+Suggested questions are three fields of up to 60 characters, any of which may
+be left empty. Where the site has Do it with me on, each has a "Haptic does it"
+switch beside it, and pressing that question presses Do it. Where it is off the
+switches are not shown.
 
 **Sites.** A company with one site lands inside it. With more than one, the
 first page is the list, one card a site. Sites whose script is running come
