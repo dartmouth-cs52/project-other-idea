@@ -92,7 +92,9 @@ button { font: inherit; cursor: pointer; }
 .note { padding: 0 12px 6px; color: #78716c; font-size: 13px; line-height: 18px; }
 .did { padding: 4px 4px 2px; }
 .did h2 { margin: 4px 8px 6px; font-size: 13px; line-height: 18px; font-weight: 600; color: #1c1917; }
-.did ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: fit-content(50%) minmax(0, 1fr); column-gap: 12px; }
+/* In a short window the list scrolls inside itself, so the panel never grows past the window. */
+.did ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: fit-content(50%) minmax(0, 1fr); column-gap: 12px;
+  max-height: max(84px, calc(100vh - 330px)); overflow-y: auto; scrollbar-width: thin; }
 .did li, .did .line { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); grid-template-columns: subgrid; }
 .did .line { width: 100%; align-items: baseline; border: 0; border-radius: 8px; padding: 4px 8px; background: transparent; color: #1c1917;
   font-size: 13px; line-height: 18px; text-align: left; }
@@ -188,6 +190,12 @@ const PRESENT_CSS = `
 .did h2 { font-size: 18px; line-height: 24px; }
 .did .line { font-size: 17px; line-height: 24px; padding: 5px 8px; }
 .did p { font-size: 15px; line-height: 21px; }
+/* A short window, as a laptop's at 150% zoom: "What I did" at its usual size, which leaves room for the caption and the control. */
+@media (max-height: 760px) {
+  .panel:has(.did:not([hidden])) { width: min(320px, calc(100vw - 40px)); }
+  .did h2, .did p { font-size: 13px; line-height: 18px; }
+  .did .line { font-size: 13px; line-height: 18px; padding: 4px 8px; }
+}
 `;
 
 /**
@@ -1238,6 +1246,7 @@ export class Ui {
         this.captionAvoid = [];
       }
       this.aim(el);
+      this.bringIntoView(this.target ?? el);
     }
     this.captionText.textContent = text;
     this.caption.hidden = text === "";
@@ -1263,6 +1272,24 @@ export class Ui {
       this.follow(el, true);
     } catch (error) {
       console.warn("[Haptic]", error);
+    }
+  }
+
+  /**
+   * A control that is partly outside the window is brought to its middle at once, before anything is drawn round it:
+   * a button whose lower edge is under the window's edge would be ringed half out of sight, with the pointer that
+   * hangs from it out of sight altogether. One that is wholly out of view is the guide's to scroll to, and one that
+   * does not move with the page, like a bar pinned to the window's foot, is left where it is.
+   */
+  private bringIntoView(el: Element) {
+    const rect = el.getBoundingClientRect();
+    const height = window.innerHeight;
+    const partly = rect.bottom > 0 && rect.top < height && (rect.top < 0 || rect.bottom > height);
+    if (!partly || rect.height >= height || pinned(el)) return;
+    try {
+      el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+    } catch {
+      el.scrollIntoView();
     }
   }
 

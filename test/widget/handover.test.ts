@@ -151,3 +151,37 @@ for (const [mode, present] of [
     }
   });
 }
+
+test("in a short window the button is brought into view before the hand-over, the pointer is in sight, and What I did covers neither the caption nor the button", async () => {
+  // 1280 by 720 is a 1920 by 1080 screen at 150% zoom. The button's lower edge starts under the window's.
+  const { session, frames } = await toHandOver({ width: 1280, height: 720 }, true, -14);
+  try {
+    const before = frames[0]!;
+    assert.ok(before.issue[1] < 720 && before.issue[3] > 720, `the button was not half out of view before the hand-over: ${before.issue}`);
+    const shown = ofHandOver(frames);
+    for (const [at, frame] of shown.entries()) {
+      assert.ok(frame.issue[1] >= 0 && frame.issue[3] <= 720, `frame ${at}: the button is not wholly in the window: ${frame.issue}`);
+      assert.ok(frame.caption && frame.panel && !overlap(frame.panel, frame.caption), `frame ${at}: What I did covers the caption: ${JSON.stringify(frame)}`);
+      assert.ok(!overlap(frame.panel!, frame.issue) && !overlap(frame.caption!, frame.issue), `frame ${at}: the button is covered: ${JSON.stringify(frame)}`);
+      assert.ok(frame.panel![1] >= 0 && frame.caption![1] >= 0 && frame.caption![3] <= 720 && frame.caption![0] >= 0 && frame.caption![2] <= 1280, `frame ${at}: part of Haptic is outside the window: ${JSON.stringify(frame)}`);
+    }
+    assert.equal(new Set(shown.map((frame) => `${frame.caption?.join(",")} ${frame.panel?.join(",")}`)).size, 1, "the hand-over moved after it was drawn");
+    const last = shown.at(-1)!;
+    assert.ok(last.pointer && last.pointer[1] >= 0 && last.pointer[3] <= 720 && last.pointer[0] >= 0 && last.pointer[2] <= 1280, `the pointer is out of sight: ${last.pointer}`);
+    assert.deepEqual((await session.did()).lines, ["Cardholder: Malika", "Card name: Ads", "Spending limit: 500", "Purpose: marketing"]);
+
+    // Shorter still: the list scrolls inside itself, and the panel stays inside the window with every line reachable.
+    await session.page.setViewportSize({ width: 1280, height: 420 });
+    await session.page.waitForTimeout(400);
+    const small = await session.page.evaluate(() => {
+      const root = document.querySelector("haptic-root")!.shadowRoot!;
+      const list = root.querySelector(".did ul") as HTMLElement;
+      const panel = root.querySelector(".panel")!.getBoundingClientRect();
+      return { top: panel.top, bottom: panel.bottom, scrolls: list.scrollHeight > list.clientHeight + 1, overflow: getComputedStyle(list).overflowY };
+    });
+    assert.ok(small.top >= 0 && small.bottom <= 420, `What I did does not fit a window 420 px high: ${JSON.stringify(small)}`);
+    assert.deepEqual([small.scrolls, small.overflow], [true, "auto"]);
+  } finally {
+    await session.close();
+  }
+});
