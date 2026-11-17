@@ -147,7 +147,7 @@ export default function Privacy() {
         table&apos;s row is kept by its name only when other rows have one of the same name, such as Edit, never by the
         record&apos;s own name; a name elsewhere on the page can still be kept. The person reviews the steps in the dashboard before anything is used. Saved steps are
         kept with the company&apos;s site, with any notes added and the name of who taught them, until the company
-        removes them, and Haptic uses them to guide anyone who asks something like the same question. Steps nobody
+        removes them, and Haptic uses them to guide anyone who asks how to do the same task. Steps nobody
         saves are deleted after a week. Teaching asks the AI nothing.
       </p>
       <p>

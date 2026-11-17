@@ -516,9 +516,12 @@ reason a customer gave.
 - **Questions.** Every question, newest first, as a table to search and filter.
   A row opens its guide.
 - **Gaps.** What the company can fix. What people can't find, guides that
-  stopped finishing, where people give up and the steps they click past.
+  stopped finishing, where people give up and the steps they click past. Each
+  question people can't find has Teach Haptic the right way beside See the
+  guides.
 - **Knowledge.** What Haptic reads and what the company has corrected. Notes,
-  help docs, corrections, the controls never to point at, and the pages read.
+  help docs, corrections, the routes taught by doing, the controls never to
+  point at, and the pages read.
 - **Settings.** Three tabs. General holds how the widget looks and deleting
   the site. Install holds the script and where it runs. Usage holds the
   finished guides, month by month, which are what billing counts.
@@ -610,6 +613,16 @@ page behind under a 20 percent Ink wash. Each step is a white card that says
 what was pointed at, and what Haptic said in the Ink caption bubble. The
 address holds the guide, so the link opens the same guide for someone else,
 and Back closes it.
+
+**Teaching.** Teach Haptic uses the same panel. A guide that did not get there
+has Teach Haptic the right way at the top of its panel, and pressing it closes
+the guide and opens the teaching panel in its place, so one panel is open at a
+time. Its title is Teach Haptic in Muted text over the question. It says the
+site is open in another tab while the task is done there, then lists the
+recorded steps as white cards, each with its number in a ring, Delete and Add
+a note, and Save this route as the one Ink button. The address does not hold
+it: closing it loses nothing, and steps waiting for review are listed under
+Knowledge, in Taught by doing, with Review.
 
 **Waiting.** While numbers load, Muted blocks hold the place of what is coming,
 at its size, so nothing jumps when it arrives. Once a page has numbers it keeps
