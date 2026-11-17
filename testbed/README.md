@@ -38,6 +38,12 @@ Then reload the app and press Ask. The crawl only sees the empty HTML shell, bec
 
 To load the app without Haptic, add `?lab.widget=0`.
 
+## Online
+
+Northpine runs at https://demo.joinhaptic.com with Haptic on, so anyone can open it and press Ask. Its site is `site_5a6c4cb3e840`, on the Haptic company's account in the dashboard, with `haptic-notes.md` as its notes and a limit of 60 steps per visitor a day. It was built with `npm run tag -- --url https://demo.joinhaptic.com --name Northpine --notes testbed/haptic-notes.md --visitor-steps 60` and made live with `npm run site:publish -- site_5a6c4cb3e840`. To change what Haptic knows, edit the notes and run both again with `--id site_5a6c4cb3e840`. The notes are Haptic's, not the app's, so changing them does not redeploy the app.
+
+The app itself goes live on its own: every change to `testbed/` that lands on main is built, packed into the `northpine` Worker and deployed by `.github/workflows/deploy-demo.yml`, which then checks the demo serves the new build. A change to Markdown alone is skipped. `wrangler.jsonc` says how to deploy by hand.
+
 ## On a phone
 
 Northpine is the live demo, and what Haptic is tried on from a phone. A page wider than the phone is laid out wider than the screen, so everything fixed to the window, Haptic's launcher among them, lands off it. A field with words under 16px makes the phone zoom the page in when it takes the keyboard. `npm run phone:check`, with the app running, opens every page at 320px and 390px with touch, and the states only a press reaches: each step of issuing a physical card, a split expense report, the invite and split dialogs, the menu drawer and the New menu. It fails a page that scrolls sideways, an open dialog or menu that runs off the screen, a link or button squeezed to nothing, and a field under 16px. A table or a row of tabs that scrolls sideways inside its own box is fine. CI runs it on every push, against the built app.
