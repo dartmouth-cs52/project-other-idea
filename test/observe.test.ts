@@ -301,3 +301,12 @@ test("after a click into another field, coming back to the pointed one, a button
   // A field clicked while the pointer is on a button is still a wrong click at once.
   assert.deepEqual(run(BUTTON, intoLast).verdict, { how: "other", name: "Last name", onTarget: false, strayed: true });
 });
+
+test("filling in the pointed field after a click into another field clears that click, however the visitor got back", () => {
+  // The browser's autofill filled only Last name, and the visitor was back in First name, by keyboard, typing, before it was judged.
+  const back = run(FIELD, [...intoLast, input(900, false, { autofill: true }), input(1000, true), tick(900 + AUTOFILL_DONE_MS), tick(1500)]);
+  assert.equal(back.verdict, undefined, "typing in the pointed field is not the other field used");
+  assert.equal(run(FIELD, [...intoLast, input(900, false, { autofill: true }), input(1000, true), tick(2300)]).verdict?.how, "filled");
+  // Back by keyboard with nothing filled, typing in First name, then in Last name: that is leaving a field typed in, not the old click.
+  assert.equal(run(FIELD, [...intoLast, input(800, true), input(1200, false)]).verdict, undefined);
+});

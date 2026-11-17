@@ -290,6 +290,8 @@ export function hear(heard: Heard, seen: Seen, pointed: Pointed): Heard {
       }
       // The page writing into a field is not the visitor typing in it. A box ticked or a choice picked by the page's script is still news of a pick.
       if (seen.byPage && pointed.typed) return next;
+      // Back in the pointed field, by click or by keyboard: whatever they did in the other field no longer counts against them.
+      next.elsewhere = undefined;
       if (pointed.ticked) return say(used);
       if (pointed.select) return say(seen.autofill ? { ...filled, autofill: true } : filled);
       next.typed = seen.at;
