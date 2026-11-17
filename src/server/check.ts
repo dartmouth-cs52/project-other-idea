@@ -489,32 +489,57 @@ export function namedButNotDoneNote(element: SnapElement): string {
 // says that Haptic does it ("Clicking Next to go to the Review step."). No
 // model call is made for it. The widget's gate judges the press as it
 // judges every other, so a control that commits is still never pressed.
+//
+// Live on Northpine on 17 November, with Do it pressed, Haptic made the first
+// press and then handed every later one back, in two requests of three. In
+// "find my most expensive bill" the bill's link went to the visitor with
+// "Amount is sorted with the largest first, so open the top bill,
+// INV-[number] from Linden Logistics, to see its amount. This only covers the
+// Inbox tab, so check other tabs like Overdue too.": the press was written
+// "open", its name came after a few words of the sentence's own, and a later
+// sentence said "check". Haptic is asked again once its press is done, about
+// the page the press leads to, so what a sentence says of after the press is
+// not the visitor's to do first: "Click Next to go to the Review step, where
+// you can check the card" leaves them the check on the Review step, not the
+// press of Next. Only what comes before the press, and what makes the press
+// itself a choice, a wish or a matter of their time, keeps it theirs.
 
-/** The words with which a sentence tells the visitor to press a control, and how Haptic says it does the same. */
-const PRESS: Record<string, string> = { click: "clicking", tap: "tapping", press: "pressing" };
+/** The words with which a sentence tells the visitor to press or go through a control, and how Haptic says it does the same. */
+const PRESS: Record<string, string> = {
+  click: "clicking",
+  tap: "tapping",
+  press: "pressing",
+  open: "opening",
+  expand: "expanding",
+  "go to": "going to",
+  "head to": "heading to",
+  "switch to": "switching to",
+};
+const PRESS_WORDS = String.raw`(?:click|tap|press|open|expand|go\s+to|head\s+to|switch\s+to)`;
 /** Where an instruction can begin: a sentence, a clause after a comma, colon or semicolon, or after "so" or "and". */
 const CLAUSE = String.raw`(?<=^|[.!?…]["'”’)]*\s+|[,;:]\s+|\b(?:so|and)\s+)`;
 /** What ends the sentence before an instruction that opens the next one. */
 const SENTENCE_BEFORE = /(?:^|[.!?…]["'”’)]*\s+)$/;
+/** The end of a sentence: a full stop that a space or the end follows, so "$61,880.27" is not one. */
+const SENTENCE_END = /[.!?…]["'”’)]*(?=\s|$)/;
 /** Words that leave the visitor to judge or change something: "Check that the limit is right". */
 const JUDGE = String.raw`(?:check|make sure|verify|confirm|double[- ]check|review|look over|ensure|decide|change|edit|adjust|correct|fix|tick|untick|uncheck|toggle|turn on|turn off)`;
-/** Words that make the step a choice, or leave it to the visitor's wish or time: "or Back", "if you want", "then", "when you're ready". */
-const NOT_ONLY_THE_PRESS = /\b(?:if|unless|whether|or|either|instead|optional|optionally|then)\b|\b(?:when|once|after|before|until|as soon as)\s+you\b/i;
+/** Words that make the press a choice, or leave it to the visitor's wish or time: "or Back", "if you want", "when you're ready". */
+const NOT_ONLY_THE_PRESS = /\b(?:if|unless|whether|or|either|instead|optional|optionally)\b|\b(?:when|once|after|before|until|as soon as)\s+you\b/i;
 
 /**
- * Whether a sentence, once its instruction to press is written as Haptic's,
- * still leaves something to the visitor: a question, a value or a field, as
- * for namedButNotDone; a choice, a wish or a time ("or", "if you want",
- * "when you're ready"); something after it ("then"); or anything else to
- * use, fill in, pick or check, asked of them or said to be theirs ("where
- * you can choose Virtual").
+ * Whether the words before the instruction to press ask something of the
+ * visitor first: a value or a field, as for namedButNotDone; something to
+ * use, fill in, pick or check ("Check that the limit is $500, then"), asked
+ * of them or said to be theirs; or a "then" that puts the press after
+ * something else.
  */
-function stillLeavesSomething(say: string, snapshot: Snapshot): boolean {
-  if (leavesItToTheVisitor(say, snapshot) || NOT_ONLY_THE_PRESS.test(say)) return true;
+function asksFirst(before: string, snapshot: Snapshot): boolean {
+  if (/\bthen\b/i.test(before) || leavesItToTheVisitor(before, snapshot)) return true;
   const verbs = String.raw`(?:${USE}|${ASK_FOR}|${JUDGE})\b`;
   const asked = new RegExp(String.raw`${CLAUSE}(?:(?:please|just|now|also|first)\s+)*${verbs}`, "i");
   const theirs = new RegExp(String.raw`\byou(?:'ll|’ll| will)?(?:\s+(?:need to|have to|must|can|could|should|may want to|might want to|want to))?\s+${verbs}`, "i");
-  return asked.test(say) || theirs.test(say);
+  return asked.test(before) || theirs.test(before);
 }
 
 /**
@@ -524,10 +549,15 @@ function stillLeavesSomething(say: string, snapshot: Snapshot): boolean {
  * "commits" not true, and is not the answer to a closing question; the
  * control is one Haptic could press (no field, list or choice, and nothing
  * that commits or that the act check would stop); and the sentence tells the
- * visitor to click, tap or press that control by its name, once, and asks
- * nothing else of them. Only the instruction is changed: "Click Next to go
- * on." becomes "Clicking Next to go on.", and "The limit is set, so click
- * Next." becomes "The limit is set, so I'm clicking Next."
+ * visitor to click, tap, press, open, expand, go to, head to or switch to
+ * that control by its name ("the Amount column header", "the top bill,
+ * INV-[number]"), with nothing asked of them before it, no question, and
+ * nothing before it or in the rest of its own sentence that makes it a
+ * choice, a wish or a matter of their time. What the sentences after it say
+ * of the next page is left as it is.
+ * Only the instruction is changed: "Click Next to go on." becomes "Clicking
+ * Next to go on.", and "The limit is set, so click Next." becomes "The limit
+ * is set, so I'm clicking Next."
  */
 export function pressLeftToVisitor(
   request: Pick<TurnRequest, "goal" | "snapshot" | "closing">,
@@ -538,14 +568,20 @@ export function pressLeftToVisitor(
   const element = request.snapshot.elements.find((listed) => listed.id === reply.target);
   if (!element || element.label.trim().length < SHORTEST || !hapticMayPress(element, request, commitWords)) return undefined;
   const say = reply.say;
-  // One instruction to press: in "Click Next, and click Issue card after" the second press is still the visitor's.
-  if ((say.match(/\b(?:click|tap|press)\b/gi) ?? []).length !== 1) return undefined;
-  const told = new RegExp(String.raw`${CLAUSE}(?:(?:please|just|now)\s+)*(click|tap|press)\s+(?:on\s+)?(?:the\s+)?${nameIn(element)}${NAME_END}`, "iu").exec(say);
-  if (!told || NOT_AN_INSTRUCTION.test(say.slice(0, told.index))) return undefined;
+  // A question is the visitor's to answer, wherever it is.
+  if (say.includes("?")) return undefined;
+  // The name straight after the instruction, or after "the" and a few words of the sentence's own and a comma.
+  const told = new RegExp(String.raw`${CLAUSE}(?:(?:please|just|now)\s+)*(${PRESS_WORDS})\s+(?:on\s+)?(?:the\s+(?:[\p{L}\p{N}'’ -]{1,30},\s+)?)?${nameIn(element)}${NAME_END}`, "iu").exec(say);
+  if (!told) return undefined;
+  const before = say.slice(0, told.index);
+  if (NOT_AN_INSTRUCTION.test(before) || NOT_ONLY_THE_PRESS.test(before) || asksFirst(before, request.snapshot)) return undefined;
+  // The rest of the sentence the press is in: "or Back", "when you're ready". What comes after that sentence is about the next page.
+  const after = say.slice(told.index + told[0].length);
+  const ends = SENTENCE_END.exec(after);
+  if (NOT_ONLY_THE_PRESS.test(ends ? after.slice(0, ends.index) : after)) return undefined;
   const verb = told[1]!;
-  const doing = PRESS[verb.toLowerCase()]!;
+  const doing = PRESS[verb.toLowerCase().replace(/\s+/g, " ")]!;
   const end = told.index + told[0].indexOf(verb) + verb.length;
-  const ours = SENTENCE_BEFORE.test(say.slice(0, told.index)) ? doing[0]!.toUpperCase() + doing.slice(1) : `I'm ${doing}`;
-  const rewritten = say.slice(0, told.index) + ours + say.slice(end);
-  return stillLeavesSomething(rewritten, request.snapshot) ? undefined : { element, say: rewritten };
+  const ours = SENTENCE_BEFORE.test(before) ? doing[0]!.toUpperCase() + doing.slice(1) : `I'm ${doing}`;
+  return { element, say: before + ours + say.slice(end) };
 }

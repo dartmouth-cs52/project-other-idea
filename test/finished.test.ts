@@ -40,7 +40,10 @@ const acting: SiteContext = { ...plain, id: "site_finished03", acting: { enabled
 const ruling: SiteContext = { ...plain, id: "site_finished04", blocked: [{ label: "Home" }] };
 /** A site with Answers on: it has a help article. */
 const answers: SiteContext = { ...plain, id: "site_finished05", docs: [{ title: "Teammates", source: "help/teammates.md", text: "Who can invite teammates? Owners and admins can invite teammates from the Team page." }] };
-const sites = [plain, off, acting, ruling, answers];
+/** A site whose company pays for a plan with Stripe. */
+const paying: SiteContext = { ...plain, id: "site_finished06" };
+const PAYING_ORG = "00000000-0000-4000-8000-0000000000d1";
+const sites = [plain, off, acting, ruling, answers, paying];
 
 /** A page with a link the stand-in will point at for "open billing", and one with nothing for it. */
 const HOME: Snapshot = { path: "/", title: "Home", headings: [], text: [], truncated: false, elements: [{ id: "e1", role: "link", label: "Billing" }] };
@@ -59,13 +62,15 @@ interface Options {
   stepsLandAfterMs?: number;
   /** Steps are answered and never written, as when the database cannot be reached. */
   stepsLost?: boolean;
+  /** Stripe's key, so a guide kept as finished is sent to Stripe at once. */
+  stripeKey?: string;
 }
 
 /** The server with the store behind it, as worker/index.ts wires them, and what a widget on the site's page would send. */
 function server(options: Options = {}) {
   const sql = psqlSql(DB) as unknown as ConstructorParameters<typeof Store>[0];
   // A report looks for its guide at once, and twice more: enough for a row written a moment late, and quick to give up.
-  const store = new Store(sql, 3, { reportWaitsMs: [0, 250, 400] });
+  const store = new Store(sql, 3, { reportWaitsMs: [0, 250, 400], stripeKey: options.stripeKey });
   const elsewhere = new Store(sql, 3, { reportWaitsMs: [0, 250, 400] });
   const work: Promise<unknown>[] = [];
   const later = (write: Promise<unknown> | undefined) => void (write && work.push(write));
@@ -320,5 +325,38 @@ describe("which guides are stored as finished", { skip: TEST_DATABASE_URL ? fals
     const said = await hearing(() => report(acting, real, { outcome: "finished" }));
     assert.equal((await kept(real))?.outcome, "step_limit");
     assert.match(said, /so it is kept as step_limit/);
+  });
+  test("a finished guide on a paying company's site goes to Stripe at once, and one that isn't finished doesn't", async () => {
+    exec(
+      DB,
+      `update sites set company_id = '${PAYING_ORG}' where id = '${paying.id}';
+       insert into billing (organization_id, stripe_customer_id, stripe_subscription_id, plan, status, metered_from)
+         values ('${PAYING_ORG}', 'cus_paying', 'sub_paying', 'team', 'active', now() - interval '1 day');`,
+    );
+    const sent: URLSearchParams[] = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      assert.equal(String(input), "https://api.stripe.com/v1/billing/meter_events");
+      sent.push(new URLSearchParams(String(init?.body)));
+      return Response.json({ object: "billing.meter_event" });
+    }) as typeof fetch;
+    try {
+      const { step, report } = server({ stripeKey: "sk_test_not_a_real_key" });
+      const finished = newGuide();
+      await step(paying, finished, 0, HOME);
+      await step(paying, finished, 1, BILLING, { event: 'The user clicked link "Billing".' });
+      await report(paying, finished, { outcome: "finished" });
+      const stopped = newGuide();
+      await step(paying, stopped, 0, HOME);
+      await report(paying, stopped, { outcome: "stopped" });
+      assert.deepEqual(
+        sent.map((form) => [form.get("identifier"), form.get("payload[stripe_customer_id]"), form.get("payload[value]")]),
+        [[finished, "cus_paying", "1"]],
+      );
+      const [row] = await psqlSql(DB)`select billed_at is not null as billed from guides where id = ${finished}`;
+      assert.equal(row?.billed, true);
+    } finally {
+      globalThis.fetch = real;
+    }
   });
 });
