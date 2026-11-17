@@ -25,7 +25,7 @@ try {
 }
 
 test("every question carries the widget's version and the date where the visitor is", { skip: chromium ? false : "Playwright is not installed" }, async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   try {
     // Fourteen hours ahead of the server's clock, so the visitor's date is often not the server's.
     const context = await browser.newContext({ timezoneId: "Pacific/Kiritimati" });

@@ -231,7 +231,7 @@ test("Stop part way: no event reaches the page after it, the half-typed name sta
     await session.ask(`can you make a card called ${LONG}`, { act: true });
     await session.untilState("acting");
     await session.until(async () => (await session.page.inputValue("#name")).length >= 4, "some of the name to be typed");
-    await session.page.locator("haptic-root .status .stop").click();
+    await session.page.locator("haptic-root .ask .stop").click();
     await session.untilState("finished");
     const typed = await session.page.inputValue("#name");
     const after = await mark(session);
@@ -473,7 +473,7 @@ test("once acting is over, by the visitor's click on the commit or by Stop, noth
     await session.ask(`can you make a card called ${LONG}`, { act: true });
     await session.untilState("acting", 10_000);
     await session.until(async () => (await session.page.inputValue("#name")).length >= 3, "some of the name to be typed");
-    await session.page.locator("haptic-root .status .stop").click();
+    await session.page.locator("haptic-root .ask .stop").click();
     await session.untilState("finished");
     await putAway();
     assert.deepEqual(await quiet(session), idle, "after Stop");
