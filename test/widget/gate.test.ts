@@ -710,6 +710,51 @@ test("an unknown button is the visitor's, and acting carries on after their clic
   }
 });
 
+test("a table's column header that sorts is pressed; a header with more in it, one in a form, or one whose words or look commit is not", async () => {
+  // Seen live on Northpine's Bills (17 November): "find my most expensive bill", the model asked to click the Amount
+  // header, and it went to the visitor as a button nobody could read. Built as Northpine's data table builds it.
+  const page = await open(`<h1>Bills</h1>
+    <div role="table" aria-label="Bills">
+      <div role="rowgroup"><div role="row">
+        <div role="columnheader"><button type="button" id="vendor" data-watch>Vendor</button></div>
+        <div role="columnheader" aria-sort="descending"><button type="button" id="amount" data-watch>Amount <svg class="lucide lucide-arrow-down" width="12" height="12"></svg></button></div>
+        <div role="columnheader"><button type="button" id="due" data-watch>Due</button><button type="button" id="hide-due" data-watch>Hide</button></div>
+        <div role="columnheader"><button type="button" id="drop" data-watch>Delete column</button></div>
+        <div role="columnheader"><button type="button" id="red" style="background:#d11;color:#fff" data-watch>Status</button></div>
+      </div></div>
+      <div role="rowgroup"><div role="row"><div role="cell">Linden Logistics</div><div role="cell">$61,880.27</div></div></div>
+    </div>
+    <table><thead><tr><th aria-sort="none" tabindex="0" id="th-name" data-watch>Name</th><th><button type="button" id="th-total" data-watch>Total</button></th></tr></thead></table>
+    <form id="bulk"><table><thead><tr><th><button id="in-form" data-watch>Amount</button></th><th><button type="button" id="in-form-typed" data-watch>Total</button></th></tr></thead></table></form>`);
+  try {
+    for (const id of ["amount", "vendor", "th-total"]) {
+      const seen = await page.plan(`#${id}`, { do: "click" }, "find my most expensive bill");
+      assert.deepEqual([id, seen.kind, seen.control, seen.tripwire], [id, "act", "button", false]);
+      assert.deepEqual((await page.press()).hits?.slice(-1), [id]);
+    }
+    const before = (await page.press()).hits?.length;
+    const refused: [string, string, string][] = [
+      // Two controls in one header: either could do something else.
+      ["due", "visitor", "unknown"],
+      // In a form, a button with no type sends it, and a script can send it from any other.
+      ["in-form", "visitor", "writes"],
+      ["in-form-typed", "visitor", "unknown"],
+      // Words and looks still come first.
+      ["red", "visitor", "styled"],
+    ];
+    for (const [id, kind, reason] of refused) {
+      const seen = await page.plan(`#${id}`, { do: "click" }, "find my most expensive bill");
+      assert.deepEqual([id, seen.kind, seen.reason], [id, kind, reason]);
+    }
+    // Deleting a column ends something the visitor did not ask to end.
+    const drop = await page.plan("#drop", { do: "click" }, "find my most expensive bill");
+    assert.notEqual(drop.kind, "act");
+    assert.equal((await page.press()).hits?.length, before, "a refused header was pressed");
+  } finally {
+    await page.close();
+  }
+});
+
 test("a date is the visitor's, and the sentence says plainly that Haptic does not pick dates: a calendar's day or a date field, not a dated row of a table", async () => {
   // A calendar the way react-day-picker draws one: a grid of weeks, each day a button named by its date.
   const day = (date: number, weekday: string) =>

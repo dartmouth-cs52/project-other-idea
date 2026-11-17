@@ -759,20 +759,73 @@ test("in act mode, a reply that points at a control Haptic could press and only 
   assert.equal(made(onCardType, sayingAt("e32", "Virtual is already selected. Press Next to open Limits and controls.")), "Virtual is already selected. Pressing Next to open Limits and controls.");
 });
 
+test("in act mode, what a sentence says of the page after the press does not keep the press the visitor's: Haptic is asked again there", () => {
+  // Written at this wizard in earlier rounds, and once handed to the visitor for the check, the choice or the value on the next page.
+  assert.equal(
+    made(step8, sayingAt("e36", "Click Next to go to the Review step, where you can check the card before issuing it.")),
+    "Clicking Next to go to the Review step, where you can check the card before issuing it.",
+  );
+  assert.equal(
+    made(onCardType, sayingAt("e32", "Click Next to move on to Card type, where you can choose Virtual. Limits come after that.")),
+    "Clicking Next to move on to Card type, where you can choose Virtual. Limits come after that.",
+  );
+  assert.equal(
+    made(onCardType, sayingAt("e32", "Virtual is already selected, so click Next to go to Limits and controls, where you can set the $500 monthly limit.")),
+    "Virtual is already selected, so I'm clicking Next to go to Limits and controls, where you can set the $500 monthly limit.",
+  );
+  assert.equal(made(step8, sayingAt("e36", "Click Next and pick Monthly there.")), "Clicking Next and pick Monthly there.");
+  // The commit after it is the hand-over's, on its own step.
+  assert.equal(made(step8, sayingAt("e36", "Click Next, and click Issue card on the Review step.")), "Clicking Next, and click Issue card on the Review step.");
+});
+
+test("in act mode, a press written as opening, going to or switching to a control, or naming it after a few words of the sentence's own, is made Haptic's", () => {
+  // Live on Northpine's Bills on 17 November, "find my most expensive bill", after Haptic's first press, exactly as the model wrote it.
+  const bills: Snapshot = {
+    path: "/bills",
+    title: "Bills",
+    headings: ["Bills"],
+    text: [],
+    truncated: false,
+    elements: [
+      { id: "e47", role: "button", label: "Amount", context: "main › Bills" },
+      { id: "e52", role: "link", label: "INV-[number]", href: "/bills/:id", context: "main › Bills › row: Linden Logistics Northpine Ltd Nov 26,… › 1 of 2" },
+      { id: "e9", role: "link", label: "Bills", href: "/bills", state: ["current"], context: "nav" },
+      { id: "e60", role: "tab", label: "Overdue", context: "main › Bills" },
+      { id: "e61", role: "button", label: "Pay", context: "main › Bills › row: Linden Logistics Northpine Ltd Nov 26,… › 1 of 2" },
+    ],
+  };
+  const onBills: TurnRequest = { ...step8, goal: "find my most expensive bill", snapshot: bills, event: 'You did not click button "Amount": you can\'t tell what it does, so the visitor has it. The visitor clicked button "Amount".' };
+  const live = sayingAt(
+    "e52",
+    "Amount is sorted with the largest first, so open the top bill, INV-[number] from Linden Logistics, to see its amount. This only covers the Inbox tab, so check other tabs like Overdue too.",
+  );
+  assert.equal(
+    made(onBills, live),
+    "Amount is sorted with the largest first, so I'm opening the top bill, INV-[number] from Linden Logistics, to see its amount. This only covers the Inbox tab, so check other tabs like Overdue too.",
+  );
+  assert.equal(made(onBills, sayingAt("e9", "Go to Bills in the sidebar.")), "Going to Bills in the sidebar.");
+  assert.equal(made(onBills, sayingAt("e60", "Switch to the Overdue tab to see late bills.")), "Switching to the Overdue tab to see late bills.");
+  assert.equal(made(onBills, sayingAt("e47", "Click the Amount column header to sort by amount.")), "Clicking the Amount column header to sort by amount.");
+  // A press that pays is never made Haptic's, however it is written.
+  assert.equal(made(onBills, sayingAt("e61", "Open the top bill's Pay to pay it.")), undefined);
+  assert.equal(made(onBills, sayingAt("e61", "Click Pay on the top bill.")), undefined);
+  // Words of the sentence's own before the name end at a comma, and are few: a long run of them is something else.
+  assert.equal(made(onBills, sayingAt("e52", "Open the bill from the vendor that has the largest amount this month, INV-[number].")), undefined);
+});
+
 test("in act mode, the press stays the visitor's when the sentence leaves them more than the click, when it is not that control's, and when the control is a field, a list or a commit", () => {
   const left: [TurnRequest, TurnReply][] = [
-    // A check, a choice or a value said to be theirs. The first three were written at this wizard in earlier rounds.
-    [step8, sayingAt("e36", "Click Next to go to the Review step, where you can check the card before issuing it.")],
-    [onCardType, sayingAt("e32", "Click Next to move on to Card type, where you can choose Virtual. Limits come after that.")],
-    [onCardType, sayingAt("e32", "Virtual is already selected, so click Next to go to Limits and controls, where you can set the $500 monthly limit.")],
+    // A check, a choice or a value said to be theirs, before the press or as part of it.
     [step8, sayingAt("e36", "Check that the limit is $500, then click Next.")],
     [step8, sayingAt("e36", "Make sure the limit reads $500 and click Next.")],
     [step8, sayingAt("e36", "Click Next, or Back to change the limit.")],
     [step8, sayingAt("e36", "If you want, click Next to go to the Review step.")],
     [step8, sayingAt("e36", "Click Next when you're ready.")],
+    [step8, sayingAt("e36", "Open Next once you have looked the limit over.")],
     [step8, sayingAt("e36", "Ready for the Review step? Click Next.")],
-    [step8, sayingAt("e36", "Click Next and pick Monthly there.")],
-    [step8, sayingAt("e36", "Click Next, and click Issue card on the Review step.")],
+    [step8, sayingAt("e36", "Click Next. Do you want a different limit first?")],
+    [step8, sayingAt("e36", "Type 500 in Spending limit, then click Next.")],
+    [step8, sayingAt("e36", "You'll need to pick an interval. Then click Next.")],
     // Not an instruction to press it, or an instruction to press another control.
     [step8, sayingAt("e36", "Don't click Next yet.")],
     [step8, sayingAt("e36", "Now you can click Next to go on.")],
