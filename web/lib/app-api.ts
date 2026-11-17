@@ -96,6 +96,10 @@ export interface Site {
   reading: Reading | null;
   corrections: Correction[];
   blocked: ControlName[];
+  /** The questions suggested above the ask box, in order. `act` marks one that Haptic does, where acting is on. */
+  suggestions: { text: string; act?: boolean }[];
+  /** "Do it with me" is on for the site, so a suggested question can be one that Haptic does. */
+  acting: boolean;
 }
 
 export type Outcome =

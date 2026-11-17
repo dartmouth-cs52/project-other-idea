@@ -20,7 +20,7 @@ import { Card, CardTitle, DashboardSurface, DoneMark, FailedCard, PageHeader, Se
 import { Questions } from "./questions";
 import { SetupGate } from "./setup/setup-gate";
 import { SiteShell } from "./shell";
-import { DeleteSite, HelpDocs, Notes, SiteName, WidgetLook } from "./site-settings";
+import { DeleteSite, HelpDocs, Notes, SiteName, SuggestedQuestions, WidgetLook } from "./site-settings";
 import { FinishedGuides } from "./usage";
 
 /** How often the page asks whether the script has been seen, while waiting for it. */
@@ -107,6 +107,7 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
           <>
             <SiteName site={site} onChange={setSite} onRenamed={onRenamed} />
             <WidgetLook site={site} onChange={setSite} />
+            <SuggestedQuestions site={site} onChange={setSite} />
             <DeleteSite site={site} onDeleted={onDeleted} />
           </>
         )}

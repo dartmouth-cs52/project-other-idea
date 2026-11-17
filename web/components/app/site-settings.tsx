@@ -6,6 +6,7 @@ import { cn } from "cn";
 import { Field, FieldError, FieldWithButton, FormAlert, failureFrom, useFieldErrors, type Failure } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { api, type Brand, type Site } from "@/lib/app-api";
 import { Card, CardTitle } from "./parts";
@@ -241,6 +242,114 @@ export function WidgetLook({ site, onChange }: { site: Site; onChange: (site: Si
           </div>
           <Preview accent={HEX.test(accent) ? accent : site.appearance.accent} launcher={HEX.test(launcher) ? launcher : INK} label={site.appearance.launcherLabel || "Ask"} />
         </div>
+      </Card>
+    </form>
+  );
+}
+
+/** How many questions may be suggested, and how long each may be. The server checks the same (src/shared/suggestions.ts). */
+const SUGGESTIONS = { count: 3, chars: 60 };
+const SUGGESTION_EXAMPLES = ["How do I export my data?", "Where do I change my plan?", "Invite a teammate"];
+type SuggestionRow = { text: string; act: boolean };
+
+/** The three fields as a site's list fills them, with the fields past its end empty. */
+function suggestionRows(site: Site): SuggestionRow[] {
+  return Array.from({ length: SUGGESTIONS.count }, (_, index) => ({ text: site.suggestions[index]?.text ?? "", act: site.suggestions[index]?.act === true }));
+}
+
+/** What a set of fields would save, to tell whether anything changed: the words trimmed, and Haptic does it only on a question that is there. */
+function suggestionKey(rows: SuggestionRow[]): string {
+  return JSON.stringify(rows.map((row) => ({ text: row.text.trim(), act: row.act && row.text.trim() !== "" })).filter((row) => row.text));
+}
+
+/**
+ * Up to three questions shown above the ask box when a visitor opens it, so
+ * someone who doesn't know what to ask has something to press. Where the site
+ * has Do it with me on, each can be one Haptic does: pressing it presses Do it,
+ * with the same first-use line, and the last click still left to the visitor.
+ */
+export function SuggestedQuestions({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
+  const [rows, setRows] = useState(() => suggestionRows(site));
+  const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const fields = useFieldErrors({ "suggestions.0": "suggestion-1", "suggestions.1": "suggestion-2", "suggestions.2": "suggestion-3" });
+  const changed = suggestionKey(rows) !== suggestionKey(suggestionRows(site));
+
+  function edit(index: number, change: Partial<SuggestionRow>) {
+    setRows((current) => current.map((row, at) => (at === index ? { ...row, ...change } : row)));
+    fields.clear(`suggestions.${index}` as "suggestions.0");
+    setStatus("idle");
+  }
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setFailure(null);
+    setStatus("saving");
+    try {
+      // Every field goes, blank ones too: the server leaves those out, and each refusal names the field it is about.
+      const saved = await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { suggestions: rows.map(({ text, act }) => ({ text, ...(act ? { act: true } : {}) })) } });
+      onChange(saved);
+      setRows(suggestionRows(saved));
+      setStatus("saved");
+    } catch (failure) {
+      if (!fields.showRefusal(failure)) setFailure(failureFrom("Couldn't save the questions", failure));
+      setStatus("idle");
+    }
+  }
+
+  return (
+    <form onSubmit={save} noValidate>
+      <Card>
+        <CardTitle>Suggested questions</CardTitle>
+        <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
+          Up to three questions shown above the ask box when someone opens it, so a first-time visitor has something to press. Pressing one asks it.
+          Leave a field empty to show fewer.
+        </p>
+        <div className="flex max-w-2xl flex-col gap-5">
+          {rows.map((row, index) => {
+            const name = `suggestions.${index}` as "suggestions.0";
+            return (
+              <Field key={index} id={`suggestion-${index + 1}`} label={`Question ${index + 1}`} error={fields.errors[name]}>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                  <Input
+                    {...fields.control(name)}
+                    value={row.text}
+                    maxLength={SUGGESTIONS.chars}
+                    placeholder={SUGGESTION_EXAMPLES[index]}
+                    onChange={(event) => edit(index, { text: event.target.value })}
+                    className={cn(FIELD, "min-w-56 flex-1")}
+                  />
+                  {site.acting && (
+                    <label className="flex shrink-0 items-center gap-2 text-sm font-medium">
+                      <Switch
+                        checked={row.act}
+                        disabled={!row.text.trim()}
+                        onCheckedChange={(act) => edit(index, { act })}
+                        aria-describedby="suggestions-act-hint"
+                      />
+                      Haptic does it
+                    </label>
+                  )}
+                </div>
+              </Field>
+            );
+          })}
+        </div>
+        {site.acting && (
+          <p id="suggestions-act-hint" className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
+            With Haptic does it on, pressing the question starts Do it with me, as pressing Do it would. Haptic fills in the steps and leaves the last
+            click to the visitor.
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-4">
+          <Button type="submit" size="xl" disabled={!changed || status === "saving"}>
+            {status === "saving" ? "Saving" : "Save questions"}
+          </Button>
+          <span className="text-sm text-muted-foreground" role="status">
+            {status === "saved" && !changed ? "Saved. The widget picks them up within a minute." : ""}
+          </span>
+        </div>
+        <FormAlert failure={failure} />
       </Card>
     </form>
   );

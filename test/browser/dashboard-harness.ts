@@ -7,6 +7,7 @@ import { chromium, type Browser, type Page } from "playwright";
 import { siteBrand } from "../../web/worker/brand.ts";
 import { groupGuides } from "../../web/worker/health.ts";
 import { finishedGuides, guideSteps, headline, insights, live, sitesOverview } from "../../web/worker/insights.ts";
+import { checkSuggestions, SuggestionsRefused, usableSuggestions } from "../../src/shared/suggestions.ts";
 import { exec, freshDatabase, psqlSql, TEST_DATABASE_URL, testDatabase } from "../psql.ts";
 
 // The dashboard as it ships, in a real browser: the pages `next build` wrote to
@@ -18,7 +19,8 @@ import { exec, freshDatabase, psqlSql, TEST_DATABASE_URL, testDatabase } from ".
 // queries behind /insights, /metrics, /live, /sites, /guides, /groups,
 // /finished and /brand. What is stood in for: sign-in (everyone is signed in),
 // and the site's own record, which is kept here in a few lines and not by
-// worker/app-api.ts, since that needs Neon's HTTP driver and Neon Auth.
+// worker/app-api.ts, since that needs Neon's HTTP driver and Neon Auth. Its
+// suggested questions are checked by the same code app-api.ts checks them with.
 //
 //   cd web && npm run build && cd ..
 //   TEST_DATABASE_URL=postgres://postgres@127.0.0.1:55432/haptic_test npm run test:browser
@@ -97,8 +99,12 @@ function fixtureSite(): Server {
 
 /** A fortnight of questions on the running site, the newest two hours old, so nothing seeded reads as under way. */
 function seed(db: string, siteOrigin: string) {
-  const context = (id: string, name: string, origin: string) =>
-    JSON.stringify({ version: 1, id, name, origin, allowedOrigins: [origin], appearance: { accent: "#1E6EF4", position: "bottom-right", launcherLabel: "Ask" }, notes: "", docs: [], pages: [], corrections: [], blocked: [] });
+  // The running site has Do it with me on, so a suggested question there can be one Haptic does. The waiting one has it off.
+  const context = (id: string, name: string, origin: string, acting = false) =>
+    JSON.stringify({
+      version: 1, id, name, origin, allowedOrigins: [origin], appearance: { accent: "#1E6EF4", position: "bottom-right", launcherLabel: "Ask" }, notes: "", docs: [], pages: [], corrections: [], blocked: [],
+      ...(acting ? { acting: { enabled: true } } : {}),
+    });
   const flows: [string, [string, string, string][], string | null][] = [
     ["How do I issue a new card?", [["/", "Cards", "Open Cards."], ["/cards", "Issue card", "Press Issue card."], ["/cards/new", "Create card", "Press Create card."]], "finished"],
     ["Where do I add a receipt?", [["/", "Expenses", "Open Expenses."], ["/expenses", "Add receipt", "Press Add receipt."]], "finished"],
@@ -125,7 +131,7 @@ function seed(db: string, siteOrigin: string) {
     db,
     `insert into sites (id, company_id, name, origin, allowed_origins, context, created_at) values
       ('${WAITING}', '${COMPANY}', 'Northpine', 'https://staging.northpine.example', '{https://staging.northpine.example}', ${quoted(context(WAITING, "Northpine", "https://staging.northpine.example"))}, now() - interval '30 days'),
-      ('${SITE}', '${COMPANY}', 'Northpine', ${quoted(siteOrigin)}, '{${siteOrigin}}', ${quoted(context(SITE, "Northpine", siteOrigin))}, now() - interval '20 days');
+      ('${SITE}', '${COMPANY}', 'Northpine', ${quoted(siteOrigin)}, '{${siteOrigin}}', ${quoted(context(SITE, "Northpine", siteOrigin, true))}, now() - interval '20 days');
     insert into site_origins (site_id, origin, allowed, requests) values ('${SITE}', ${quoted(siteOrigin)}, true, 40);
     insert into guides (id, site_id, question, question_key, started_path, started_at, ended_at, outcome, last_step_at, step_count, visitor) values ${guides.join(",\n")};
     insert into steps (guide_id, n, path, target_role, target_label, said, status, ms, ms_to_target, model) values ${steps.join(",\n")};`,
@@ -165,6 +171,8 @@ export async function startDashboard(): Promise<Dashboard> {
       notes: row.context.notes ?? "",
       docs: { budget: 60000, used: 0, list: [] },
       answers: { on: false, chosen: null },
+      suggestions: usableSuggestions(row.context.suggestions),
+      acting: row.context.acting?.enabled === true,
     };
   }
 
@@ -189,6 +197,16 @@ export async function startDashboard(): Promise<Dashboard> {
         const next = { ...site.appearance, ...input.appearance };
         if (input.appearance.launcher === null) delete next.launcher;
         await sql`update sites set context = jsonb_set(context, '{appearance}', ${JSON.stringify(next)}::jsonb) where id = ${id}`;
+      }
+      if (input.suggestions !== undefined) {
+        let suggestions;
+        try {
+          suggestions = checkSuggestions(input.suggestions);
+        } catch (error) {
+          if (!(error instanceof SuggestionsRefused)) throw error;
+          return [400, { error: error.message, field: error.index === undefined ? "suggestions" : `suggestions.${error.index}` }];
+        }
+        await sql`update sites set context = jsonb_set(context, '{suggestions}', ${JSON.stringify(suggestions)}::jsonb) where id = ${id}`;
       }
       return [200, await siteStatus(id)];
     }

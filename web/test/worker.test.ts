@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { appApi } from "../worker/app-api";
+import { appApi, Refusal, suggestionsFrom } from "../worker/app-api";
 import { handle } from "../worker/handler";
 
 // The site's Worker as a whole, which needs web/'s own packages (Neon Auth,
@@ -41,4 +41,31 @@ test("the Worker hands /install/<site>.md to the install steps before the static
   assert.ok((await steps.text()).includes(`data-site="${SITE}"`));
   assert.equal(await (await handle(new Request(`https://joinhaptic.com/install/?site=${SITE}`), env, assets)).text(), "static page");
   assert.equal((await handle(new Request("https://joinhaptic.com/install/nope.md"), env, assets)).status, 404);
+});
+
+test("suggested questions from the settings form are cleaned, and a bad list is refused under the field at fault", async () => {
+  assert.deepEqual(suggestionsFrom([{ text: "  Lock my Team offsite card " }, { text: "" }, { text: "Issue Malika a $500 virtual card", act: true }]), [
+    { text: "Lock my Team offsite card" },
+    { text: "Issue Malika a $500 virtual card", act: true },
+  ]);
+  const refusal = (input: unknown) => {
+    try {
+      suggestionsFrom(input);
+    } catch (error) {
+      assert.ok(error instanceof Refusal);
+      return { status: error.status, field: error.field };
+    }
+    assert.fail("not refused");
+  };
+  assert.deepEqual(refusal([{ text: "One" }, { text: "Two" }, { text: "Three" }, { text: "Four" }]), { status: 400, field: "suggestions.3" });
+  assert.deepEqual(refusal([{ text: "One" }, { text: "x".repeat(61) }]), { status: 400, field: "suggestions.1" });
+  assert.deepEqual(refusal([{ text: "One\ntwo" }]), { status: 400, field: "suggestions.0" });
+  assert.deepEqual(refusal("Lock my card"), { status: 400, field: "suggestions" });
+  // A change to them, like any change, needs someone signed in, before anything is looked up.
+  const request = new Request(`https://joinhaptic.com/api/app/sites/${SITE}`, {
+    method: "PATCH",
+    headers: { origin: "https://joinhaptic.com", "content-type": "application/json" },
+    body: JSON.stringify({ suggestions: [{ text: "Lock my card" }] }),
+  });
+  assert.equal((await appApi(request, env, new URL(request.url))).status, 401);
 });

@@ -3,7 +3,7 @@
 //   GET    /api/app/me                          who is signed in, and their company; makes the company on first sign-in
 //   POST   /api/app/sites                       add a site from its address, and start reading its public pages
 //   GET    /api/app/sites/:id                   a site, its install health and how far the reading has got
-//   PATCH  /api/app/sites/:id                   change its name or the origins it may run on
+//   PATCH  /api/app/sites/:id                   change its name, the origins it may run on, its look, notes or suggested questions
 //   POST   /api/app/sites/:id/read              read a few more public pages
 //   GET    /api/app/sites                       every site the company has, as the list of sites shows them
 //   GET    /api/app/sites/:id/insights          the dashboard: questions, outcomes, what to fix
@@ -24,7 +24,8 @@
 // Every site is looked up together with the caller's organization, so a site
 // id, which is public, is never enough to read or change someone's data.
 
-import { answersOn, cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
+import { checkSuggestions, SuggestionsRefused, usableSuggestions } from "../../src/shared/suggestions";
+import { answersOn, cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext, type Suggestion } from "../../src/shared/types";
 import { ANSWERS_DOCS_BUDGET, DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
 import { pageControls } from "../lib/setup";
@@ -65,7 +66,7 @@ interface SeenOrigin {
 }
 
 /** A request turned away, with what to tell the person. `field` names the one input at fault, so the page can show the message under it. */
-class Refusal extends Error {
+export class Refusal extends Error {
   constructor(
     readonly status: number,
     message: string,
@@ -332,7 +333,26 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string) 
     docs: docsSummary(site.context.docs ?? [], answersOn(site.context)),
     // On means answering in words from the docs. Chosen is null when the site follows the default: on once it has docs.
     answers: { on: answersOn(site.context), chosen: site.context.answers?.enabled ?? null },
+    // The questions suggested above the ask box, as visitors are shown them. Whether acting is on decides whether each can be one Haptic does.
+    suggestions: usableSuggestions(site.context.suggestions),
+    acting: site.context.acting?.enabled === true,
   };
+}
+
+/**
+ * Suggested questions from the settings form, checked and cleaned as every
+ * way in checks them (src/shared/suggestions.ts): at most three, each one line
+ * of up to 60 characters once trimmed, blank fields left out. A refusal names
+ * the field at fault, `suggestions.0` to `suggestions.2`, so the form shows it
+ * under that field.
+ */
+export function suggestionsFrom(input: unknown): Suggestion[] {
+  try {
+    return checkSuggestions(input);
+  } catch (error) {
+    if (!(error instanceof SuggestionsRefused)) throw error;
+    throw new Refusal(400, error.message, error.index === undefined ? "suggestions" : `suggestions.${error.index}`);
+  }
 }
 
 /** The docs as the settings page lists them: no text, and whether each one is in the prompt. */
@@ -456,12 +476,15 @@ async function changeSite(sql: Sql, env: AppEnv, org: Organization, id: string, 
   if (input.answers !== undefined && typeof input.answers !== "boolean") throw new Refusal(400, "answers must be true or false.");
   // Switching Answers keeps how long an answer's article may go before it is marked as possibly out of date.
   const answers = typeof input.answers === "boolean" ? { ...site.context.answers, enabled: input.answers } : null;
+  // An empty list is kept as one: the company took them all away.
+  const suggestions = input.suggestions === undefined ? null : suggestionsFrom(input.suggestions);
   // Only the fields given change, inside the context too, so a page read finishing meanwhile keeps its pages.
   await sql`
     update sites set name = ${name}, allowed_origins = ${origins},
       context = jsonb_set(jsonb_set(context, '{appearance}', coalesce(${appearance === null ? null : JSON.stringify(appearance)}::jsonb, context->'appearance', '{}'::jsonb)),
         '{notes}', coalesce(to_jsonb(${notes}::text), context->'notes', '""'::jsonb))
-        || jsonb_strip_nulls(jsonb_build_object('answers', ${answers === null ? null : JSON.stringify(answers)}::jsonb)),
+        || jsonb_strip_nulls(jsonb_build_object('answers', ${answers === null ? null : JSON.stringify(answers)}::jsonb,
+          'suggestions', ${suggestions === null ? null : JSON.stringify(suggestions)}::jsonb)),
       updated_at = now()
     where id = ${id} and company_id = ${org.id}`;
   // The widget server keeps its copy of a site for up to a minute, so a newly allowed address starts working within that.

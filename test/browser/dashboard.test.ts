@@ -188,6 +188,58 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     });
   });
 
+  test("suggested questions are saved from General settings, Haptic does it shows only where acting is on, and a bad list is refused", async () => {
+    const tab = await dash.open(`/dashboard/?site=${SITE}&view=settings`);
+    await closing(tab, async () => {
+      const section = tab.locator("form", { has: tab.getByText("Suggested questions", { exact: true }) });
+      await section.waitFor();
+      const switches = section.getByRole("switch", { name: "Haptic does it" });
+      assert.equal(await switches.count(), 3, "the running site has acting on, so each question has its switch");
+      assert.equal(await switches.nth(0).isDisabled(), true, "a switch for an empty field can be pressed");
+      await tab.locator("#suggestion-1").fill("  Lock my Team offsite card ");
+      await tab.locator("#suggestion-2").fill("Who approves meals over $150?");
+      await tab.locator("#suggestion-3").fill("Issue Malika a $500 virtual card");
+      await switches.nth(2).click();
+      await section.getByRole("button", { name: "Save questions" }).click();
+      await section.getByText("Saved. The widget picks them up within a minute.").waitFor({ timeout: 10_000 });
+      assert.deepEqual((await dash.site()).suggestions, [
+        { text: "Lock my Team offsite card" },
+        { text: "Who approves meals over $150?" },
+        { text: "Issue Malika a $500 virtual card", act: true },
+      ]);
+      assert.equal(await tab.locator("#suggestion-1").inputValue(), "Lock my Team offsite card", "the field shows the words as saved");
+
+      // A repeat is refused by the server, under the field at fault, and nothing changes.
+      await tab.locator("#suggestion-2").fill("lock my team offsite card");
+      await section.getByRole("button", { name: "Save questions" }).click();
+      await section.getByText("This is the same as another suggested question.").waitFor({ timeout: 10_000 });
+      assert.equal(await tab.locator("#suggestion-2").getAttribute("aria-invalid"), "true");
+      assert.equal((await dash.site()).suggestions[1].text, "Who approves meals over $150?");
+
+      // So are more than three, and words too long or on two lines, sent straight to the server.
+      // Written without a named function inside, which the test runner's build would wrap in a helper the page does not have.
+      const refused = await tab.evaluate(
+        ([id, lists]) =>
+          Promise.all(
+            lists.map((suggestions) =>
+              fetch(`/api/app/sites/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ suggestions }) }).then(async (response) => [
+                response.status,
+                (await response.json()).field,
+              ]),
+            ),
+          ),
+        [SITE, [[{ text: "One" }, { text: "Two" }, { text: "Three" }, { text: "Four" }], [{ text: "One" }, { text: "x".repeat(61) }], [{ text: "One\ntwo" }]]] as const,
+      );
+      assert.deepEqual(refused, [[400, "suggestions.3"], [400, "suggestions.1"], [400, "suggestions.0"]]);
+      assert.equal((await dash.site()).suggestions.length, 3, "a refused list changed what was saved");
+    });
+    const off = await dash.open(`/dashboard/?site=${WAITING}&view=settings`);
+    await closing(off, async () => {
+      await off.locator("#suggestion-1").waitFor();
+      assert.equal(await off.getByRole("switch").count(), 0, "a site with acting off shows Haptic does it");
+    });
+  });
+
   test("deleting a site leads to the list of sites, not into the one that is left", async () => {
     const tab = await dash.open(`/dashboard/?site=${WAITING}&view=settings`);
     await closing(tab, async () => {
