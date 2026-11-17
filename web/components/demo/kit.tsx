@@ -185,6 +185,14 @@ export function Stage({
   const [resized, setResized] = useState(0);
   const lastTip = useRef<{ x: number; y: number } | null>(null);
   const press = useAnimationControls();
+  // Each spell of thinking starts the glow's band again from the top of the page.
+  const thinking = status === "thinking";
+  const [wasThinking, setWasThinking] = useState(thinking);
+  const [spell, setSpell] = useState(0);
+  if (thinking !== wasThinking) {
+    setWasThinking(thinking);
+    if (thinking) setSpell(spell + 1);
+  }
 
   useEffect(() => {
     if (pointing.pulse > 0) void press.start("press");
@@ -250,15 +258,11 @@ export function Stage({
       {children}
 
       {/* Everything below is Haptic, drawn on top of the customer's app. */}
-      {/* While Haptic thinks, Pointer blue gathers along the top edge of the page. When the reply arrives it breaks
-          away as a band and falls to the bottom, turning violet and then pink. It is the widget's own glow
-          (src/widget/ui.ts), styled in globals.css. It is over the page and under the chat, which sits at z-15. */}
-      <div className="thinking-glow" data-phase={status === "thinking" ? "gather" : !status || status === "idle" ? undefined : "sweep"}>
-        <div>
-          <i className="c" />
-          <i className="b" />
-          <i className="a" />
-        </div>
+      {/* The thinking glow. It is on the page only while Haptic thinks: a soft band comes in at the top and falls to
+          the bottom, and fades the moment the reply arrives. It is the widget's own glow (src/widget/ui.ts), styled
+          in globals.css. It is over the page and under the chat, which sits at z-15. */}
+      <div className="thinking-glow" data-on={thinking}>
+        <i key={spell} />
       </div>
 
       <AnimatePresence>
@@ -535,7 +539,7 @@ export function Chat({ view, compact, className }: { view: ChatView; compact?: b
             </Marker>
           )}
           {view.status === "thinking" && (
-            // No icon. A lighter shade sweeps across the word while Haptic works, and the glow gathers at the top of the page.
+            // No icon. A lighter shade sweeps across the word while Haptic works, and the glow falls down the page.
             <Marker>
               <MarkerContent className="shimmer">Thinking</MarkerContent>
             </Marker>
