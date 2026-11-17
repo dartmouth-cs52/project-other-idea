@@ -453,6 +453,12 @@ export class Ui {
   private target?: Element;
   /** Whether `target` has been chosen with the control on screen, where what lies at its middle can be seen. */
   private aimed = false;
+  /** Whether `target` moves with the page as a whole, held to nothing that stays in the window (see `movesWithPage`). */
+  private withPage = false;
+  /** Whether our element is held to the page, as the control it points at is, rather than to the window (see `anchor`). */
+  private onPage = false;
+  /** How far our element's place on the page is from the page's corner, for when something other than the page holds it. */
+  private pageOffset = { x: 0, y: 0 };
   /** Where in the target's box the tip went, for the box it was found for, so the page is looked at only when the box moves. */
   private tip?: { box: string; dx: number; dy: number };
   /** The caption is above the control rather than below it, because something opened where it was. */
@@ -1226,6 +1232,8 @@ export class Ui {
     this.under = undefined;
     this.mark(undefined);
     cancelAnimationFrame(this.frame);
+    // The pointer rests where it is in the window, and Haptic's next glide starts from there.
+    this.anchor();
     this.ring.hidden = true;
     this.caption.hidden = true;
   }
@@ -1432,9 +1440,56 @@ export class Ui {
     // The ring goes round the control now, and is not left for the next frame as the pointer's glide is. On a machine
     // that draws slowly the next frame is a while off, and a guide that says it is pointing has its ring up.
     const target = this.target;
+    this.anchor();
     if (target?.isConnected && target.getClientRects().length) this.ringAt(target.getBoundingClientRect());
     cancelAnimationFrame(this.frame);
     this.frame = requestAnimationFrame(this.track);
+  }
+
+  /**
+   * Holds our element where the control pointed at is held, so the ring, the
+   * pointer and the caption go with it however the page moves. Each frame puts
+   * them back on the control, but the page can move with none of ours running:
+   * a Mac's trackpad pulls the page past its top and lets it spring back with
+   * its scroll position still 0, and the browser scrolls between two of our
+   * frames. Held to the window, they stayed where the control had been: on
+   * Northpine's Issue a card the ring went round Cardholder's label.
+   *
+   * For a control that moves with the page, our element is held to the page:
+   * it is put on the page where the window is, the window's size, so every
+   * place in it is still a place in the window, and moving it does not make
+   * the page any longer. It stays in the top layer, above the page, and what
+   * of ours is fixed to the window, the launcher and the chat, stays there.
+   * For anything else, and with nothing pointed at, it is fixed to the window.
+   */
+  private anchor() {
+    const parts = [this.ring, this.cursor, this.caption];
+    const host = this.host.style;
+    if (!this.target || !this.withPage) {
+      if (!this.onPage) return;
+      this.onPage = false;
+      for (const name of ["position", "inset", "left", "top", "width", "height", "overflow"]) host.removeProperty(name);
+      for (const part of parts) part.style.removeProperty("position");
+      return;
+    }
+    if (!this.onPage) {
+      this.onPage = true;
+      this.pageOffset = { x: 0, y: 0 };
+      host.setProperty("position", "absolute");
+      host.setProperty("inset", "auto");
+      // Cut off at the window's edge, as the window cuts off what is fixed to it: the pointer next to a row at the foot or
+      // the side of the page would otherwise make the page longer or wider. Clip, where the browser has it, so nothing
+      // can scroll our element; hidden where it has not.
+      host.setProperty("overflow", "hidden");
+      host.setProperty("overflow", "clip");
+      for (const part of parts) part.style.setProperty("position", "absolute");
+    }
+    // The window's size without its scroll bars, as `inset: 0` gives when fixed, so it never reaches past the page.
+    const page = document.documentElement;
+    host.setProperty("left", `${window.scrollX + this.pageOffset.x}px`);
+    host.setProperty("top", `${window.scrollY + this.pageOffset.y}px`);
+    host.setProperty("width", `${page.clientWidth}px`);
+    host.setProperty("height", `${page.clientHeight}px`);
   }
 
   /** Puts the ring round a box of the page, or puts it away when the box is not in the window, and says which. */
@@ -1530,6 +1585,8 @@ export class Ui {
     this.dockAt(this.home);
     this.mark(undefined);
     cancelAnimationFrame(this.frame);
+    // Held to the window again, where what is said with nothing to point at goes, and where a press plays out.
+    this.anchor();
     this.ring.hidden = true;
     this.cursor.hidden = true;
   }
@@ -1671,6 +1728,7 @@ export class Ui {
     const rect = el.getBoundingClientRect();
     this.aimed = rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
     this.target = partToClick(el, this.aimed);
+    this.withPage = movesWithPage(this.target);
     this.mark(this.target);
     // The ring's corners follow the control's own, a little rounder for standing off it. Presentation mode has its own.
     if (!this.present) this.ring.style.setProperty("border-radius", `${Math.min((parseFloat(getComputedStyle(this.target).borderTopLeftRadius) || 6) + 4, (rect.height + 8) / 2 || 10)}px`);
@@ -1704,6 +1762,8 @@ export class Ui {
       this.cursor.hidden = false;
       this.caption.hidden = this.captionText.textContent === "";
     }
+    // Before anything is measured, so the page is laid out once a frame.
+    this.anchor();
     let rect = el.getBoundingClientRect();
     if (!this.ringAt(rect)) return;
     // A control pointed at while it was scrolled out of view is looked at again once it is in view.
@@ -1742,6 +1802,13 @@ export class Ui {
     const now = performance.now();
     if (now - this.looked < 200) return;
     this.looked = now;
+    // A page can fix a bar to the window once it has scrolled, or let it go. The next frame holds our element as it is held.
+    this.withPage = movesWithPage(el);
+    if (this.onPage) {
+      // Held to the page, our element is where the window is, unless something positioned around it is not the page's corner.
+      const at = this.host.getBoundingClientRect();
+      if (Math.abs(at.left) > 0.5 || Math.abs(at.top) > 0.5) this.pageOffset = { x: this.pageOffset.x - at.left, y: this.pageOffset.y - at.top };
+    }
     const caption = this.caption.hidden ? undefined : { left, top, right: left + box.width, bottom: top + box.height };
     this.keepLauncherOff(rect, caption);
     if (caption) this.keepCaptionOff(el, caption);
@@ -2131,6 +2198,24 @@ function isModal(el: Element): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Whether an element moves with the page as a whole: it is in the page
+ * itself, not a frame, and neither it nor anything it is drawn inside is
+ * fixed to the window, on the top layer (a modal dialog, an open popover) or
+ * sticky. A sticky bar counts as held to the window: once it has stuck it
+ * stays put while the page scrolls under it, which happens far more often
+ * than the page springing back past its top.
+ */
+function movesWithPage(el: Element): boolean {
+  if (el.ownerDocument !== document) return false;
+  // Up the boxes it is drawn in: through the slot it is shown in, and out of a shadow root to its host.
+  for (let at: Element | null = el; at; at = at.assignedSlot ?? at.parentElement ?? ((at.getRootNode() as ShadowRoot).host || null)) {
+    const position = getComputedStyle(at).position;
+    if (position === "fixed" || position === "sticky") return false;
+  }
+  return true;
 }
 
 /** Whether an element is drawn over the page on its own: positioned against the window or a box, or on the top layer. */

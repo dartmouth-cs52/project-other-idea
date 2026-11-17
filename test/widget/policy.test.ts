@@ -114,7 +114,9 @@ for (const [name, policy] of Object.entries(POLICIES)) {
           captionBackground: getComputedStyle(caption).backgroundColor,
         };
       });
-      assert.deepEqual(shown, { pointed: "export", ringBorder: "2px", ringPosition: "fixed", caption: "Click Export.", captionBackground: "rgb(28, 25, 23)" });
+      // The border and the caption's background are the widget's stylesheet. The ring is held to the page, as Export
+      // is, by a position the widget sets through the style object, which a policy with no inline style still allows.
+      assert.deepEqual(shown, { pointed: "export", ringBorder: "2px", ringPosition: "absolute", caption: "Click Export.", captionBackground: "rgb(28, 25, 23)" });
       assert.ok(violations.some((line) => line.startsWith("style-src-elem inline") && line.includes(PAGE)), `the page's own inline style was not reported: ${violations.join(" | ")}`);
       assert.deepEqual(violations.filter((line) => line.includes(HAPTIC)), [], "the policy reported something the widget did");
     } finally {
