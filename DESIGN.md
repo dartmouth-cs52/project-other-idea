@@ -204,6 +204,7 @@ components:
     rounded: "{rounded.full}"
     size: 20px
   launcher:
+    # Ink, or the site's own colour when the company matched it. See Components, Launcher.
     backgroundColor: "{colors.primary}"
     textColor: "{colors.primary-foreground}"
     typography: "{typography.label-md}"
@@ -443,6 +444,13 @@ Components are shadcn/ui, restyled only through tokens and variants.
 - **Caption:** Ink bubble with Paper text, 14px, at most 288px wide. Text only.
   It sits under the target, or above when the space under it is busy, and
   never over the next control.
+- **Launcher:** The pill in the bottom right corner that opens the chat. Ink
+  with Paper words. A company can give it its own site's colour, so it looks
+  like part of the site, the way a support button does. Its words are then
+  Paper or Ink, whichever reads better on that colour. The pointer never takes
+  the site's colour. The two have opposite jobs: the launcher belongs to the
+  site, and the pointer has to be seen against it. A green pointer on a green
+  sidebar was tried and could hardly be found.
 - **Chat:** Haptic's home, in the bottom right corner where support chat
   usually lives. A Card panel holding the conversation and the ask box. It
   stays open from the first question to the last step.
@@ -521,15 +529,18 @@ reason a customer gave.
   stopped finishing, where people give up and the steps they click past.
 - **Knowledge.** What Haptic reads and what the company has corrected. Notes,
   help docs, corrections, the controls never to point at, and the pages read.
-- **Settings.** Three tabs. General holds the pointer's colour and deleting
-  the site. Install holds the script and where it runs. Usage holds the
-  finished guides, month by month, which are what billing counts.
+- **Settings.** Three tabs. General holds the site's name, the widget's two
+  colours and deleting the site. Install holds the script and where it runs.
+  Usage holds the finished guides, month by month, which are what billing
+  counts.
 
-The pointer's colour is the one thing a company chooses about the widget. It
-can be typed, picked, or matched: a secondary button, "Match website", reads
-the site's own colour from its first page and saves it in one press. A grey, a near white or a near black is never taken, because the
-pointer has to be seen on any page. The launcher sits bottom right on every
-site, where support chat usually lives, and that is not a setting.
+A company chooses two colours. The Ask button's is the one to match: a
+secondary button, "Match website", reads the site's own colour from its first
+page and saves it in one press. A grey, a near white or a near black is never
+taken. The pointer's colour is Haptic's blue, and stays so unless the company
+changes it. When it is anything else, "Use Haptic blue" puts it back. The
+launcher sits bottom right on every site, where support chat usually lives,
+and that is not a setting. Deleting a site leads back to the list of sites.
 
 **Sites.** A company with one site lands inside it. With more than one, the
 first page is the list, one card a site. Sites whose script is running come

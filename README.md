@@ -173,10 +173,13 @@ npm run build                     # bundle the widget to dist/widget.js, and the
 npm run eval -- --models mock     # the guide benchmark, no API key needed
 npm run eval:guides -- demo       # whole guides in a browser (needs the local server running)
 npm run test:browser              # page reading in Chromium, and the widget in Chromium, Firefox and WebKit
+npm run test:dashboard            # the built dashboard in Chromium, kept current from a real Postgres (see below)
 npm run test:widget               # guides, hearing, Do it with me, the gate and red-team pages, in Chromium
 ```
 
 The browser tests need Playwright's browsers once: `npx playwright install chromium firefox webkit`. The act tests on pages built from the real React, Radix and cmdk also need those libraries for the run (`npm install --no-save react@19 react-dom@19 radix-ui@1 cmdk@1`), and are skipped without them.
+
+The dashboard tests open the pages `next build` writes, so build the site first, and they read every number from a local Postgres through the Worker's own queries, so they need `TEST_DATABASE_URL` set to an empty local database, never a real one: `cd web && npm run build && cd .. && TEST_DATABASE_URL=postgres://postgres@127.0.0.1:55432/haptic_test npm run test:dashboard`. A test writes a question and its steps to the database as the widget server does, and waits for the open page to show them by itself. Without the build or the database they are skipped, and say which is missing. `dashboard-tests.yml` runs them on every pull request that touches the dashboard.
 
 `web/` and `testbed/` are separate packages with their own `npm run dev` and `npm run build`. CI typechecks, tests and builds the server, lints and builds the website, and typechecks and builds Northpine, on every push and pull request, and a pull request that touches the widget also runs both browser suites (`widget-tests.yml`). Pushes to `main` deploy the website and the widget server; the widget's deploy first runs the page-reading and widget browser tests and the acting-safety suites (the gate and the red-team pages). A [staging copy of the server](docs/operations.md#the-staging-server), with a small budget of its own, is for trying a change against the real model before visitors get it.
 
