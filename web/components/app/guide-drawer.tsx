@@ -49,7 +49,7 @@ export function GuideDrawer({
             {shown ? (
               <>
                 <span className="flex flex-wrap items-center text-foreground">
-                  <GuideStatus outcome={shown.outcome} step={shown.steps.length ? shown.steps[shown.steps.length - 1]!.n : null} />
+                  <GuideStatus outcome={shown.outcome} helped={shown.helped} step={shown.steps.length ? shown.steps[shown.steps.length - 1]!.n : null} />
                   {shown.helped !== null && <span className="text-muted-foreground">, {shown.helped ? "said it helped" : "said it did not help"}</span>}
                 </span>
                 <span>

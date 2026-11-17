@@ -271,11 +271,13 @@ looks stark.
 - **Pointer blue (#1E6EF4):** The pointer, the mark around its target and the
   keyboard focus ring. Nothing else.
 - **Done green (#008932):** The small round tick that says a task is finished.
-  Blue means in progress and green means done, so the two never share a screen.
-  Not for buttons, text or bubbles.
-- **Error red (#DC2626):** Forms only. The star on a required field, the
-  outline and message on a field that failed its check, and the alert when
-  sending fails. It is shadcn's destructive colour.
+  Blue means in progress and green means done, so on a visitor's page the two
+  never share a screen. Not for buttons or bubbles. In the dashboard it also
+  says good, as set out under Dashboard.
+- **Error red (#DC2626):** Forms. The star on a required field, the outline
+  and message on a field that failed its check, and the alert when sending
+  fails. It is shadcn's destructive colour. In the dashboard it also says bad,
+  as set out under Dashboard.
 
 Dark mode follows the visitor's system setting and swaps the roles. The page
 becomes Ink (#1C1917), text becomes #F5F5F4, cards are #292524, borders are
@@ -486,7 +488,9 @@ left the screen completely. Nothing switches while any of it can be seen.
 
 ## Dashboard
 
-Proposed. It is built, in `web/components/app`, and waits for sign off.
+Signed off: colour says how a guide stands and which way a number moved, and
+no page says that it is live. The rest below is proposed. It is built, in
+`web/components/app`.
 
 The dashboard is where a company sees what its people asked and how each guide
 went. It is read at a glance and many times a day, so it is denser than the
@@ -544,8 +548,33 @@ couldn't guide, and median time to finish. A tile is a 14px Medium label in
 Muted text, the number at 36px, the change, and one 12px line that says what
 the number counts. A change against the same number of days before is said in
 words, such as "Up 12% on the previous 30 days", with a small arrow. The arrow
-and the words are Ink whichever way the number went, because the system has no
-colour for good or bad, and whether more is good depends on the number.
+and the words that say what moved, "Up 12%", are Done green when the number
+went the way it should and Error red when it did not. Which way is good
+depends on the number: more guides finished is good, more questions Haptic
+couldn't guide is not, and a shorter time to finish is good. The rest of the
+line is Muted text, and a number that did not move is Muted throughout. A new
+number arrives from 4px below in 200ms, which is how a tile shows it changed.
+
+**Colour.** The dashboard is the one place the three colours say how something
+stands, so a list can be read without reading it. Each is a 16px mark before
+the words, and the words stay in the text colour.
+
+- **Under way** is the pointer itself, Pointer blue with its white border and
+  shadow, because that is what is moving on someone's screen.
+- **Finished** is the green tick.
+- **A green dot** is a guide that got the person there another way: answered
+  from the help docs, or answered and not clicked.
+- **A red dot** is a guide Haptic couldn't guide: nothing to point at, a loop,
+  out of steps, an error, not in the help docs, or abandoned. These are the
+  guides the top row counts as ones Haptic couldn't guide.
+- **A grey dot** is one that was never Haptic's to answer: stopped by the
+  visitor, left for a person, off topic, or a control the company ruled out.
+
+What the person said outweighs how the guide ended, so one they said didn't
+help is red and one they said helped is green. Colour is never the only sign:
+the words beside every mark say the same, and the arrow beside a number points
+the way it moved. Colour stays on marks, arrows and the few words of a change.
+It is never a fill, a card, a bar or a button.
 
 **Charts.** The two neutrals, and nothing else. Guides each day is a bar for
 each day of the range, in UTC, the same days the numbers above it count. Muted
@@ -558,13 +587,14 @@ fortnight as fourteen small bars, today's in Ink. Every chart has the same
 numbers as a table for a screen reader. There is no chart library.
 
 **Live.** A page that shows questions keeps itself current while it is open,
-asking every second and a half. The page says Live beside an Ink dot. The dot
-is still. It draws in once each time something new arrives, which is the only
-movement that says so. A question under way reads "Thinking", then "Showing
-step 2", with the shimmer, the same words the widget's status line uses. A new
-row fades in from 4px above in 200ms. A finished guide carries the green tick.
-Pointer blue stays with the pointer, so nothing on the dashboard is blue but
-the keyboard focus ring and the preview of the widget in Settings.
+asking every second and a half, and says nothing about it. There is no Live
+label and no dot. A new question is simply there, a step later it reads on,
+and the numbers above have moved. A question under way reads "Thinking", then
+"Showing step 2", with the shimmer, the same words the widget's status line
+uses, beside the blue pointer. A new row fades in from 4px above in 200ms.
+The page speaks up only when it has stopped hearing from the server, with the
+word "Reconnecting" in Muted text where the time range is, so nobody takes
+what is on screen for the latest.
 
 **A guide.** It opens in a panel on the right, 576px wide, on Paper, with the
 page behind under a 20 percent Ink wash. Each step is a white card that says
@@ -655,7 +685,8 @@ asked. Thinking is a shimmer across the word. The rest below is proposed.
 - Do centre text in controls with flex, and keep every control on the 4px grid.
 - Don't replace the visitor's own mouse cursor.
 - Don't let the pointer or a caption cover the label it is pointing at.
-- Don't use Done green for anything but the finished mark.
+- Don't use Done green for anything but the finished mark, or Error red
+  outside a form, except to say good and bad in the dashboard.
 - Don't add another colour, a gradient, an illustration or artwork. Paintings
   behind the demos were tried and turned down. The window dots on the demo
   frame are the one borrowed exception.

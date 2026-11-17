@@ -88,7 +88,7 @@ export function Questions({ data, live, onOpen }: { data: Insights | null; live:
                     </button>
                   </TableCell>
                   <TableCell className="px-3 py-2.5">
-                    <GuideStatus outcome={row.outcome} step={row.step_count ? row.step_count - 1 : null} />
+                    <GuideStatus outcome={row.outcome} helped={row.helped} step={row.step_count ? row.step_count - 1 : null} />
                     {row.helped !== null && <span className="text-muted-foreground">, {row.helped ? "helped" : "did not help"}</span>}
                   </TableCell>
                   <TableCell className="hidden px-3 py-2.5 text-right text-muted-foreground tabular-nums md:table-cell">{row.step_count}</TableCell>

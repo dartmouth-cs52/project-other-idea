@@ -9,7 +9,7 @@ import { OUTCOME_LABEL, type Insights, type Live, type LiveGuide } from "@/lib/a
 import { ShareBar } from "./chart";
 import { HeadlineChart, HeadlineTiles, HeadlineWaiting, useHeadline } from "./headline";
 import { siteHref } from "./nav";
-import { GuideStatus, Panel, PanelEmpty, seconds, useNow, when } from "./parts";
+import { GuideStatus, Panel, PanelEmpty, StatusMark, seconds, useNow, when } from "./parts";
 
 /** How many of the newest questions the first page shows. The Questions page has the rest. */
 const LATEST_SHOWN = 8;
@@ -103,7 +103,7 @@ function Latest({ siteId, live, onOpen, className }: { siteId: string; live: Liv
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="truncate text-sm font-medium">{guide.question}</span>
                   <span className="flex min-w-0 items-center text-xs leading-5 text-muted-foreground">
-                    <GuideStatus outcome={guide.outcome} step={guide.last?.n ?? null} className={cn("shrink-0", guide.outcome === "under_way" && "text-foreground")} />
+                    <GuideStatus outcome={guide.outcome} helped={guide.helped} step={guide.last?.n ?? null} className={cn("shrink-0", guide.outcome === "under_way" && "text-foreground")} />
                     <span className="truncate">{reached(guide)}</span>
                   </span>
                 </span>
@@ -141,8 +141,11 @@ function Endings({ data }: { data: Insights | null }) {
       ) : data.outcomes.length ? (
         <ul className="flex flex-col gap-2.5 px-5 pb-5">
           {data.outcomes.map((row) => (
-            <li key={row.outcome} className="grid grid-cols-[minmax(0,13.5rem)_1fr_2.5rem] items-center gap-3 text-sm">
-              <span className="truncate">{OUTCOME_LABEL[row.outcome]}</span>
+            <li key={row.outcome} className="grid grid-cols-[minmax(0,14.5rem)_1fr_2.5rem] items-center gap-3 text-sm">
+              <span className="flex min-w-0 items-center gap-2">
+                <StatusMark outcome={row.outcome} />
+                <span className="truncate">{OUTCOME_LABEL[row.outcome]}</span>
+              </span>
               <ShareBar share={row.count / data.summary.guides} />
               <span className="text-right text-muted-foreground tabular-nums">{row.count.toLocaleString()}</span>
             </li>

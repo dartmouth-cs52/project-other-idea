@@ -138,7 +138,7 @@ export function SiteView({ me, row, view, onDeleted }: { me: Me; row: SiteRow; v
     page = (
       <>
         <PageHeader title="Questions" note={`Everything asked on ${hostOf(site.origin)}, newest first.`}>
-          <LiveMark stamp={live?.stamp} failing={failing} />
+          <Reconnecting failing={failing} />
           {range}
         </PageHeader>
         <Questions data={numbers.data} live={live} onOpen={openIt} />
@@ -157,7 +157,7 @@ export function SiteView({ me, row, view, onDeleted }: { me: Me; row: SiteRow; v
     page = (
       <>
         <PageHeader title="Overview" note={`${site.name}, ${hostOf(site.origin)}`}>
-          <LiveMark stamp={live?.stamp} failing={failing} />
+          <Reconnecting failing={failing} />
           {range}
         </PageHeader>
         <Overview siteId={site.id} origin={site.origin} days={days} stamp={stamp} data={numbers.data} live={live} onOpen={openIt} />
@@ -178,20 +178,15 @@ export function SiteView({ me, row, view, onDeleted }: { me: Me; row: SiteRow; v
 }
 
 /**
- * Says the page is keeping itself current. The dot is Ink and still. It draws
- * in once each time something new arrives, and at no other time.
+ * A page that keeps itself current says nothing about it: new questions simply
+ * arrive. It speaks up only when it has stopped hearing from the server, so
+ * nobody takes what is on screen for the latest.
  */
-function LiveMark({ stamp, failing }: { stamp?: string; failing: boolean }) {
+function Reconnecting({ failing }: { failing: boolean }) {
+  if (!failing) return null;
   return (
-    <span className="inline-flex items-center gap-2 text-sm text-muted-foreground" role="status">
-      <span className="relative inline-flex size-2" aria-hidden>
-        {failing ? (
-          <span className="absolute inset-0 rounded-full border border-muted-foreground" />
-        ) : (
-          <span key={stamp} className="absolute inset-0 rounded-full bg-foreground motion-safe:animate-in motion-safe:duration-300 motion-safe:zoom-in-50 motion-safe:fade-in-0" />
-        )}
-      </span>
-      {failing ? "Reconnecting" : "Live"}
+    <span className="text-sm text-muted-foreground" role="status">
+      Reconnecting
     </span>
   );
 }

@@ -60,9 +60,10 @@ export function HeadlineTiles({ data, days, error }: { data: HeadlineData | null
 
   return (
     <div className={cn("grid gap-4 transition-opacity duration-200 sm:grid-cols-2 xl:grid-cols-4", stale && "opacity-60")} aria-busy={stale}>
-      <Tile label="Guides finished" value={now.finished.toLocaleString()} note="The number billing counts. Free during early access." change={countChange(now.finished, before.finished, period)} />
+      <Tile label="Guides finished" better="up" value={now.finished.toLocaleString()} note="The number billing counts. Free during early access." change={countChange(now.finished, before.finished, period)} />
       <Tile
         label="Finish rate"
+        better="up"
         value={finishRate === null ? null : `${Math.round(finishRate * 100)}%`}
         empty="No guides to count yet"
         note="Of the questions Haptic could guide, the share that finished."
@@ -70,12 +71,14 @@ export function HeadlineTiles({ data, days, error }: { data: HeadlineData | null
       />
       <Tile
         label="Questions Haptic couldn't guide"
+        better="down"
         value={now.unguided.toLocaleString()}
         note={now.started ? `${Math.round((now.unguided / now.started) * 100)}% of ${now.started.toLocaleString()} questions. Stuck, not in the help docs, given up on, or said it didn't help.` : "Stuck, not in the help docs, given up on, or said it didn't help."}
         change={countChange(now.unguided, before.unguided, period)}
       />
       <Tile
         label="Median time to finish"
+        better="down"
         value={now.medianMsToFinish === null ? null : duration(now.medianMsToFinish)}
         empty="No finished guides yet"
         note="From the question to the last step."
@@ -112,17 +115,42 @@ export function HeadlineChart({ data }: { data: HeadlineData | null }) {
   );
 }
 
-function Tile({ label, value, empty = "None yet", note, change }: { label: string; value: string | null; empty?: string; note: string; change: Change | null }) {
+/** The change as two parts: what moved, such as "Up 12%", and against what, such as "on the previous 30 days". */
+function partsOf(text: string): [string, string] {
+  const found = /^(.*?) ((?:on|as|in|than) the previous .*)$/.exec(text);
+  return found ? [found[1]!, found[2]!] : [text, ""];
+}
+
+/**
+ * One number. Under it, which way it moved against the days before: green when
+ * that is the way it should go, red when it is not, grey when it did not move.
+ * `better` says which way is good, since more finished guides is good and more
+ * questions Haptic couldn't guide is not. The arrow and the words say the
+ * same as the colour, so nobody has to tell red from green to read it.
+ */
+function Tile({ label, value, empty = "None yet", note, change, better }: { label: string; value: string | null; empty?: string; note: string; change: Change | null; better: "up" | "down" }) {
   const Icon = change?.direction === "up" ? ArrowUpRight : change?.direction === "down" ? ArrowDownRight : Minus;
+  const tone = !change || change.direction === "same" ? "text-muted-foreground" : change.direction === better ? "text-success" : "text-destructive";
+  const [moved, against] = change ? partsOf(change.text) : ["", ""];
   return (
     <div className="flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-5" data-metric={label}>
       {/* Two lines kept for the label, so the numbers line up across the row when one label wraps. */}
       <span className="text-sm font-medium text-muted-foreground sm:min-h-10">{label}</span>
-      {value === null ? <span className="text-2xl font-medium tracking-[-0.02em] text-muted-foreground">{empty}</span> : <span className="text-4xl font-medium tracking-[-0.03em]">{value}</span>}
+      {value === null ? (
+        <span className="text-2xl font-medium tracking-[-0.02em] text-muted-foreground">{empty}</span>
+      ) : (
+        // Keyed by the number, so a new one arrives from just below. That is the only sign the page gives that it changed.
+        <span key={value} className="text-4xl font-medium tracking-[-0.03em] motion-safe:animate-in motion-safe:duration-200 motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1">
+          {value}
+        </span>
+      )}
       {change && (
-        <span className="flex items-start gap-1 text-sm text-foreground">
-          <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
-          {change.text}
+        <span className="flex items-start gap-1 text-sm">
+          <Icon className={cn("mt-0.5 size-4 shrink-0", tone)} aria-hidden />
+          <span>
+            <span className={cn("font-medium", tone)}>{moved}</span>
+            {against && <span className="text-muted-foreground"> {against}</span>}
+          </span>
         </span>
       )}
       <span className="text-xs leading-4 text-muted-foreground">{note}</span>

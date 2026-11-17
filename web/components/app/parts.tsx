@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 import { cn } from "cn";
+import { Pointer } from "@/components/pointer";
 import { Button } from "@/components/ui/button";
 import { OUTCOME_LABEL, type Outcome } from "@/lib/app-api";
 
@@ -204,18 +205,55 @@ export function Segmented<Value extends string | number>({
   );
 }
 
+/** How a guide stands, as one of four. Each has a colour of its own in the dashboard. */
+export type Tone = "good" | "bad" | "quiet" | "live";
+
 /**
- * How a guide stands, in a few words. One under way reads as the widget's own
- * status line does, with the shimmer. A finished one carries the green tick.
+ * Which of the four a guide is. Good and bad follow the Worker's own rules for
+ * a guide that succeeded and one Haptic couldn't guide (worker/health.ts and
+ * worker/insights.ts), so a red mark here is a guide the top row counts. What
+ * the person said outweighs how the guide ended. Quiet is the rest: stopped by
+ * the visitor, left for a person, off topic, or a control the company ruled out.
  */
-export function GuideStatus({ outcome, step, className }: { outcome: Outcome; step?: number | null; className?: string }) {
-  if (outcome === "under_way") {
-    return <span className={cn("shimmer", className)}>{step === null || step === undefined ? "Thinking" : `Showing step ${step + 1}`}</span>;
-  }
+export function toneOf(outcome: Outcome, helped?: boolean | null): Tone {
+  if (outcome === "under_way") return "live";
+  if (helped === true) return "good";
+  if (helped === false) return "bad";
+  if (outcome === "finished" || outcome === "answered" || outcome === "shown") return "good";
+  if (["nothing_to_point_at", "loop", "step_limit", "error", "not_covered", "abandoned"].includes(outcome)) return "bad";
+  return "quiet";
+}
+
+const DOT: Record<Exclude<Tone, "live">, string> = { good: "bg-success", bad: "bg-destructive", quiet: "bg-muted-foreground/50" };
+
+/**
+ * The 16px mark before a guide's status. A guide under way is the pointer
+ * itself, in Pointer blue, because that is what is moving on someone's screen.
+ * A finished one is the green tick. Anything else is a dot: green when Haptic
+ * got the person there another way, red when it couldn't, grey when it was
+ * never Haptic's to answer.
+ */
+export function StatusMark({ outcome, helped, className }: { outcome: Outcome; helped?: boolean | null; className?: string }) {
+  const tone = toneOf(outcome, helped);
+  if (tone === "live") return <Pointer bordered className={cn("pointer-shadow size-4 text-pointer", className)} />;
+  if (tone === "good" && outcome === "finished") return <DoneMark className={cn("size-4", className)} />;
+  return (
+    <span className={cn("inline-flex size-4 shrink-0 items-center justify-center", className)} aria-hidden>
+      <span className={cn("size-2 rounded-full", DOT[tone])} />
+    </span>
+  );
+}
+
+/**
+ * How a guide stands: its mark, then a few words. One under way reads as the
+ * widget's own status line does, with the shimmer. The words stay in the text
+ * colour, so the mark is the only thing that carries the colour.
+ */
+export function GuideStatus({ outcome, step, helped, className }: { outcome: Outcome; step?: number | null; helped?: boolean | null; className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-1.5", className)}>
-      {outcome === "finished" && <DoneMark className="size-4" />}
-      {OUTCOME_LABEL[outcome]}
+      <StatusMark outcome={outcome} helped={helped} />
+      {outcome === "under_way" ? <span className="shimmer">{step === null || step === undefined ? "Thinking" : `Showing step ${step + 1}`}</span> : OUTCOME_LABEL[outcome]}
     </span>
   );
 }

@@ -139,7 +139,7 @@ function GroupGuides({ siteId, days, groupKey, onOpen }: { siteId: string; days:
           >
             <span className="min-w-0 truncate">{guide.question}</span>
             <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
-              <GuideStatus outcome={guide.outcome} step={guide.step_count ? guide.step_count - 1 : null} />, {when(guide.started_at)}
+              <GuideStatus outcome={guide.outcome} helped={guide.helped} step={guide.step_count ? guide.step_count - 1 : null} />, {when(guide.started_at)}
             </span>
           </button>
         </li>
