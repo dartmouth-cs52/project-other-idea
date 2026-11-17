@@ -1,7 +1,7 @@
 import { MAX_TAUGHT_STEPS, newTeachToken, sectionOf, stepText, type TaughtStep } from "../shared/teach.ts";
 import { TEACH_KEY, TEACH_TOKEN } from "../shared/teach-link.ts";
 import { cleanText, type SnapElement } from "../shared/types.ts";
-import { currentPath, nameOf, shownWords, takeSnapshot, type PageSnapshot } from "./snapshot.ts";
+import { currentPath, nameOf, shownWords, takeSnapshot, withoutTyping, withTyping, type PageSnapshot } from "./snapshot.ts";
 import { raise, showNotice } from "./teach-notice.ts";
 import { adoptStyles, make, topModal } from "./ui.ts";
 
@@ -296,6 +296,12 @@ export class Teacher {
       this.say(`That's the most steps one route can have (${MAX_TAUGHT_STEPS}). Press Done, or Undo last.`, true);
       return;
     }
+    // Every name goes through the page reading's filter again, with what the fields hold now: words that repeat a field's
+    // value become "[typed]", as in what a guide sends. A name read from the page before it changed is caught here too.
+    withTyping(() => {
+      step.label = withoutTyping(step.label);
+      for (const key of ["choice", "context", "dialog"] as const) if (step[key]) step[key] = withoutTyping(step[key]);
+    });
     this.teaching.steps.push(step);
     if (el) this.lastPressed = { el, at: Date.now() };
     this.save();
@@ -541,7 +547,8 @@ function controlIn(path: EventTarget[], reading: PageSnapshot): { el: Element; l
   }
   for (const node of path) {
     if (!(node instanceof Element) || !node.matches(CLICKABLE)) continue;
-    const { label, icon } = nameOf(node);
+    // Named after the reading, so with what the fields hold in hand, as the reading names what it lists.
+    const { label, icon } = withTyping(() => nameOf(node));
     return { el: node, listed: { id: "", role: roleGuess(node), label, ...(icon ? { icon } : {}) } };
   }
   return undefined;
@@ -586,20 +593,24 @@ function sharedByRows(label: string, table: Element, reading: PageSnapshot): boo
   return rows.size >= 2;
 }
 
-/** A set of radio buttons' name: the group's own label or its fieldset's legend, masked. Empty when the page gives none. */
+/**
+ * A set of radio buttons' name: the group's own label or its fieldset's
+ * legend, masked, and with words that repeat what a field holds put as
+ * "[typed]". Empty when the page gives none.
+ */
 function groupName(el: Element): string {
   const group = el.closest('[role="radiogroup"], fieldset');
   if (!group) return "";
-  return nameGiven(group) || (group.tagName === "FIELDSET" && group.querySelector("legend") ? shownWords(group.querySelector("legend")!, 80) : "");
+  return withTyping(() => nameGiven(group) || (group.tagName === "FIELDSET" && group.querySelector("legend") ? shownWords(group.querySelector("legend")!, 80) : ""));
 }
 
-/** A list's own name, when it gives one. */
+/** A list's own name, when it gives one, read as `groupName` reads a group's. */
 function listName(el: Element): string {
   const list = el.closest('[role="listbox"], [role="tree"], [role="menu"]');
-  return list ? nameGiven(list) : "";
+  return list ? withTyping(() => nameGiven(list)) : "";
 }
 
-/** The name a page gives a box for screen readers, masked. Never words from a field. */
+/** The name a page gives a box for screen readers, masked. Never words from a field: it is read inside `withTyping`. */
 function nameGiven(box: Element): string {
   const ids = box.getAttribute("aria-labelledby");
   if (ids) {
@@ -611,9 +622,9 @@ function nameGiven(box: Element): string {
       .map((named) => shownWords(named, 80))
       .join(" ")
       .trim();
-    if (words) return cleanText(words, 80);
+    if (words) return cleanText(withoutTyping(words), 80);
   }
-  return cleanText(box.getAttribute("aria-label") ?? "", 80);
+  return cleanText(withoutTyping(box.getAttribute("aria-label") ?? ""), 80);
 }
 
 function isTextField(el: Element): boolean {

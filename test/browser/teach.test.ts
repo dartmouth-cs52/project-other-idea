@@ -8,7 +8,7 @@ import { createApp } from "../../src/server/app.ts";
 import { MemoryTeachStore } from "../../src/server/teach.ts";
 import { newTeachToken, type TaughtStep } from "../../src/shared/teach.ts";
 import { DEFAULT_APPEARANCE, type SiteContext } from "../../src/shared/types.ts";
-import { BROWSERS, launch, widgetBundle } from "./harness.ts";
+import { BROWSERS, launch, snapshotBundle, widgetBundle } from "./harness.ts";
 
 // Teach mode in real browsers: the dashboard's link opens the app with a
 // token in the fragment, the widget claims it with the real server code (an
@@ -51,6 +51,55 @@ const BUDGETS = shell(`
   </script>`);
 
 const DETAIL = shell(`<h1>Marketing</h1><button type="button">Add owner</button><button type="button">Share</button>`);
+
+/**
+ * Pages that repeat what was typed in a field in a name teach mode reads for
+ * itself, after the page reading: a radio group's label, a fieldset's legend,
+ * a list's label, and a control the reading leaves out (inside aria-hidden).
+ * Each says what is typed, the control used next, and what the step must be
+ * named, as the guide's own reading names it.
+ */
+const ECHOES: Record<string, { html: string; field: string; typed: string; use: string; label: string; listed: boolean }> = {
+  radio: {
+    html: shell(`<label>Customer <input id="field"></label>
+  <div id="g" role="radiogroup" aria-label="Plan"><label><input type="radio" name="p"> Basic</label><label><input type="radio" name="p" id="use"> Pro</label></div>
+  <script>const f = document.getElementById("field"); f.addEventListener("input", () => document.getElementById("g").setAttribute("aria-label", "Plan for " + f.value));</script>`),
+    field: "#field",
+    typed: "Zebulon Quackenbush",
+    use: "#use",
+    label: "Plan for [typed]",
+    listed: true,
+  },
+  legend: {
+    html: shell(`<label>Customer <input id="field"></label>
+  <fieldset><legend id="lg">Plan</legend><label><input type="radio" name="p"> Basic</label><label><input type="radio" name="p" id="use"> Pro</label></fieldset>
+  <script>const f = document.getElementById("field"); f.addEventListener("input", () => document.getElementById("lg").textContent = "Plan for " + f.value);</script>`),
+    field: "#field",
+    typed: "Zebulon Quackenbush",
+    use: "#use",
+    label: "Plan for [typed]",
+    listed: true,
+  },
+  list: {
+    html: shell(`<label>Search people <input id="field" type="search" autocomplete="off"></label>
+  <ul id="r" role="listbox" aria-label="People"><li role="option" tabindex="-1">Ana Lima</li><li role="option" tabindex="-1" id="use">Bo Chen</li></ul>
+  <script>const f = document.getElementById("field"); f.addEventListener("input", () => document.getElementById("r").setAttribute("aria-label", "Results for " + f.value));</script>`),
+    field: "#field",
+    typed: "Xantippe Ollerenshaw",
+    use: "#use",
+    label: "Results for [typed]",
+    listed: true,
+  },
+  unlisted: {
+    html: shell(`<label>Tag <input id="field"></label><div aria-hidden="true"><button id="use" type="button">Create tag</button></div>
+  <script>const f = document.getElementById("field"); f.addEventListener("input", () => document.getElementById("use").textContent = "Create tag " + f.value);</script>`),
+    field: "#field",
+    typed: "Zebulon Quackenbush",
+    use: "#use",
+    label: "Create tag [typed]",
+    listed: false,
+  },
+};
 
 interface Rig {
   url: string;
@@ -117,7 +166,8 @@ async function startRig(): Promise<Rig> {
         return res.end(Buffer.from(await response.arrayBuffer()));
       }
     }
-    const page = url.pathname === "/budgets" ? BUDGETS : url.pathname.startsWith("/budgets/") ? DETAIL : undefined;
+    const echo = url.pathname.startsWith("/echo/") ? ECHOES[url.pathname.slice("/echo/".length)]?.html : undefined;
+    const page = url.pathname === "/budgets" ? BUDGETS : url.pathname.startsWith("/budgets/") ? DETAIL : echo;
     if (!page) return res.writeHead(404).end("Not found");
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }).end(page);
   });
@@ -242,6 +292,33 @@ for (const name of BROWSERS) {
       const kept = JSON.stringify(steps);
       for (const hidden of ["ana@", "12345678", "Acme", "Globex"]) assert.ok(!kept.includes(hidden), `masked or left out: ${hidden}`);
       await context.close();
+    });
+
+    test("a name teach mode reads for itself has what was typed put as [typed], as the guide's reading has it", async () => {
+      const snap = await snapshotBundle();
+      for (const [page, echo] of Object.entries(ECHOES)) {
+        const token = await rig.store.create(SITE, "how do I assign a plan", newTeachToken());
+        const context = await browser.newContext({ viewport: { width: 1200, height: 900 } });
+        const tab = await context.newPage();
+        await tab.goto(`${rig.url}/echo/${page}#haptic-teach=${token}`);
+        await barSays(tab, "No steps yet");
+        await tab.locator(echo.field).pressSequentially(echo.typed);
+        await tab.click(echo.use);
+        await barSays(tab, "2 steps");
+        const said = (await bar(tab)) ?? "";
+        await press(tab, "Done");
+        await barSays(tab, "Sent 2 steps");
+        const steps = (await rig.store.stepsOf(token))!;
+        const used = steps[steps.length - 1]!;
+        assert.equal(used.label, echo.label, `${page}: the step's name`);
+        const surname = echo.typed.split(" ")[1]!;
+        assert.ok(!JSON.stringify(steps).includes(surname) && !said.includes(surname), `${page}: nothing typed is kept or shown`);
+        // The guide's own reading of the same page, with the field still holding the words, names it the same way.
+        const reading = await tab.evaluate(`(() => { ${snap}; return JSON.stringify(window.hapticSnapshot(document.querySelector("haptic-teach") || document.body).elements); })()`);
+        assert.ok(!String(reading).includes(surname), `${page}: the guide's reading sends nothing typed either`);
+        if (echo.listed) assert.ok(String(reading).includes(echo.label), `${page}: the guide's reading says ${echo.label}`);
+        await context.close();
+      }
     });
 
     test("a failed post keeps the steps, says so with Retry, and survives a reload", async () => {
