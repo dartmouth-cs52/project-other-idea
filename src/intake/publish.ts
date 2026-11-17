@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { actingProblems } from "../server/acting.ts";
 import { Store } from "../server/db.ts";
 import { listSiteIds, loadSite } from "../server/sites.ts";
 import type { SiteContext } from "../shared/types.ts";
@@ -13,7 +14,8 @@ import type { SiteContext } from "../shared/types.ts";
 // It needs DATABASE_URL, the same connection string the server uses (in .env).
 // --from-kv moves a site from the KV store sites were kept in before Neon,
 // which needs the same Cloudflare sign-in as a deploy. The online server picks
-// a change up within a minute.
+// a change up within a minute, acting turned on or off included: it reads the
+// site again for every step.
 //
 // A site published this way keeps the company it belongs to, if one has
 // claimed it, and the allowed origins it is given here replace the old ones.
@@ -34,14 +36,27 @@ if (!ids.length) {
   process.exit(1);
 }
 
+// Every site is read and checked before any is published, so one with a mistake stops them all.
+const sites: SiteContext[] = [];
 for (const id of ids) {
   const site = fromKv ? readFromKv(id) : await loadSite(id);
   if (!site) {
     console.error(fromKv ? `There is no ${id} in the KV store.` : `There is no ${id} in data/sites. Build it first with npm run tag.`);
     process.exit(1);
   }
+  // The server takes acting settings it cannot read as acting off, and says nothing. Saying it here is the only chance.
+  // A site with acting plainly off always goes: that may be a company stopping it.
+  const problems = site.acting?.enabled === false ? [] : actingProblems(site.acting);
+  if (problems.length) {
+    console.error(`Nothing was published, because of ${id}: ${problems.join(" ")}`);
+    process.exit(1);
+  }
+  sites.push(site);
+}
+for (const site of sites) {
   await store.saveSite(site);
-  console.log(`Published ${id}${fromKv ? " from the KV store" : ""}.`);
+  const acting = site.acting?.enabled === true ? ` Acting is on${site.acting.paths?.length ? ` under ${site.acting.paths.join(", ")}` : ""}.` : "";
+  console.log(`Published ${site.id}${fromKv ? " from the KV store" : ""}.${acting}`);
 }
 
 function readFromKv(id: string): SiteContext | undefined {

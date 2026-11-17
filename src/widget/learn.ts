@@ -10,7 +10,9 @@ import { nameOf, takeSnapshot } from "./snapshot.ts";
 // labels. And when a click is followed by a new page within a few seconds, it
 // sends the clicked label as a link on the page it came from, like
 // "View, in a dialog → /set/:id", which is how Haptic learns a page that is
-// only reachable through a dialog.
+// only reachable through a dialog. And when a visitor opens a menu, a tab or
+// an accordion, it sends what appeared, with the label of the control that
+// opened it, so the model knows what is behind "Help" before anyone opens it.
 //
 // Labels only. Nothing typed into a field is ever read, controls inside a
 // table's cells are left out, and emails and numbers are masked. The server
@@ -28,6 +30,30 @@ const CLICKABLE = 'a[href], button, summary, [role="button"], [role="link"], [ro
 /** A table's cells hold the customer's records, like their clients' names. Nothing in them is learned. */
 const CELL = 'td, [role="cell"], [role="gridcell"]';
 const BUTTON_ROLES = new Set(["button", "tab", "menuitem", "menuitemcheckbox", "menuitemradio"]);
+/** Controls that show something when opened. Menus often open on the press, before the click, so it is watched from there. */
+const OPENER = '[aria-haspopup]:not([aria-haspopup="false"]), [aria-expanded="false"], [role="tab"], summary';
+const FIELDISH = 'input, textarea, select, [role="combobox"], [role="searchbox"], [role="textbox"], [contenteditable]:not([contenteditable="false"])';
+/** More new controls than this after opening something means the whole view changed, not that something opened. */
+const MAX_OPENED = 40;
+const MAX_OPENED_SENT = 30;
+/** When to look after a press, each wait after the one before: about 1.5 s in all. */
+const LOOKS_MS = [120, 180, 300, 400, 500];
+
+/** The labels of the links and buttons on screen now, dialog included, outside table cells. */
+function shownNow(host: Element): { links: Map<string, { label: string; to: string }>; buttons: Set<string> } {
+  const { snapshot, elements } = takeSnapshot(host);
+  const links = new Map<string, { label: string; to: string }>();
+  const buttons = new Set<string>();
+  for (const element of snapshot.elements) {
+    if (elements.get(element.id)?.closest(CELL)) continue;
+    const label = element.label || (element.icon ? `icon:${element.icon}` : "");
+    if (!isLearnableLabel(label)) continue;
+    // A menu item can be a link too, like <a role="menuitem" href="/help">. Where it leads is what matters.
+    if (element.href && !element.href.startsWith("external:")) links.set(`${label} ${element.href}`, { label, to: element.href });
+    else if (BUTTON_ROLES.has(element.role)) buttons.add(label);
+  }
+  return { links, buttons };
+}
 
 interface LastClick {
   from: string;
@@ -107,7 +133,7 @@ export function startLearning(send: (report: Omit<OutlineReport, "site">) => voi
     try {
       do {
         again = false;
-        await settle(host, 800, 6000);
+        await settle(host, { quietMs: 800, maxMs: 6000, patient: false });
         await idle();
         const outline = buildOutline(host);
         if (!outline || sent.has(outline.path)) continue;
@@ -128,13 +154,77 @@ export function startLearning(send: (report: Omit<OutlineReport, "site">) => voi
       console.warn("[Haptic]", error);
     }
   };
+
+  // Opening a menu, tab or accordion: what was on screen as it was pressed, against what shows up after.
+  // Some people pick from a menu within a few hundred milliseconds, so it is looked at several times
+  // until the next press, and whatever appeared in any look counts.
+  let presses = 0;
+  const onPress = (event: Event) => {
+    if (event instanceof KeyboardEvent && event.key !== "Enter" && event.key !== " " && event.key !== "ArrowDown") return;
+    const pressed = ++presses;
+    try {
+      const control = openerOf(event, host);
+      if (!control) return;
+      const from = normalizePath(location.pathname);
+      const key = `${from} opens ${control.name}`;
+      if (sent.has(key)) return;
+      const before = shownNow(host);
+      const links = new Map<string, { label: string; to: string }>();
+      const buttons = new Set<string>();
+      void (async () => {
+        for (const wait of LOOKS_MS) {
+          await new Promise((resolve) => setTimeout(resolve, wait));
+          if (presses !== pressed || normalizePath(location.pathname) !== from) break;
+          const after = shownNow(host);
+          for (const [id, link] of after.links) if (!before.links.has(id)) links.set(id, link);
+          for (const label of after.buttons) if (!before.buttons.has(label) && label !== control.name) buttons.add(label);
+        }
+        if (!links.size && !buttons.size) return;
+        if (links.size + buttons.size > MAX_OPENED || sent.has(key)) return;
+        remember(sent, key);
+        post({
+          path: from,
+          title: "",
+          headings: [],
+          links: [],
+          buttons: [],
+          opens: [{ control: control.name, links: [...links.values()].slice(0, MAX_OPENED_SENT), buttons: [...buttons].slice(0, MAX_OPENED_SENT) }],
+        });
+      })().catch((error) => console.warn("[Haptic]", error));
+    } catch (error) {
+      console.warn("[Haptic]", error);
+    }
+  };
+
   document.addEventListener("click", onClick, { capture: true, passive: true });
+  document.addEventListener("pointerdown", onPress, { capture: true, passive: true });
+  document.addEventListener("keydown", onPress, { capture: true, passive: true });
   const stopAddress = onAddressChange(() => void run());
   void run();
   return () => {
     stopAddress();
     document.removeEventListener("click", onClick, { capture: true });
+    document.removeEventListener("pointerdown", onPress, { capture: true });
+    document.removeEventListener("keydown", onPress, { capture: true });
   };
+}
+
+/** The control a press is about to open, with the name it is learned by, or nothing for any other press. */
+function openerOf(event: Event, host: Element): { name: string } | undefined {
+  for (const node of event.composedPath()) {
+    if (node === host) return undefined;
+    if (!(node instanceof Element)) continue;
+    if (!node.matches(OPENER)) {
+      if (node.matches(CLICKABLE)) return undefined;
+      continue;
+    }
+    // A field's suggestions follow what was typed into it, so nothing a field opens is learned.
+    if (node.closest(CELL) || node.matches(FIELDISH)) return undefined;
+    const { label, icon } = nameOf(node);
+    const name = label || (icon ? `icon:${icon}` : "");
+    return isLearnableLabel(name) ? { name } : undefined;
+  }
+  return undefined;
 }
 
 /**

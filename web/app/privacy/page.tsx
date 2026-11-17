@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Privacy", alternates: { canonical: "
 
 export default function Privacy() {
   return (
-    <LegalPage title="Privacy" updated="November 16, 2026">
+    <LegalPage title="Privacy" updated="November 17, 2026">
       <p>
         {site.company} makes Haptic. This page says what we collect on this website, and what Haptic reads when it runs
         inside a product.
@@ -31,6 +31,13 @@ export default function Privacy() {
         things. We do not sign in to anything and we do not send forms.
       </p>
       <p>
+        If you ask us to email the install steps to your developer, we send them one email through Resend, from
+        install@joinhaptic.com, with your email address so they can reply to you. Resend gets their address
+        and the email, and nothing else. We do not keep their address. So that no address gets more than a few of
+        these emails, and no one can keep trying to send them, we keep a scrambled form of it with the site, your company, who sent it and when, and delete
+        that record once it is a day old, always within two days.
+      </p>
+      <p>
         Haptic runs on this website too, so you can try it. If you ask it something here, it works as the next part
         of this page describes, and we are the company that sees your questions.
       </p>
@@ -44,16 +51,49 @@ export default function Privacy() {
         changed on the page.
       </p>
       <p>
-        Haptic does not read what people type into fields, or anything inside an area the page marks as one they
-        write in, and it takes no pictures of the page. Two kinds of page can still show it typed words. A product may
-        show what someone typed somewhere else, such as in a preview, a confirmation or the page title, and Haptic
-        reads it there. And some code editors draw what is typed as ordinary text beside a hidden field, which Haptic
-        cannot tell from the rest of the page.
+        Haptic does not send what people type into fields, or anything inside an area the page marks as one they
+        write in, and it takes no pictures of the page. It looks at what fields hold only inside the browser, to leave
+        it out wherever the page repeats it while it is there, in the page&apos;s text, headings, title, buttons, links
+        and lists. The one exception is plain words a person also wrote in their question to Haptic. Those words are
+        sent with the question, so where the page repeats them, as a list of search results does with a name they
+        asked about, Haptic can read them. An email address or a long number is not one of them: when a person types
+        one, it is left out like anything else they type, even if they also wrote it in their question. Three kinds of page can still show it typed words. A product may show what someone typed on a later
+        page, such as in a confirmation, and Haptic reads it there. A page may write a search into an address, its own or a
+        link&apos;s, which Haptic sends with ids and numbers masked. And some code editors draw what is typed as
+        ordinary text beside a hidden field, which Haptic cannot tell from the rest of the page.
       </p>
       <p>
-        In what it reads, in the page&apos;s address and in the question itself, Haptic masks most email addresses,
-        phone numbers and long numbers before anything leaves the browser. It does not mask names or other words, so
-        text that shows on the page can still hold personal details.
+        Haptic does note whether a field is marked as not accepted, by the page itself or by the browser&apos;s own
+        check, such as an email field that holds no email address, so it can ask for the field to be fixed before
+        moving on. It notes the same of an email address with no dot in its domain, which the browser accepts and
+        nearly every form does not. That is a yes or a no, and nothing of what was typed.
+      </p>
+      <p>
+        Before anything leaves the browser, in what it reads, in the page&apos;s address and in the question itself,
+        Haptic masks anything that looks like an email address, any run of five or more digits, such as an account or
+        order number, and any eight or more digits written in groups with spaces, dashes, dots or brackets between
+        them, such as a phone or card number. Digits that follow straight after a letter, like the model number I9100,
+        count as part of that word, unless more of a number follows them, as in SSN123-45-6789: then the whole
+        number is masked. Our server masks the same again before it stores anything.
+      </p>
+      <p>
+        Haptic does not mask real dates written in figures, such as 07.03.1984 or 2026-11-16, with a month from 1 to
+        12 and a day from 1 to 31. Digits written like a date that is not one, such as 12.34.5678, are masked.
+        Questions like &ldquo;my latest invoice&rdquo; need dates, and a date says no more about a person than the
+        names a page already shows.
+        But a date on the page can be a date of birth, and it is read and sent like any other text. Nor does Haptic
+        mask shorter numbers, such as prices and quantities, or names and other words, so text that shows on the page
+        can still hold personal details.
+      </p>
+      <p>
+        One exception: when someone writes an email address, or a number of five or more digits, in their question,
+        that exact value is left readable wherever it stands on its own on the page, so Haptic can find the order or
+        account they asked about. In the question itself it is left readable only when the page shows it standing on
+        its own like that, and masked otherwise.
+      </p>
+      <p>
+        With each question the widget also sends the person&apos;s date, as their device shows it, so the AI knows what
+        day it is. It does not send their time zone or location.
       </p>
       <p>
         Haptic is an AI guide and can be wrong, so check anything that matters before relying on it. To work out the
@@ -61,9 +101,18 @@ export default function Privacy() {
         our server and to Anthropic, which provides the AI model.
       </p>
       <p>
+        A company can turn on Do it with me, which is off unless it does. Then a person can ask Haptic to do the steps
+        with them: it clicks, types and chooses on the page while they watch, and the final click is always theirs. It
+        types only what the person wrote in their question. It leaves to the person anything whose name or address
+        says it saves, sends, pays or deletes, and never types passwords or payment details. It does follow a plain
+        link that opens a form to fill in, and if a click of its own ever sends something to the product, it stops
+        there and says so. To check that its own typing took, it reads that
+        field&apos;s value inside the person&apos;s browser, and never sends it.
+      </p>
+      <p>
         We keep the question that was asked, what Haptic said, the names of the controls it pointed at and where on
         the page they sit, which page of the product each step was on, the product&apos;s web address, what was
-        clicked along the way, when each step happened and how long it took, which AI model answered and what the step
+        clicked along the way, what Haptic typed in Do it with me (only ever words from the question), when each step happened and how long it took, which AI model answered and what the step
         cost, how the guide ended, and whether the person said it helped. The company whose product it is can see the
         questions, the steps and their timings in its Haptic dashboard, so it can tell what people ask and where a
         guide fell short. We do not keep the rest of the description of the page. This record is stored in a database
@@ -84,17 +133,36 @@ export default function Privacy() {
         page of the product it loads on, once per page in each browser tab, whether or not anyone asks it anything.
         The outline is the page&apos;s title and headings, the names of its links and buttons, and where each link
         leads. When a click leads straight to another page, it also sends the name of what was clicked and where it
-        led. It never includes what people type, what is inside a table&apos;s cells, or the rest of the text on the
+        led. When someone opens a menu, a tab or a section that unfolds, it sends the names of what appeared, with the
+        name of what opened it. Nothing a text box suggests is sent. It never includes what people type, what is inside a table&apos;s cells, or the rest of the text on the
         page. A name that holds anything that looks like an email address, a phone number or a long number is left
         out whole.
       </p>
       <p>
         To count how many different people have seen a name, or asked a question, the browser keeps a random id for
         that product, made by Haptic and tied to nothing else. Our server keeps only a scrambled form of it, made differently for each
-        product, and at most ten of those for each name. A name is used to guide anyone only once several different
-        people have seen it, so a name that only one person sees, like the title of their own document, is never
-        used. The names, with when each was first and last seen and how often, are kept until the company asks us to
-        delete them. The company can switch this off.
+        product, and at most ten of those for each name. Because any program could make up such ids, a name is also
+        counted by the network it was sent from: for each name we keep at most ten very short scrambled forms of the
+        sender&apos;s network address, made differently for each product. Each of these is shared by tens of thousands
+        of addresses, so it cannot be turned back into an address. A name is used to guide anyone only once several
+        different people on different networks have seen it, so a name that only one person sees, like the title of
+        their own document, is never used. The names, with when each was first and last seen and how often, are kept
+        until the company asks us to delete them. The company can switch this off.
+      </p>
+      <p>
+        A company can teach Haptic a task by doing it in its own product. Someone at the company starts it from the
+        dashboard, which opens the product with a link that works once, for half an hour, and only on that
+        company&apos;s site. While they do the task, Haptic notes which buttons, links, fields and lists they use,
+        each by its name and the section of the page it is in, which option they chose in a list, and the page&apos;s
+        address within the product. It
+        never reads what they type, and it masks email addresses and long numbers the same way as above. A control in a
+        table&apos;s row is kept by its name only when other rows have one of the same name, such as Edit, never by the
+        record&apos;s own name; a name elsewhere on the page can still be kept. The person reviews the steps in the dashboard before anything is used. Saving keeps only the steps they
+        kept, with the company&apos;s site, with any notes added and the name of who taught them, and deletes the
+        recording, with any steps they deleted. Haptic uses the saved steps to guide anyone who asks how to do the same
+        task, until the company removes them or teaches the task again, and then the record of that teaching is deleted
+        too. A recording the person discards is deleted at once, and one nobody saves is deleted once it is a week old,
+        by a check that runs every day. Teaching asks the AI nothing.
       </p>
       <p>
         From a visit where nobody asks Haptic anything, we keep nothing else about the visitor. For each web address
@@ -118,7 +186,8 @@ export default function Privacy() {
       </p>
       <p>
         Progress through a guide, and which pages have been outlined, is kept in the browser for that tab, and is
-        cleared when the tab closes. The random id stays in the browser until its storage for that product is cleared.
+        cleared when the tab closes. The random id stays in the browser until its storage for that product is cleared, and so
+        does a note that you put the launcher away, if you did. That note is never sent to us.
       </p>
 
       <h2>Contact</h2>

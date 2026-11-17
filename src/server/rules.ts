@@ -608,20 +608,154 @@ function sentences(text: string): string[] {
   return pieces.filter((piece) => piece.trim());
 }
 
+/** The most a visitor is shown. Of 1,555 live sentences, every one that was fine had at most four sentences and 258 characters. */
+export const SAY_MAX_SENTENCES = 4;
+export const SAY_MAX_CHARS = 300;
+
+// The sentence is one string in the reply's JSON, and it is read only when the
+// whole reply has arrived. So nothing wrong with it comes from cutting a reply
+// that is still streaming: the model wrote it. About one live sentence in
+// thirty has something that is not for the visitor, nearly always after its
+// last full stop: a line-break tag, the reply's own closing quote mark and
+// brace written with the wrong characters, a character with no width, a stray
+// word. The tests hold every kind that was seen, as it was written.
+
+/** What ends a sentence. */
+const STOP = ".!?…。！？";
+/** A stop, then any quote marks or brackets that close with it, and nothing more. */
+const PROPER_END = new RegExp(`[${STOP}]["'”’»«)\\]]*$`);
+/**
+ * Tags that break a line. The sentence is shown as plain text, so a tag would
+ * be read out as one. Only the line-break tag has been seen. A name in angle
+ * brackets that is not one of these, like a key, is left alone.
+ */
+const BREAK_TAG = /<\/?(?:br|p|div)\s*\/?>/gi;
+/** Tags that only dress the words between them. */
+const DRESS_TAG = /<\/?(?:b|i|em|strong|u|code|span)\s*\/?>/gi;
+/**
+ * A tag named after a field of the reply itself ("enter" is left out: "<Enter>" is a key). Seen on Northpine's staging
+ * on 16 November, shown to the visitor: "…then open it to add the receipt.</say>".
+ */
+const FIELD_TAG = /<\/?(?:say|target|status|reply)\s*\/?>/gi;
+/** Characters that take no room and mean nothing here. */
+const NO_WIDTH = /[\u200B\u2060\uFEFF]/g;
+/** The two joiners are part of how some languages are written, but only between letters, never beside a space or at an end. */
+const LOOSE_JOINER = /(?<=^|[\s.!?,;:])[\u200C\u200D]+|[\u200C\u200D]+(?=$|[\s.!?,;:])/g;
+/** A check mark or a picture where a sentence would start, with the marks that can trail a picture. Inside a sentence it may be part of a control's name. */
+const SIGN_AFTER_STOP = /(?<=[.!?…])\s*(?:[\p{So}\u{1F3FB}-\u{1F3FF}\uFE0F\u200D]+\s*)+/gu;
+/** "its menu.Step 1": a full stop with a new sentence right behind it. */
+const NO_SPACE_AFTER_STOP = /(\p{Ll}[.!?])(?=\p{Lu}\p{Ll})/gu;
+/**
+ * What can be left stuck to the last full stop: quote marks and stops and then
+ * one word of code ("start.”.replace"), or one bare word ("list.markdown").
+ * A bare word has to be five letters or more, which spares the end of a file
+ * name or a web address when a sentence stops on one with no full stop.
+ */
+const SCRAP = /^(?:["'”’»«)\]}.]+[A-Za-z_$][\w$]*(?:\(\))?|[A-Za-z]{5,})$/;
+const OPENS: Record<string, string> = { "}": "{", "]": "[", ")": "(" };
+
+const count = (text: string, chars: string) => [...text].filter((char) => chars.includes(char)).length;
+
+/** Takes off what follows the last sentence and is not part of it. */
+function withoutLeftovers(text: string): string {
+  for (;;) {
+    const before = (text = text.trimEnd());
+    const last = text.at(-1) ?? "";
+    const rest = text.slice(0, -1);
+    // A bracket that closes nothing: most often the brace that ends the reply itself.
+    if (OPENS[last] && count(text, last) > count(text, OPENS[last])) text = rest;
+    // A quote mark with no partner. French and German marks are counted with their own kind.
+    else if ('"“”'.includes(last) && count(text, '"“”„') % 2) text = rest;
+    else if ("«»".includes(last) && count(text, "«»") % 2) text = rest;
+    // A single one counts only after a stop, and only when no word in the sentence opens with one: "we'll" does not.
+    else if ("'’".includes(last) && STOP.includes(rest.at(-1) ?? " ") && !/(?:^|[\s(])['‘’]\S/.test(rest)) text = rest;
+    // A comma, colon or semicolon after the last stop and any marks that close with it ends nothing: it is the reply's own JSON, written as text.
+    else if (",;:".includes(last) && PROPER_END.test(rest)) text = rest;
+    else if (!PROPER_END.test(text)) {
+      // The last run of characters holds a full stop with more stuck to it.
+      const word = /\S+$/.exec(text)?.[0] ?? "";
+      const stuck = /^.*?\p{L}[.!?](?=\D)/su.exec(word)?.[0];
+      if (stuck && word.length - stuck.length > 1 && SCRAP.test(word.slice(stuck.length))) text = text.slice(0, text.length - word.length + stuck.length);
+      // A digit or two stuck to the last full stop, like a footnote mark: "in the Email address field.2" (seen on staging,
+      // 16 November 2026). A number of its own, "section 4.2", has no letter before its stop and is left alone.
+      else if (/\p{L}[.!?]\d{1,2}$/u.test(word)) text = text.replace(/\d{1,2}$/, "");
+    }
+    if (text === before) return text;
+  }
+}
+
+/** Where one sentence ends and the next begins. A lower-case letter after the stop means it was a short form, like "e.g.". */
+const BETWEEN_SENTENCES = /[.!?…]["'”’»)\]]*(?=\s+[^\s\p{Ll}])|[。！？]["”’」』）]*(?=.)/gsu;
+
+/** Keeps to the limits above, cutting after a whole sentence wherever one ends in time. */
+function capped(text: string, maxChars: number): string {
+  let sentences = 0;
+  let cut = 0;
+  for (const end of text.matchAll(BETWEEN_SENTENCES)) {
+    const at = end.index + end[0].length;
+    if (at > maxChars) break;
+    cut = at;
+    if (++sentences === SAY_MAX_SENTENCES) return text.slice(0, cut);
+  }
+  if (text.length <= maxChars) return text;
+  if (cut) return text.slice(0, cut);
+  // One sentence longer than the limit: stop at a word, and show that there was more.
+  const room = text.slice(0, maxChars - 1);
+  return room.slice(0, Math.max(room.lastIndexOf(" "), 0) || room.length).replace(/[\s,;:(–-]+$/, "") + "…";
+}
+
+/**
+ * The sentence a visitor reads, tidied. It comes out as plain prose on one
+ * line: no tags, no characters without width, no blank lines or double
+ * spaces, a space after every full stop, nothing left over after the last
+ * sentence, and no longer than a caption can show. A sentence that was fine
+ * comes out exactly as it went in. An answer in words (answers.ts) is given
+ * more room than a step's caption with `maxChars`.
+ */
+export function tidySay(say: string, maxChars = SAY_MAX_CHARS): string {
+  const prose = say
+    .replace(BREAK_TAG, " ")
+    .replace(DRESS_TAG, "")
+    .replace(FIELD_TAG, "")
+    .replace(NO_WIDTH, "")
+    .replace(LOOSE_JOINER, "")
+    .replace(SIGN_AFTER_STOP, " ")
+    .replace(/\s*[\n\r]\s*/g, " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(NO_SPACE_AFTER_STOP, "$1 ")
+    .trim();
+  return capped(withoutLeftovers(prose), maxChars);
+}
+
 /** What a visitor reads when every sentence of a step had to be dropped. The pointer, if there is one, still says where to go. */
+/**
+ * The widget's own words for a visitor who used another control, or went to another page, in place of the step they
+ * were shown: 'The user clicked "Team" instead of link "Billing".', 'The user went to /team without using link "Billing".'
+ */
+const USED_SOMETHING_ELSE = /\binstead of\b|\bwent to \S+ without using\b/;
+
+/**
+ * A step's sentence without the opening "Not that one.", unless the visitor did use something other than the step
+ * they were shown, which `event`, what the widget heard them do, says in the words above.
+ *
+ * That opening is for a wrong click or a wrong turn, as the instructions have it. Written to a visitor who used the
+ * very control pointed at, it blames them for the model's own wrong pointer. On Northpine's Bills the model pointed at
+ * the Vendor column's button, the visitor clicked it, and the next step read "Not that one. Click the Vendor filter
+ * dropdown above the table…". In the measurement of 16 November it was said 3 times in 596 steps, and all 3
+ * were to a visitor who had done the step shown. It is as wrong for one who closed a dialog without using the control
+ * in it: there was no other one. The step that follows the opening is the right one, so only the opening goes.
+ */
+export function withoutBlame(say: string, event: string | undefined): string {
+  if (USED_SOMETHING_ELSE.test(event ?? "")) return say;
+  const rest = say.replace(/^\s*not that one\s*[.!,:;]?\s*/i, "");
+  if (!rest || rest === say) return say;
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
 export const SAY_WITHOUT_WORDS = {
   pointing: "This is the one to use.",
   nothing: "I can't help with that one.",
 } as const;
-
-/**
- * The sentence a visitor reads, tidied: no blank space at either end, and no
- * closing brace left over from the reply's own JSON. Some settings add one.
- * Sonnet with thinking off did in about one reply in eight.
- */
-export function tidySay(say: string): string {
-  return say.replace(/[\s}]+$/, "").trimStart();
-}
 
 export function checkSay(text: string, max = MAX_STEP_SAY): Checked {
   const broke = new Set<Rule>();

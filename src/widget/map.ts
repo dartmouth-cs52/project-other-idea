@@ -267,7 +267,7 @@ class Mapper {
 
   private async work() {
     const { host } = this.parts;
-    await settle(host, 500, 6000);
+    await settle(host, { quietMs: 500, maxMs: 6000, patient: false });
     if (!this.running()) return;
     const path = here();
     const state = this.state;
@@ -460,7 +460,7 @@ class Mapper {
     raise();
     try {
       click(el);
-      await settle(host, 300, 2500);
+      await settle(host, { quietMs: 300, maxMs: 2500, patient: false });
       if (here() !== path) return "moved";
       const after = takeSnapshot(host);
       const dialog = after.snapshot.dialog !== undefined;
@@ -476,7 +476,7 @@ class Mapper {
         // A menu or panel is closed the way it was opened, or with Escape.
         if (el.getAttribute("aria-expanded") === "true" || (el.tagName === "SUMMARY" && (el.parentElement as HTMLDetailsElement | null)?.open)) click(el);
         else escape();
-        await settle(host, 200, 1200);
+        await settle(host, { quietMs: 200, maxMs: 1200, patient: false });
       }
       return { result, urls };
     } finally {
@@ -491,7 +491,7 @@ class Mapper {
     raise();
     try {
       escape();
-      await settle(host, 200, 1200);
+      await settle(host, { quietMs: 200, maxMs: 1200, patient: false });
       let snap = open();
       if (snap.snapshot.dialog === undefined) return true;
       // Its own way out: Cancel, Close, or the cross in its corner.
@@ -499,12 +499,12 @@ class Mapper {
       const el = closer && snap.elements.get(closer.id);
       if (el) {
         click(el);
-        await settle(host, 200, 1200);
+        await settle(host, { quietMs: 200, maxMs: 1200, patient: false });
         snap = open();
         if (snap.snapshot.dialog === undefined) return true;
       }
       for (const dialog of Array.from(document.querySelectorAll<HTMLDialogElement>("dialog[open]"))) if (!host.contains(dialog)) dialog.close();
-      await settle(host, 200, 800);
+      await settle(host, { quietMs: 200, maxMs: 800, patient: false });
       return open().snapshot.dialog === undefined;
     } finally {
       await lower(200);

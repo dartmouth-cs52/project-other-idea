@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertCircleIcon } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FormAlert, failureFrom, type Failure } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/app-api";
-import { Card } from "./parts";
+import { Card, FailedCard } from "./parts";
 
 interface Request {
   name: string;
@@ -29,6 +28,7 @@ export function ApproveView() {
   const sig = params.get("sig") ?? "";
   const [request, setRequest] = useState<Request | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const [done, setDone] = useState<{ scope: string; sent: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -38,24 +38,17 @@ export function ApproveView() {
 
   async function approve(scope: "email" | "domain") {
     setBusy(true);
-    setError(null);
+    setFailure(null);
     try {
       setDone(await api<{ scope: string; sent: boolean }>("/approve", { method: "POST", body: { key, sig, scope } }));
     } catch (failure) {
-      setError((failure as Error).message);
+      setFailure(failureFrom("Couldn't approve", failure));
     } finally {
       setBusy(false);
     }
   }
 
-  if (error && !request) {
-    return (
-      <Card className="max-w-2xl">
-        <h1 className="text-2xl font-medium tracking-[-0.02em]">This link does not work</h1>
-        <p className="text-base text-muted-foreground">{error}</p>
-      </Card>
-    );
-  }
+  if (error) return <FailedCard className="max-w-2xl" title="This link does not work" message={error} />;
   if (!request) return <p className="text-base text-muted-foreground">Loading the request</p>;
 
   if (done) {
@@ -109,12 +102,7 @@ export function ApproveView() {
           ? `Approving the domain lets anyone with an ${request.domain} address sign in, and they all join the same company.`
           : `${request.domain} is a free mailbox, so only this one address can be approved.`}
       </p>
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircleIcon />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      <FormAlert failure={failure} />
     </Card>
   );
 }

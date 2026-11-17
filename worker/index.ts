@@ -1,11 +1,14 @@
-import { createApp, type AppParts } from "../src/server/app.ts";
-import { describeAlert, limitsFor, type Admission, type Ceiling, type Gate, type Limits, type Report } from "../src/server/budget.ts";
+import { createApp, turnCounts, type AppParts } from "../src/server/app.ts";
+import { describeAlert, meterFor, type Admission, type Ceiling, type Gate, type Limits, type Report } from "../src/server/budget.ts";
 import { Store } from "../src/server/db.ts";
-import { labelThreshold } from "../src/server/learned.ts";
+import { labelThreshold, networkThreshold } from "../src/server/learned.ts";
 import { configure } from "../src/server/model.ts";
 import { createSiteCache } from "../src/server/site-cache.ts";
+import { NeonTeachStore } from "../src/server/teach.ts";
 import type { SiteContext } from "../src/shared/types.ts";
 import mapper from "../dist/map.txt";
+import widgetActing from "../dist/widget-act.txt";
+import widgetTeaching from "../dist/widget-teach.txt";
 import widget from "../dist/widget.txt";
 
 export { BudgetMeter } from "./budget.ts";
@@ -13,8 +16,8 @@ export { BudgetMeter } from "./budget.ts";
 // The Haptic server as customers' browsers reach it: a Cloudflare Worker at
 // widget.joinhaptic.com. It gives the same answers as the Node server in
 // src/server (both run app.ts). What differs is where things are kept: sites,
-// and every guide and step, are in Neon (src/server/db.ts), and the widget file
-// is packed into the Worker when it is built.
+// and every guide and step, are in Neon (src/server/db.ts), and the widget's three
+// files (widget.js, widget-act.js for acting and widget-teach.js for teach mode) are packed into the Worker when it is built.
 //
 // Without the DATABASE_URL secret it still answers, from the KV store sites
 // were kept in before Neon, and records nothing. A site missing from Neon is
@@ -31,6 +34,8 @@ export interface Env {
   DATABASE_URL?: string;
   /** Slows down anyone asking for steps too fast. */
   TURN_LIMIT?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+  /** Slows down anyone checking teach tokens or posting taught steps too fast. TURN_LIMIT when it is not bound. */
+  TEACH_LIMIT?: { limit(options: { key: string }): Promise<{ success: boolean }> };
   /** What each site has spent on the model this hour and today. One object per site, in worker/budget.ts. */
   BUDGET?: {
     idFromName(name: string): unknown;
@@ -42,18 +47,24 @@ export interface Env {
   /** US dollars a site may spend in an hour and in a day, unless the site sets its own. */
   HAPTIC_BUDGET_HOUR?: string;
   HAPTIC_BUDGET_DAY?: string;
+  /** "1": every site shares one meter, held to the two limits above whatever a site sets. For the staging Worker (wrangler.staging.jsonc). */
+  HAPTIC_BUDGET_SHARED?: string;
   /** A secret. When set, budget alerts are posted here as {"text": …}, the shape Slack's incoming webhooks take. */
   HAPTIC_ALERT_WEBHOOK?: string;
   HAPTIC_MODEL?: string;
   HAPTIC_EFFORT?: string;
   HAPTIC_THINKING?: string;
   HAPTIC_CACHE?: string;
+  /** "log", "ask" or "off": what is done with a reply that tells the visitor to use a control and points at nothing. See src/server/check.ts. */
+  HAPTIC_RECHECK?: string;
   HAPTIC_MOCK_PAUSE_MS?: string;
   HAPTIC_MOCK_USD?: string;
   /** "1" switches every site off. It takes a deploy to change, so the keys in SITES are the quicker switch. */
   HAPTIC_OFF?: string;
   /** How many different visitors must have seen a learned label before the prompt gets it. 3 unless set. */
   HAPTIC_LABEL_THRESHOLD?: string;
+  /** How many different networks those visitors must have called from. 3 unless set, and never more than the visitors needed. */
+  HAPTIC_NETWORK_THRESHOLD?: string;
   /** A secret, set with `wrangler secret put`. Not needed while HAPTIC_MODEL is "mock". */
   ANTHROPIC_API_KEY?: string;
 }
@@ -69,9 +80,20 @@ const sites = createSiteCache({ keepMs: 60_000, maxStaleMs: 10 * 60_000 });
 
 /** One per isolate, so its note of which origins were seen lately is shared by every request. */
 let store: { url: string; store: Store } | undefined;
+let teachStore: { url: string; store: NeonTeachStore } | undefined;
+/** Teach sessions are in Neon, beside the sites (db/migrations/0014_teach_sessions.sql). Without the database there is no teach mode. */
+function teachFor(env: Env): NeonTeachStore | undefined {
+  if (!env.DATABASE_URL) return undefined;
+  if (teachStore?.url !== env.DATABASE_URL) teachStore = { url: env.DATABASE_URL, store: new NeonTeachStore(env.DATABASE_URL) };
+  return teachStore.store;
+}
+
 function storeFor(env: Env): Store | undefined {
   if (!env.DATABASE_URL) return undefined;
-  if (store?.url !== env.DATABASE_URL) store = { url: env.DATABASE_URL, store: new Store(env.DATABASE_URL, labelThreshold({ HAPTIC_LABEL_THRESHOLD: env.HAPTIC_LABEL_THRESHOLD, HAPTIC_PRODUCTION: "1" })) };
+  if (store?.url !== env.DATABASE_URL) {
+    const online = { HAPTIC_LABEL_THRESHOLD: env.HAPTIC_LABEL_THRESHOLD, HAPTIC_NETWORK_THRESHOLD: env.HAPTIC_NETWORK_THRESHOLD, HAPTIC_PRODUCTION: "1" };
+    store = { url: env.DATABASE_URL, store: new Store(env.DATABASE_URL, labelThreshold(online), { labelNetworks: networkThreshold(online) }) };
+  }
   return store.store;
 }
 
@@ -139,11 +161,11 @@ function budgetFor(env: Env): AppParts["budget"] {
   const store = env.BUDGET;
   if (!store) return undefined;
   const reach = async (site: SiteContext, caller: string) => {
-    const limits = limitsFor(site, { HAPTIC_BUDGET_HOUR: env.HAPTIC_BUDGET_HOUR, HAPTIC_BUDGET_DAY: env.HAPTIC_BUDGET_DAY });
+    const { name, limits } = meterFor(site, { HAPTIC_BUDGET_HOUR: env.HAPTIC_BUDGET_HOUR, HAPTIC_BUDGET_DAY: env.HAPTIC_BUDGET_DAY, HAPTIC_BUDGET_SHARED: env.HAPTIC_BUDGET_SHARED });
     // Callers are only told apart when the site limits each one. The site's own object scrambles the
     // address before it keeps it. This copy of the Worker holds the address only in memory, for a few seconds.
     const who = limits.perCaller ? caller : "";
-    return { limits, who, key: `${site.id} ${who}`, meter: store.get(store.idFromName(site.id)) };
+    return { limits, who, key: `${name} ${who}`, meter: store.get(store.idFromName(name)) };
   };
   const remember = (key: string, gate: Gate) => {
     if (gate.open) return closed.delete(key);
@@ -188,6 +210,7 @@ export default {
       HAPTIC_EFFORT: env.HAPTIC_EFFORT,
       HAPTIC_THINKING: env.HAPTIC_THINKING,
       HAPTIC_CACHE: env.HAPTIC_CACHE,
+      HAPTIC_RECHECK: env.HAPTIC_RECHECK,
       HAPTIC_MOCK_PAUSE_MS: env.HAPTIC_MOCK_PAUSE_MS,
       HAPTIC_MOCK_USD: env.HAPTIC_MOCK_USD,
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
@@ -197,19 +220,35 @@ export default {
     const app = createApp({
       loadSite: async (id, hurry) => (SITE_ID.test(id) ? sites(id, () => readSite(env, id), hurry ? (work) => ctx.waitUntil(work) : undefined) : undefined),
       widget: async () => widget,
+      widgetActing: async () => widgetActing,
+      widgetTeaching: async () => widgetTeaching,
       mapper: async () => mapper,
       widgetMaxAge: 300,
       overLimit: async (key) => (env.TURN_LIMIT ? !(await env.TURN_LIMIT.limit({ key })).success : false),
+      overTeachLimit: async (key) => {
+        const limit = env.TEACH_LIMIT ?? env.TURN_LIMIT;
+        return limit ? !(await limit.limit({ key })).success : false;
+      },
+      teach: teachFor(env),
       isOff: (site) => isOff(env, site.id),
       budget: budgetFor(env),
       onAlert: (site, alert) => ctx.waitUntil(sendAlert(env, describeAlert(site, alert))),
       background: (work) => ctx.waitUntil(work),
       onSeen: (site, origin, allowed) => later(db?.seenAt(site, origin, allowed)),
       onAsk: (turn, _site, origin) => later(db?.startGuide(turn, origin)),
-      onTurn: (turn, measure, _site, origin) => later(db?.recordStep(turn, measure, origin)),
+      onTurn: (turn, measure, site, origin) => {
+        // One line of counts per step, with nothing from the visitor or their page, so that how guides and acting go on a site can be seen.
+        try {
+          console.log(JSON.stringify(turnCounts(turn, measure, site)));
+        } catch {
+          // A line that cannot be written must not cost the visitor their step.
+        }
+        // And the step on the guide's record, as the dashboard shows it (src/server/db.ts).
+        later(db?.recordStep(turn, measure, origin));
+      },
       onReport: (site, guide, report) => later(db?.report(site, guide, report)),
       onCancel: (turn) => later(db?.cancelStep(turn)),
-      onOutline: (site, visitor, outline) => later(db?.recordOutline(site, visitor, outline)),
+      onOutline: (site, visitor, outline, network) => later(db?.recordOutline(site, visitor, outline, network)),
       ...(db ? { mapping: { allowed: (site, pass) => db.mappingAllowed(site.id, pass), save: (site, page) => db.saveMappedPage(site.id, page) } } : {}),
     });
     try {

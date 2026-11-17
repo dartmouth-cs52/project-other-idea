@@ -87,14 +87,21 @@ export function day(value: string): string | undefined {
 
 export function fromHtml(html: string, source: string): Doc {
   const $ = cheerio.load(html);
-  const title = $("h1").first().text().trim() || $("title").first().text().trim() || source;
+  // A help page's <title> starts with the page's own name and ends with the site's: "Basic searching | Jira Software".
+  // Its first h1 is often the site's name, or the first section's.
+  const titled = $("title").first().text().split(/\s+[|–—]\s+|\s+-\s+/)[0]?.trim() ?? "";
   const address = $('link[rel="canonical"]').attr("href");
   const changed = day($('meta[property="article:modified_time"], meta[name="last-modified"], meta[name="revised"]').first().attr("content") ?? "");
   $("script, style, noscript, nav, header, footer, aside, svg").remove();
   // Block elements end a line, so headings and list items don't run together.
   $("p, li, h1, h2, h3, h4, tr, br, div").each((_, el) => void $(el).append("\n"));
-  const main = $("main, article, [role='main']").first();
-  const text = (main.length ? main : $("body")).text();
+  // A help page can have more than one of these, like a search box's results drawn as an article before the page's own.
+  // The one with the most words is the page.
+  const candidates = $("main, article, [role='main']").toArray();
+  const main = candidates.sort((a, b) => $(b).text().length - $(a).text().length)[0];
+  const body = main ? $(main) : $("body");
+  const title = titled || $("h1").first().text().trim() || source;
+  const text = body.text();
   const doc: Doc = { title, source, text: text.replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim() };
   if (isWebAddress(address)) doc.url = address;
   if (changed) doc.updated = changed;
