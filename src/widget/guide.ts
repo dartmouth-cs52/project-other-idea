@@ -26,6 +26,7 @@ import { onAddressChange } from "./navigation.ts";
 import { isDrawn, POPUP_ROLES, watchPopups } from "./popups.ts";
 import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, sameView, statesOf, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
 import { ACTING_WORDS, type DidShown, type Ui, SHOWING } from "./ui.ts";
+import { inSight } from "./view.ts";
 
 // Runs one guide: ask the model for a step, point at it, wait for the visitor
 // to act, let the page settle, and go again until the model has nothing more
@@ -822,7 +823,7 @@ export class Guide {
       const listed = page.snapshot.elements.find((element) => element.id === id);
       // A control the site's owner ruled out gets no pointer, not even for a moment.
       if (isBlocked(listed, this.blocked)) return;
-      if (listed?.offscreen) el.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (listed?.offscreen || cutOff(el)) el.scrollIntoView({ block: "center", behavior: "smooth" });
       ui.pointAt(el, "");
       if (acting) {
         pointedEarly = el;
@@ -1074,7 +1075,7 @@ export class Guide {
     const target = el;
     if (early?.el !== target) {
       dropEarly();
-      if (listed?.offscreen) target.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (listed?.offscreen || cutOff(target)) target.scrollIntoView({ block: "center", behavior: "smooth" });
     }
     // If they have already used it, the caption would only flash. An answer's words are in the panel, so its pointer goes alone.
     if (!acted) ui.pointAt(target, inPanel ? "" : reply.say);
@@ -2619,6 +2620,22 @@ function loadingMark(ignore: Element): Element | undefined {
   const main = document.querySelector("main, [role='main']");
   if (main && !stuckMarks.has(main) && main.getElementsByTagName("*").length < 60 && /^(?:loading|please wait)\b[\s.…]*$/i.test(((main as HTMLElement).innerText ?? "").trim())) return main;
   return undefined;
+}
+
+/**
+ * Whether a control is only partly on the screen: in sight, but cut off by its
+ * top or bottom edge, like a form's last button half under the foot of a
+ * phone's screen. The snapshot calls a control out of view only when none of
+ * it shows, and the guide scrolls that to the middle of the screen. A control
+ * cut off is brought there too, so the visitor sees all of it, with room for
+ * the pointer and its sentence. One taller than the screen is left as it is.
+ */
+function cutOff(el: Element): boolean {
+  const rect = el.getBoundingClientRect();
+  const view = inSight();
+  if (rect.height === 0 || rect.height > view.height - 40) return false;
+  const showing = rect.bottom > view.top && rect.top < view.bottom;
+  return showing && (rect.top < view.top - 1 || rect.bottom > view.bottom + 1);
 }
 
 /**
