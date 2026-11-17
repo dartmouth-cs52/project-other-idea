@@ -55,8 +55,8 @@ const assets: Assets = {
 };
 
 const worker = {
-  fetch(request: Request, env: Env): Promise<Response> {
-    return handle(request, env, assets);
+  fetch(request: Request, env: Env, ctx?: { waitUntil(work: Promise<unknown>): void }): Promise<Response> {
+    return handle(request, env, assets, ctx ? (work) => ctx.waitUntil(work) : undefined);
   },
   scheduled(_event: unknown, env: Env, ctx: { waitUntil(work: Promise<unknown>): void }) {
     ctx.waitUntil(daily(env));

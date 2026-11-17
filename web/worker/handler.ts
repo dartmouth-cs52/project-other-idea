@@ -2,7 +2,7 @@
 // supplied: one address for the site, the request access form, and the static pages.
 
 import { checkRequest, cleanRequest, emailDomain, isPersonalEmail, type AccessField, type AccessRequest } from "../lib/access-request";
-import { appApi, approveLink, type AppEnv } from "./app-api";
+import { appApi, approveLink, type AppEnv, type Later } from "./app-api";
 import { proxyAuth } from "./auth";
 import { boundedText } from "./body";
 import { database } from "./db";
@@ -47,7 +47,8 @@ export async function daily(env: Env): Promise<void> {
   await forgetOldTeaching(database(env.DATABASE_URL)).catch((error: Error) => console.error("Could not delete old teach sessions:", error.message));
 }
 
-export async function handle(request: Request, env: Env, assets: Assets): Promise<Response> {
+/** `later` finishes work after the answer has gone: the request's waitUntil on Cloudflare. */
+export async function handle(request: Request, env: Env, assets: Assets, later?: Later): Promise<Response> {
   const url = new URL(request.url);
 
   // One address for the site: www goes to the bare domain, and plain http goes to https.
@@ -69,7 +70,7 @@ export async function handle(request: Request, env: Env, assets: Assets): Promis
     }
     return proxyAuth(request, env);
   }
-  if (url.pathname.startsWith("/api/app/")) return appApi(request, env, url);
+  if (url.pathname.startsWith("/api/app/")) return appApi(request, env, url, later);
   // The install steps a coding agent fetches, /install/<site>.md. The install page itself is static.
   if (isPlaybookPath(url.pathname)) return playbook(request, env, url);
 

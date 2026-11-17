@@ -123,8 +123,13 @@ export interface Site {
   origin: string;
   allowedOrigins: string[];
   scriptUrl: string;
-  /** `launcher` is the Ask button's own colour. Missing means Ink. */
+  /** `launcher` is the Ask button's own colour, as it is drawn. Missing means Ink. `accent` is always Haptic's blue. */
   appearance: { accent: string; position: "bottom-right"; launcherLabel: string; launcher?: string };
+  /**
+   * The launcher's colour is read from the site once, when the site is added. `waiting` is true until that has
+   * finished for the site's address or a person has chosen a colour. `source` says where the colour came from.
+   */
+  launcherMatch?: { waiting: boolean; source: "matched" | "chosen" | null };
   notes: string;
   docs: {
     budget: number;

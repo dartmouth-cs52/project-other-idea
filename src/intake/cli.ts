@@ -44,7 +44,6 @@ Options:
   --hide <words>       Keep these words out of the map, like the name of the account in --session.
                        Repeat for more. Not kept in the site file: give it again on refresh.
   --allow <origin>     Another origin the widget may run on, like a staging site. Repeat for more.
-  --accent <hex>       Color of the pointer and its highlight. Default ${DEFAULT_APPEARANCE.accent}.
   --label <text>       Text on the launcher button. Default "${DEFAULT_APPEARANCE.launcherLabel}".
   --answers <on|off>   Answers: reply in words from the help docs as well as pointing. On by default for a site with help docs.
   --stale-days <n>     With Answers on, mark an answer from an article older than this as possibly out of date.
@@ -81,7 +80,6 @@ const { values, positionals } = parseArgs({
     also: { type: "string", multiple: true },
     hide: { type: "string", multiple: true },
     allow: { type: "string", multiple: true },
-    accent: { type: "string" },
     label: { type: "string" },
     "handoff-webhook": { type: "string" },
     "handoff-secret": { type: "string" },
@@ -261,7 +259,6 @@ async function main() {
   const url = values.url ?? existing?.source.url;
   if (!url) fail(`--url is required.\n\n${HELP}`);
   if (!URL.canParse(url)) fail(`"${url}" isn't a full URL. Include https://.`);
-  if (values.accent && !/^#[0-9a-f]{6}$/i.test(values.accent)) fail(`--accent has to be a hex color like #5b5bd6, not "${values.accent}".`);
   const actingOn = onOrOff(values.acting, "--acting");
   const maxPages = Number(values["max-pages"] ?? existing?.source.maxPages ?? 30);
   if (!Number.isInteger(maxPages) || maxPages < 1) fail("--max-pages has to be a whole number, 1 or more.");
@@ -323,7 +320,9 @@ async function main() {
     origin,
     allowedOrigins: [...new Set([origin, ...(values.allow ?? existing?.allowedOrigins ?? [])])],
     appearance: {
-      accent: values.accent ?? existing?.appearance.accent ?? DEFAULT_APPEARANCE.accent,
+      // The pointer is Haptic's blue on every site and is not a setting. See src/shared/colour.ts.
+      accent: DEFAULT_APPEARANCE.accent,
+      ...(existing?.appearance.launcher ? { launcher: existing.appearance.launcher } : {}),
       position: DEFAULT_APPEARANCE.position,
       launcherLabel: values.label ?? existing?.appearance.launcherLabel ?? DEFAULT_APPEARANCE.launcherLabel,
     },

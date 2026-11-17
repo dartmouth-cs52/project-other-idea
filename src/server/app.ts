@@ -15,6 +15,7 @@ import {
   type TurnRequest,
 } from "../shared/types.ts";
 import { publicActing } from "./acting.ts";
+import { INK, launcherColour, POINTER_BLUE } from "../shared/colour.ts";
 import type { Alert, Budget, Gate } from "./budget.ts";
 import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
 import { networkHash, parseOutlineReport, visitorHash } from "./learned.ts";
@@ -119,6 +120,17 @@ export const FIXED_SAY = {
 
 const fixedReply = (say: string): TurnReply => ({ target: null, status: "stuck", say, paused: true });
 
+/**
+ * A site's look as a widget is told it: the pointer is Haptic's blue whatever was saved, and the launcher is the
+ * colour it will be drawn in, darkened if it was too light. A widget from before these rules, still in a visitor's
+ * cache, draws the same as a new one.
+ */
+export function publicAppearance(saved: SiteContext["appearance"]): SiteContext["appearance"] {
+  const { launcher: _launcher, ...rest } = saved;
+  const launcher = launcherColour(saved.launcher);
+  return { ...rest, accent: POINTER_BLUE, ...(launcher === INK ? {} : { launcher }) };
+}
+
 /** Returns the handler. It answers `undefined` for addresses that are not its own, so a host can serve other things. */
 export function createApp(parts: AppParts) {
   return async function handle(request: Request, caller: string): Promise<Response | undefined> {
@@ -150,7 +162,7 @@ export function createApp(parts: AppParts) {
       const allowed = mayRead(site, origin);
       if (origin) parts.onSeen?.(site, origin, allowed);
       if (!allowed) return json(403, { error: refusal(origin) });
-      const config: PublicSiteConfig = { name: site.name, appearance: site.appearance };
+      const config: PublicSiteConfig = { name: site.name, appearance: publicAppearance(site.appearance) };
       if (await switchedOff(parts, site)) config.off = true;
       else {
         // Only a site with acting on says anything about it, so every other site's settings read as they always have.
