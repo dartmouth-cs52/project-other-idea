@@ -248,7 +248,7 @@ button { font: inherit; cursor: pointer; }
 @keyframes dip-pointer { 40% { transform: scale(.9); } }
 .cursor path { fill: var(--accent); stroke: #fff; stroke-width: 3; stroke-linejoin: round; paint-order: stroke; }
 /* A pointer's caption shows as the pointer lands. A sentence with nothing to point at shows at once. */
-.caption { position: fixed; display: flex; align-items: center; gap: 8px; max-width: min(320px, calc(var(--fit-w, 100vw) - 24px)); transform-origin: 0 0; background: #1c1917; color: #fafaf9;
+.caption { position: fixed; display: flex; align-items: center; gap: 8px; width: max-content; max-width: min(320px, calc(var(--fit-w, 100vw) - 24px)); transform-origin: 0 0; background: #1c1917; color: #fafaf9;
   border-radius: 14px; padding: 6px 6px 6px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.22); animation: show .18s ease-out .35s both; }
 .caption.said { animation-delay: 0s; }
 @keyframes show { from { opacity: 0; } }
@@ -889,6 +889,8 @@ export class Ui {
    */
   findHome = () => {
     try {
+      // Measured at the size it is drawn at on a zoomed page, which measure() sets.
+      this.measure();
       const launcher = this.dock.querySelector(".launcher")?.getBoundingClientRect();
       if (!launcher?.width || !launcher.height) return;
       const size = { w: launcher.width, h: launcher.height };
