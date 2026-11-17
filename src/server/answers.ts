@@ -75,7 +75,7 @@ export function neverDecided(question: string, answer: string): boolean {
 // own records are money. On Northpine, with Answers on, every caption that repeated the visitor's own figure lost
 // its words: asked to "raise the Platform travel budget to $75,000", the step at Edit budget read "This is the one
 // to use.", and "who approves meals over $150?" was answered "I can't help with that one." (17 of 596 steps in the
-// demo's configuration on 16 November, and that question 3 times in 3). A figure the visitor wrote themselves is
+// measurement of 16 November, and that question 3 times in 3). A figure the visitor wrote themselves is
 // theirs: a step that repeats it states no price in the company's name. So in a step, and only there, such a figure
 // is not counted. An answer in words is held to the rule as before, and so is any step when the question is itself
 // about a price, a refund or the visitor's own account, where repeating a figure back would confirm it.

@@ -480,7 +480,7 @@ test("a link that moves the page to another address and loads what it shows ther
 // A link named for what its form will do ------------------------------------------------------------------------------
 //
 // Northpine's "Issue card" is a plain link to /cards/new, the first page of the card form. Read as a button it "saves
-// something", and the first press of the demo's "Can you issue Malika a card…" went to the visitor. A real visit whose
+// something", and the first press of "Can you issue Malika a card…" went to the visitor. A real visit whose
 // address plainly opens a form is pressed, with the tripwire armed. Nothing else with such a name is.
 
 test("a link named Issue card that visits /cards/new is pressed as a visit, and acting carries on in the form it opens", () =>

@@ -92,8 +92,8 @@ const ACT_RULES = swapOnce(swapOnce(swapOnce(RULES, GUIDE_ONLY_POINTS, ACT_DOES_
  *
  * Since main's #49 it is the prompt of every site with help docs. It was first
  * run against a model on 16 November 2026, on Northpine built with its help
- * docs: 22 guides three times each, the stage questions and the acting finale
- * (the results are in the pull request). One sentence was added then, to case
+ * docs: 22 guides three times each, six more questions and an acting run
+ * five times each (the results are in the pull request). One sentence was added then, to case
  * 5: "So does a list on this page that would hold the answer once it is
  * searched, filtered or unfolded: point at what does that." Asked "what's the
  * GL code for lodging" on the chart of accounts, where Lodging is folded

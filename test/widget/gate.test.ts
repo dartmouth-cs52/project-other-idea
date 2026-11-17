@@ -434,7 +434,7 @@ test("links that send, save, approve or publish are never pressed, whatever the 
 });
 
 test("a link named for what its form will do is pressed when it plainly visits that form's page, watched, and in no other case", async () => {
-  // Northpine's "Issue card" is a link to /cards/new. Read as a button it "saves something", and the demo's first press went to the visitor.
+  // Northpine's "Issue card" is a link to /cards/new. Read as a button it "saves something", and the first press of acting went to the visitor.
   // These pages are served at /cards/new, so the card form's own address here is another one.
   const page = await open(`<main><h1>Cards</h1>
     <a href="/team/cards/new" id="issue" data-watch>Issue card</a>

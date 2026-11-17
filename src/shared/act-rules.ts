@@ -398,7 +398,7 @@ export function readAddress(address: string, extra?: readonly string[]): NameVer
 // A link named for what its form will do. Northpine's "Issue card" is a plain
 // link to /cards/new, the first page of the card form. Read as a button it
 // "saves something", and the first press of "Can you issue Malika a card…"
-// went to the visitor, with a sentence that was not true of it (5 demo runs
+// went to the visitor, with a sentence that was not true of it (5 runs
 // of 5 on 16 November). Its words alone cannot tell it from "<a href='#'>Send
 // invite</a>", which a script makes send. Its address can: a real visit whose
 // last word is the one web frameworks give to the page that holds a form.

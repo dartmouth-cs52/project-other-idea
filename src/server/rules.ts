@@ -741,7 +741,7 @@ const USED_SOMETHING_ELSE = /\binstead of\b|\bwent to \S+ without using\b/;
  * That opening is for a wrong click or a wrong turn, as the instructions have it. Written to a visitor who used the
  * very control pointed at, it blames them for the model's own wrong pointer. On Northpine's Bills the model pointed at
  * the Vendor column's button, the visitor clicked it, and the next step read "Not that one. Click the Vendor filter
- * dropdown above the table…". In the demo's measurement of 16 November it was said 3 times in 596 steps, and all 3
+ * dropdown above the table…". In the measurement of 16 November it was said 3 times in 596 steps, and all 3
  * were to a visitor who had done the step shown. It is as wrong for one who closed a dialog without using the control
  * in it: there was no other one. The step that follows the opening is the right one, so only the opening goes.
  */
