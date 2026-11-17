@@ -259,8 +259,8 @@ mouse.
 ## Colors
 
 Two neutrals carry the whole interface. One colour belongs to the pointer, and
-one marks a finished task. The thinking glow is the pointer's colour with its
-two neighbours, and is the only place another hue is seen.
+one marks a finished task. The thinking glow is Pointer blue with its two
+neighbours, and is the only place another hue is seen.
 Neutrals are Tailwind's stone scale, which has a slight warmth so the page never
 looks stark.
 
@@ -279,11 +279,12 @@ looks stark.
   its middle, indigo at its leading edge. The three are the pointer's colour
   and its neighbours 28 degrees to one side and 30 to the other in OKLCH,
   mixed in OKLCH so they melt into each other with no seam. Staying that close
-  to the pointer's hue is what keeps it Haptic's and not a general AI rainbow,
-  and it means a customer's own accent gets a glow of its own neighbours: an
-  orange pointer glows peach to amber, a green one lime to teal. The three hex
-  values are what Pointer blue gives, and what a browser without relative
-  colours falls back to. Violet and pink were tried first and turned down:
+  to the pointer's hue is what keeps it Haptic's and not a general AI rainbow.
+  The glow is these three on every site, whatever the site's accent: it is how
+  Haptic looks when it thinks, the same on the home page and in every product
+  it runs in. It was once worked out from each site's accent instead, and a
+  site with a green one glowed lime to teal. The three are written down, not
+  worked out by the browser. Violet and pink were tried first and turned down:
   they are furthest from the pointer, they are what every other AI product
   uses, and violet is the darkest of them over a page. Never used flat, and
   never outside the glow.
