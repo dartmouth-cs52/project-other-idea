@@ -44,6 +44,8 @@ export class TeachRefused extends Error {
 const MAX_WAITING = 10;
 /** A session nobody saved is deleted this long after it was made. */
 const KEEP_UNSAVED_DAYS = 7;
+/** How many times a save reads the site's routes again when another save changed them at the same moment. */
+const SAVE_TRIES = 3;
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ROUTE_ID = /^[0-9a-f]{8}$/;
 
@@ -260,7 +262,10 @@ export function reviewedSteps(recorded: TaughtStep[], input: Record<string, unkn
  * session keeps when it was saved and by whom, and no longer the steps it
  * recorded, nor those the reviewer deleted. A route that goes, replaced or
  * past the most a site keeps, takes the session it was saved from with it.
- * If saving fails, the session keeps its steps, so the person can try again.
+ * Two saves at the same moment both keep their routes: each writes only over
+ * the routes it read, and reads them again if they changed. A save that writes
+ * no site fails. If saving fails, the session keeps its steps, so the person
+ * can try again.
  */
 export async function saveTaught(sql: Sql, site: TeachSite, orgId: string, id: string, input: Record<string, unknown>) {
   const row = await sessionRow(sql, site.id, id);
@@ -276,18 +281,36 @@ export async function saveTaught(sql: Sql, site: TeachSite, orgId: string, id: s
     ...(row.created_by_name ? { by: row.created_by_name } : {}),
   };
   const key = questionKey(row.question);
-  const before = site.context.taught ?? [];
-  const taught = [...before.filter((item) => questionKey(item.question) !== key), route].slice(-MAX_TAUGHT_ROUTES);
-  const gone = before.filter((item) => !taught.includes(item)).map((item) => item.question);
-  // Both or neither: a route is never saved without its session saying so, nor the reverse.
-  await sql.transaction([
-    sql`
-      update sites set context = jsonb_set(context, '{taught}', ${JSON.stringify(taught)}::jsonb), updated_at = now()
-      where id = ${site.id} and company_id = ${orgId}`,
-    sql`update teach_sessions set saved_at = now(), steps = null where id = ${id} and site_id = ${site.id} and saved_at is null`,
-    sql`delete from teach_sessions where site_id = ${site.id} and id <> ${id} and saved_at is not null and question = any(${gone}::text[])`,
-  ]);
-  return { taught: taught.map(routeView), route: routeView(route) };
+  /** Whether the site holds this route, once the first statement has run: what the other two go by. */
+  const holds = JSON.stringify([{ id: route.id }]);
+  let before = site.context.taught ?? [];
+  for (let tries = 0; tries < SAVE_TRIES; tries++) {
+    const taught = [...before.filter((item) => questionKey(item.question) !== key), route].slice(-MAX_TAUGHT_ROUTES);
+    const gone = before.filter((item) => !taught.includes(item)).map((item) => item.question);
+    // Both or neither: a route is never saved without its session saying so, nor the reverse. The site's routes are
+    // replaced only if they are still the ones this list was made from, so a route saved or removed meanwhile, by another
+    // save at the same moment, is never lost or brought back: a second save waits for the first, then writes nothing.
+    const [written] = await sql.transaction([
+      sql`
+        update sites set context = jsonb_set(context, '{taught}', ${JSON.stringify(taught)}::jsonb), updated_at = now()
+        where id = ${site.id} and company_id = ${orgId} and coalesce(context->'taught', '[]'::jsonb) = ${JSON.stringify(before)}::jsonb
+          and exists (select 1 from teach_sessions where id = ${id} and site_id = ${site.id} and saved_at is null)
+        returning id`,
+      sql`
+        update teach_sessions set saved_at = now(), steps = null where id = ${id} and site_id = ${site.id} and saved_at is null
+          and exists (select 1 from sites where id = ${site.id} and context->'taught' @> ${holds}::jsonb)`,
+      sql`
+        delete from teach_sessions where site_id = ${site.id} and id <> ${id} and saved_at is not null and question = any(${gone}::text[])
+          and exists (select 1 from sites where id = ${site.id} and context->'taught' @> ${holds}::jsonb)`,
+    ]);
+    if ((written as unknown[] | undefined)?.length) return { taught: taught.map(routeView), route: routeView(route) };
+    // Nothing was written: the site is not this company's, these steps were saved meanwhile, or the routes changed. Read again.
+    const [now] = (await sql`select context->'taught' as taught from sites where id = ${site.id} and company_id = ${orgId}`) as { taught: TaughtRoute[] | null }[];
+    if (!now) throw new TeachRefused(404, "No such site.");
+    if (statusOf(await sessionRow(sql, site.id, id)) === "saved") throw new TeachRefused(400, "These steps are saved already.");
+    before = now.taught ?? [];
+  }
+  throw new TeachRefused(409, "Someone else changed this site's taught routes at the same moment. Save again.");
 }
 
 /**

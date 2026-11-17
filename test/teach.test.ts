@@ -467,7 +467,7 @@ test("review: delete steps, add notes, leave the last click, and name an unnamed
 
 test("a save that fails leaves the steps where they were, so it can be tried again", async () => {
   const session = { id: "0b6f2c1e-6a1d-4c3e-9f2a-3d4c5b6a7e8f", question: "how do I add a budget", created_by_name: "Dana", created_at: new Date(), expires_at: new Date(), claimed_at: new Date(), finished_at: new Date(), cancelled_at: null, saved_at: null, steps: [step({}), step({ label: "Create budget", commits: true })], expired: true };
-  const { sql, sent } = standIn((text) => (text.startsWith("select") ? [session] : []));
+  const { sql, sent } = standIn((text) => (text.startsWith("select") ? [session] : text.startsWith("update sites") ? [{ id: site.id }] : []));
   const failing = Object.assign((strings: TemplateStringsArray, ...values: unknown[]) => sql(strings, ...values), {
     query: (sql as unknown as { query: (text: string, values: unknown[]) => Promise<unknown> }).query,
     transaction: async () => {
@@ -576,5 +576,24 @@ describe("what a teach session keeps, against Postgres", { skip: TEST_DATABASE_U
     // As the review checked it: a session started after that, and then the saved rows that still hold steps.
     await startTeaching(sql, await siteNow(), teacher, { question: "how do I add a card" });
     assert.equal(Number((await rows("select count(*)::int as n from teach_sessions where saved_at is not null and steps is not null"))[0]!.n), 0);
+  });
+
+  test("two routes saved at the same moment are both kept, and a save that writes no site fails and keeps the steps", async () => {
+    // As the review raced them: both saves start from the same reading of the site.
+    const deleting = await recorded("how do I delete a card", [step({ label: "Delete card" })]);
+    const inviting = await recorded("how do I invite a teammate", [step({ label: "Invite" })]);
+    const read = await siteNow();
+    await Promise.all([saveTaught(sql, read, ORG, deleting, { steps: [{ n: 0 }] }), saveTaught(sql, read, ORG, inviting, { steps: [{ n: 0 }] })]);
+    const questions = (await siteNow()).context.taught!.map((route) => route.question);
+    assert.ok(questions.includes("how do I delete a card") && questions.includes("how do I invite a teammate"), `both routes are kept: ${questions.join(" / ")}`);
+    assert.equal(Number((await rows("select count(*)::int as n from teach_sessions where id = any($1::uuid[]) and saved_at is not null", [[deleting, inviting]]))[0]!.n), 2);
+
+    // A save whose site update matches no row, here another company's: refused, and the session is as it was.
+    const other = await recorded("how do I export expenses", [step({ label: "Export" })]);
+    await assert.rejects(saveTaught(sql, await siteNow(), "22222222-2222-4222-8222-222222222222", other, { steps: [{ n: 0 }] }), (error: unknown) => error instanceof TeachRefused && error.status === 404);
+    const [session] = await rows("select saved_at, steps from teach_sessions where id = $1", [other]);
+    assert.equal(session!.saved_at, null, "not marked saved");
+    assert.ok(Array.isArray(session!.steps), "its steps are kept, to try again");
+    assert.ok(!(await siteNow()).context.taught!.some((route) => route.question === "how do I export expenses"));
   });
 });
