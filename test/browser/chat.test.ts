@@ -392,6 +392,93 @@ for (const name of BROWSERS) {
       await glow.waitFor({ state: "detached", timeout: 1000 });
     });
 
+    test("a press or a key on the page while Haptic thinks sends the glow away for the rest of that wait, and Haptic goes on thinking", async () => {
+      harness.script = async (request, index) => {
+        await sleep(1200);
+        return point(idOf(request, index === 0 ? "Invite teammate" : "Send invite"), "Click it.");
+      };
+      await ask(tab, "invite someone");
+      const glow = tab.locator("haptic-veil .glow");
+      await glow.waitFor({ state: "attached" });
+      // The chat is ours, not the page: using it leaves the glow where it is.
+      await part(tab, '.ask [aria-label="Ask a question"]').click();
+      await sleep(100);
+      assert.equal(await glow.count(), 1, "a press in the chat is not a press on the page");
+      // A press on the page, on nothing the guide is waiting for.
+      await tab.click("h1");
+      await glow.waitFor({ state: "detached", timeout: 1000 });
+      assert.equal((await veil(tab)).display, "none", "nothing is left over the page");
+      assert.equal(await guideState(tab), "asking", "Haptic is still thinking");
+      assert.equal(await statusLine(tab), "thinking: Thinking", "and the chat still says so");
+      await sleep(300);
+      assert.equal(await glow.count(), 0, "it does not come back in that wait");
+      assert.ok(await ringAround(tab, "#invite"), "the reply was not called off");
+
+      // The next wait has its glow again. A modifier on its own is not using the page; a key is, the same as a press.
+      await tab.click("#invite");
+      await glow.waitFor({ state: "attached", timeout: 1000 });
+      await tab.keyboard.press("Shift");
+      await sleep(100);
+      assert.equal(await glow.count(), 1, "Shift alone leaves it");
+      await tab.keyboard.press("j");
+      await glow.waitFor({ state: "detached", timeout: 1000 });
+      assert.equal(await guideState(tab), "asking");
+      assert.ok(await ringAround(tab, "#send"));
+    });
+
+    // The page in the screenshot that asked for this: the visitor fills in the invite's fields, some of them ahead of the
+    // step on show, while Haptic works out the next one. A band of colour over the form they are filling in is in their way.
+    test("a wait that begins with the visitor filling in a field or choosing from a dropdown has no glow, and one after a button does", async () => {
+      harness.pages.set(
+        "/form",
+        page(`
+          <main style="font:14px system-ui;padding:40px">
+            <h1>Invite people</h1>
+            <button id="start" onclick="document.getElementById('email').focus()">Start an invite</button>
+            <p><label>Email <input id="email" type="email"></label>
+            <label style="margin-left:24px">Entity <select id="entity"><option>Northpine Inc.</option><option>Northpine Ltd</option><option>Northpine GmbH</option></select></label></p>
+            <button id="send">Send invite</button>
+          </main>`),
+      );
+      harness.script = async (request, index) => {
+        if (index > 0) await sleep(700);
+        return point(idOf(request, ["Start an invite", "Email"][index] ?? "Send invite"), "Do this.");
+      };
+      await tab.goto(`${harness.url}/form`);
+      await part(tab, ".launcher").waitFor();
+      const glow = tab.locator("haptic-veil .glow");
+      await ask(tab, "invite someone");
+      assert.ok(await ringAround(tab, "#start"));
+      await glow.waitFor({ state: "detached", timeout: 1000 });
+      // A button, after which the page puts the keyboard in a field of its own accord: the visitor is waiting, so it glows.
+      await tab.click("#start");
+      await glow.waitFor({ state: "attached", timeout: 1000 });
+      assert.equal(await tab.evaluate(() => document.activeElement?.id), "email");
+      assert.ok(await ringAround(tab, "#email"));
+      await glow.waitFor({ state: "detached", timeout: 1000 });
+
+      await watchClasses(tab);
+      // Typing in the field on show: Haptic works out the next step once the typing pauses, with the visitor still in the field.
+      await tab.click("#email");
+      await tab.locator("#email").pressSequentially("theo@example.com");
+      await untilState(tab, "asking");
+      assert.equal(await statusLine(tab), "thinking: Thinking");
+      assert.equal(await glow.count(), 0, "no glow over the field they are filling in");
+      assert.ok(await ringAround(tab, "#send"));
+
+      // Choosing from a dropdown that is not the step on show, as in the screenshot.
+      await tab.click("#entity");
+      await tab.keyboard.press("ArrowDown");
+      await tab.keyboard.press("Enter");
+      await untilState(tab, "asking");
+      assert.equal(await statusLine(tab), "thinking: Finding the way from here");
+      await sleep(300);
+      assert.equal(await glow.count(), 0, "no glow over the dropdown they are choosing from");
+      await turns(harness, 4);
+      assert.ok(await ringAround(tab, "#send"));
+      assert.ok(!(await seen(tab)).some((classes) => classes.split(" ").includes("glow")), `no glow at all while they filled in the form: ${(await seen(tab)).join(", ")}`);
+    });
+
     test("the glow and the pointer's ring are Haptic's blue on every site, whatever colour the site saved", async () => {
       harness.script = () => new Promise(() => {});
       const band = async () => {
