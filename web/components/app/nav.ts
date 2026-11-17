@@ -3,9 +3,9 @@
 // Where each part of the dashboard lives. The site is fully static, so a page
 // can't have the site's id in its path. Everything is one page, /dashboard/,
 // and the address says the rest: ?site= for the site, ?view= for the page of
-// it, ?guide= for the guide open beside it. A reload or a shared link comes
-// back to the same place. Adding a site has screens of its own, at
-// /dashboard/setup/.
+// it, ?guide= for the guide open beside it. With no site named it is the list
+// of sites. A reload or a shared link comes back to the same place. Adding a
+// site has screens of its own, at /dashboard/setup/.
 
 import { useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -33,8 +33,8 @@ export function daysFrom(text: string | null): number {
   return RANGES.find((range) => range === asked) ?? 30;
 }
 
-/** The list of every site. */
-export const SITES_HREF = "/dashboard/?view=sites";
+/** The list of every site, which is where sign-in lands. It is kept in lib/dashboard.ts, where the Worker can reach it too. */
+export { SITES_HREF } from "@/lib/dashboard";
 /** Adding a site, on the setup screens, one question at a time. */
 export const NEW_SITE_HREF = "/dashboard/setup/";
 

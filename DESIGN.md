@@ -259,8 +259,8 @@ mouse.
 ## Colors
 
 Two neutrals carry the whole interface. One colour belongs to the pointer, and
-one marks a finished task. The thinking glow is the pointer's colour with its
-two neighbours, and is the only place another hue is seen.
+one marks a finished task. The thinking glow is Pointer blue with its two
+neighbours, and is the only place another hue is seen.
 Neutrals are Tailwind's stone scale, which has a slight warmth so the page never
 looks stark.
 
@@ -279,11 +279,12 @@ looks stark.
   its middle, indigo at its leading edge. The three are the pointer's colour
   and its neighbours 28 degrees to one side and 30 to the other in OKLCH,
   mixed in OKLCH so they melt into each other with no seam. Staying that close
-  to the pointer's hue is what keeps it Haptic's and not a general AI rainbow,
-  and it means a customer's own accent gets a glow of its own neighbours: an
-  orange pointer glows peach to amber, a green one lime to teal. The three hex
-  values are what Pointer blue gives, and what a browser without relative
-  colours falls back to. Violet and pink were tried first and turned down:
+  to the pointer's hue is what keeps it Haptic's and not a general AI rainbow.
+  The glow is these three on every site, whatever the site's accent: it is how
+  Haptic looks when it thinks, the same on the home page and in every product
+  it runs in. It was once worked out from each site's accent instead, and a
+  site with a green one glowed lime to teal. The three are written down, not
+  worked out by the browser. Violet and pink were tried first and turned down:
   they are furthest from the pointer, they are what every other AI product
   uses, and violet is the darkest of them over a page. Never used flat, and
   never outside the glow.
@@ -604,10 +605,11 @@ be left empty. Where the site has Do it with me on, each has a "Haptic does it"
 switch beside it, and pressing that question presses Do it. Where it is off the
 switches are not shown.
 
-**Sites.** A company with one site lands inside it. With more than one, the
-first page is the list, one card a site. Sites whose script is running come
-first, the one asked most recently at their head, and those still waiting for
-the script come last, so the first card is the one with something happening.
+**Sites.** The first page after sign-in is the list, one card a site, for a
+company with one site as for one with several. A site opens when its card is
+pressed or a link names it. Sites whose script is running come first, the one
+asked most recently at their head, and those still waiting for the script
+come last, so the first card is the one with something happening.
 A card says how many questions the last seven days had and how many finished,
 the last fortnight as fourteen small bars, and the newest question. A site
 still waiting for its script says so in place of the numbers. A running site

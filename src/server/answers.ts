@@ -1,6 +1,6 @@
 import { MODES, REASONS, type Act, type Mode, type Reason, type SiteContext, type Snapshot, type Source, type TurnReply, type TurnRequest } from "../shared/types.ts";
 import { wantsTheWay } from "./check.ts";
-import { articlesOf, type Article } from "./prompt.ts";
+import { articlesOf, inert, type Article } from "./prompt.ts";
 import { checkSay, SAY_WITHOUT_WORDS, tidySay, type Rule } from "./rules.ts";
 
 // What the server does with a reply on a site that has Answers on, after the
@@ -209,9 +209,12 @@ const MAX_CONTROLS = 6;
 /** A site map with fewer different controls than this, over all its pages, says nothing about what the product has. */
 const MIN_KNOWN_CONTROLS = 5;
 
-/** A label made comparable: lower case, single spaces, and none of the quotes, dots or arrows a sentence wraps a label in. */
+/**
+ * A label made comparable: as the prompt writes it (`inert`, so the model's "< b>Pay</ b>" is the page's "<b>Pay</b>"),
+ * lower case, single spaces, and none of the quotes, dots or arrows a sentence wraps a label in.
+ */
 const plainLabel = (label: string): string =>
-  label
+  inert(label)
     .toLowerCase()
     .replace(/["'“”‘’`…›»→]+/g, " ")
     .replace(/\s+/g, " ")

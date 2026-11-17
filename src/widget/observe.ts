@@ -106,8 +106,12 @@ export type Seen =
   | { type: "click"; at: number; where: Where }
   /** A key went down outside the widget. `inTyped` is true when the keyboard was in something text is typed into. */
   | { type: "key"; at: number; key: string; inTarget: boolean; inTyped: boolean }
-  /** Something was typed, picked or ticked. `byPage` when the page's script fired it, as a calendar does when it writes the picked day into its field. */
-  | { type: "input"; at: number; inTarget: boolean; byPage?: boolean }
+  /**
+   * Something was typed, picked or ticked. `byPage` when the page's script fired it, as a calendar does when it writes
+   * the picked day into its field. `autofill` when the browser filled the field in from what it keeps, as Chrome's
+   * autofill does: in one go, with no typing, and often in the fields around it too.
+   */
+  | { type: "input"; at: number; inTarget: boolean; byPage?: boolean; autofill?: boolean }
   /** The pointed control lost the keyboard. */
   | { type: "left"; at: number }
   /** The window lost the keyboard to a frame inside the pointed control: a click in the frame, which the page never hears. */
@@ -116,7 +120,13 @@ export type Seen =
 
 export type Verdict =
   /** They used the pointed control. */
-  | { how: "clicked" | "filled" | "opened"; onTarget: true; strayed: false }
+  | { how: "clicked" | "opened"; onTarget: true; strayed: false }
+  /**
+   * They filled in the pointed field. `autofill` when the browser did it for them, which can fill other fields too.
+   * `then` when they went on to click another control before their typing paused: what they clicked, or "" for a
+   * control with no name that is safe to send.
+   */
+  | { how: "filled"; onTarget: true; strayed: false; autofill?: true; then?: string }
   | { how: "key"; key: string; onTarget: true; strayed: false }
   /** They picked from what the pointed control opened. */
   | { how: "chose"; names: string[]; onTarget: true; strayed: false }
@@ -199,6 +209,10 @@ export function hear(heard: Heard, seen: Seen, pointed: Pointed): Heard {
     }
     // Blank space, plain text, or a box around the control: not worth a step by itself. What the page does next may be.
     if (!where.controls.length || where.aroundTarget) return pointed.anyClick ? say({ how: "elsewhere", onTarget: false, strayed: true }) : next;
+    // A field the visitor typed in and then left for another control is filled in: going on to the next field, or to
+    // the button, is how a form is used. Only the pause in their typing had not come yet, and a wrong click told them
+    // "Not that one".
+    if (pointed.typed && next.typed !== undefined) return say({ ...filled, then: where.name });
     return say({ how: "other", name: where.name, onTarget: false, strayed: true });
   };
 
@@ -242,9 +256,12 @@ export function hear(heard: Heard, seen: Seen, pointed: Pointed): Heard {
       // The page writing into a field is not the visitor typing in it. A box ticked or a choice picked by the page's script is still news of a pick.
       if (seen.byPage && pointed.typed) return next;
       if (pointed.ticked) return say(used);
-      if (pointed.select) return say(filled);
+      if (pointed.select) return say(seen.autofill ? { ...filled, autofill: true } : filled);
       next.typed = seen.at;
       next.usedAt = seen.at;
+      // The browser's autofill writes the whole value at once, so there is no pause to wait for. Heard at once, the
+      // next step is asked for while the visitor is still looking at the form it filled in.
+      if (seen.autofill) return say({ ...filled, autofill: true });
       return next;
     case "left":
       // Leaving a dropdown after opening it is a pick too, whichever choice it was.

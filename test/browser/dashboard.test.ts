@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import type { Locator, Page } from "playwright";
-import { BRAND, SITE, SKIP, WAITING, startDashboard, type Dashboard } from "./dashboard-harness.ts";
+import { BRAND, NO_SITE_COMPANY, ONE_SITE, ONE_SITE_COMPANY, SETTING_UP, SETTING_UP_COMPANY, SITE, SKIP, WAITING, startDashboard, type Dashboard } from "./dashboard-harness.ts";
 
 // The dashboard keeping itself current, and the things about it that only show
 // in a real browser. Each test opens the built page, changes the database the
@@ -248,6 +248,86 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
       await tab.waitForURL(/[?&]view=sites/, { timeout: 10_000 });
       await tab.getByRole("heading", { name: "Sites" }).waitFor();
       await eventually(async () => (await tab.locator("main ul > li").count()) === 1, "one site should be left on the list");
+    });
+  });
+
+  describe("where signing in lands", () => {
+    const SITES = "/dashboard/?view=sites";
+    const where = (tab: Page) => new URL(tab.url()).pathname + new URL(tab.url()).search;
+    /** Whether the page asked for the site's own record since call `from`, which only opening the site does. The list asks only for its icon. */
+    const opened = (id: string, from: number) => dash.calls.slice(from).some((call) => call.method === "GET" && call.path === `/api/app/sites/${id}`);
+
+    test("an emailed link and Google are both asked to come back to the list of sites", async () => {
+      const from = dash.auth.length;
+      const tab = await dash.open("/sign-in/");
+      await closing(tab, async () => {
+        await tab.getByLabel("Work email").fill("ada@northpine.example");
+        await tab.getByRole("button", { name: "Email me a sign-in link" }).click();
+        await tab.getByRole("heading", { name: "Check your email" }).waitFor();
+        await tab.getByRole("button", { name: "Use a different email" }).click();
+        await tab.getByRole("button", { name: "Continue with Google" }).click();
+        await eventually(async () => dash.auth.slice(from).some((call) => call.path.endsWith("/sign-in/social")), "Google should have been asked for");
+        assert.deepEqual(
+          dash.auth.slice(from).filter((call) => call.path.includes("/sign-in/")).map(({ path, body }) => ({ path, body })),
+          [
+            { path: "/api/auth/sign-in/magic-link", body: { email: "ada@northpine.example", callbackURL: `${dash.url}${SITES}` } },
+            { path: "/api/auth/sign-in/social", body: { provider: "google", callbackURL: `${dash.url}${SITES}` } },
+          ],
+        );
+      });
+    });
+
+    test("with one site, the list is where sign-in lands, and the site opens from its card", async () => {
+      const from = dash.calls.length;
+      const tab = await dash.open(SITES, undefined, ONE_SITE_COMPANY);
+      await closing(tab, async () => {
+        const cards = tab.locator("main ul > li");
+        await cards.first().getByText("questions in the last 7 days").waitFor({ timeout: 10_000 });
+        assert.equal(await cards.count(), 1);
+        assert.equal(opened(ONE_SITE, from), false, "the one site is not opened by itself");
+        await cards.first().getByRole("link").click();
+        await tab.locator('[data-metric="Guides finished"]').waitFor({ timeout: 10_000 });
+        assert.equal(where(tab), `/dashboard/?site=${ONE_SITE}`);
+      });
+    });
+
+    test("with one site, an address that names no site is the list too, and stays the list", async () => {
+      for (const address of ["/dashboard/", "/dashboard/?view=questions"]) {
+        const from = dash.calls.length;
+        const tab = await dash.open(address, undefined, ONE_SITE_COMPANY);
+        await closing(tab, async () => {
+          await tab.getByRole("heading", { name: "Sites" }).waitFor({ timeout: 10_000 });
+          await tab.locator("main ul > li").first().getByText("questions in the last 7 days").waitFor({ timeout: 10_000 });
+          await tab.waitForTimeout(1000);
+          assert.equal(where(tab), address, `${address} should stay where it is`);
+          assert.equal(opened(ONE_SITE, from), false, `${address} should not open the company's only site`);
+        });
+      }
+    });
+
+    test("a site part way through setup goes back to its setup screen when it is opened, and not before", async () => {
+      for (const address of [SITES, "/dashboard/"]) {
+        const tab = await dash.open(address, undefined, SETTING_UP_COMPANY);
+        await closing(tab, async () => {
+          const card = tab.locator("main ul > li").first();
+          await card.getByText("Waiting for the script").waitFor({ timeout: 10_000 });
+          await tab.waitForTimeout(1000);
+          assert.equal(where(tab), address, `${address} should stay on the list`);
+          await card.getByRole("link").click();
+          await tab.waitForURL(`**/dashboard/setup/?site=${SETTING_UP}`, { timeout: 10_000 });
+          await tab.getByRole("heading", { name: "Add the script" }).waitFor({ timeout: 10_000 });
+        });
+      }
+    });
+
+    test("a company with no site yet still goes to the setup screens", async () => {
+      for (const address of [SITES, "/dashboard/"]) {
+        const tab = await dash.open(address, undefined, NO_SITE_COMPANY);
+        await closing(tab, async () => {
+          await tab.waitForURL("**/dashboard/setup/", { timeout: 10_000 });
+          await tab.getByLabel("Your app's address").waitFor({ timeout: 10_000 });
+        });
+      }
     });
   });
 });
