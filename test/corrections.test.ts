@@ -166,4 +166,5 @@ test("the picker offers the controls the crawl found on that page, and those eno
     { role: "button", label: "Archive" },
   ]);
   assert.ok(sent[0]!.values.includes(3), "only labels three visitors have seen, as for the prompt");
+  assert.match(sent[0]!.text, /visitor_count >= \? and network_count >= \?/, "and from three networks, since visitor ids can be made up");
 });

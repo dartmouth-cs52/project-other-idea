@@ -35,7 +35,13 @@ const SEEN_EVERY_MS = 60_000;
  * means a burst of made-up ones cannot stop a real one being noted for good.
  */
 const MAX_REFUSED_ORIGINS = 20;
-/** Learned labels kept for one site. Past this, labels already known are still counted and new ones are not added. */
+/**
+ * Learned labels kept for one site, and as many items behind controls. Past
+ * this, new ones still go in, and room is made by dropping others: never the
+ * ones the prompt reads (`LABELS_READ`), and of the rest, those seen longest
+ * ago. Anyone can send labels, so a site that is full has to keep learning:
+ * a flood of made-up ones is pushed out by the labels real visitors keep seeing.
+ */
 const MAX_LABELS = 5000;
 /** The most learned labels read with a site, the most seen first. */
 const LABELS_READ = 1500;
@@ -54,11 +60,15 @@ export class Store {
   /**
    * `connection` is Neon's connection string. A test hands in a stand-in for
    * the query function instead. `labelThreshold` is how many different
-   * visitors must have seen a learned label before the prompt gets it.
+   * visitors must have seen a learned label before the prompt gets it, and
+   * `labelNetworks` how many different networks they must have called from.
+   * `maxLabels` is for tests, which would take long to fill the real limit.
    */
   constructor(
     connection: string | NeonQueryFunction<false, false>,
     private readonly labelThreshold = 3,
+    private readonly labelNetworks = labelThreshold,
+    private readonly maxLabels = MAX_LABELS,
   ) {
     this.sql = typeof connection === "string" ? neon(connection) : connection;
   }
@@ -77,84 +87,119 @@ export class Store {
     return rows[0] ? withLearned(siteFromRow(rows[0]), labels, this.labelThreshold, openings) : undefined;
   }
 
-  /** What enough visitors saw behind a control. None when the table is missing (db/migrations/0012). */
+  /**
+   * What enough visitors, from enough networks, saw behind a control. None
+   * when the table is missing (db/migrations/0012) or has no networks yet (0014):
+   * until they are counted, nothing learned is trusted with the prompt.
+   */
   private async learnedOpenings(id: string): Promise<LearnedOpening[]> {
     try {
       const rows = await this.sql`
-        select route, control, label, href, visitor_count as visitors, seen_count::int as seen from outline_openings
-        where site_id = ${id} and visitor_count >= ${this.labelThreshold}
-        order by visitor_count desc, seen_count desc limit ${LABELS_READ}`;
+        select route, control, label, href, visitor_count as visitors, network_count as networks, seen_count::int as seen from outline_openings
+        where site_id = ${id} and visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}
+        order by network_count desc, visitor_count desc, seen_count desc limit ${LABELS_READ}`;
       return rows as LearnedOpening[];
     } catch (error) {
-      console.error("Couldn't read what menus show (has db/migrations/0012 been applied?):", error instanceof Error ? error.message : error);
+      console.error("Couldn't read what menus show (have db/migrations/0012 and 0014 been applied?):", error instanceof Error ? error.message : error);
       return [];
     }
   }
 
-  /** The labels enough visitors have seen on this site. None, rather than a failed site, when the table is missing (db/migrations/0009). */
+  /**
+   * The labels enough visitors, from enough networks, have seen on this site.
+   * None, rather than a failed site, when the table is missing
+   * (db/migrations/0009) or has no networks yet (0014).
+   */
   private async learnedLabels(id: string): Promise<LearnedLabel[]> {
     try {
       const rows = await this.sql`
-        select route, kind, label, href, visitor_count as visitors, seen_count::int as seen from outline_labels
-        where site_id = ${id} and visitor_count >= ${this.labelThreshold}
-        order by visitor_count desc, seen_count desc limit ${LABELS_READ}`;
+        select route, kind, label, href, visitor_count as visitors, network_count as networks, seen_count::int as seen from outline_labels
+        where site_id = ${id} and visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}
+        order by network_count desc, visitor_count desc, seen_count desc limit ${LABELS_READ}`;
       return rows as LearnedLabel[];
     } catch (error) {
-      console.error("Couldn't read what was learned (has db/migrations/0009 been applied?):", error instanceof Error ? error.message : error);
+      console.error("Couldn't read what was learned (have db/migrations/0009 and 0014 been applied?):", error instanceof Error ? error.message : error);
       return [];
     }
   }
 
   /**
    * Counts the labels of a page a visitor saw. `visitor` is already hashed
-   * with the site's id. Each label keeps up to ten visitors, and a visitor
-   * already counted for a label isn't counted again.
+   * with the site's id, and so is `network`, the network they called from,
+   * which is empty when it is not known. Each label keeps up to ten of each,
+   * and one already counted for a label isn't counted again.
+   *
+   * A site at its limit still learns: the new labels go in, and then the
+   * labels the prompt does not read that were seen longest ago are dropped
+   * to make room.
    */
-  recordOutline(site: SiteContext, visitor: string, outline: PageOutline): Promise<void> {
+  recordOutline(site: SiteContext, visitor: string, outline: PageOutline, network = ""): Promise<void> {
     const rows = outlineRows(outline);
     // In a statement of their own, so a database without 0012 still learns the page's labels.
-    const opened = this.recordOpenings(site, visitor, openingRows(outline));
+    const opened = this.recordOpenings(site, visitor, openingRows(outline), network);
     if (!rows.length) return opened;
-    return this.quietly("learn from a page (has db/migrations/0009 been applied?)", async () => {
+    return this.quietly("learn from a page (have db/migrations/0009 and 0014 been applied?)", async () => {
       const [counted] = (await this.sql`select count(*)::int as count from outline_labels where site_id = ${site.id}`) as { count: number }[];
-      const count = counted?.count ?? 0;
-      const json = JSON.stringify(rows);
-      if (count >= MAX_LABELS) {
-        await this.sql`
-          update outline_labels o set seen_count = o.seen_count + 1, last_seen_at = now(),
-            visitors = case when ${visitor} = any(o.visitors) or cardinality(o.visitors) >= ${MAX_VISITORS} then o.visitors else o.visitors || ${visitor}::text end
-          from jsonb_to_recordset(${json}::jsonb) as r(route text, kind text, label text, href text)
-          where o.site_id = ${site.id} and o.route = r.route and o.kind = r.kind and o.label = r.label and o.href = r.href`;
-        return;
-      }
       await this.sql`
-        insert into outline_labels (site_id, route, kind, label, href, visitors)
-        select ${site.id}, r.route, r.kind, r.label, r.href, array[${visitor}::text]
-        from jsonb_to_recordset(${json}::jsonb) as r(route text, kind text, label text, href text)
+        insert into outline_labels (site_id, route, kind, label, href, visitors, networks)
+        select ${site.id}, r.route, r.kind, r.label, r.href, array[${visitor}::text],
+          case when ${network} = '' then '{}'::text[] else array[${network}::text] end
+        from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as r(route text, kind text, label text, href text)
         on conflict (site_id, route, kind, label, href) do update set
           seen_count = outline_labels.seen_count + 1, last_seen_at = now(),
           visitors = case when ${visitor} = any(outline_labels.visitors) or cardinality(outline_labels.visitors) >= ${MAX_VISITORS}
-            then outline_labels.visitors else outline_labels.visitors || ${visitor}::text end`;
+            then outline_labels.visitors else outline_labels.visitors || ${visitor}::text end,
+          networks = case when ${network} = '' or ${network} = any(outline_labels.networks) or cardinality(outline_labels.networks) >= ${MAX_VISITORS}
+            then outline_labels.networks else outline_labels.networks || ${network}::text end`;
+      // Only when this outline could have taken the site past its limit, so most outlines cost two statements.
+      if ((counted?.count ?? 0) + rows.length <= this.maxLabels) return;
+      // The rows the prompt reads are the ones `learnedLabels` picks, in its order. They stay. The rest go least recently seen first.
+      await this.sql`
+        delete from outline_labels o using (
+          select route, kind, label, href from (
+            select route, kind, label, href, last_seen_at, seen_count,
+              (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) and row_number() over (
+                order by (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) desc, network_count desc, visitor_count desc, seen_count desc
+              ) <= ${LABELS_READ} as read
+            from outline_labels where site_id = ${site.id}
+          ) ranked
+          order by read desc, last_seen_at desc, seen_count desc, route, kind, label, href
+          offset ${this.maxLabels}
+        ) least
+        where o.site_id = ${site.id} and o.route = least.route and o.kind = least.kind and o.label = least.label and o.href = least.href`;
     });
   }
 
-  /** Counts what a visitor saw behind each control, the same way as a page's labels. */
-  private recordOpenings(site: SiteContext, visitor: string, rows: ReturnType<typeof openingRows>): Promise<void> {
+  /** Counts what a visitor saw behind each control, the same way as a page's labels, and makes room the same way. */
+  private recordOpenings(site: SiteContext, visitor: string, rows: ReturnType<typeof openingRows>, network: string): Promise<void> {
     if (!rows.length) return Promise.resolve();
-    return this.quietly("learn what a menu shows (has db/migrations/0012 been applied?)", async () => {
-      const json = JSON.stringify(rows);
+    return this.quietly("learn what a menu shows (have db/migrations/0012 and 0014 been applied?)", async () => {
       const [counted] = (await this.sql`select count(*)::int as count from outline_openings where site_id = ${site.id}`) as { count: number }[];
-      const full = (counted?.count ?? 0) >= MAX_LABELS;
       await this.sql`
-        insert into outline_openings (site_id, route, control, label, href, visitors)
-        select ${site.id}, r.route, r.control, r.label, r.href, array[${visitor}::text]
-        from jsonb_to_recordset(${json}::jsonb) as r(route text, control text, label text, href text)
-        where not ${full} or exists (select 1 from outline_openings o where o.site_id = ${site.id} and o.route = r.route
-          and o.control = r.control and o.label = r.label and o.href = r.href)
+        insert into outline_openings (site_id, route, control, label, href, visitors, networks)
+        select ${site.id}, r.route, r.control, r.label, r.href, array[${visitor}::text],
+          case when ${network} = '' then '{}'::text[] else array[${network}::text] end
+        from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as r(route text, control text, label text, href text)
         on conflict (site_id, route, control, label, href) do update set
           seen_count = outline_openings.seen_count + 1, last_seen_at = now(),
           visitors = case when ${visitor} = any(outline_openings.visitors) or cardinality(outline_openings.visitors) >= ${MAX_VISITORS}
-            then outline_openings.visitors else outline_openings.visitors || ${visitor}::text end`;
+            then outline_openings.visitors else outline_openings.visitors || ${visitor}::text end,
+          networks = case when ${network} = '' or ${network} = any(outline_openings.networks) or cardinality(outline_openings.networks) >= ${MAX_VISITORS}
+            then outline_openings.networks else outline_openings.networks || ${network}::text end`;
+      if ((counted?.count ?? 0) + rows.length <= this.maxLabels) return;
+      await this.sql`
+        delete from outline_openings o using (
+          select route, control, label, href from (
+            select route, control, label, href, last_seen_at, seen_count,
+              (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) and row_number() over (
+                order by (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) desc, network_count desc, visitor_count desc, seen_count desc
+              ) <= ${LABELS_READ} as read
+            from outline_openings where site_id = ${site.id}
+          ) ranked
+          order by read desc, last_seen_at desc, seen_count desc, route, control, label, href
+          offset ${this.maxLabels}
+        ) least
+        where o.site_id = ${site.id} and o.route = least.route and o.control = least.control and o.label = least.label and o.href = least.href`;
     });
   }
 

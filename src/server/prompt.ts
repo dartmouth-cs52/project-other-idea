@@ -239,6 +239,38 @@ function renderArticle({ id, doc }: Article): string {
 const MAX_PAGE_BUTTONS = 24;
 
 /**
+ * Text from a site's pages or from its visitors, made safe to write inside one
+ * of the prompt's blocks: on one line, and with nothing that reads as a tag,
+ * so it can neither close the block it is in nor open another. "</site_map>"
+ * becomes "</ site_map>", the way a help article's own tags are kept shut
+ * (`shut`). An angle bracket that starts no tag, as in "Next >", stays.
+ *
+ * What visitors teach Haptic can hold no angle bracket at all
+ * (`isLearnableLabel`). This is for everything else that reaches the site
+ * map, and for anything stored before that rule.
+ */
+export function inert(text: string): string {
+  return text.replace(/\s+/g, " ").replace(/<(\/?)(?=[\p{L}_!?])/gu, "<$1 ");
+}
+
+/** A page with every piece of text in it made `inert`. */
+function inertPage(page: PageNode): PageNode {
+  const links = (list: PageNode["links"]) => list.map((item) => ({ label: inert(item.label), to: inert(item.to) }));
+  const safe: PageNode = {
+    ...page,
+    path: inert(page.path),
+    title: inert(page.title),
+    headings: page.headings.map(inert),
+    links: links(page.links),
+    buttons: page.buttons.map(inert),
+    fields: page.fields.map(inert),
+  };
+  if (page.description !== undefined) safe.description = inert(page.description);
+  if (page.opens) safe.opens = page.opens.map((opening) => ({ control: inert(opening.control), links: links(opening.links), buttons: opening.buttons.map(inert) }));
+  return safe;
+}
+
+/**
  * One line per page. Links and buttons that repeat on most pages (the main
  * navigation) are listed once at the top, which leaves each page's line for
  * what's specific to it. The same goes for a menu that opens the same way on
@@ -248,8 +280,12 @@ const MAX_PAGE_BUTTONS = 24;
  * What a menu, tab or accordion shows once it is opened reads
  * `behind "Account": Billing → /billing`, so the model knows which control to
  * point at first.
+ *
+ * Every piece of text is made `inert` first: the map is written inside
+ * <site_map>, and part of it comes from whoever called the server.
  */
-export function renderSiteMap(pages: PageNode[]): string {
+export function renderSiteMap(given: PageNode[]): string {
+  const pages = given.map(inertPage);
   const link = (l: { label: string; to: string }) => `${l.label} → ${l.to}`;
   const opening = (o: PageOpening) => `behind "${o.control.replace(/"/g, "'")}": ${[...o.links.map(link), ...o.buttons].join("; ")}`;
   const counts = new Map<string, number>();
@@ -351,8 +387,9 @@ const CHROME = new Set(["header", "nav", "aside"]);
  */
 export function knownOpenings(site: SiteContext | undefined, path: string): (element: SnapElement) => string | undefined {
   if (!site?.pages.some((page) => page.opens?.length)) return () => undefined;
+  // Written inside <page>, and learned from visitors, so made `inert` like the site map.
   const text = (opening: PageOpening) =>
-    [...opening.links.map((link) => `${link.label} → ${link.to}`), ...opening.buttons].slice(0, MAX_OPENS_LISTED).join("; ");
+    inert([...opening.links.map((link) => `${link.label} → ${link.to}`), ...opening.buttons].slice(0, MAX_OPENS_LISTED).join("; "));
   const here = new Map((site.pages.find((page) => page.path === path)?.opens ?? []).map((opening) => [opening.control, text(opening)]));
   const elsewhere = new Map<string, Set<string>>();
   for (const page of site.pages) {
