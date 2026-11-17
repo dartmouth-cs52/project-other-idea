@@ -363,7 +363,8 @@ test("only a sentence shown beside a pointer counts as a caption, and the counts
   assert.ok(shownAsCaption({ target: "e5", status: "continue" }));
   assert.ok(shownAsCaption({ target: "e5", status: "done", mode: "guide" }), "a place on the page, pointed at to end");
   assert.ok(shownAsCaption({ target: "e5", status: "continue", mode: "act" }));
-  // Read in the chat: nothing pointed at, stuck, an answer in words (its pointer has no caption) and a fixed sentence.
+  // Not beside a pointer: nothing pointed at and stuck (in the caption above the chat), an answer in words (in the chat, its
+  // pointer with no caption), and the fixed sentence for one Haptic can't help with.
   assert.ok(!shownAsCaption({ target: null, status: "done" }));
   assert.ok(!shownAsCaption({ target: "e5", status: "stuck" }));
   assert.ok(!shownAsCaption({ target: "e5", status: "done", mode: "answer" }));

@@ -186,13 +186,22 @@ test('the rules say a caption is the action and the label, since the pointer sho
   const withAnswers = buildSystemPrompt({ ...site, answers: { enabled: true } });
   for (const [name, prompt] of [["guide", rules], ["answers", withAnswers], ["act", buildSystemPrompt(site, "act")]] as const) {
     assert.match(prompt, /the pointer already shows the visitor where it is, so "say" is only what to do with it: the action and the element's visible label\. "Click Sign out\."/, name);
-    assert.match(prompt, /An element with no visible label is named by what it opens or does, like "Open your account menu\.", never by how it looks or where it sits\./, name);
+    // The demo app's account button is listed as button "A", and Northpine's shows the visitor's initials: "Click A." tells nobody anything.
+    assert.match(prompt, /An element with no visible label, or one labeled only with an icon, initials or a letter or two, is named by what it opens or does, like "Open your account menu\.", never by how it looks or where it sits\./, name);
     assert.match(prompt, /Leave out where the element is, what it looks like, what comes after it, what else the visitor could do instead, and what is already filled in or selected/, name);
     // What asked for the long ones is gone: the example that said where, the icon described with its place, and two sentences as the measure.
     assert.doesNotMatch(prompt, /Click Settings in the top bar\./, name);
     assert.doesNotMatch(prompt, /describe the icon and where it is/, name);
     assert.doesNotMatch(prompt, /One or two short sentences/, name);
   }
+  // A sentence with nothing pointed at still answers. A question about what the site shows is answered in one sentence from
+  // the page, and the benchmark's guides that ask for a fact pass on that sentence (ui5's out-of-stock laptops, horilla's
+  // Christmas days): the caption rules must not send the visitor off to look instead.
+  for (const [name, prompt] of [["guide", rules], ["act", buildSystemPrompt(site, "act")]] as const) {
+    assert.match(prompt, /With target null, use one short sentence: the answer from the page, what now shows once the goal is done, what to do, or where on the page to look\./, name);
+    assert.match(prompt, /Add words only where the rules above ask for them, like what a field marked "invalid" needs, moving the mouse over an element that shows on hover,/, name);
+  }
+  assert.match(withAnswers, /A step says what to do with the control\. The reply that ends a guide says that the goal is done, or where on the page to look\./);
 });
 
 test("the question asked after the last step is worded as a closing one", () => {
@@ -573,9 +582,9 @@ test('the reply\'s own words for "say" ask for the action and the label as the r
   // The model reads the field's description as well as the rules. It said "One or two short sentences" while the rules
   // had the same, and would contradict the rules now if it still did.
   const guide = await sentFor(site, later({}), { target: "e3", status: "continue", say: "Click Update card." });
-  assert.match(guide.sayHint, /With a target, only the action and its visible label, like "Click Sign out\."/);
+  assert.match(guide.sayHint, /With a target, the action and its visible label, like "Click Sign out\.", and no more than the rules add\./);
   const answers = await sentFor({ ...site, answers: { enabled: true } }, later({}), { mode: "guide", target: "e3", status: "continue", say: "Click Update card." });
-  assert.match(answers.sayHint, /With "guide" and a target, only the action and its visible label, like "Click Sign out\."/);
+  assert.match(answers.sayHint, /With "guide" and a target, the action and its visible label, like "Click Sign out\.", and no more than the rules add\./);
   assert.match(answers.sayHint, /With "answer", one to four sentences/);
   const act = await sentFor(actingSite, later({ version: 3, mode: "act" }), { target: "e1", do: "click", enter: null, commits: false, status: "continue", say: "Opening Billing." });
   assert.match(act.sayHint, /what you are doing, like "Opening Cards\."/);

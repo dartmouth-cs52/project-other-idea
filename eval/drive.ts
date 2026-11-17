@@ -219,7 +219,8 @@ export async function drive(browser: Browser, set: GuideSet, guide: Guide, site:
       saidDoneButNot: end === "stopped short" && lastReply?.status === "done",
       ...counts,
       showing,
-      trail,
+      // A copy: a reply that comes back after the run is judged still lands in `trail`, and no visitor saw it.
+      trail: trail.slice(),
       ...(net ? { sent: net.log } : {}),
     };
     return { run, traced };
@@ -413,6 +414,7 @@ export async function drive(browser: Browser, set: GuideSet, guide: Guide, site:
       for (const shownBy = Date.now() + 8000; Date.now() < shownBy; ) {
         if (replies.length > at + 1 && replies[at + 1]!.stepNo === replies[at]!.stepNo) {
           trail[at]!.did = "nothing: the page had changed, so the widget asked again";
+          trail[at]!.captioned = false;
           counts.askedAgain++;
           at++;
           continue;

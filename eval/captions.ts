@@ -32,8 +32,10 @@ export function namesALaterStep(say: string): boolean {
 
 /**
  * Whether the widget shows this reply's sentence in a caption beside the
- * pointer. A reply with nothing to point at, one that is stuck, and an answer
- * in words are read in the chat, where a sentence or more is right.
+ * pointer. A reply with nothing to point at, and one that is stuck, is shown
+ * with no pointer, in the caption above the chat; an answer in words is read
+ * in the chat. Neither stands beside a pointer, and a sentence or more is
+ * right for both.
  */
 export function shownAsCaption(reply: Pick<TurnReply, "target" | "status" | "mode">): boolean {
   return reply.target !== null && reply.status !== "stuck" && reply.mode !== "answer" && reply.mode !== "cannot_help";
@@ -42,11 +44,11 @@ export function shownAsCaption(reply: Pick<TurnReply, "target" | "status" | "mod
 export interface CaptionStats {
   /** Captions counted. An empty one is left out: the widget shows none. */
   captions: number;
-  /** The middle caption's length in words. */
+  /** The middle caption's length in words: the longer of the two middle ones for an even count, as eval/run.ts's `middle` takes it. */
   typicalWords: number;
   /** Captions of `SHORT_CAPTION_WORDS` words or fewer. */
   short: number;
-  /** Captions that also tell a later step. */
+  /** Captions that also tell a later step, in one of the ways `namesALaterStep` knows: a floor, not a full count. */
   laterStep: number;
 }
 
