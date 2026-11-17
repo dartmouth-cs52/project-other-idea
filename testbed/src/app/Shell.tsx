@@ -186,7 +186,7 @@ function TopBar({ onMenu, onSearch, onShortcuts }: { onMenu: () => void; onSearc
   const t = useT();
   const navigate = useNavigate();
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-line bg-panel/95 px-4 backdrop-blur md:px-6">
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-line bg-panel/95 px-3 backdrop-blur sm:gap-3 sm:px-4 md:px-6">
       <IconButton className="md:hidden" icon={<MenuIcon />} label="Open menu" onClick={onMenu} />
       <EntitySwitcher />
       <button
@@ -203,7 +203,8 @@ function TopBar({ onMenu, onSearch, onShortcuts }: { onMenu: () => void; onSearc
           label="Create new"
           trigger={
             <Button variant="primary" size="sm">
-              <Plus /> New
+              {/* Only the plus on the narrowest phones, where the word leaves no room for the rest of the bar. */}
+              <Plus /> <span className="max-[359px]:sr-only">New</span>
             </Button>
           }
           items={[
@@ -244,8 +245,8 @@ function EntitySwitcher() {
   const Icon = ENTITY_ICON;
   if (!enabled)
     return (
-      <span className="flex items-center gap-2 text-[13px] font-medium">
-        <Icon className="size-4 text-ink-3" /> Northpine Inc.
+      <span className="flex min-w-0 items-center gap-2 text-[13px] font-medium">
+        <Icon className="size-4 shrink-0 text-ink-3" /> <span className="truncate">Northpine Inc.</span>
       </span>
     );
   return (
@@ -279,7 +280,7 @@ function Notifications() {
       open={open}
       onOpenChange={setOpen}
       align="end"
-      className="w-80 p-0"
+      className="w-80 max-w-[calc(100vw-1rem)] p-0"
       trigger={
         <span className="relative">
           <IconButton icon={<Bell />} label={t("Notifications")} />

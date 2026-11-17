@@ -125,7 +125,14 @@ export function Switch({ checked, onCheckedChange, label, description, disabled,
 
 export function RadioCards<T extends string>({ value, onValueChange, options, columns = 2, name }: { value: T; onValueChange: (v: T) => void; options: { value: T; label: ReactNode; description?: ReactNode; icon?: ReactNode; disabled?: boolean }[]; columns?: number; name?: string }) {
   return (
-    <RRadio.Root value={value} onValueChange={(v) => onValueChange(v as T)} name={name} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+    // One card to a row on a phone, where two side by side are too narrow to read.
+    <RRadio.Root
+      value={value}
+      onValueChange={(v) => onValueChange(v as T)}
+      name={name}
+      className="grid grid-cols-1 gap-2 sm:grid-cols-[repeat(var(--cols),minmax(0,1fr))]"
+      style={{ ["--cols" as string]: columns }}
+    >
       {options.map((o) => (
         <RRadio.Item
           key={o.value}

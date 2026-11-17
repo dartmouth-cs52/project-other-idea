@@ -4,7 +4,8 @@ import type { AddressInfo } from "node:net";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type Page } from "playwright";
-import { siteBrand } from "../../web/worker/brand.ts";
+import { INK, launcherColour, POINTER_BLUE } from "../../src/shared/colour.ts";
+import { launcherState, matchLauncher, siteBrand } from "../../web/worker/brand.ts";
 import { groupGuides } from "../../web/worker/health.ts";
 import { finishedGuides, guideSteps, headline, insights, live, sitesOverview } from "../../web/worker/insights.ts";
 import { exec, freshDatabase, psqlSql, TEST_DATABASE_URL, testDatabase } from "../psql.ts";
@@ -75,6 +76,10 @@ export interface Dashboard {
   quietFor(guide: string, interval: string): void;
   /** The site's record, as the stand-in holds it. */
   site(id?: string): Promise<Record<string, any>>;
+  /** Forgets a site's launcher colour and that it was ever read, as a site added a moment ago. */
+  forgetLauncher(id?: string): void;
+  /** Saves a launcher colour as it was saved before colours were darkened on saving and before matching existed. */
+  saveOldLauncher(colour: string, id?: string): void;
   close(): Promise<void>;
 }
 
@@ -162,9 +167,15 @@ export async function startDashboard(): Promise<Dashboard> {
   let made = 100;
 
   /** A site as worker/app-api.ts answers for one, from its row. */
-  async function siteStatus(id: string, company = COMPANY): Promise<Record<string, any> | null> {
-    const [row] = (await sql`select id, name, origin, allowed_origins, context from sites where id = ${id} and company_id = ${company}`) as Record<string, any>[];
+  /**
+   * A site as worker/app-api.ts answers for one. Asked for by the page (`asked`), it also starts reading the site's
+   * colour for its launcher, as the Worker does after its answer has gone, when that is still to do.
+   */
+  async function siteStatus(id: string, company = COMPANY, asked = false): Promise<Record<string, any> | null> {
+    const [row] = (await sql`select id, name, origin, allowed_origins, context, routes_mode from sites where id = ${id} and company_id = ${company}`) as Record<string, any>[];
     if (!row) return null;
+    const launcher = launcherState(row.context, row.origin);
+    if (asked && launcher.start) void matchLauncher(sql as unknown as Parameters<typeof matchLauncher>[0], id, row.origin).catch(() => undefined);
     const origins = (await sql`select origin, first_seen_at, last_seen_at, requests from site_origins where site_id = ${id}`) as Record<string, any>[];
     const seen = origins.map((origin) => ({ ...origin, allowed: row.allowed_origins.includes(origin.origin) }));
     return {
@@ -172,16 +183,24 @@ export async function startDashboard(): Promise<Dashboard> {
       name: row.name,
       origin: row.origin,
       allowedOrigins: row.allowed_origins,
+      routesMode: row.routes_mode,
       scriptUrl: "https://widget.joinhaptic.com/widget.js",
       connected: seen.some((origin) => origin.allowed),
       origins: seen,
       corrections: [],
       blocked: [],
       reading: null,
+      // Screens mapped from a signed-in browser at the company, counted as worker/app-api.ts counts them.
+      mapped: ((row.context.pages ?? []) as { mapped?: true }[]).filter((page) => page.mapped).length,
       // Where the setup screens are, kept in the context as worker/setup-api.ts keeps it. Most seeded sites were
       // set up before there were setup screens, so they have none, and the dashboard keeps them.
       setup: row.context.setup ?? null,
-      appearance: row.context.appearance,
+      appearance: (() => {
+        const { launcher: _saved, ...look } = row.context.appearance ?? {};
+        const drawn = launcherColour(row.context.appearance?.launcher);
+        return { ...look, accent: POINTER_BLUE, ...(drawn === INK ? {} : { launcher: drawn }) };
+      })(),
+      launcherMatch: { waiting: launcher.waiting, source: launcher.source },
       notes: row.context.notes ?? "",
       docs: { budget: 60000, used: 0, list: [] },
       answers: { on: false, chosen: null },
@@ -201,14 +220,23 @@ export async function startDashboard(): Promise<Dashboard> {
     const [, id = "", sub, rest] = match;
     const site = await siteStatus(id, company);
     if (!site) return [404, { error: "No such site." }];
-    if (!sub && method === "GET") return [200, site];
+    if (!sub && method === "GET") return [200, await siteStatus(id, company, true)];
     if (!sub && method === "PATCH") {
       const input = await bodyOf(request);
       if (typeof input.name === "string" && input.name.trim()) await sql`update sites set name = ${input.name.trim()} where id = ${id}`;
+      if (["off", "shadow", "serve"].includes(input.routesMode)) await sql`update sites set routes_mode = ${input.routesMode} where id = ${id}`;
       if (input.appearance) {
-        const next = { ...site.appearance, ...input.appearance };
-        if (input.appearance.launcher === null) delete next.launcher;
-        await sql`update sites set context = jsonb_set(context, '{appearance}', ${JSON.stringify(next)}::jsonb) where id = ${id}`;
+        // As worker/app-api.ts keeps it: the pointer is always blue, and a launcher colour is kept as it is drawn,
+        // with Ink kept as none, and marked as the person's own choice.
+        const { launcherMatch: _match, ...kept } = { ...site.appearance, ...input.appearance, accent: POINTER_BLUE };
+        const next: Record<string, unknown> = kept;
+        if (input.appearance.launcher !== undefined) {
+          const drawn = launcherColour(input.appearance.launcher);
+          if (drawn === INK) delete next.launcher;
+          else next.launcher = drawn;
+        }
+        const chosen = input.appearance.launcher !== undefined;
+        await sql`update sites set context = jsonb_set(context, '{appearance}', ${JSON.stringify(next)}::jsonb) || ${JSON.stringify(chosen ? { launcherChosen: true } : {})}::jsonb where id = ${id}`;
       }
       return [200, await siteStatus(id, company)];
     }
@@ -232,29 +260,39 @@ export async function startDashboard(): Promise<Dashboard> {
   }
 
   const server = createServer(async (request, response) => {
-    const url = new URL(request.url ?? "/", "http://localhost");
-    const json = (status: number, body: unknown) => (response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }), response.end(JSON.stringify(body)));
-    if (url.pathname.startsWith("/api/auth")) {
-      // Kept, and answered as signed in: no email goes out, and Google is never asked.
-      auth.push({ method: request.method ?? "GET", path: url.pathname, body: await bodyOf(request) });
-      return json(200, { session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 86_400_000).toISOString() }, user: { id: "u", email: "ada@northpine.example", name: "Ada Lovelace", emailVerified: true } });
-    }
-    if (url.pathname.startsWith("/api/")) {
-      calls.push({ method: request.method ?? "GET", path: url.pathname.replace(/\/$/, "") });
-      // The company the tab was opened as, which `open` keeps in a cookie.
-      const company = /(?:^|;\s*)company=([^;]+)/.exec(request.headers.cookie ?? "")?.[1] ?? COMPANY;
-      try {
-        return json(...(await api(request.method ?? "GET", url, request, company)));
-      } catch (error) {
-        return json(500, { error: (error as Error).message });
+    try {
+      const url = new URL(request.url ?? "/", "http://localhost");
+      const json = (status: number, body: unknown) => (response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }), response.end(JSON.stringify(body)));
+      if (url.pathname.startsWith("/api/auth")) {
+        // Kept, and answered as signed in: no email goes out, and Google is never asked.
+        auth.push({ method: request.method ?? "GET", path: url.pathname, body: await bodyOf(request) });
+        return json(200, { session: { id: "s", userId: "u", expiresAt: new Date(Date.now() + 86_400_000).toISOString() }, user: { id: "u", email: "ada@northpine.example", name: "Ada Lovelace", emailVerified: true } });
       }
+      if (url.pathname.startsWith("/api/")) {
+        calls.push({ method: request.method ?? "GET", path: url.pathname.replace(/\/$/, "") });
+        // The company the tab was opened as, which `open` keeps in a cookie.
+        const company = /(?:^|;\s*)company=([^;]+)/.exec(request.headers.cookie ?? "")?.[1] ?? COMPANY;
+        try {
+          return json(...(await api(request.method ?? "GET", url, request, company)));
+        } catch (error) {
+          return json(500, { error: (error as Error).message });
+        }
+      }
+      // The built pages, as the Worker serves them: a folder's index.html for an address that ends in a slash.
+      const wanted = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, "");
+      const file = join(OUT, wanted.endsWith("/") ? `${wanted}index.html` : wanted);
+      if (!file.startsWith(OUT) || !existsSync(file)) return (response.writeHead(404), response.end("Not found"));
+      response.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream" });
+      response.end(readFileSync(file));
+    } catch (error) {
+      // The browser hung up part way through a request, as closing a tab or the browser at the end of a test can,
+      // and reading the rest of it failed with "aborted". Nobody is left to answer, and what never arrived in full
+      // is not recorded. Anything else still fails the test.
+      if (response.destroyed) return;
+      if (response.headersSent) response.destroy();
+      else (response.writeHead(500, { "content-type": "text/plain" }), response.end(String(error)));
+      throw error;
     }
-    // The built pages, as the Worker serves them: a folder's index.html for an address that ends in a slash.
-    const wanted = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, "");
-    const file = join(OUT, wanted.endsWith("/") ? `${wanted}index.html` : wanted);
-    if (!file.startsWith(OUT) || !existsSync(file)) return (response.writeHead(404), response.end("Not found"));
-    response.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream" });
-    response.end(readFileSync(file));
   });
   const url = await listen(server);
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
@@ -293,6 +331,12 @@ export async function startDashboard(): Promise<Dashboard> {
     },
     async site(id = SITE) {
       return (await siteStatus(id)) ?? {};
+    },
+    saveOldLauncher(colour, id = SITE) {
+      exec(db, `update sites set context = jsonb_set(context - 'launcherMatch' - 'launcherChosen', '{appearance,launcher}', '"${colour}"') where id = '${id}'`);
+    },
+    forgetLauncher(id = SITE) {
+      exec(db, `update sites set context = jsonb_set(context - 'launcherMatch' - 'launcherChosen', '{appearance}', (context->'appearance') - 'launcher') where id = '${id}'`);
     },
     async close() {
       await browser.close();

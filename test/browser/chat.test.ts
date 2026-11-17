@@ -56,6 +56,9 @@ const watchClasses = (tab: Page) =>
     }
   });
 const seen = (tab: Page) => tab.evaluate(() => (window as unknown as { seen: string[] }).seen);
+/** How far up the launcher and the chat sit from the window's bottom, and how far its right edge is from the window's. */
+const dockBottom = (tab: Page) => part(tab, ".dock").evaluate((dock) => Math.round(parseFloat(getComputedStyle(dock).bottom)));
+const inFromRight = (tab: Page) => part(tab, ".launcher").evaluate((el) => Math.round(window.innerWidth - el.getBoundingClientRect().right));
 
 /** The glow's element, as the browser has it: whether it is displayed, how it is blended into the page, and where it sits. */
 const veil = (tab: Page) =>
@@ -104,10 +107,88 @@ for (const name of BROWSERS) {
       const about = part(tab, ".about");
       assert.equal((await about.textContent())?.trim(), "Haptic is an AI guide and can be wrong.");
       assert.equal(await about.locator("a").getAttribute("href"), "https://joinhaptic.com/privacy/");
-      await part(tab, ".ask input").fill("invite someone");
-      await part(tab, ".ask input").press("Enter");
+      await part(tab, ".ask textarea").fill("invite someone");
+      await part(tab, ".ask textarea").press("Enter");
       assert.ok(await ringAround(tab, "#invite"));
       assert.equal(await about.isVisible(), true, "it is still there while the pointer shows a step");
+    });
+
+    test("a question longer than the ask box wraps onto more lines, never sideways, up to six, and Enter sends it whole", async () => {
+      harness.script = () => done("Card users are added from Team.");
+      const question = "lets add Theo as a card user he will 50 dollars for his trip to japan";
+      /** How the ask box is drawn: its height, and whether its words go past it either way. */
+      const drawn = () =>
+        part(tab, ".ask textarea").evaluate((field: HTMLTextAreaElement) => ({
+          height: Math.round(field.getBoundingClientRect().height),
+          sideways: field.scrollWidth > field.clientWidth || field.scrollLeft > 0,
+          upAndDown: field.scrollHeight > field.clientHeight,
+          typed: field.value,
+        }));
+      await part(tab, ".launcher").click();
+      assert.equal((await drawn()).height, 40, "an empty ask box is one line");
+      await tab.keyboard.type(question);
+      const typed = await drawn();
+      assert.deepEqual({ ...typed, height: undefined }, { height: undefined, sideways: false, upAndDown: false, typed: question }, "the question is not all in sight");
+      assert.ok(typed.height >= 60, `the ask box did not grow to a second line: ${typed.height}px`);
+      // Its limit, 300 characters: far more than six lines, so it stops growing and scrolls up and down, still never sideways.
+      // The last words are typed, and the line they are typed on stays in sight.
+      const long = `${question} `.repeat(5).slice(0, 300);
+      await part(tab, ".ask textarea").fill(long.slice(0, 290));
+      await tab.keyboard.type(long.slice(290));
+      assert.deepEqual(await drawn().then(({ typed, ...rest }) => ({ ...rest, length: typed.length })), { height: 140, sideways: false, upAndDown: true, length: 300 });
+      const end = await part(tab, ".ask textarea").evaluate((field: HTMLTextAreaElement) => field.scrollHeight - field.clientHeight - field.scrollTop);
+      assert.ok(end <= 1, `the line being typed on is ${end}px out of sight`);
+      // A change at its start shows the start, where the caret is, not the end. The first line starts under 13px of space,
+      // and the browsers bring the caret's line into sight but not all the space above it: 14px down, in each of the three.
+      await part(tab, ".ask textarea").evaluate((field: HTMLTextAreaElement) => field.setSelectionRange(0, 0));
+      await tab.keyboard.press("Delete");
+      const top = await part(tab, ".ask textarea").evaluate((field: HTMLTextAreaElement) => ({ scrolled: field.scrollTop, caret: field.selectionStart, length: field.value.length }));
+      assert.deepEqual({ ...top, scrolled: top.scrolled <= 15 }, { scrolled: true, caret: 0, length: 299 }, `the caret's line is out of sight, scrolled ${top.scrolled}px down`);
+      await part(tab, ".ask textarea").fill(question);
+      await tab.keyboard.press("Enter");
+      assert.equal((await turns(harness, 1))[0]!.goal, question);
+      assert.deepEqual(await drawn(), { height: 40, sideways: false, upAndDown: false, typed: "" }, "the ask box is not back to one empty line");
+    });
+
+    test("closes from the × at its top right, without minimizing the launcher or stopping a guide", async () => {
+      await part(tab, ".launcher").click();
+      assert.equal(await part(tab, ".panel").isVisible(), true);
+      // In the panel's top right corner, above the ask box.
+      const [button, panel, box] = await Promise.all([part(tab, ".dismiss").boundingBox(), part(tab, ".panel").boundingBox(), part(tab, ".ask").boundingBox()]);
+      assert.ok(panel!.x + panel!.width - (button!.x + button!.width) <= 8 && button!.y - panel!.y <= 8, JSON.stringify({ button, panel }));
+      assert.ok(button!.y + button!.height <= box!.y, JSON.stringify({ button, box }));
+      assert.equal(await part(tab, ".dismiss").getAttribute("aria-label"), "Close");
+
+      await part(tab, ".dismiss").click();
+      assert.equal(await part(tab, ".panel").isHidden(), true);
+      assert.equal(await part(tab, ".launcher").evaluate((el) => el.classList.contains("mini")), false, "the launcher stays as it was");
+
+      // Mid-guide it only puts the chat away: the pointer stays on the step, and the launcher brings the chat back.
+      harness.script = (request) => point(idOf(request, "Invite teammate"), "Click Invite teammate.");
+      await ask(tab, "invite someone");
+      assert.ok(await ringAround(tab, "#invite"));
+      await untilState(tab, "pointing");
+      await part(tab, ".dismiss").click();
+      assert.equal(await part(tab, ".panel").isHidden(), true);
+      await sleep(200);
+      assert.equal(await guideState(tab), "pointing");
+      assert.equal(await part(tab, ".cursor").isVisible(), true);
+      await part(tab, ".launcher").click();
+      assert.equal(await part(tab, ".question").textContent(), "invite someone");
+    });
+
+    test("the × closes the chat from the keyboard, and the keyboard goes back to the launcher", async () => {
+      const focused = () => tab.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.activeElement?.className);
+      await part(tab, ".launcher").focus();
+      await tab.keyboard.press("Enter");
+      assert.equal(await part(tab, ".panel").isVisible(), true);
+      // The × comes just before the ask box. Safari leaves buttons out of the Tab order unless the visitor turns that on.
+      if (name === "webkit") await part(tab, ".dismiss").focus();
+      else await tab.keyboard.press("Shift+Tab");
+      assert.equal(await focused(), "dismiss");
+      await tab.keyboard.press("Enter");
+      assert.equal(await part(tab, ".panel").isHidden(), true);
+      assert.equal(await tab.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.activeElement?.className), "launcher");
     });
 
     test("stays open through a guide, with the question at the top and stop in the ask box", async () => {
@@ -119,7 +200,7 @@ for (const name of BROWSERS) {
       await untilState(tab, "asking");
       assert.equal(await part(tab, ".question").textContent(), "invite someone");
       assert.equal(await statusLine(tab), "thinking: Thinking");
-      assert.equal(await part(tab, ".ask input").inputValue(), "", "the ask box is empty again, and still there");
+      assert.equal(await part(tab, ".ask textarea").inputValue(), "", "the ask box is empty again, and still there");
       assert.equal(await part(tab, ".ask").isVisible(), true);
       assert.equal(await part(tab, ".stop").isVisible(), true, "its button is the way to stop");
       assert.equal(await part(tab, ".send").isVisible(), false);
@@ -229,8 +310,8 @@ for (const name of BROWSERS) {
       await part(tab, ".launcher").click();
       assert.equal((await veil(tab)).display, "none", "with no glow on, its element is not displayed");
       await watchClasses(tab);
-      await part(tab, ".ask input").fill("invite someone");
-      await part(tab, ".ask input").press("Enter");
+      await part(tab, ".ask textarea").fill("invite someone");
+      await part(tab, ".ask textarea").press("Enter");
       const glow = tab.locator("haptic-veil .glow");
       await glow.waitFor({ state: "attached" });
       assert.equal(await guideState(tab), "asking");
@@ -348,7 +429,94 @@ for (const name of BROWSERS) {
       await glow.waitFor({ state: "detached", timeout: 1000 });
     });
 
-    test("the glow is Haptic's blue on every site, whatever the site's accent", async () => {
+    test("a press or a key on the page while Haptic thinks sends the glow away for the rest of that wait, and Haptic goes on thinking", async () => {
+      harness.script = async (request, index) => {
+        await sleep(1200);
+        return point(idOf(request, index === 0 ? "Invite teammate" : "Send invite"), "Click it.");
+      };
+      await ask(tab, "invite someone");
+      const glow = tab.locator("haptic-veil .glow");
+      await glow.waitFor({ state: "attached" });
+      // The chat is ours, not the page: using it leaves the glow where it is.
+      await part(tab, '.ask [aria-label="Ask a question"]').click();
+      await sleep(100);
+      assert.equal(await glow.count(), 1, "a press in the chat is not a press on the page");
+      // A press on the page, on nothing the guide is waiting for.
+      await tab.click("h1");
+      await glow.waitFor({ state: "detached", timeout: 1000 });
+      assert.equal((await veil(tab)).display, "none", "nothing is left over the page");
+      assert.equal(await guideState(tab), "asking", "Haptic is still thinking");
+      assert.equal(await statusLine(tab), "thinking: Thinking", "and the chat still says so");
+      await sleep(300);
+      assert.equal(await glow.count(), 0, "it does not come back in that wait");
+      assert.ok(await ringAround(tab, "#invite"), "the reply was not called off");
+
+      // The next wait has its glow again. A modifier on its own is not using the page; a key is, the same as a press.
+      await tab.click("#invite");
+      await glow.waitFor({ state: "attached", timeout: 1000 });
+      await tab.keyboard.press("Shift");
+      await sleep(100);
+      assert.equal(await glow.count(), 1, "Shift alone leaves it");
+      await tab.keyboard.press("j");
+      await glow.waitFor({ state: "detached", timeout: 1000 });
+      assert.equal(await guideState(tab), "asking");
+      assert.ok(await ringAround(tab, "#send"));
+    });
+
+    // The page in the screenshot that asked for this: the visitor fills in the invite's fields, some of them ahead of the
+    // step on show, while Haptic works out the next one. A band of colour over the form they are filling in is in their way.
+    test("a wait that begins with the visitor filling in a field or choosing from a dropdown has no glow, and one after a button does", async () => {
+      harness.pages.set(
+        "/form",
+        page(`
+          <main style="font:14px system-ui;padding:40px">
+            <h1>Invite people</h1>
+            <button id="start" onclick="document.getElementById('email').focus()">Start an invite</button>
+            <p><label>Email <input id="email" type="email"></label>
+            <label style="margin-left:24px">Entity <select id="entity"><option>Northpine Inc.</option><option>Northpine Ltd</option><option>Northpine GmbH</option></select></label></p>
+            <button id="send">Send invite</button>
+          </main>`),
+      );
+      harness.script = async (request, index) => {
+        if (index > 0) await sleep(700);
+        return point(idOf(request, ["Start an invite", "Email"][index] ?? "Send invite"), "Do this.");
+      };
+      await tab.goto(`${harness.url}/form`);
+      await part(tab, ".launcher").waitFor();
+      const glow = tab.locator("haptic-veil .glow");
+      await ask(tab, "invite someone");
+      assert.ok(await ringAround(tab, "#start"));
+      await glow.waitFor({ state: "detached", timeout: 1000 });
+      // A button, after which the page puts the keyboard in a field of its own accord: the visitor is waiting, so it glows.
+      await tab.click("#start");
+      await glow.waitFor({ state: "attached", timeout: 1000 });
+      assert.equal(await tab.evaluate(() => document.activeElement?.id), "email");
+      assert.ok(await ringAround(tab, "#email"));
+      await glow.waitFor({ state: "detached", timeout: 1000 });
+
+      await watchClasses(tab);
+      // Typing in the field on show: Haptic works out the next step once the typing pauses, with the visitor still in the field.
+      await tab.click("#email");
+      await tab.locator("#email").pressSequentially("theo@example.com");
+      await untilState(tab, "asking");
+      assert.equal(await statusLine(tab), "thinking: Thinking");
+      assert.equal(await glow.count(), 0, "no glow over the field they are filling in");
+      assert.ok(await ringAround(tab, "#send"));
+
+      // Choosing from a dropdown that is not the step on show, as in the screenshot.
+      await tab.click("#entity");
+      await tab.keyboard.press("ArrowDown");
+      await tab.keyboard.press("Enter");
+      await untilState(tab, "asking");
+      assert.equal(await statusLine(tab), "thinking: Finding the way from here");
+      await sleep(300);
+      assert.equal(await glow.count(), 0, "no glow over the dropdown they are choosing from");
+      await turns(harness, 4);
+      assert.ok(await ringAround(tab, "#send"));
+      assert.ok(!(await seen(tab)).some((classes) => classes.split(" ").includes("glow")), `no glow at all while they filled in the form: ${(await seen(tab)).join(", ")}`);
+    });
+
+    test("the glow and the pointer's ring are Haptic's blue on every site, whatever colour the site saved", async () => {
       harness.script = () => new Promise(() => {});
       const band = async () => {
         await ask(tab, "invite someone");
@@ -357,12 +525,12 @@ for (const name of BROWSERS) {
       };
       const blue = await band();
       for (const colour of ["rgb(119, 208, 254)", "rgb(82, 148, 255)", "rgb(132, 96, 238)"]) assert.ok(blue.includes(colour), `${colour} in ${blue}`);
-      // A site whose accent is green: its pointer is green, and the glow is the same blue.
+      // A site that saved green for its pointer, back when that was a setting: the glow and the ring are still blue.
       harness.config = { ...harness.config, appearance: { ...harness.config.appearance, accent: "#16a34a" } };
       await tab.reload();
       await part(tab, ".launcher").waitFor();
       assert.equal(await band(), blue);
-      assert.equal(await part(tab, ".ring").evaluate((ring) => getComputedStyle(ring).borderTopColor), "rgb(22, 163, 74)");
+      assert.equal(await part(tab, ".ring").evaluate((ring) => getComputedStyle(ring).borderTopColor), "rgb(30, 110, 244)");
     });
 
     test("Send and Do it pressed with nothing typed say what to do, under the ask box, and ask nothing", async () => {
@@ -374,24 +542,24 @@ for (const name of BROWSERS) {
       await part(tab, ".doit").click();
       assert.equal(await hint.textContent(), "Type what you want Haptic to do first, then press Do it.");
       assert.equal(await hint.isVisible(), true);
-      assert.equal(await tab.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.activeElement?.matches(".ask input")), true, "the keyboard is in the ask box");
+      assert.equal(await tab.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.activeElement?.matches(".ask textarea")), true, "the keyboard is in the ask box");
       // Typing takes it away.
-      await part(tab, ".ask input").pressSequentially("in");
+      await part(tab, ".ask textarea").pressSequentially("in");
       assert.equal(await hint.isVisible(), false);
-      await part(tab, ".ask input").fill("");
-      await part(tab, ".ask input").press("Enter");
+      await part(tab, ".ask textarea").fill("");
+      await part(tab, ".ask textarea").press("Enter");
       assert.equal(await hint.textContent(), "Type what you want to do first, then send it.");
       await part(tab, ".send").click();
       assert.equal(await hint.isVisible(), true);
       // Read out to a screen reader, and named as what the box needs.
       assert.equal(await hint.getAttribute("aria-live"), "polite");
-      assert.equal(await part(tab, ".ask input").getAttribute("aria-describedby"), await hint.getAttribute("id"));
+      assert.equal(await part(tab, ".ask textarea").getAttribute("aria-describedby"), await hint.getAttribute("id"));
       await sleep(300);
       assert.equal(harness.turns.length, 0, "nothing was asked");
       // A question sent takes it away.
       harness.script = () => new Promise(() => {});
-      await part(tab, ".ask input").fill("invite someone");
-      await part(tab, ".ask input").press("Enter");
+      await part(tab, ".ask textarea").fill("invite someone");
+      await part(tab, ".ask textarea").press("Enter");
       await turns(harness, 1);
       assert.equal(await hint.isVisible(), false);
     });
@@ -422,23 +590,82 @@ for (const name of BROWSERS) {
       await still.close();
     });
 
-    test("moves to the other side of the window when it would cover the control, and comes back when the pointer has gone", async () => {
+    test("moves up the right side of the window when it would cover the control, and back down when the pointer has gone", async () => {
       harness.script = async (request, index) => {
         if (index > 0) await sleep(500);
         return point(idOf(request, index === 0 ? "Save changes" : "Invite teammate"), "Click it.");
       };
-      const side = () => part(tab, ".dock").evaluate((dock) => (dock.classList.contains("left") ? "left" : "right"));
       await ask(tab, "save my changes");
       assert.ok(await ringAround(tab, "#corner"));
-      await tab.waitForFunction(() => document.querySelector("haptic-root")!.shadowRoot!.querySelector(".dock")!.classList.contains("left"), undefined, { timeout: 2000 });
-      assert.equal(await part(tab, ".panel").isVisible(), true, "the chat is still open, on the other side");
+      await tab.waitForFunction(() => parseFloat(getComputedStyle(document.querySelector("haptic-root")!.shadowRoot!.querySelector(".dock")!).bottom) > 20, undefined, { timeout: 2000 });
+      assert.equal(await part(tab, ".panel").isVisible(), true, "the chat is still open, above the control");
+      assert.equal(await inFromRight(tab), 20, "it went up, not sideways");
+      const [panel, corner] = await Promise.all([part(tab, ".panel").boundingBox(), tab.locator("#corner").boundingBox()]);
+      assert.ok(panel!.y + panel!.height < corner!.y, JSON.stringify({ panel, corner }));
       // The control it would have covered can be clicked.
       await tab.locator("#corner").click({ trial: true, timeout: 1000 });
 
       await tab.click("#corner");
       assert.ok(await ringAround(tab, "#invite"));
       await sleep(400);
-      assert.equal(await side(), "right", "it is back on its own side for a control it does not cover");
+      assert.equal(await dockBottom(tab), 20, "it is back in its corner for a control it does not cover");
+      assert.equal(await inFromRight(tab), 20);
+    });
+
+    test("stays in its corner when only the caption would run under it: the caption moves over instead", async () => {
+      // A dialog's last button, just left of the chat's column, as on a page's "Invite people" dialog. The caption is
+      // long, so under the button's left edge it would run on under the chat. The chat used to jump up the window to
+      // clear it, and drop back on the next step, for a control it never covered.
+      harness.pages.set(
+        "/beside",
+        page(`<main style="font:14px system-ui;padding:40px"><h1>Invite people</h1>
+          <button id="beside" style="position:fixed;right:370px;bottom:200px">Send invite</button></main>`),
+      );
+      await tab.goto(`${harness.url}/beside`);
+      await part(tab, ".launcher").waitFor();
+      // Every place the dock is put, however briefly.
+      await part(tab, ".dock").evaluate((dock) => {
+        const moves = ((window as unknown as { moves: string[] }).moves = [] as string[]);
+        new MutationObserver(() => moves.push((dock as HTMLElement).style.bottom)).observe(dock, { attributes: true, attributeFilter: ["style"] });
+      });
+      const say = "Click Send invite to send the invitation. Role, Department and Entity are optional to adjust first if you need to.";
+      harness.script = (request) => point(idOf(request, "Send invite"), say);
+      await ask(tab, "lets invite him");
+      assert.ok(await ringAround(tab, "#beside"));
+      await part(tab, ".caption").waitFor();
+      // The dock is looked at again every 200ms while the pointer is up.
+      await sleep(700);
+      const moves = await tab.evaluate(() => (window as unknown as { moves: string[] }).moves);
+      assert.ok(moves.every((bottom) => parseFloat(bottom) === 20), `it never left its corner: ${JSON.stringify(moves)}`);
+      assert.equal(await dockBottom(tab), 20);
+      const [caption, panel, button] = await Promise.all([part(tab, ".caption").boundingBox(), part(tab, ".panel").boundingBox(), tab.locator("#beside").boundingBox()]);
+      assert.ok(caption!.width > 300, `the caption is long enough to have reached the chat: ${caption!.width}`);
+      assert.ok(caption!.x + caption!.width <= panel!.x, `the caption is clear of the chat: ${JSON.stringify({ caption, panel })}`);
+      assert.ok(caption!.y >= button!.y + button!.height, "it is still below the button");
+      assert.ok(caption!.x < button!.x + button!.width && caption!.x + caption!.width >= button!.x + button!.width, "and still under it, its right edge at or past the button's");
+    });
+
+    test("with no room for the chat above the control, tucks the chat away for the step, and the launcher brings it back", async () => {
+      // A short window: the open chat can't fit between the control and the top of the window.
+      await tab.setViewportSize({ width: 1000, height: 420 });
+      harness.script = (request) => point(idOf(request, "Save changes"), "Click it.");
+      await ask(tab, "save my changes");
+      assert.ok(await ringAround(tab, "#corner"));
+      await part(tab, ".panel").waitFor({ state: "hidden", timeout: 2000 });
+      assert.equal(await guideState(tab), "pointing", "the guide carries on");
+      assert.equal(await inFromRight(tab), 20, "the launcher went up, not sideways");
+      // The launcher alone is clear of the control, in its corner here, and the control can be clicked.
+      const [launcher, corner] = await Promise.all([part(tab, ".launcher").boundingBox(), tab.locator("#corner").boundingBox()]);
+      const clear = launcher!.y >= corner!.y + corner!.height || launcher!.y + launcher!.height <= corner!.y || launcher!.x >= corner!.x + corner!.width;
+      assert.ok(clear, JSON.stringify({ launcher, corner }));
+      await tab.locator("#corner").click({ trial: true, timeout: 1000 });
+
+      // The visitor asks for it: it comes back, and stays for this step.
+      await part(tab, ".launcher").click();
+      assert.equal(await part(tab, ".panel").isVisible(), true);
+      await sleep(500);
+      assert.equal(await part(tab, ".panel").isVisible(), true, "it is not tucked away again");
+      assert.equal(await inFromRight(tab), 20);
     });
   });
 }

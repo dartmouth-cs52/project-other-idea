@@ -173,14 +173,14 @@ function Wizard() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-5">
       <UnsavedGuard when={dirty} />
-      <div className="overflow-x-auto pb-1">
+      <div className="relative overflow-x-auto pb-1">
         <Stepper steps={STEPS} current={step} />
       </div>
       {!can.allowed ? <Callout tone="warn" title="You can't add vendors">{can.reason}</Callout> : null}
 
       <Card title={STEPS[step]} description={`Step ${step + 1} of ${STEPS.length}`}>
         {step === 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Vendor name" error={errors.name} hint="The name people know them by.">
               {(id) => <Input id={id} value={f.name} onChange={(e) => set("name", e.target.value)} aria-invalid={!!errors.name} autoFocus />}
             </Field>
@@ -225,7 +225,7 @@ function Wizard() {
             />
             {/* The fields below change with the method picked above. */}
             {f.method === "ach" ? (
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Routing number" error={errors.routing}>
                   {(id) => <Input id={id} inputMode="numeric" autoComplete="off" value={f.routing} onChange={(e) => set("routing", e.target.value.trim())} aria-invalid={!!errors.routing} placeholder="9 digits" />}
                 </Field>
@@ -243,7 +243,7 @@ function Wizard() {
               </div>
             ) : null}
             {f.method === "wire" ? (
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="SWIFT / BIC code" error={errors.swift}>
                   {(id) => <Input id={id} autoComplete="off" value={f.swift} onChange={(e) => set("swift", e.target.value)} aria-invalid={!!errors.swift} placeholder="ABCDGB2L" />}
                 </Field>
@@ -262,7 +262,7 @@ function Wizard() {
               </div>
             ) : null}
             {f.method === "check" ? (
-              <div className="grid gap-4 sm:grid-cols-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
                 <Field label="Mailing address" error={errors.street} className="sm:col-span-6">
                   {(id) => <Input id={id} value={f.street} onChange={(e) => set("street", e.target.value)} aria-invalid={!!errors.street} placeholder="Street and suite" />}
                 </Field>

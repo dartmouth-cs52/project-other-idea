@@ -134,9 +134,9 @@ function Overview({ person }: { person: Employee }) {
   const openReimb = reimbursements.filter((r) => r.employeeId === person.id && (r.status === "submitted" || r.status === "approved"));
 
   return (
-    <div className="grid gap-5 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
       <div className="flex flex-col gap-5 lg:col-span-2">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Stat label="Card spend this month" value={money(spend, "USD", { compact: true })} />
           <Stat label="Active cards" value={activeCards.length} />
           <Stat label="Open reimbursements" value={openReimb.length} hint={openReimb.length ? money(openReimb.reduce((s, r) => s + r.amount, 0)) : undefined} />
@@ -404,7 +404,7 @@ function ApprovalsTab({ person }: { person: Employee }) {
   const requested = useMemo(() => all.filter((a) => a.requesterId === person.id), [all, person.id]);
   const waiting = useMemo(() => all.filter((a) => a.status === "pending" && a.approverIds.includes(person.id)), [all, person.id]);
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <ApprovalList title={`Waiting on ${person.firstName}`} description="Requests they need to approve or reject." items={waiting} empty={`Nothing is waiting on ${person.firstName}.`} />
       <ApprovalList title={`Requested by ${person.firstName}`} description="Cards, limits and reimbursements they asked for." items={requested} empty={`${person.firstName} hasn't requested anything.`} />
     </div>

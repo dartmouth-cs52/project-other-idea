@@ -5,6 +5,7 @@
 //   GET    /api/app/sites/:id                   a site, its install health and how far the reading has got
 //   PATCH  /api/app/sites/:id                   change its name or the origins it may run on
 //   POST   /api/app/sites/:id/read              read a few more public pages
+//   POST   /api/app/sites/:id/map               a link that lets this person map their signed-in app from their own browser
 //   GET    /api/app/sites                       every site the company has, as the list of sites shows them
 //   GET    /api/app/sites/:id/insights          the dashboard: questions, outcomes, what to fix
 //   GET    /api/app/sites/:id/live              the newest questions and the step each is on, asked for every second or two
@@ -15,32 +16,41 @@
 //   POST   /api/app/sites/:id/corrections       point a step of a guide at another control from now on
 //   DELETE /api/app/sites/:id/corrections/:id   take a correction back
 //   PUT    /api/app/sites/:id/blocked           the controls Haptic must never point at
+//   …      /api/app/sites/:id/teach[/:session]  Teach Haptic: start, follow, review and save (worker/teach.ts)
+//   DELETE /api/app/sites/:id/taught/:route     take a taught route back
 //   GET    /api/app/approve?key=…&sig=…         an access request, for the team's approve page
 //   POST   /api/app/approve                     approve it, and email the person a sign-in link
 //
 // The setup screens, the email to a developer and the dashboard's top numbers
-// are answered in setup-api.ts.
+// are answered in setup-api.ts, billing, under /api/app/billing, in billing.ts,
+// and the Team page, under /api/app/team, in team.ts.
 //
 // Every site is looked up together with the caller's organization, so a site
 // id, which is public, is never enough to read or change someone's data.
 
-import { answersOn, cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
+import { MAPPING_FRAGMENT, MAPPING_PASS_MS, mappingHash, newMappingPass } from "../../src/shared/mapping";
+import { answersOn, cleanText, DEFAULT_APPEARANCE, ROUTES_MODES, type Appearance, type Doc, type PageNode, type RoutesMode, type SiteContext } from "../../src/shared/types";
 import { ANSWERS_DOCS_BUDGET, DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
 import { signedInUrl } from "../lib/dashboard";
 import { pageControls } from "../lib/setup";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
+import { boundedText } from "./body";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
-import { siteBrand } from "./brand";
+import { billingRoutes, type BillingEnv } from "./billing";
+import { teamRoutes } from "./team";
+import { launcherState, matchLauncher, siteBrand } from "./brand";
+import { INK, launcherColour, POINTER_BLUE } from "../../src/shared/colour";
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
 import { groupGuides } from "./health";
 import { finishedCsv, finishedGuides, guideSteps, insights, live, monthOf, sitesOverview } from "./insights";
+import { routeView, teachApi, TeachRefused } from "./teach";
 import { MAX_PAGES, readMore, startReading, type BrowserBinding, type Reading } from "./reader";
 import { saveReadBatch } from "./read-batch";
 import { readingExtras, setupOf, setupRoutes } from "./setup-api";
 import type { SendEnv } from "./sign-in-email";
 
-export interface AppEnv extends AuthEnv, SendEnv {
+export interface AppEnv extends AuthEnv, SendEnv, BillingEnv {
   ACCESS_REQUESTS: { put(key: string, value: string): Promise<void>; get(key: string): Promise<string | null> };
   /** Neon's connection string. A secret. */
   DATABASE_URL?: string;
@@ -56,6 +66,7 @@ const SITE_ID = /^site_[a-z0-9_]{3,40}$/;
 const MAX_SITES = 5;
 const MAX_ORIGINS = 20;
 const MAX_REFUSED_SHOWN = 5;
+const MAX_NOTES = 20_000;
 
 interface SeenOrigin {
   origin: string;
@@ -76,7 +87,14 @@ class Refusal extends Error {
   }
 }
 
-export async function appApi(request: Request, env: AppEnv, url: URL): Promise<Response> {
+/**
+ * Work to finish after the answer has gone, such as reading a new site's colour. On Cloudflare it is handed to the
+ * request's waitUntil, so the page never waits on it. Elsewhere it simply runs.
+ */
+export type Later = (work: Promise<unknown>) => void;
+const runAnyway: Later = (work) => void work.catch((error) => console.error("app api, after the answer:", error));
+
+export async function appApi(request: Request, env: AppEnv, url: URL, later: Later = runAnyway): Promise<Response> {
   const cookies: string[] = [];
   const reply = (body: unknown, status = 200) => {
     const headers = new Headers({ "content-type": "application/json", "cache-control": "no-store" });
@@ -106,18 +124,23 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
     if (path === "/sites" && request.method === "GET") return reply(await sitesOverview(sql, org.id, minutesWest(url)));
     const more = await setupRoutes({ request, env, sql, org, user, path, url });
     if (more) return reply(more.body, more.status);
+    const billing = await billingRoutes({ request, env, sql, org, user, path, url });
+    if (billing) return reply(billing.body, billing.status);
+    const people = await teamRoutes({ request, sql, org, user, path, sendLink: (email) => sendSignInLink(env, url.origin, email, signedInUrl(url.origin)) });
+    if (people) return reply(people.body, people.status);
 
-    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/live|\/brand|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?)?$/.exec(path);
+    const match = /^\/sites\/([^/]+)(\/read|\/map|\/insights|\/live|\/brand|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?|\/teach(?:\/[^/]+)?|\/taught\/[^/]+)?$/.exec(path);
     if (match) {
       const id = match[1] ?? "";
       if (!SITE_ID.test(id)) throw new Refusal(404, "No such site.");
       const sub = match[2];
-      if (!sub && request.method === "GET") return reply(await siteStatus(sql, env, org, id));
-      if (!sub && request.method === "PATCH") return reply(await changeSite(sql, env, org, id, await body(request)));
+      if (!sub && request.method === "GET") return reply(await siteStatus(sql, env, org, id, later));
+      if (!sub && request.method === "PATCH") return reply(await changeSite(sql, env, org, id, await body(request, SITE_BODY)));
       if (!sub && request.method === "DELETE") return reply(await deleteSite(sql, org, id, await body(request)));
-      if (sub === "/docs" && request.method === "POST") return reply(await addDoc(sql, env, org, id, await body(request)), 201);
+      if (sub === "/docs" && request.method === "POST") return reply(await addDoc(sql, env, org, id, await body(request, DOC_BODY)), 201);
       if (sub === "/docs" && request.method === "DELETE") return reply(await removeDoc(sql, env, org, id, url.searchParams.get("source") ?? ""));
       if (sub === "/read" && request.method === "POST") return reply(await readSite(sql, env, org, id, (await body(request)).restart === true));
+      if (sub === "/map" && request.method === "POST") return reply(await startMapping(sql, org, id, await body(request)), 201);
       if (sub === "/insights" && request.method === "GET") {
         await ownedSite(sql, org, id);
         const days = Math.min(Math.max(Number(url.searchParams.get("days")) || 30, 1), 365);
@@ -162,6 +185,18 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
           throw error;
         }
       }
+      if (sub?.startsWith("/teach") || sub?.startsWith("/taught/")) {
+        const site = await ownedSite(sql, org, id);
+        const kind = sub.startsWith("/taught/") ? "taught" : "teach";
+        const rest = sub.slice(kind === "taught" ? "/taught/".length : "/teach".length).replace(/^\//, "");
+        try {
+          const result = await teachApi(sql, site, org.id, { id: user.id, name: user.name, email: user.email }, request.method, kind, rest, () => body(request));
+          return reply(result.body, result.status);
+        } catch (error) {
+          if (error instanceof TeachRefused) throw new Refusal(error.status, error.message);
+          throw error;
+        }
+      }
       if (match[3] && request.method === "GET") {
         await ownedSite(sql, org, id);
         const steps = await guideSteps(sql, id, match[3]);
@@ -183,9 +218,30 @@ function minutesWest(url: URL): number {
   return Number.isFinite(asked) ? Math.min(Math.max(Math.round(asked), -840), 840) : 0;
 }
 
-async function body(request: Request): Promise<Record<string, unknown>> {
-  const text = await request.text();
-  if (text.length > 20_000) throw new Refusal(413, "That is too long.");
+/** How long a request body may be, in characters as sent, and what to say when it is longer. */
+interface BodyLimit {
+  max: number;
+  message: string;
+  /** The input to show the message under. */
+  field?: string;
+}
+
+const ANY_BODY: BodyLimit = { max: 20_000, message: "That is too long." };
+/**
+ * A pasted doc. Tidying drops indentation and blank lines, so a paste up to twice a doc's length can still
+ * fit, and JSON sends each line break, tab or quote as two characters, so its body can be four times as long.
+ */
+const DOC_BODY: BodyLimit = {
+  max: MAX_DOC_CHARS * 4 + 4_000,
+  message: `That is too long to add. One doc can be up to ${MAX_DOC_CHARS.toLocaleString()} characters. Split it, or paste the part that matters.`,
+  field: "text",
+};
+/** The settings form: the notes, each line break sent as two characters, and the widget's look beside them. */
+const SITE_BODY: BodyLimit = { max: MAX_NOTES * 2 + 4_000, message: `Notes can be up to ${MAX_NOTES.toLocaleString()} characters.`, field: "notes" };
+
+async function body(request: Request, limit: BodyLimit = ANY_BODY): Promise<Record<string, unknown>> {
+  const text = await boundedText(request, limit.max);
+  if (text === null) throw new Refusal(413, limit.message, limit.field);
   try {
     const value = JSON.parse(text || "{}");
     if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
@@ -226,11 +282,12 @@ interface SiteRow {
   allowed_origins: string[];
   context: SiteContext;
   reading: Reading | null;
+  routes_mode: RoutesMode;
   created_at: string;
 }
 
 async function ownedSite(sql: Sql, org: Organization, id: string): Promise<SiteRow> {
-  const rows = (await sql`select id, name, origin, allowed_origins, context, reading, created_at from sites where id = ${id} and company_id = ${org.id}`) as SiteRow[];
+  const rows = (await sql`select id, name, origin, allowed_origins, context, reading, routes_mode, created_at from sites where id = ${id} and company_id = ${org.id}`) as SiteRow[];
   if (!rows[0]) throw new Refusal(404, "No such site.");
   return rows[0];
 }
@@ -304,8 +361,16 @@ function readingSummary(reading: Reading | null, pages: PageNode[]) {
   };
 }
 
-async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string) {
+/**
+ * A site, as the dashboard and the setup screens show it. Given `later`, it
+ * also starts reading the site's colour for its launcher, if that has not been
+ * done for its address and no person has chosen one. That runs after the
+ * answer has gone, so the next ask has the colour.
+ */
+async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string, later?: Later) {
   const site = await ownedSite(sql, org, id);
+  const launcher = launcherState(site.context, site.origin);
+  if (later && launcher.start) later(matchLauncher(sql, id, site.origin).catch((error) => console.error(`Couldn't match the launcher of ${id}:`, error)));
   // Whether an origin is allowed is read from the list as it stands now, not from what it was when
   // the script last called, so allowing an address shows at once. Anyone can send a request with a
   // made-up Origin header, so only the few refused origins seen most recently are shown.
@@ -319,6 +384,7 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string) 
     name: site.name,
     origin: site.origin,
     allowedOrigins: site.allowed_origins,
+    routesMode: site.routes_mode,
     createdAt: site.created_at,
     scriptUrl: `${widget}/widget.js`,
     // Connected means the script has called from an origin the site allows. Seen but refused is the other common failure.
@@ -326,14 +392,30 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string) 
     origins,
     corrections: site.context.corrections ?? [],
     blocked: site.context.blocked ?? [],
+    taught: (site.context.taught ?? []).map(routeView),
     reading: readingSummary(site.reading, site.context.pages ?? []),
+    // Screens mapped from a signed-in browser at the company, which the reading of public pages cannot reach.
+    mapped: (site.context.pages ?? []).filter((page) => page.mapped).length,
     setup: setupOf(site.context),
-    appearance: { ...DEFAULT_APPEARANCE, ...site.context.appearance },
+    // The pointer is Haptic's blue on every site, whatever was saved before. The launcher is the colour visitors see:
+    // one saved too light before colours were darkened on saving is shown darkened here too.
+    appearance: drawnAppearance(site.context.appearance),
+    // Whether the launcher's colour is still being read from the site, and where the one it has came from.
+    launcherMatch: { waiting: launcher.waiting, source: launcher.source },
     notes: site.context.notes ?? "",
     docs: docsSummary(site.context.docs ?? [], answersOn(site.context)),
     // On means answering in words from the docs. Chosen is null when the site follows the default: on once it has docs.
     answers: { on: answersOn(site.context), chosen: site.context.answers?.enabled ?? null },
   };
+}
+
+/** A site's look as visitors see it: Haptic's blue for the pointer, and the launcher as launcherColour draws it. */
+function drawnAppearance(saved: Partial<Appearance> | undefined): Appearance {
+  const look: Appearance = { ...DEFAULT_APPEARANCE, ...saved, accent: POINTER_BLUE };
+  const drawn = launcherColour(saved?.launcher);
+  if (drawn === INK) delete look.launcher;
+  else look.launcher = drawn;
+  return look;
 }
 
 /** The docs as the settings page lists them: no text, and whether each one is in the prompt. */
@@ -344,6 +426,9 @@ function docsSummary(docs: Doc[], answers: boolean) {
   return {
     budget,
     used,
+    // The page applies the same rule before sending a doc. A body far over it can be refused before it is read
+    // in full, and the browser may then report a failed connection instead of this message.
+    bodyLimit: { max: DOC_BODY.max, message: DOC_BODY.message },
     list: docs.map((doc) => ({
       title: doc.title,
       source: doc.source,
@@ -355,26 +440,26 @@ function docsSummary(docs: Doc[], answers: boolean) {
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
-const MAX_NOTES = 20_000;
 
 /** The widget's look, checked field by field. Anything not given keeps its value. */
 function appearanceFrom(input: unknown, current: Appearance): Appearance {
   if (!input || typeof input !== "object") throw new Refusal(400, "appearance must be an object.");
   const raw = input as Record<string, unknown>;
-  const next = { ...current };
-  if (raw.accent !== undefined) {
-    if (typeof raw.accent !== "string" || !HEX.test(raw.accent)) throw new Refusal(400, "The colour must be a hex value like #1E6EF4.", "accent");
-    next.accent = raw.accent.toUpperCase();
-  }
-  if (raw.position !== undefined) {
-    if (raw.position !== "bottom-right" && raw.position !== "bottom-left") throw new Refusal(400, "The corner must be bottom-right or bottom-left.", "position");
-    next.position = raw.position;
-  }
-  // The launcher's own colour. Null, or nothing, puts it back to Ink.
+  // The pointer is Haptic's blue on every site and is not a setting, so a colour sent for it is not kept. Saving puts
+  // the blue back in place of one saved before.
+  const next = { ...current, accent: POINTER_BLUE };
+  // The launcher is bottom right on every site. A site stored on the left before that choice went is put right on any save.
+  if (raw.position !== undefined && raw.position !== "bottom-right") throw new Refusal(400, "The launcher is always in the bottom right corner.", "position");
+  next.position = "bottom-right";
+  // The launcher's own colour, kept as it will be drawn: darkened if it is too light to see on a white page. Null,
+  // nothing, or Ink itself puts it back to Ink.
   if (raw.launcher !== undefined) {
-    if (raw.launcher === null || raw.launcher === "") delete next.launcher;
-    else if (typeof raw.launcher !== "string" || !HEX.test(raw.launcher)) throw new Refusal(400, "The colour must be a hex value like #1E6EF4.", "launcher");
-    else next.launcher = raw.launcher.toUpperCase();
+    if (raw.launcher !== null && raw.launcher !== "" && (typeof raw.launcher !== "string" || !HEX.test(raw.launcher))) {
+      throw new Refusal(400, "The colour must be a hex value like #1C1917.", "launcher");
+    }
+    const drawn = launcherColour(raw.launcher);
+    if (drawn === INK) delete next.launcher;
+    else next.launcher = drawn;
   }
   if (raw.launcherLabel !== undefined) {
     const label = typeof raw.launcherLabel === "string" ? cleanText(raw.launcherLabel, 24) : "";
@@ -408,7 +493,8 @@ async function addDoc(sql: Sql, env: AppEnv, org: Organization, id: string, inpu
     const text = typeof input.text === "string" ? input.text : "";
     if (!title.trim()) throw new Refusal(400, "Give the doc a title.", "title");
     if (!text.trim()) throw new Refusal(400, "Paste the doc's text.", "text");
-    doc = pastedDoc(title, text.slice(0, MAX_DOC_CHARS * 2));
+    // DOC_BODY bounds the text, so it is tidied whole: a doc over the limit is refused with its real length, not cut short.
+    doc = pastedDoc(title, text);
   }
   if (doc.text.length < 40) {
     throw new Refusal(400, from === "url" ? "There was almost no text on that page. Paste the text instead." : "That is too short to help. Paste the whole article.", from);
@@ -451,18 +537,22 @@ async function changeSite(sql: Sql, env: AppEnv, org: Organization, id: string, 
   const origins = input.allowedOrigins === undefined ? site.allowed_origins : originList(input.allowedOrigins);
   if (!origins.length) throw new Refusal(400, "Keep at least one origin, or the widget can't run anywhere.");
   const appearance = input.appearance === undefined ? null : appearanceFrom(input.appearance, { ...DEFAULT_APPEARANCE, ...site.context.appearance });
+  // A launcher colour sent by a person is theirs: it is never read from the site on its own again.
+  const chosen = appearance !== null && (input.appearance as Record<string, unknown>).launcher !== undefined ? true : null;
   if (input.notes !== undefined && typeof input.notes !== "string") throw new Refusal(400, "notes must be text.");
   const notes = typeof input.notes === "string" ? input.notes.trim() : null;
   if (notes !== null && notes.length > MAX_NOTES) throw new Refusal(400, `Notes can be up to ${MAX_NOTES.toLocaleString()} characters.`, "notes");
   if (input.answers !== undefined && typeof input.answers !== "boolean") throw new Refusal(400, "answers must be true or false.");
   // Switching Answers keeps how long an answer's article may go before it is marked as possibly out of date.
   const answers = typeof input.answers === "boolean" ? { ...site.context.answers, enabled: input.answers } : null;
+  const routesMode = input.routesMode === undefined ? site.routes_mode : (input.routesMode as RoutesMode);
+  if (!ROUTES_MODES.includes(routesMode)) throw new Refusal(400, "routesMode is off, shadow or serve.");
   // Only the fields given change, inside the context too, so a page read finishing meanwhile keeps its pages.
   await sql`
-    update sites set name = ${name}, allowed_origins = ${origins},
+    update sites set name = ${name}, allowed_origins = ${origins}, routes_mode = ${routesMode},
       context = jsonb_set(jsonb_set(context, '{appearance}', coalesce(${appearance === null ? null : JSON.stringify(appearance)}::jsonb, context->'appearance', '{}'::jsonb)),
         '{notes}', coalesce(to_jsonb(${notes}::text), context->'notes', '""'::jsonb))
-        || jsonb_strip_nulls(jsonb_build_object('answers', ${answers === null ? null : JSON.stringify(answers)}::jsonb)),
+        || jsonb_strip_nulls(jsonb_build_object('answers', ${answers === null ? null : JSON.stringify(answers)}::jsonb, 'launcherChosen', ${chosen}::boolean)),
       updated_at = now()
     where id = ${id} and company_id = ${org.id}`;
   // The widget server keeps its copy of a site for up to a minute, so a newly allowed address starts working within that.
@@ -477,13 +567,34 @@ async function readSite(sql: Sql, env: AppEnv, org: Organization, id: string, re
   if (!reading || reading.finishedAt) return readingSummary(reading, pages);
   const batch = await readMore(reading, env.BROWSER);
   const byPath = new Map(pages.map((page) => [page.path, page]));
-  for (const page of batch.pages) byPath.set(page.path, page);
+  // A page mapped from a signed-in browser is the fuller view of it, so the public reading does not replace it.
+  for (const page of batch.pages) if (!byPath.get(page.path)?.mapped) byPath.set(page.path, page);
   const merged = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
   const from = { origin: site.origin, startedAt: site.reading?.startedAt ?? null };
   if (await saveReadBatch(sql, { id, companyId: org.id, maxOrigins: MAX_ORIGINS }, from, batch, merged)) return readingSummary(batch.reading, merged);
   // The address changed while this batch was read, so it was dropped. Answer with the reading that is there now.
   const now = await ownedSite(sql, org, id);
   return readingSummary(now.reading, now.context.pages ?? []);
+}
+
+/**
+ * Makes a pass for mapping the signed-in app, and the link that carries it to
+ * the widget on the company's own site. The pass rides after the #, so their
+ * server never sees it, and only its hash is kept here. It works for two
+ * hours, from an address the site allows, and a new one replaces the last.
+ */
+async function startMapping(sql: Sql, org: Organization, id: string, input: Record<string, unknown>) {
+  const site = await ownedSite(sql, org, id);
+  const start = input.url === undefined || input.url === "" ? new URL(site.origin) : siteAddress(input.url);
+  if (!site.allowed_origins.includes(start.origin)) {
+    throw new Refusal(400, `Haptic isn't allowed to run on ${start.origin} yet. Add it under "Where Haptic may run", or start from ${site.origin}.`);
+  }
+  const pass = newMappingPass();
+  const expires = new Date(Date.now() + MAPPING_PASS_MS).toISOString();
+  const mapping = { hash: await mappingHash(id, pass), expires };
+  await sql`update sites set context = jsonb_set(context, '{mapping}', ${JSON.stringify(mapping)}::jsonb), updated_at = now() where id = ${id} and company_id = ${org.id}`;
+  start.hash = `${MAPPING_FRAGMENT}${pass}`;
+  return { url: start.href, expires };
 }
 
 // Approving access requests ---------------------------------------------------

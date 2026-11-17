@@ -46,7 +46,7 @@ export function HeadlineTiles({ data, days, error }: { data: HeadlineData | null
   }
   if (!data) {
     return (
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-hidden>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-hidden>
         {[0, 1, 2, 3].map((key) => (
           <Skeleton key={key} className="h-[148px] rounded-xl" />
         ))}
@@ -61,7 +61,7 @@ export function HeadlineTiles({ data, days, error }: { data: HeadlineData | null
 
   return (
     <TooltipProvider>
-      <div className={cn("grid gap-4 transition-opacity duration-200 sm:grid-cols-2 xl:grid-cols-4", stale && "opacity-60")} aria-busy={stale}>
+      <div className={cn("grid grid-cols-1 gap-4 transition-opacity duration-200 sm:grid-cols-2 xl:grid-cols-4", stale && "opacity-60")} aria-busy={stale}>
         <Tile label="Guides finished" better="up" value={now.finished.toLocaleString()} about="Guides where the person reached the end. The number billing counts, free during early access." change={countChange(now.finished, before.finished, period)} />
         <Tile
           label="Finish rate"
@@ -207,7 +207,7 @@ export function HeadlineWaiting({ origin }: { origin?: string }) {
             of every day. Try it yourself to see the first one.
           </p>
         </div>
-        <dl className="grid gap-x-6 gap-y-4 rounded-lg border bg-card p-5 sm:grid-cols-2">
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 rounded-lg border bg-card p-5 sm:grid-cols-2">
           {items.map(([name, what]) => (
             <div key={name} className="flex flex-col gap-1">
               <dt className="text-sm font-medium">{name}</dt>

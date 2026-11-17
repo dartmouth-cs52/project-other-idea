@@ -44,10 +44,10 @@ A company installs Haptic with one script tag. It reads the page on every step, 
 |---|---|
 | **Accurate** | Points at the right control on 97% of steps on Haptic's own sites, 85% on twelve real apps, and 86% on three apps held out of all tuning. [Method, results for each app and caveats.](eval/README.md#results) |
 | **Fast** | Replies are streamed, so the pointer moves as soon as the model names the control, about 0.8 s into a step. |
-| **Small** | One script, 58 KB gzipped, with no dependencies, isolated in a shadow root. |
+| **Small** | One script, 64 KB gzipped, with no dependencies, isolated in a shadow root. The code for Do it with me and for teach mode loads only where it is used. |
 | **Safe on pages it has never seen** | Put into 107 public websites, it mounted on all 90 that could be tested and disturbed none of them while idle. It threw no errors, moved no elements and left the focus order as it was. [The same run lists what it still gets wrong.](eval/README.md#does-the-tag-work-on-any-website) |
 | **Private by construction** | What a user types is never sent. Email addresses and long numbers are masked in the browser, and again on the server before anything is stored. [Exactly what, and the exceptions.](docs/privacy.md) |
-| **Tested** | 74 test files, about 21,000 lines of tests for about 21,000 lines of widget and server code, including red-team pages and browser suites in Chromium, Firefox and WebKit. |
+| **Tested** | 77 test files, about 21,000 lines of tests for about 21,000 lines of widget and server code, including red-team pages and browser suites in Chromium, Firefox and WebKit. |
 | **In production** | The widget server runs on Cloudflare Workers with Postgres on Neon, deployed from `main` by GitHub Actions, behind an invite-only dashboard at [joinhaptic.com](https://joinhaptic.com). |
 
 ## How it works
@@ -78,7 +78,7 @@ sequenceDiagram
 
 ### What Haptic knows about a site
 
-A crawl turns the site into a **graph**. Each page's title, headings, buttons and field labels make a node, and the links between pages are the edges. The dashboard's reader uses a headless browser and also opens each menu, tab and accordion, so the map knows which control a link sits behind. Real visits fill in what a crawl can't reach. The widget reports the labels on each page it loads on, and a label joins the map once three different visitors have seen it. [How visits teach it.](docs/widget.md#learning-the-site-from-visits) Together with the company's notes and help docs, this gives the model a map it can plan routes through, to pages the user hasn't reached yet.
+A crawl turns the site into a **graph**. Each page's title, headings, buttons and field labels make a node, and the links between pages are the edges. The dashboard's reader uses a headless browser and also opens each menu, tab and accordion, so the map knows which control a link sits behind. Real visits fill in what a crawl can't reach. The widget reports the labels on each page it loads on, and a label joins the map once three different visitors have seen it. [How visits teach it.](docs/widget.md#learning-the-site-from-visits) And someone at the company can have Haptic go through their signed-in app by itself, from the dashboard, which adds what each button, menu and dialog leads to. [How mapping works.](docs/widget.md#mapping-the-signed-in-app) Together with the company's notes and help docs, this gives the model a map it can plan routes through, to pages the user hasn't reached yet.
 
 ## Engineering
 
@@ -99,6 +99,7 @@ The pointer is the easy part. Most of the code is what makes it safe to put in f
 - **[Answers](docs/answers.md).** On a site with help docs, Haptic answers questions about what something does in words, citing the articles it drew on. The server, not the prompt, enforces the rules that matter. An answer must cite a real article. Prices, refunds and legal matters are never stated. A button an article names is checked against the page, so out-of-date docs get flagged instead of repeated.
 - **[Do it with me](docs/widget.md#do-it-with-me).** Off unless a site turns it on. Haptic clicks, types and chooses on the page while the user watches, then points at the last control, the one that saves, sends or pays, for the user to click. It never types passwords or payment details, types only what the user wrote in their question, and stops on Escape. The server checks every action with the same rules as the widget.
 - **[What people can't find](docs/corrections.md#what-people-cant-find-and-guide-health).** The dashboard leads with the questions people gave up on, and flags a common question whose guides stopped finishing, which is what a change to the product looks like.
+- **[Teach Haptic](docs/corrections.md#teach-haptic).** When Haptic gets a question wrong, someone at the company presses Teach Haptic the right way in the dashboard. Their app opens with a one-time link, and they do the task once while the widget records which controls they use, never what they type. They review the steps, and from then on a question for the same task, the same action on the same thing, is guided along that route. The model still checks each step against the live page.
 - **[Corrections](docs/corrections.md#point-here-instead).** When Haptic points at the wrong thing, the company picks the right control in the dashboard and the fix applies to similar questions from then on. A company can also list controls Haptic must never point at.
 - **[Hand-off to a person](docs/answers.md#the-way-to-a-person).** When Haptic can't help, it passes the conversation to the company's existing support through a webhook, a contact page, email or the site's own chat widget. The webhook can be HMAC-signed.
 
@@ -182,16 +183,16 @@ The browser tests need Playwright's browsers once, with `npx playwright install 
 
 The dashboard tests open the pages `next build` writes, so build the site first. They read every number from a local Postgres through the Worker's own queries, so they need `TEST_DATABASE_URL` set to an empty local database, never a real one. Run them with `cd web && npm run build && cd .. && TEST_DATABASE_URL=postgres://postgres@127.0.0.1:55432/haptic_test npm run test:dashboard`. A test writes a question and its steps to the database as the widget server does, and waits for the open page to show them by itself. Without the build or the database they are skipped, and say which is missing. `dashboard-tests.yml` runs them on every pull request that touches the dashboard.
 
-`web/` and `testbed/` are separate packages with their own `npm run dev` and `npm run build`. On every push and pull request, CI typechecks, tests and builds the server, lints, tests and builds the website, and builds Northpine. A pull request that touches the widget also runs both browser suites, in `widget-tests.yml`. Pushes to `main` deploy the website and the widget server. The widget's deploy first runs the page-reading and widget browser tests and the acting-safety suites, which are the gate and the red-team pages. A [staging copy of the server](docs/operations.md#the-staging-server), with a small budget of its own, is for trying a change against the real model before visitors get it.
+`web/` and `testbed/` are separate packages with their own `npm run dev` and `npm run build`. On every push and pull request, CI typechecks, tests and builds the server, lints, tests and builds the website, and builds Northpine. A pull request that touches the widget also runs both browser suites, in `widget-tests.yml`. Pushes to `main` deploy the website and the widget server. Each applies the database migrations before it publishes, and stops if the `DATABASE_URL` secret is missing ([the database](docs/operations.md#the-database)). The widget's deploy first runs the page-reading and widget browser tests and the acting-safety suites, which are the gate and the red-team pages. A [staging copy of the server](docs/operations.md#the-staging-server), with a small budget of its own, is for trying a change against the real model before visitors get it.
 
 ## Documentation
 
 | Doc | Covers |
 |---|---|
-| [Operations](docs/operations.md) | Deploying, the database, what is recorded about visitors, billing outcomes, the kill switch, spend limits and step costs |
+| [Operations](docs/operations.md) | Deploying, the database, what is recorded about visitors, what Teach Haptic keeps, billing outcomes, the kill switch, spend limits, step costs and verified routes |
 | [Privacy](docs/privacy.md) | What leaves the browser, what is masked first, and the exceptions |
-| [The widget on a page](docs/widget.md) | Modal dialogs, covered controls, route changes, Do it with me, learning the site from visits, and the browser tests |
-| [Correcting Haptic](docs/corrections.md) | What people can't find, guide health and its emails, Point here instead, and controls Haptic must never point at |
+| [The widget on a page](docs/widget.md) | Modal dialogs, covered controls, what a form needs before its button, route changes, Do it with me, teach mode, learning the site from visits, mapping the signed-in app, and the browser tests |
+| [Correcting Haptic](docs/corrections.md) | What people can't find, guide health and its emails, Point here instead, Teach Haptic, and controls Haptic must never point at |
 | [Answers and hand-off](docs/answers.md) | Answering from help docs, the server-side rules, and hand-off to a person |
 | [Benchmark](eval/README.md) | How cases work, how to run them, and results |
 | [Website and dashboard](web/README.md) | Sign-in, approvals, the dashboard, and deploying the site |

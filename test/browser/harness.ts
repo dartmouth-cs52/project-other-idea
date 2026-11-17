@@ -2,8 +2,8 @@ import { build } from "esbuild";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
-import { chromium, firefox, webkit, type Browser, type BrowserType, type Page } from "playwright";
-import { widgetBundles } from "../../src/widget/build.ts";
+import { chromium, firefox, webkit, type Browser, type BrowserType, type Locator, type Page } from "playwright";
+import { bundleMapper, widgetBundles } from "../../src/widget/build.ts";
 import { DEFAULT_APPEARANCE, STREAM_TYPE, type PublicSiteConfig, type SnapElement, type TurnReply, type TurnRequest } from "../../src/shared/types.ts";
 
 // Runs the real widget in real browsers, against a small server that serves
@@ -22,11 +22,18 @@ const ENGINES: Record<string, BrowserType> = { chromium, firefox, webkit };
 /** The engines this run covers. */
 export const BROWSERS = (process.env.BROWSERS ?? "chromium,firefox,webkit").split(",").map((name) => name.trim()).filter((name) => name in ENGINES);
 
-let bundle: Promise<{ widget: string; acting: string }> | undefined;
+let bundle: Promise<{ widget: string; acting: string; teach: string }> | undefined;
 /** The widget's two files, widget.js and the code that acts, as the server serves them, built once per run. Not minified, so a failure points at a readable line. */
-export function widgetBundle(): Promise<{ widget: string; acting: string }> {
+export function widgetBundle(): Promise<{ widget: string; acting: string; teach: string }> {
   bundle ??= widgetBundles({ minify: false });
   return bundle;
+}
+
+let mapper: Promise<string> | undefined;
+/** The mapper as the widget fetches it, at /map.js. Not minified, like the widget's files. */
+export function mapperBundle(): Promise<string> {
+  mapper ??= bundleMapper({ minify: false });
+  return mapper;
 }
 
 let snapshotCode: Promise<string> | undefined;
@@ -50,6 +57,16 @@ export async function labelsOf(tab: Page, body: string, before?: string): Promis
   return tab.evaluate(() => {
     const ours = document.getElementById("ours") ?? document.createElement("div");
     return (window as unknown as { hapticSnapshot(ignore: Element): import("../../src/shared/types.ts").Snapshot }).hapticSnapshot(ours).elements.map((element) => element.label);
+  });
+}
+
+/** Shows this markup in a fresh page and returns each listed control's states by its label, like { "Email": ["required"] }. A control with none gets an empty list. */
+export async function statesOf(tab: Page, body: string, head = ""): Promise<Record<string, string[]>> {
+  await tab.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}</style>${head}</head><body>${body}</body></html>`);
+  await tab.addScriptTag({ content: await snapshotBundle() });
+  return tab.evaluate(() => {
+    const snapshot = (window as unknown as { hapticSnapshot(ignore: Element): import("../../src/shared/types.ts").Snapshot }).hapticSnapshot(document.createElement("div"));
+    return Object.fromEntries(snapshot.elements.map((element) => [element.label, element.state ?? []]));
   });
 }
 
@@ -80,7 +97,7 @@ export interface Harness {
 }
 
 export async function startHarness(): Promise<Harness> {
-  const { widget, acting } = await widgetBundle();
+  const { widget, acting, teach } = await widgetBundle();
   const harness: Harness = {
     url: "",
     pages: new Map(),
@@ -92,42 +109,57 @@ export async function startHarness(): Promise<Harness> {
     close: async () => {},
   };
   const server: Server = createServer(async (req, res) => {
-    const url = new URL(req.url ?? "/", "http://localhost");
-    if (url.pathname === "/widget.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(widget);
-    if (url.pathname === "/widget-act.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(acting);
-    if (url.pathname.startsWith("/v1/sites/")) return res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(harness.config));
-    if (req.method === "POST" && url.pathname === "/v1/turn") {
-      const request = JSON.parse(await readBody(req)) as TurnRequest;
-      const index = harness.turns.push(request) - 1;
-      let gone = false;
-      res.on("close", () => {
-        if (!res.writableFinished) {
-          gone = true;
-          harness.hungUp++;
-        }
-      });
-      const answer = await harness.script(request, index);
-      if (gone) return;
-      res.writeHead(200, { "Content-Type": STREAM_TYPE, "Cache-Control": "no-store" });
-      if (answer.reply.target) res.write(JSON.stringify({ target: answer.reply.target }) + "\n");
-      if (answer.holdMs) await new Promise((resolve) => setTimeout(resolve, answer.holdMs));
-      if (gone) return;
-      return res.end(JSON.stringify(answer.reply) + "\n");
-    }
-    if (req.method === "POST") {
-      const text = await readBody(req);
-      let body: unknown = text;
-      try {
-        body = JSON.parse(text);
-      } catch {
-        // Kept as text.
+    try {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      if (url.pathname === "/widget.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(widget);
+      if (url.pathname === "/widget-act.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(acting);
+      if (url.pathname === "/widget-teach.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(teach);
+      if (url.pathname === "/map.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(await mapperBundle());
+      if (url.pathname.startsWith("/v1/sites/")) return res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(harness.config));
+      if (req.method === "POST" && url.pathname === "/v1/turn") {
+        const request = JSON.parse(await readBody(req)) as TurnRequest;
+        const index = harness.turns.push(request) - 1;
+        let gone = false;
+        res.on("close", () => {
+          if (!res.writableFinished) {
+            gone = true;
+            harness.hungUp++;
+          }
+        });
+        const answer = await harness.script(request, index);
+        if (gone) return;
+        res.writeHead(200, { "Content-Type": STREAM_TYPE, "Cache-Control": "no-store" });
+        if (answer.reply.target) res.write(JSON.stringify({ target: answer.reply.target }) + "\n");
+        if (answer.holdMs) await new Promise((resolve) => setTimeout(resolve, answer.holdMs));
+        if (gone) return;
+        return res.end(JSON.stringify(answer.reply) + "\n");
       }
-      harness.posts.push({ path: url.pathname, body });
-      return res.writeHead(200, { "Content-Type": "application/json" }).end("{}");
+      if (req.method === "POST") {
+        const text = await readBody(req);
+        let body: unknown = text;
+        try {
+          body = JSON.parse(text);
+        } catch {
+          // Kept as text.
+        }
+        harness.posts.push({ path: url.pathname, body });
+        return res.writeHead(200, { "Content-Type": "application/json" }).end("{}");
+      }
+      const page = harness.pages.get(url.pathname) ?? harness.fallback;
+      if (page === undefined) return res.writeHead(404).end("Not found");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }).end(page);
+    } catch (error) {
+      // The browser hung up part way through: a test that ends while a guide is still going closes its browser or
+      // context with a request still arriving, such as the report the widget sends with keepalive as the page goes,
+      // and reading the rest of it fails with "aborted". Nobody is left to answer, and what never arrived in full
+      // is not recorded.
+      if (res.destroyed) return;
+      // Anything else is a fault of the test's own, such as a script that throws. The page is answered, so that it
+      // is not left waiting, and the fault still fails the test.
+      if (res.headersSent) res.destroy();
+      else res.writeHead(500, { "Content-Type": "text/plain" }).end(String(error));
+      throw error;
     }
-    const page = harness.pages.get(url.pathname) ?? harness.fallback;
-    if (page === undefined) return res.writeHead(404).end("Not found");
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }).end(page);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   harness.url = `http://localhost:${(server.address() as AddressInfo).port}`;
@@ -166,8 +198,8 @@ export async function launch(name: string, how: { full?: boolean } = {}): Promis
 /** Opens the panel, types the question and sends it. */
 export async function ask(tab: Page, question: string): Promise<void> {
   await tab.locator("haptic-root .launcher").click();
-  await tab.locator("haptic-root .ask input").fill(question);
-  await tab.locator("haptic-root .ask input").press("Enter");
+  await tab.locator("haptic-root .ask textarea").fill(question);
+  await tab.locator("haptic-root .ask textarea").press("Enter");
 }
 
 /** Waits until the widget has asked for at least `count` steps. */
@@ -223,3 +255,25 @@ export async function reachable(tab: Page, selector: string): Promise<boolean> {
     return hit !== null && part.contains(hit) && !host.closest("[inert]");
   }, selector);
 }
+
+/**
+ * Where the first and the last letter of the words in this element are drawn, across the line. On a page written right
+ * to left, it tells a sentence that ends with its full stop from one drawn with the stop at its start.
+ */
+export const ends = (element: Locator) =>
+  element.evaluate((el) => {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const texts: Text[] = [];
+    while (walker.nextNode()) if ((walker.currentNode as Text).data.trim()) texts.push(walker.currentNode as Text);
+    const first = texts[0]!;
+    const last = texts[texts.length - 1]!;
+    // Written out in one piece: a named helper in here would not survive the trip into the page.
+    const [start, end] = ([[first, first.data.search(/\S/)], [last, last.data.trimEnd().length - 1]] as [Text, number][]).map(([node, at]) => {
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + 1);
+      const box = range.getBoundingClientRect();
+      return { char: node.data[at], left: box.left, right: box.right };
+    });
+    return { first: start!, last: end! };
+  });

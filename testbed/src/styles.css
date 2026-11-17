@@ -123,6 +123,31 @@ body {
   outline-offset: 2px;
 }
 
+/* The search box at the top of a picker's list, and of the command palette, is
+   focused the moment the list opens, and the list shows where you are. Its
+   class asks for no outline, but the rule above is outside Tailwind's layers,
+   so it would beat `outline-none` and draw a green box round the search box
+   under Haptic's blue ring on an option. */
+[cmdk-input]:focus-visible {
+  outline: none;
+}
+
+/* A fieldset is as wide as its widest line unless told otherwise, which on a phone is wider than the screen. */
+fieldset {
+  min-width: 0;
+}
+
+/* A phone zooms the page in when a field with words smaller than 16px takes the keyboard, and leaves it zoomed. So on a
+   touch screen every field is 16px. Unlayered, so it wins over the text-[13px] on the fields themselves. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+  select,
+  textarea,
+  [contenteditable="true"] {
+    font-size: 16px;
+  }
+}
+
 dialog::backdrop {
   background: rgb(0 0 0 / 0.4);
 }

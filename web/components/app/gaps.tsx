@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, type GroupGuide, type HealthGroup, type Insights } from "@/lib/app-api";
 import { ShareBar } from "./chart";
 import { GuideStatus, Panel, PanelEmpty, when } from "./parts";
+import { TeachButton } from "./teach";
 
 const percent = (share: number) => `${Math.round(share * 100)}%`;
 const people = (count: number) => `${count.toLocaleString()} ${count === 1 ? "person" : "people"}`;
@@ -29,7 +30,7 @@ export function Gaps({ siteId, data, onOpen }: { siteId: string; data: Insights 
     <>
       <CantFind siteId={siteId} days={data.days} rows={data.cantFind} onOpen={onOpen} />
       <GuideHealth groups={data.health} alerts={data.alerts} />
-      <div className="grid items-start gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
         <Panel title="Where people give up">
           {data.abandonedAt.length ? (
             <ul className="flex flex-col divide-y border-t">
@@ -88,7 +89,7 @@ function CantFind({ siteId, days, rows, onOpen }: { siteId: string; days: number
             const gaveUp = (row.visitors - row.found) / row.visitors;
             return (
               <li key={row.key} className="flex flex-col gap-2 px-5 py-4">
-                <div className="grid items-center gap-x-6 gap-y-1 text-sm sm:grid-cols-[minmax(0,1fr)_8rem_9rem]">
+                <div className="grid grid-cols-1 items-center gap-x-6 gap-y-1 text-sm sm:grid-cols-[minmax(0,1fr)_8rem_9rem]">
                   <span className="min-w-0">
                     <span className="font-medium">&ldquo;{row.question}&rdquo;</span>
                     <span className="text-muted-foreground">, asked by {people(row.visitors)}</span>
@@ -102,9 +103,12 @@ function CantFind({ siteId, days, rows, onOpen }: { siteId: string; days: number
                     : "Those who gave up got no first step."}{" "}
                   Asked {row.asked.toLocaleString()} {row.asked === 1 ? "time" : "times"} in all.
                 </p>
-                <Button variant="secondary" size="sm" className="self-start" onClick={() => setShown(shown === row.key ? null : row.key)} aria-expanded={shown === row.key}>
-                  {shown === row.key ? "Hide the guides" : "See the guides"}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => setShown(shown === row.key ? null : row.key)} aria-expanded={shown === row.key}>
+                    {shown === row.key ? "Hide the guides" : "See the guides"}
+                  </Button>
+                  <TeachButton siteId={siteId} question={row.question} variant="ghost" />
+                </div>
                 {shown === row.key && <GroupGuides siteId={siteId} days={days} groupKey={row.key} onOpen={onOpen} />}
               </li>
             );

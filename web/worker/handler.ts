@@ -2,13 +2,16 @@
 // supplied: one address for the site, the request access form, and the static pages.
 
 import { checkRequest, cleanRequest, emailDomain, isPersonalEmail, type AccessField, type AccessRequest } from "../lib/access-request";
-import { appApi, approveLink, type AppEnv } from "./app-api";
+import { appApi, approveLink, type AppEnv, type Later } from "./app-api";
+import { billingSweep, stripeWebhook, WEBHOOK_PATH } from "./billing";
 import { proxyAuth } from "./auth";
+import { boundedText } from "./body";
 import { database } from "./db";
 import { sendHealthAlerts } from "./health";
 import { HOOK_PATH, neonHook, type HookEnv } from "./neon-hook";
 import { forgetOldEmails } from "./setup-api";
 import { isPlaybookPath, playbook } from "./playbook";
+import { forgetOldTeaching } from "./teach";
 
 export interface Assets {
   fetch(request: Request): Promise<Response> | Response;
@@ -30,7 +33,19 @@ export interface Env extends AppEnv, HookEnv {
 
 const SITE = "joinhaptic.com";
 
-/** The Worker's daily schedule, in wrangler.jsonc. Runs apart from any request. */
+/** The Worker's schedules, in wrangler.jsonc: billing every hour, and the rest once a day. Runs apart from any request. */
+export async function onSchedule(cron: string, env: Env): Promise<void> {
+  if (cron === HOURLY) {
+    await billingSweep(env).catch((error: Error) => console.error("Billing sweep failed:", error.message));
+    return;
+  }
+  await daily(env);
+}
+
+/** The hourly schedule in wrangler.jsonc. Any other is the daily one. */
+export const HOURLY = "17 * * * *";
+
+/** Once a day. */
 export async function daily(env: Env): Promise<void> {
   if (!env.DATABASE_URL) return;
   try {
@@ -41,9 +56,12 @@ export async function daily(env: Env): Promise<void> {
   }
   // Each install email sent deletes the records older than a day. This catches a site that sends no more.
   await forgetOldEmails(database(env.DATABASE_URL)).catch((error: Error) => console.error("Could not delete old install email records:", error.message));
+  // Teach sessions nobody saved, a week on, and any steps a saved or closed one still holds.
+  await forgetOldTeaching(database(env.DATABASE_URL)).catch((error: Error) => console.error("Could not delete old teach sessions:", error.message));
 }
 
-export async function handle(request: Request, env: Env, assets: Assets): Promise<Response> {
+/** `later` finishes work after the answer has gone: the request's waitUntil on Cloudflare. */
+export async function handle(request: Request, env: Env, assets: Assets, later?: Later): Promise<Response> {
   const url = new URL(request.url);
 
   // One address for the site: www goes to the bare domain, and plain http goes to https.
@@ -55,6 +73,8 @@ export async function handle(request: Request, env: Env, assets: Assets): Promis
   }
 
   if (url.pathname === "/api/request-access") return requestAccess(request, env, url);
+  // Stripe, telling us a subscription or an invoice changed. Signed by Stripe, and checked in billing.ts.
+  if (url.pathname === WEBHOOK_PATH) return stripeWebhook(request, env);
   // Neon Auth hands us each sign-in link to email. Signed by Neon, so it needs no rate limit of its own.
   if (url.pathname === HOOK_PATH) return neonHook(request, env);
   if (url.pathname.startsWith("/api/auth/")) {
@@ -65,7 +85,7 @@ export async function handle(request: Request, env: Env, assets: Assets): Promis
     }
     return proxyAuth(request, env);
   }
-  if (url.pathname.startsWith("/api/app/")) return appApi(request, env, url);
+  if (url.pathname.startsWith("/api/app/")) return appApi(request, env, url, later);
   // The install steps a coding agent fetches, /install/<site>.md. The install page itself is static.
   if (isPlaybookPath(url.pathname)) return playbook(request, env, url);
 
@@ -96,8 +116,8 @@ async function requestAccess(request: Request, env: Env, url: URL): Promise<Resp
     return json({ error: "Too many requests. Try again in a minute." }, 429);
   }
 
-  const raw = await request.text();
-  if (raw.length > 8000) return json({ error: "That is too long." }, 413);
+  const raw = await boundedText(request, 8000);
+  if (raw === null) return json({ error: "That is too long." }, 413);
   let body: Record<string, unknown>;
   try {
     body = JSON.parse(raw) as Record<string, unknown>;

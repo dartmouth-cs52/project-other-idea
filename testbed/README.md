@@ -38,6 +38,24 @@ Then reload the app and press Ask. The crawl only sees the empty HTML shell, bec
 
 To load the app without Haptic, add `?lab.widget=0`.
 
+## Online
+
+Northpine runs at https://demo.joinhaptic.com with Haptic on, so anyone can open it and press Ask. Its site is `site_5a6c4cb3e840`, on the Haptic company's account in the dashboard, with `haptic-notes.md` as its notes and a limit of 60 steps per visitor a day. It was built with `npm run tag -- --url https://demo.joinhaptic.com --name Northpine --notes testbed/haptic-notes.md --visitor-steps 60` and made live with `npm run site:publish -- site_5a6c4cb3e840`. To change what Haptic knows, edit the notes and run both again with `--id site_5a6c4cb3e840`. The notes are Haptic's, not the app's, so changing them does not redeploy the app.
+
+The app itself goes live on its own: every change to `testbed/` that lands on main is built, packed into the `northpine` Worker and deployed by `.github/workflows/deploy-demo.yml`, which then checks the demo serves the new build. A change to Markdown alone is skipped. `wrangler.jsonc` says how to deploy by hand.
+
+## On a phone
+
+Northpine is the live demo, and what Haptic is tried on from a phone. A page wider than the phone is laid out wider than the screen, so everything fixed to the window, Haptic's launcher among them, lands off it. A field with words under 16px makes the phone zoom the page in when it takes the keyboard. `npm run phone:check`, with the app running, opens every page at 320px and 390px with touch, and the states only a press reaches: each step of issuing a physical card, a split expense report, the invite and split dialogs, the menu drawer and the New menu. It fails a page that scrolls sideways, an open dialog or menu that runs off the screen, a link or button squeezed to nothing, and a field under 16px. A table or a row of tabs that scrolls sideways inside its own box is fine. CI runs it on every push, against the built app.
+
+```bash
+npm run dev                       # or: npm run build && npm run preview
+npm run phone:check               # every page
+npm run phone:check -- /cards     # pages whose path starts with /cards
+```
+
+Keeping a page in shape on a phone mostly comes down to three things. A grid that sets its columns only from a breakpoint up needs `grid-cols-1` below it, or its one column grows to its widest content. A box that scrolls sideways needs `relative`, or an `sr-only` label inside it, which is positioned, escapes it and widens the page. A row of fixed-width fields goes onto two lines below `sm`.
+
 ## The test panel
 
 The flask button at the bottom left, or Ctrl+Shift+L, opens the test panel. Every setting can also be set from the URL with `?lab.<name>=<value>`, which is how tasks open a page in a known state.
@@ -84,7 +102,7 @@ Some tasks depend on the default seed, 52. They name records by id, such as `car
 
 - `data-infinite`: no list scrolls infinitely yet.
 - `data-empty`: lists have empty states, but no task asks about one yet.
-- `layout-mobile`: the app works on a phone, but tasks can't set a viewport yet.
+- `layout-mobile`: tasks can't set a viewport yet. Every page is checked on a phone by `npm run phone:check` (see [On a phone](#on-a-phone)).
 - `overlay-context-menu`: the approvals board and the card grid have right-click menus, but a task can't right-click. The act format only has click, fill, select and check.
 - `nav-collapsed-group`: sidebar groups fold. That state lives in localStorage, and no URL setting controls it.
 - **Bundle size.** The build is 823 KB gzipped, mostly the data generator and the chart and editor libraries. Splitting it by route would make the live demo load faster.

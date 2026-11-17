@@ -144,7 +144,7 @@ function NewBillForm() {
   const errorList = Object.values(errors);
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
       <UnsavedGuard when={dirty} />
       <div className="flex flex-col gap-4">
         <Card title="Invoice" description="PDF, PNG or JPG up to 20 MB">
@@ -196,7 +196,7 @@ function NewBillForm() {
         ) : null}
 
         <Card title="Bill details">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Vendor" error={errors.vendor}>
               {(id) => <VendorPicker id={id} value={vendorId} onChange={setVendorId} invalid={!!errors.vendor} />}
             </Field>
@@ -250,7 +250,7 @@ function NewBillForm() {
             </div>
           }
         >
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="w-full min-w-[820px] text-[13px]">
               <thead className="bg-sunken text-left text-[12px] text-ink-3">
                 <tr>

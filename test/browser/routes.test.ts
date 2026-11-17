@@ -114,15 +114,31 @@ for (const name of BROWSERS) {
         return done();
       };
       const tab = await browser.newPage();
+      // The widget's questions are counted where it asks them. One that it drops the moment the address moves can be gone
+      // before the stand-in server has read it, and the server never counts it: in WebKit on CI (17 November), the
+      // guide stopped as it should and the server had seen 3 of the 4.
+      await tab.addInitScript(() => {
+        const sent = { turns: 0 };
+        (window as unknown as { sent: typeof sent }).sent = sent;
+        const original = window.fetch;
+        window.fetch = function (this: unknown, input: RequestInfo | URL, init?: RequestInit) {
+          const address = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+          if (new URL(address, location.href).pathname === "/v1/turn") sent.turns++;
+          return original.call(this, input, init);
+        } as typeof window.fetch;
+      });
+      const asked = () => tab.evaluate(() => (window as unknown as { sent: { turns: number } }).sent.turns);
       await tab.goto(`${harness.url}/feed`);
       await ask(tab, "how do I find the thing");
       await tab.waitForFunction(() => (document.querySelector("haptic-root") as Element & { guideState?: string }).guideState === "finished", null, { timeout: 20_000 });
       const caption = await tab.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.querySelector(".caption span")?.textContent);
       assert.equal(caption, "This page keeps changing its address, so I've stopped for now. Ask again once it settles.");
-      assert.equal(harness.turns.length, 4, "the first question and three more");
+      assert.equal(await asked(), 4, "the first question and three more");
       await tab.waitForTimeout(3000);
-      assert.equal(harness.turns.length, 4, "it asked again after it stopped");
-      assert.equal(harness.hungUp, 4);
+      assert.equal(await asked(), 4, "it asked again after it stopped");
+      // Every question that reached the server was hung up on, and none came that the widget did not ask.
+      assert.ok(harness.turns.length >= 1 && harness.turns.length <= 4, `the server saw ${harness.turns.length} questions`);
+      assert.equal(harness.hungUp, harness.turns.length);
       await tab.close();
       harness.pages.delete("/feed");
     });

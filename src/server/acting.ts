@@ -1,4 +1,5 @@
 import { ACT_VERSION, actingAllowedAt, actionsAllowed, type ActingSettings, type PublicSiteConfig, type SiteContext, type TurnRequest } from "../shared/types.ts";
+import { leftForVisitor, taughtFor } from "../shared/teach.ts";
 
 // "Do it with me" as the server sees it: whether a site has it on, and whether
 // one step may be answered in act mode. The site is read again for every
@@ -60,5 +61,9 @@ export function actingFor(site: SiteContext, request: TurnRequest): ActingDecisi
   const settings = siteActing(site);
   if (!settings) return { act: false, refused: "site" };
   if (!actingAllowedAt(settings, request.snapshot.path)) return { act: false, refused: "path" };
+  // A route the company taught for this question may be followed, but the clicks it left for the visitor stay theirs:
+  // their labels count as the site's own commit words for this step, so the server's check never lets Haptic press them.
+  const left = leftForVisitor(taughtFor(site.taught, request.goal));
+  if (left.length) return { act: true, settings: { ...settings, commitWords: [...(settings.commitWords ?? []), ...left] } };
   return { act: true, settings };
 }

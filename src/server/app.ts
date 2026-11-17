@@ -6,6 +6,7 @@ import {
   STREAM_TYPE,
   type GuideOutcome,
   type GuideReport,
+  type PageNode,
   type PageOutline,
   type PublicSiteConfig,
   type SiteContext,
@@ -15,11 +16,16 @@ import {
   type TurnRequest,
 } from "../shared/types.ts";
 import { publicActing } from "./acting.ts";
+import { INK, launcherColour, POINTER_BLUE } from "../shared/colour.ts";
 import type { Alert, Budget, Gate } from "./budget.ts";
 import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
 import { networkHash, parseOutlineReport, visitorHash } from "./learned.ts";
+import { parseMapReport } from "./mapped.ts";
 import { ceilingFor, measureTurn, TurnCancelled, TurnError } from "./model.ts";
 import type { TurnMeasure } from "./model.ts";
+import { compareRoute, ownerSteers, ROUTE_MODEL, routeLookup, servedReply, type RouteLookup, type RouteResult, type StoredRoute } from "./routes.ts";
+import { teachCall, type TeachStore } from "./teach.ts";
+import { taughtFor } from "../shared/teach.ts";
 
 // What the Haptic server answers: the widget file, each site's public
 // settings, and the one endpoint the widget calls for every step of a guide.
@@ -39,12 +45,15 @@ export interface AppParts {
   widget(): Promise<string>;
   /** The code that acts, widget-act.js, which the widget loads from beside itself on a site with acting on. Without it, such a site is guided by pointer. */
   widgetActing?(): Promise<string>;
+  /** Teach mode, widget-teach.js, which the widget loads from beside itself only for a teaching link (src/shared/teach.ts). Without it, the page says teach mode couldn't be loaded. */
+  widgetTeaching?(): Promise<string>;
   /** How long browsers may keep the widget before asking again, in seconds. 0 for never. */
   widgetMaxAge: number;
   /** True when this caller has asked for too many steps lately. */
   overLimit(key: string): boolean | Promise<boolean>;
   /**
-   * Told when a guide's first question is about to be put to the model.
+   * Told when a guide's first question is about to be put to the model, or
+   * has been answered from a verified route (routes.ts).
    * Recording it here means a guide whose first step fails, or whose visitor
    * leaves before the answer, is still on record. It is not told of a
    * question the off switch or the budget refused: the model is never asked
@@ -60,8 +69,10 @@ export interface AppParts {
   onAlert?(site: SiteContext, alert: Alert): void;
   /** Work to finish after the reply has gone, like adding a step's cost to the budget. A Worker has to be told about it, or it is cut short. */
   background?(work: Promise<unknown>): void;
-  /** Told about each finished step, for logging. Must not throw. */
-  onTurn?(request: TurnRequest, measure: TurnMeasure, site: SiteContext, origin: string | undefined): void;
+  /** Told about each finished step, for logging, with what the route lookup found if one was made. Must not throw. */
+  onTurn?(request: TurnRequest, measure: TurnMeasure, site: SiteContext, origin: string | undefined, route?: RouteResult): void;
+  /** The verified route stored for a question on a screen. Without it, every step goes to the model. See routes.ts. */
+  findRoute?(site: SiteContext, lookup: RouteLookup): Promise<StoredRoute | undefined>;
   /**
    * Told when the widget hung up before a step was ready, because the page
    * changed while the model was answering. The widget asks for the step again
@@ -81,12 +92,28 @@ export interface AppParts {
    * It is absent when the caller's address is not known. Must not throw.
    */
   onOutline?(site: SiteContext, visitor: string, outline: PageOutline, network?: string): void;
+  /**
+   * Mapping an app from a signed-in browser at the company. `allowed` checks
+   * the pass against the site as it is stored now, not a held copy, because the
+   * pass was made a moment ago. `save` puts one page into the site's pages.
+   * Without this, mapping is not offered.
+   */
+  /** The mapper's script, served at /map.js. */
+  mapper?(): Promise<string>;
+  mapping?: {
+    allowed(site: SiteContext, pass: string): Promise<boolean>;
+    save(site: SiteContext, page: PageNode): Promise<void>;
+  };
   /** Told how a guide ended, whether it helped, or that the visitor asked for a person. Must not throw. */
   onReport?(site: SiteContext, guide: string, report: GuideReport): void;
   /** How the handoff form is posted to a company's webhook. The web's own fetch unless a test says otherwise. */
   fetch?: typeof fetch;
   /** True on a developer's machine, where a webhook may be on the same machine. */
   localWebhooks?: boolean;
+  /** Where teach sessions are kept (src/server/teach.ts). Without one, teach mode is refused. */
+  teach?: TeachStore;
+  /** True when this caller has made too many teach calls lately. `overLimit` when not given. */
+  overTeachLimit?(key: string): boolean | Promise<boolean>;
 }
 
 const MAX_BODY_BYTES = 512 * 1024;
@@ -111,6 +138,17 @@ export const FIXED_SAY = {
 
 const fixedReply = (say: string): TurnReply => ({ target: null, status: "stuck", say, paused: true });
 
+/**
+ * A site's look as a widget is told it: the pointer is Haptic's blue whatever was saved, and the launcher is the
+ * colour it will be drawn in, darkened if it was too light. A widget from before these rules, still in a visitor's
+ * cache, draws the same as a new one.
+ */
+export function publicAppearance(saved: SiteContext["appearance"]): SiteContext["appearance"] {
+  const { launcher: _launcher, ...rest } = saved;
+  const launcher = launcherColour(saved.launcher);
+  return { ...rest, accent: POINTER_BLUE, ...(launcher === INK ? {} : { launcher }) };
+}
+
 /** Returns the handler. It answers `undefined` for addresses that are not its own, so a host can serve other things. */
 export function createApp(parts: AppParts) {
   return async function handle(request: Request, caller: string): Promise<Response | undefined> {
@@ -127,9 +165,12 @@ export function createApp(parts: AppParts) {
       });
     }
 
-    if (request.method === "GET" && (url.pathname === "/widget.js" || (url.pathname === "/widget-act.js" && parts.widgetActing))) {
+    // The mapper, /map.js, is fetched only in a tab where someone at the company is mapping their app.
+    const scripts: Record<string, (() => Promise<string>) | undefined> = { "/widget.js": parts.widget, "/widget-act.js": parts.widgetActing, "/widget-teach.js": parts.widgetTeaching, "/map.js": parts.mapper };
+    const scriptFor = request.method === "GET" ? scripts[url.pathname] : undefined;
+    if (scriptFor) {
       const cache = parts.widgetMaxAge > 0 ? `public, max-age=${parts.widgetMaxAge}` : "no-store";
-      const script = url.pathname === "/widget.js" ? await parts.widget() : await parts.widgetActing!();
+      const script = await scriptFor.call(parts);
       return new Response(script, { headers: { ...cors, "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": cache } });
     }
 
@@ -140,7 +181,7 @@ export function createApp(parts: AppParts) {
       const allowed = mayRead(site, origin);
       if (origin) parts.onSeen?.(site, origin, allowed);
       if (!allowed) return json(403, { error: refusal(origin) });
-      const config: PublicSiteConfig = { name: site.name, appearance: site.appearance };
+      const config: PublicSiteConfig = { name: site.name, appearance: publicAppearance(site.appearance) };
       if (await switchedOff(parts, site)) config.off = true;
       else {
         // Only a site with acting on says anything about it, so every other site's settings read as they always have.
@@ -169,6 +210,23 @@ export function createApp(parts: AppParts) {
         return streamed ? lines(cors, undefined, async (line) => line(reply)) : json(200, reply);
       }
 
+      // The step's verified route (routes.ts) is looked up from here on, beside the budget and the model call. On a
+      // site that serves routes, a trusted one that matches this page answers the step without the model. That step
+      // makes no model call, so nothing is set aside from the budget for it and nothing is charged.
+      const routing = startRouting(parts, site, turn);
+      const served = await servedStep(routing, site, turn);
+      if (served) {
+        if (turn.step === 0 && turn.guide) parts.onAsk?.(turn, site, origin);
+        parts.onTurn?.(turn, served.measure, site, origin, served.route);
+        const { reply } = served.measure;
+        return streamed
+          ? lines(cors, undefined, async (line) => {
+              if (reply.target) line({ target: reply.target });
+              line(reply);
+            })
+          : json(200, reply);
+      }
+
       const admitted = await askBudget(parts, site, caller, turn);
       if (!admitted.gate.open) {
         const reply = fixedReply(admitted.gate.why === "caller" ? FIXED_SAY.visitorLimit : FIXED_SAY.resting);
@@ -179,12 +237,12 @@ export function createApp(parts: AppParts) {
       if (turn.step === 0 && turn.guide) parts.onAsk?.(turn, site, origin);
 
       // A widget that asks for it gets the step as it forms: the control to point at first, then the whole reply.
-      if (streamed) return streamTurn(parts, site, turn, caller, admitted, cors, origin, request.signal);
+      if (streamed) return streamTurn(parts, site, turn, caller, admitted, cors, origin, request.signal, routing);
 
       try {
         const measure = await measureTurn(site, turn);
         charge(parts, site, caller, admitted, measure.usd, 1);
-        parts.onTurn?.(turn, measure, site, origin);
+        parts.onTurn?.(turn, measure, site, origin, await comparedRoute(routing, measure, turn));
         return json(200, measure.reply);
       } catch (error) {
         charge(parts, site, caller, admitted, paidFor(error), 0);
@@ -234,6 +292,21 @@ export function createApp(parts: AppParts) {
       return json(200, { ok: true });
     }
 
+    // A page of the company's own app, mapped from a signed-in browser there
+    // (src/widget/map.ts). The pass comes from the dashboard and is checked
+    // on every call. With no page, the widget is only asking whether its pass is good.
+    if (request.method === "POST" && url.pathname === "/v1/map") {
+      const report = parseMapReport(await readJson(request));
+      if (!report) return json(400, { error: "That isn't a valid mapping report." });
+      const site = await parts.loadSite(report.site, true);
+      if (!site) return json(404, { error: "No site with that id." });
+      if (!mayWrite(site, origin)) return json(403, { error: refusal(origin) });
+      if (await parts.overLimit(`${site.id} map ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
+      if (!parts.mapping || !(await parts.mapping.allowed(site, report.pass))) return json(403, { error: "This mapping link has run out. Start again from the dashboard." });
+      if (report.page) await parts.mapping.save(site, report.page);
+      return json(200, { ok: true });
+    }
+
     // The widget's handoff form: an email address and a note, with the
     // conversation so far. It is passed on to the company's webhook and not kept.
     if (request.method === "POST" && url.pathname === "/v1/handoff") {
@@ -251,6 +324,18 @@ export function createApp(parts: AppParts) {
       return json(200, { ok: true });
     }
 
+    // Teach mode: a person at the company showing Haptic a task in their own app. Never a model call.
+    const teaching = await teachCall(
+      { loadSite: (id) => parts.loadSite(id), teach: parts.teach, overLimit: (key) => (parts.overTeachLimit ?? parts.overLimit)(key) },
+      request,
+      url,
+      origin,
+      caller,
+      () => readJson(request),
+      json,
+    );
+    if (teaching) return teaching;
+
     return undefined;
   };
 }
@@ -261,6 +346,8 @@ function parseReport(body: unknown): GuideReport | undefined {
   if (typeof raw.site !== "string") return undefined;
   const report: GuideReport = { site: raw.site };
   if (GUIDE_OUTCOMES.includes(raw.outcome as GuideOutcome)) report.outcome = raw.outcome as GuideOutcome;
+  // Only with an outcome, and only a step a turn request could have carried (parseTurn takes 0 to 100).
+  if (report.outcome && Number.isInteger(raw.step) && (raw.step as number) >= 0 && (raw.step as number) <= 100) report.step = raw.step as number;
   if (typeof raw.helped === "boolean") report.helped = raw.helped;
   if (raw.handoff === true) report.handoff = true;
   return report.outcome || report.helped !== undefined || report.handoff ? report : undefined;
@@ -283,12 +370,14 @@ function streamTurn(
   origin: string | undefined,
   /** The request's own signal. A Worker aborts it when the caller goes away. */
   gone?: AbortSignal,
+  /** The step's route lookup, to compare with the model's answer. */
+  routing?: Routing,
 ): Response {
   return lines(cors, gone, async (line, signal) => {
     try {
       const measure = await measureTurn(site, turn, undefined, { onMode: (mode) => line({ mode }), onTarget: (id) => line({ target: id }) }, signal);
       charge(parts, site, caller, admitted, measure.usd, 1);
-      parts.onTurn?.(turn, measure, site, origin);
+      parts.onTurn?.(turn, measure, site, origin, await comparedRoute(routing, measure, turn));
       line(measure.reply);
     } catch (error) {
       charge(parts, site, caller, admitted, paidFor(error), 0);
@@ -325,6 +414,74 @@ function lines(cors: Record<string, string>, gone: AbortSignal | undefined, writ
     },
   });
   return new Response(body, { headers: { ...cors, "Content-Type": STREAM_TYPE, "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
+}
+
+/**
+ * How long a route lookup may take. Serving waits for it before the budget is
+ * asked and the model is called, so it is kept short: a slow database means
+ * asking the model, as if nothing were stored. In shadow mode the lookup runs
+ * beside the model call and is only read once the model has answered.
+ */
+const ROUTE_WAIT_MS = { serve: 250, shadow: 3000 };
+
+/** A step's verified route being looked up (routes.ts), and how the site uses routes. */
+export interface Routing {
+  lookup: RouteLookup;
+  serve: boolean;
+  started: number;
+  found: Promise<StoredRoute | undefined | typeof TIMED_OUT>;
+}
+
+/**
+ * Starts looking the step's route up. Undefined when no lookup is made: the
+ * host keeps no routes, the site has them off, or the step goes to the model
+ * whatever is stored (`routeLookup`).
+ */
+export function startRouting(parts: Pick<AppParts, "findRoute">, site: SiteContext, turn: TurnRequest): Routing | undefined {
+  const mode = site.routes ?? "shadow";
+  if (!parts.findRoute || mode === "off") return undefined;
+  const lookup = routeLookup(turn);
+  if (!lookup) return undefined;
+  const serve = mode === "serve";
+  const started = Date.now();
+  const findRoute = parts.findRoute;
+  const found = within(Promise.resolve().then(() => findRoute(site, lookup)), ROUTE_WAIT_MS[serve ? "serve" : "shadow"]);
+  return { lookup, serve, started, found };
+}
+
+/**
+ * The step answered from its route, on a site that serves them, when a trusted
+ * route matches exactly one control on this page that the site's owner has
+ * not ruled out, and nothing the owner said since applies to this step
+ * (`ownerSteers`). Undefined otherwise, and the model answers.
+ */
+export async function servedStep(routing: Routing | undefined, site: SiteContext, turn: TurnRequest): Promise<{ measure: TurnMeasure; route: RouteResult } | undefined> {
+  if (!routing?.serve || ownerSteers(site, turn)) return undefined;
+  const route = await routing.found;
+  const reply = route === TIMED_OUT ? undefined : servedReply(route, turn.snapshot, routing.lookup, site.blocked);
+  if (!reply) return undefined;
+  const ms = Date.now() - routing.started;
+  // A stored sentence was tidied when the model first wrote it, so it is its own original.
+  const measure: TurnMeasure = { reply, model: ROUTE_MODEL, ms, msToTarget: ms, cited: [], wrote: reply.say, broke: [], usd: 0 };
+  return { measure, route: { lookup: routing.lookup, outcome: "served" } };
+}
+
+/** What the lookup found, given the model's answer. Undefined when no lookup was made, or it did not answer in time, which says nothing about the route. */
+export async function comparedRoute(routing: Routing | undefined, measure: TurnMeasure, turn: TurnRequest): Promise<RouteResult | undefined> {
+  if (!routing) return undefined;
+  const route = await routing.found;
+  if (route === TIMED_OUT) return undefined;
+  return { lookup: routing.lookup, outcome: compareRoute(route, measure.reply, turn.snapshot) };
+}
+
+const TIMED_OUT = Symbol("timed out");
+
+/** The promise's value, or TIMED_OUT if it takes longer than `ms` or fails. Never rejects. */
+function within<T>(promise: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<typeof TIMED_OUT>((resolve) => (timer = setTimeout(() => resolve(TIMED_OUT), ms)));
+  const settled = promise.catch((): typeof TIMED_OUT => TIMED_OUT);
+  return Promise.race<T | typeof TIMED_OUT>([settled, late]).finally(() => clearTimeout(timer));
 }
 
 /** How long a step waits to hear whether it may go ahead. A budget that is slow is treated like one that cannot be reached. */
@@ -404,8 +561,11 @@ const LISTED_ROLES = new Set([
  * mode (or why not), what the model said to do, whether the server took
  * over a click the model had left to the visitor, what the server's check
  * left and why it removed the rest, and whether the step was the hand-over.
+ * With `site`, whether a route the company taught was in the step's prompt
+ * (`taught`), which is how a route can be seen to be used, or not, for a
+ * question; the route itself is not logged.
  */
-export function turnCounts(request: TurnRequest, measure: TurnMeasure): TurnCounts {
+export function turnCounts(request: TurnRequest, measure: TurnMeasure, site?: Pick<SiteContext, "taught">): TurnCounts {
   const { reply } = measure;
   const counts: TurnCounts = {
     haptic: "turn",
@@ -421,6 +581,7 @@ export function turnCounts(request: TurnRequest, measure: TurnMeasure): TurnCoun
     // "pointed": the server pointed at the control the sentence named. "asked": the model was asked again. "logged": neither.
     recheck: measure.recheck ? (measure.recheck.pointed ? "pointed" : measure.recheck.asked ? "asked" : "logged") : "none",
   };
+  if (site) counts.taught = taughtFor(site.taught, request.goal) !== undefined;
   if (!measure.acting) return counts;
   counts.acting = reply.mode === "act" ? "on" : (measure.acting.refused ?? "off");
   if (reply.mode !== "act") return counts;
@@ -557,6 +718,7 @@ export function parseTurn(body: unknown, now: Date = new Date()): TurnRequest | 
   if (raw.event) request.event = text(raw.event, 600);
   if (raw.change) request.change = text(raw.change, 2000);
   if (raw.offTrack === true) request.offTrack = true;
+  if (typeof raw.after === "string" && raw.after) request.after = text(raw.after, 300);
   if (raw.closing === true) request.closing = true;
   // A widget from before the version number sends none. That is version 1, and is left unset.
   if (Number.isInteger(raw.version) && (raw.version as number) >= 1 && (raw.version as number) <= 9999) request.version = raw.version as number;

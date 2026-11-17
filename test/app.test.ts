@@ -5,6 +5,7 @@ import { DEFAULT_APPEARANCE, STREAM_TYPE, type SiteContext, type TurnReply } fro
 // The stand-in model, so these run with no API key. See turn.test.ts.
 process.env.HAPTIC_MODEL = "mock";
 const { createApp, parseTurn, FIXED_SAY, turnCounts } = await import("../src/server/app.ts");
+const { renderSnapshot } = await import("../src/server/prompt.ts");
 type AppParts = import("../src/server/app.ts").AppParts;
 const { scriptMock } = await import("../src/server/model.ts");
 
@@ -73,6 +74,20 @@ test("a site's settings go only to the origins it lists", async () => {
   assert.equal(allowed?.status, 200);
   assert.equal(allowed?.headers.get("Access-Control-Allow-Origin"), "https://app.test");
   assert.deepEqual(await allowed?.json(), { name: "Test", appearance: DEFAULT_APPEARANCE });
+});
+
+test("every site's widget is told Haptic's blue for the pointer, and its launcher as it will be drawn", async () => {
+  const saved = (appearance: Partial<SiteContext["appearance"]>): SiteContext => ({ ...site, id: "site_look", appearance: { ...DEFAULT_APPEARANCE, ...appearance } });
+  const told = async (appearance: Partial<SiteContext["appearance"]>) =>
+    (await (await makeApp(false, {}, [saved(appearance)]).app(new Request("https://widget.test/v1/sites/site_look", { headers: { Origin: "https://app.test" } }), "1.1.1.1"))?.json()).appearance;
+  // A pointer saved green, back when it was a setting, is blue. A widget still cached from then draws it blue too.
+  assert.deepEqual(await told({ accent: "#16A34A", launcher: "#17633A" }), { ...DEFAULT_APPEARANCE, launcher: "#17633A" });
+  // A launcher saved too light is sent darkened, the colour it is drawn in.
+  const yellow = (await told({ launcher: "#FACC15" })).launcher;
+  assert.match(yellow, /^#[0-9A-F]{6}$/);
+  assert.notEqual(yellow, "#FACC15");
+  // No launcher colour, Ink itself, or one that is not a colour: none is sent, and the widget draws Ink.
+  for (const launcher of [undefined, "#1C1917", "green"]) assert.deepEqual(await told(launcher === undefined ? {} : { launcher }), DEFAULT_APPEARANCE, String(launcher));
 });
 
 test("a step comes back whole when the caller does not ask for a stream", async () => {
@@ -172,6 +187,24 @@ test("each call from a page is noted, and a refused origin is noted as refused",
   assert.deepEqual(seen, ["https://app.test true", "https://elsewhere.test false"]);
 });
 
+test("what a page marks on its fields reaches the model beside each field", () => {
+  // As the widget lists Northpine's invite: the email it will not accept, and Department, which the dialog requires
+  // because it marks only Personal note as optional. That field carries the word in its name and no mark of its own.
+  const elements = [
+    { id: "e1", role: "textbox", label: "Email address 1", state: ["required", "invalid"] },
+    { id: "e2", role: "combobox", label: "Department", state: ["required", "collapsed"] },
+    { id: "e3", role: "textbox", label: "Personal note(optional)" },
+    { id: "e4", role: "button", label: "Send invite" },
+  ];
+  const request = parseTurn({ ...JSON.parse(turnBody), snapshot: { path: "/people", title: "People", headings: [], text: [], elements } });
+  assert.deepEqual(request?.snapshot.elements.map((element) => element.state), [["required", "invalid"], ["required", "collapsed"], undefined, undefined]);
+  const page = renderSnapshot(request!.snapshot);
+  assert.match(page, /^e1 textbox "Email address 1" \(required, invalid\)$/m);
+  assert.match(page, /^e2 combobox "Department" \(required, collapsed\)$/m);
+  assert.match(page, /^e3 textbox "Personal note\(optional\)"$/m);
+  assert.match(page, /^e4 button "Send invite"$/m);
+});
+
 test("a step carries its guide and whether the visitor strayed, and a bad guide id is dropped", () => {
   const body = JSON.parse(turnBody);
   assert.equal(parseTurn({ ...body, guide: GUIDE, offTrack: true })?.guide, GUIDE);
@@ -202,6 +235,32 @@ test("how a guide ended is passed on, from allowed origins only, and nonsense is
   assert.deepEqual(reports, [
     { guide: GUIDE, site: site.id, outcome: "finished" },
     { guide: GUIDE, site: site.id, helped: false },
+  ]);
+});
+
+test("a report names the step its ending rests on, as a whole number a step could be, and only with an ending", async () => {
+  const reports: unknown[] = [];
+  const app = createApp({
+    loadSite: async (id) => (id === site.id ? site : undefined),
+    widget: async () => "",
+    widgetMaxAge: 0,
+    overLimit: () => false,
+    onReport: (_site, guide, report) => void reports.push({ guide, ...report }),
+  });
+  const send = (body: Record<string, unknown>) =>
+    app(new Request(`https://widget.test/v1/guides/${GUIDE}/report`, { method: "POST", headers: { "Content-Type": "text/plain", Origin: "https://app.test" }, body: JSON.stringify({ site: site.id, ...body }) }), "1.1.1.1");
+  assert.equal((await send({ outcome: "finished", step: 3 }))?.status, 200);
+  assert.equal((await send({ outcome: "finished", step: 0 }))?.status, 200);
+  // Anything else in its place is left out, and the report is still taken, as one from a widget that names no step.
+  for (const step of ["3", -1, 1.5, 101, null, [3]]) assert.equal((await send({ outcome: "finished", step }))?.status, 200, JSON.stringify(step));
+  // A step says what an ending rests on, so without one it is left out, and a report of nothing else is still nothing.
+  assert.equal((await send({ helped: true, step: 2 }))?.status, 200);
+  assert.equal((await send({ step: 2 }))?.status, 400);
+  assert.deepEqual(reports, [
+    { guide: GUIDE, site: site.id, outcome: "finished", step: 3 },
+    { guide: GUIDE, site: site.id, outcome: "finished", step: 0 },
+    ...Array.from({ length: 6 }, () => ({ guide: GUIDE, site: site.id, outcome: "finished" })),
+    { guide: GUIDE, site: site.id, helped: true },
   ]);
 });
 

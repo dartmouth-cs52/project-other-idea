@@ -6,13 +6,17 @@ Exactly what leaves a visitor's browser, what is masked first, and the exception
 
 The widget sends the names of controls, never what anyone types into a field or anything inside an area they write in. It looks at what fields hold only inside the browser, to leave it out wherever the page repeats it: a block of page text that repeats it is dropped, and in a heading, the title, a control's name or an option it is replaced by `[typed]` ("Save [typed]").
 
-It does say whether a field is marked invalid, so a guide does not move on from a field that will not be accepted: the page marks it with `aria-invalid`, or the browser's own check of the field's type, pattern, length or range fails, as it does for "charlie" in an email field. That is a yes or a no and nothing of what was typed. An empty field is not called invalid.
+It does say whether a field is marked invalid, so a guide does not move on from a field that will not be accepted: the page marks it with `aria-invalid`, or the browser's own check of the field's type, pattern, length or range fails, as it does for "charlie" in an email field. An email field (`type="email"`) is also marked invalid when the address in it has no dot in its domain, like "theochain@dad", or its domain ends in a single character or in digits: the browser takes those, following the HTML standard, and nearly every form refuses them. That is a yes or a no and nothing of what was typed. An empty field is not called invalid.
 
 The one exception is words the person also wrote, whole, in their own question, which is sent anyway: asked to "make Roma Johnston a manager", they type Roma in the search box, and the row "Roma Johnston" stays readable so it can be pointed at. That holds only for words the question is sent with. An email address or a number that is masked in the question is left out when typed like anything else, whether or not the question names it, so the page's repeat of someone's typing never un-masks it. Anything else they type is left out as before.
 
 Addresses, the page's own and its links', are sent with ids and numbers masked, so a page that writes a search into an address sends it there.
 
 With each question the widget also sends the user's own date, not their time zone or location, so the model knows what day it is.
+
+## Teach mode
+
+Teach mode is not used by visitors. Someone at the company starts it from the dashboard, which opens their product with a link that works once, for half an hour, and only on that company's site. While they do the task, the widget sends which buttons, links, fields and lists they use, each by its kind, its name and the section of the page it is in, which option they chose in a list, and the page's path within the product, with ids masked. It never sends what they type, and it masks names and addresses as below. Where the page repeats what they typed in a name it sends, that is replaced by `[typed]` as above, including the names teach mode reads for itself: a group of options, a list, and a control the page reading leaves out. A control in a table's row is kept by its name only when other rows have one of the same name, such as Edit, never by the record's own name. Teach mode asks the model nothing. What is kept is listed in [operations](operations.md#what-teach-haptic-keeps).
 
 ## What is masked
 

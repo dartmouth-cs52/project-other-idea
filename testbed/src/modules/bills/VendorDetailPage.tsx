@@ -61,7 +61,7 @@ function VendorDetail({ vendor }: { vendor: Vendor }) {
         title={
           manage.allowed ? (
             // Click-to-edit title, on purpose: the name only becomes an input after a click.
-            <InlineEdit value={vendor.name} label="vendor name" className="-ml-1 min-w-max text-[22px] font-semibold" onSave={(v) => v.trim() && act(() => patch("vendors", vendor.id, { name: v.trim() }), { success: "Vendor renamed" })} />
+            <InlineEdit value={vendor.name} label="vendor name" className="-ml-1 text-[22px] font-semibold sm:min-w-max" onSave={(v) => v.trim() && act(() => patch("vendors", vendor.id, { name: v.trim() }), { success: "Vendor renamed" })} />
           ) : (
             vendor.name
           )
@@ -102,7 +102,7 @@ function VendorDetail({ vendor }: { vendor: Vendor }) {
         }
       />
 
-      <div className="mb-5 grid gap-4 sm:grid-cols-3">
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card bodyClassName="p-4">
           <p className="text-[12.5px] text-ink-3">Open balance</p>
           <p className="tabular text-[20px] font-semibold">{money(open.reduce((s, b) => s + billTotal(b), 0))}</p>
@@ -206,10 +206,10 @@ function OverviewTab({ vendor }: { vendor: Vendor }) {
   };
 
   return (
-    <div className="grid gap-5 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
       <UnsavedGuard when={dirty} />
       <Card title="Vendor details" description={ro ? manage.reason : "Changes are saved together with the bar at the bottom."} className="lg:col-span-2">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Legal name">{(id) => <Input id={id} disabled={ro} value={draft.legalName} onChange={(e) => set("legalName", e.target.value)} />}</Field>
           <Field label="Billing email">{(id) => <Input id={id} disabled={ro} type="email" value={draft.email} onChange={(e) => set("email", e.target.value)} />}</Field>
           <Field label="Phone">{(id) => <Input id={id} disabled={ro} value={draft.phone} onChange={(e) => set("phone", e.target.value)} />}</Field>
@@ -273,7 +273,7 @@ function PaymentTab({ vendor }: { vendor: Vendor }) {
   const hasBank = vendor.paymentMethod === "ach" || vendor.paymentMethod === "wire";
   const show = (v: string) => (v ? (revealed ? <span className="font-mono">{v}</span> : <span className="font-mono">{masked(last4(v))}</span>) : <span className="text-ink-3">Not set</span>);
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <Card
         title={hasBank ? "Bank account" : vendor.paymentMethod === "check" ? "Mailing address" : "Virtual card"}
         description={hasBank ? "Shown masked. Revealing is logged in the audit trail." : undefined}
@@ -394,7 +394,7 @@ function EditPaymentModal({ vendor, open, onOpenChange }: { vendor: Vendor; open
       <div className="flex flex-col gap-4">
         <RadioCards value={method} onValueChange={setMethod} options={(Object.keys(METHOD_LABELS) as Vendor["paymentMethod"][]).map((m) => ({ value: m, label: METHOD_LABELS[m], description: METHOD_HINTS[m], icon: METHOD_ICONS[m] }))} />
         {method === "ach" || method === "wire" ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label={method === "ach" ? "Routing number" : "SWIFT / BIC code"}>{(id) => <Input id={id} autoComplete="off" value={a} onChange={(e) => setA(e.target.value)} />}</Field>
             <Field label={method === "ach" ? "Account number" : "IBAN"}>{(id) => <Input id={id} autoComplete="off" value={b} onChange={(e) => setB(e.target.value)} />}</Field>
           </div>
@@ -414,7 +414,7 @@ function DocumentsTab({ vendor }: { vendor: Vendor }) {
     { name: "Certificate of insurance 2026.pdf", kind: "Insurance", at: vendor.createdAt },
   ];
   return (
-    <div className="grid gap-5 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
       <Card title="Files" bodyClassName="p-0" className="lg:col-span-2">
         <ul>
           {docs.map((d) => (

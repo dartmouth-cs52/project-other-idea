@@ -85,7 +85,7 @@ test("the model is told to point at nothing more once the goal is reached (10 si
 test("the model is told to say what to type and stop (jira and ui5: 'type it, then press Enter', which on Jira sends a signed-out visitor to sign in)", () => {
   // Jira's quick search has no button. Told "ask for Enter only if no button does it", the model said "type KAFKA-1, then press Enter" 8 times in 8 on staging.
   assert.match(rules, /For a text field, say what to type and stop there: never add "then press Enter" or any later step, even when no button sends it\./);
-  assert.match(rules, /You're asked again once they have typed it; then treat the field as filled in and point at what comes next, usually the search, save or submit button, or say to press Enter if no button does it\./);
+  assert.match(rules, /You're asked again once they have typed it; then treat the field as filled in and point at what comes next, or say to press Enter if no button does it\./);
 });
 
 test("the model is told what a step with nothing to point at means (ui5 and grafana: 'Press Enter' with no target ended the guide)", () => {
@@ -172,7 +172,36 @@ test("a field marked invalid is printed as sent, and the rules say not to move o
     },
   });
   assert.ok(page.includes('e1 textbox "Email address 1" (invalid) [dialog › Invite people]'));
-  assert.match(rules, /A field marked "invalid" holds something the page or the browser won't accept, like an email address with no @: when the field they just typed in is marked "invalid", don't move on\. Point at it again and say what it needs/);
+  // Every prompt a step can be asked with carries the rule: the guide's, the one for a site with help docs (Answers on,
+  // as Northpine is), and the act variant for Do it. The Answers one lacked it at first, so a pointer guide on such a site
+  // still went on from "charlie".
+  const rule = /A field marked "invalid" holds something the page or the browser won't accept, like an email address with no @: when the field they just typed in is marked "invalid", don't move on\. Point at it again and say what it needs/;
+  const withAnswers = buildSystemPrompt({ ...site, answers: { enabled: true } });
+  assert.notEqual(withAnswers, rules, "the site did not get the Answers prompt");
+  for (const [name, prompt] of [["guide", rules], ["answers", withAnswers], ["act", buildSystemPrompt(site, "act")]] as const) assert.match(prompt, rule, name);
+});
+
+test('the rules say a caption is the action and the label, since the pointer shows where (Northpine, "lets log out": "Click the round button with your initials at the top right to open the account menu, then choose Sign out.")', () => {
+  // Every prompt a step can be asked with: the guide's, the one for a site with help docs (as Northpine is), and Do it's.
+  const withAnswers = buildSystemPrompt({ ...site, answers: { enabled: true } });
+  for (const [name, prompt] of [["guide", rules], ["answers", withAnswers], ["act", buildSystemPrompt(site, "act")]] as const) {
+    assert.match(prompt, /the pointer already shows the visitor where it is, so "say" is only what to do with it: the action and the element's visible label\. "Click Sign out\."/, name);
+    // The demo app's account button is listed as button "A", and Northpine's shows the visitor's initials: "Click A." tells nobody anything.
+    assert.match(prompt, /An element with no visible label, or one labeled only with an icon, initials or a letter or two, is named by what it opens or does, like "Open your account menu\.", never by how it looks or where it sits\./, name);
+    assert.match(prompt, /Leave out where the element is, what it looks like, what comes after it, what else the visitor could do instead, and what is already filled in or selected/, name);
+    // What asked for the long ones is gone: the example that said where, the icon described with its place, and two sentences as the measure.
+    assert.doesNotMatch(prompt, /Click Settings in the top bar\./, name);
+    assert.doesNotMatch(prompt, /describe the icon and where it is/, name);
+    assert.doesNotMatch(prompt, /One or two short sentences/, name);
+  }
+  // A sentence with nothing pointed at still answers. A question about what the site shows is answered in one sentence from
+  // the page, and the benchmark's guides that ask for a fact pass on that sentence (ui5's out-of-stock laptops, horilla's
+  // Christmas days): the caption rules must not send the visitor off to look instead.
+  for (const [name, prompt] of [["guide", rules], ["act", buildSystemPrompt(site, "act")]] as const) {
+    assert.match(prompt, /With target null, use one short sentence: the answer from the page, what now shows once the goal is done, what to do, or where on the page to look\./, name);
+    assert.match(prompt, /Add words only where the rules above ask for them, like what a field marked "invalid" needs, moving the mouse over an element that shows on hover,/, name);
+  }
+  assert.match(withAnswers, /A step says what to do with the control\. The reply that ends a guide says that the goal is done, or where on the page to look\./);
 });
 
 test("the question asked after the last step is worded as a closing one", () => {
@@ -228,6 +257,23 @@ test("finding nothing on the first reply is stuck, and nothing left after some s
     snapshot: { path: "/", title: "", headings: [], text: [], truncated: false, elements },
   });
   assert.equal(later.status, "done");
+});
+
+test("the model is told what a form needs before its button, with Answers on or off", () => {
+  for (const [name, prompt] of [["guide", buildSystemPrompt(site)], ["answers", buildSystemPrompt({ ...site, answers: { enabled: true } })], ["act", buildSystemPrompt(site, "act")]] as const) {
+    // The button comes after what the form requires. The widget marks those fields "required", including the ones a
+    // form leaves unmarked when it marks only its optional fields (markRequiredByOptional in src/widget/snapshot.ts).
+    assert.match(prompt, /A form's save or submit button comes after everything the form needs\. A field or group marked "required" has to be filled in or chosen before its form's button will work\./, name);
+    // Only what the visitor filled in during the guide counts as done: the model cannot see into a field.
+    assert.match(prompt, /Take the visitor to each one they haven't filled in or chosen during this guide, one a step, top to bottom, then to the button\./, name);
+    // A form that already holds saved values is not walked through.
+    assert.match(prompt, /a form that already holds saved values, like renaming something: point at that field, then at save/, name);
+    // A form turned back is not a finished guide.
+    assert.match(prompt, /After the visitor submits, a field marked "invalid" or an error message that appears means the form was turned back/, name);
+    assert.match(prompt, /The goal isn't complete until the form goes through/, name);
+    // The rule this replaces sent the visitor to the button after any one field.
+    assert.doesNotMatch(prompt, /usually the (search, )?save or submit button/, name);
+  }
 });
 
 test("the model is told that stuck is its own status, apart from done", () => {
@@ -539,14 +585,28 @@ async function sentFor(on: SiteContext, asked: TurnRequest, reply: TurnReply) {
   configure({ HAPTIC_MODEL: "claude-test", HAPTIC_RECHECK: "off", ANTHROPIC_API_KEY: "test" }, stand);
   try {
     const measure = await measureTurn(on, asked);
-    const params = sent[0] as unknown as { system: { text: string }[]; output_config: { format: { schema: { properties: object } } }; messages: { content: string }[] };
-    return { measure, system: params.system[0]?.text, fields: Object.keys(params.output_config.format.schema.properties), question: params.messages.at(-1)?.content };
+    const params = sent[0] as unknown as { system: { text: string }[]; output_config: { format: { schema: { properties: Record<string, { description?: string }> } } }; messages: { content: string }[] };
+    const properties = params.output_config.format.schema.properties;
+    return { measure, system: params.system[0]?.text, fields: Object.keys(properties), sayHint: properties.say?.description ?? "", question: params.messages.at(-1)?.content };
   } finally {
     configure({ HAPTIC_MODEL: "mock" });
   }
 }
 
 const later = (extra: Partial<TurnRequest>): TurnRequest => ({ ...request('You clicked link "Billing".'), ...extra });
+
+test('the reply\'s own words for "say" ask for the action and the label as the rules do, and in act mode for what Haptic is doing', async () => {
+  // The model reads the field's description as well as the rules. It said "One or two short sentences" while the rules
+  // had the same, and would contradict the rules now if it still did.
+  const guide = await sentFor(site, later({}), { target: "e3", status: "continue", say: "Click Update card." });
+  assert.match(guide.sayHint, /With a target, the action and its visible label, like "Click Sign out\.", and no more than the rules add\./);
+  const answers = await sentFor({ ...site, answers: { enabled: true } }, later({}), { mode: "guide", target: "e3", status: "continue", say: "Click Update card." });
+  assert.match(answers.sayHint, /With "guide" and a target, the action and its visible label, like "Click Sign out\.", and no more than the rules add\./);
+  assert.match(answers.sayHint, /With "answer", one to four sentences/);
+  const act = await sentFor(actingSite, later({ version: 3, mode: "act" }), { target: "e1", do: "click", enter: null, commits: false, status: "continue", say: "Opening Billing." });
+  assert.match(act.sayHint, /what you are doing, like "Opening Cards\."/);
+  for (const hint of [guide.sayHint, answers.sayHint, act.sayHint]) assert.doesNotMatch(hint, /one or two short sentences/i);
+});
 
 test("the model is asked for an act reply only when the widget asked to act and the site allows it", async () => {
   const guideReply: TurnReply = { target: "e3", status: "continue", say: "Click Update card." };

@@ -6,7 +6,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronsUpDown, LayoutGrid, LogOut, Plus } from "lucide-react";
+import { Check, ChevronsUpDown, CreditCard, LayoutGrid, LogOut, Plus, Users } from "lucide-react";
 import { cn } from "cn";
 import { Pointer } from "@/components/pointer";
 import {
@@ -22,8 +22,9 @@ import type { Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
 import { hostOf } from "@/lib/setup";
 import { site as haptic } from "@/lib/site";
-import { NEW_SITE_HREF, SITES_HREF, VIEWS, siteHref, type View } from "./nav";
+import { BILLING_HREF, NEW_SITE_HREF, SITES_HREF, TEAM_HREF, VIEWS, siteHref, type View } from "./nav";
 import { SiteIcon, leaveFor } from "./parts";
+import { PlanLink } from "./upgrade";
 
 type SiteRow = NonNullable<Me["sites"]>[number];
 
@@ -47,8 +48,10 @@ function Slash() {
  * The bar across the top. From the left it reads as a path: Haptic, which
  * leads to the list of sites, then the site, which is a menu of the company's
  * sites. Who is signed in is on the right, with their company in the menu.
+ * It sticks to the top of the window. `className` can hold it there another
+ * way, as SiteShell does.
  */
-export function TopBar({ me, current }: { me?: Me; current?: SiteRow }) {
+export function TopBar({ me, current, className }: { me?: Me; current?: SiteRow; className?: string }) {
   const router = useRouter();
   // The sites whose script is running come first, here and on the list of sites, since those are the ones with something to see.
   const sites = [...(me?.sites ?? [])].sort((a, b) => Number(b.connected) - Number(a.connected));
@@ -62,7 +65,7 @@ export function TopBar({ me, current }: { me?: Me; current?: SiteRow }) {
   }
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-4 border-b bg-background px-4 sm:px-6">
+    <header className={cn("sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-4 border-b bg-background px-4 sm:px-6", className)}>
       <nav aria-label="Where you are" className="flex min-w-0 items-center gap-1">
         {/* Inside the dashboard the name leads to the list of sites. Before that it leads home, by a full page load, for the reason given at leaveFor. */}
         {inside ? (
@@ -113,6 +116,8 @@ export function TopBar({ me, current }: { me?: Me; current?: SiteRow }) {
         )}
       </nav>
       {me && (
+        <div className="flex shrink-0 items-center gap-2">
+        {me.approved && <PlanLink me={me} />}
         <DropdownMenu>
           <DropdownMenuTrigger className={cn(CRUMB, "shrink-0 data-popup-open:bg-muted")} aria-label="Account">
             <span className="inline-flex size-6 items-center justify-center rounded-full bg-secondary text-xs font-medium uppercase">{(firstName(me.user.name) ?? me.user.email).slice(0, 1)}</span>
@@ -126,12 +131,25 @@ export function TopBar({ me, current }: { me?: Me; current?: SiteRow }) {
               </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
+            {me.approved && (
+              <DropdownMenuItem onClick={() => router.push(TEAM_HREF)} className="gap-2 py-1.5">
+                <Users className="text-muted-foreground" />
+                Team
+              </DropdownMenuItem>
+            )}
+            {me.approved && (
+              <DropdownMenuItem onClick={() => router.push(BILLING_HREF)} className="gap-2 py-1.5">
+                <CreditCard className="text-muted-foreground" />
+                Billing
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={signOut} className="gap-2 py-1.5">
               <LogOut className="text-muted-foreground" />
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       )}
     </header>
   );
@@ -149,14 +167,18 @@ export function Plain({ me, children, wide = false }: { me?: Me; children: React
 
 /**
  * One site: the bar across the top, its pages down the left, and the page
- * chosen beside them. The list of pages is fixed to the window, so it and its
- * line stay where they are however far the page scrolls. Below 1024px the
- * pages are a row under the bar that scrolls sideways.
+ * chosen beside them. The bar and the list of pages are both fixed to the
+ * window, so they and their lines stay where they are however far the page
+ * scrolls. They are held the same way so that nothing moves one without the
+ * other: a Mac's trackpad pulls the page past its top and lets it spring back,
+ * which carries a sticky bar down over the list and leaves a gap above it.
+ * Below 1024px the pages are a row under the bar that scrolls sideways, and
+ * the bar and the row both stick, so they move together.
  */
 export function SiteShell({ me, current, view, children }: { me: Me; current: SiteRow; view: View; children: ReactNode }) {
   return (
     <>
-      <TopBar me={me} current={current} />
+      <TopBar me={me} current={current} className="lg:fixed lg:inset-x-0" />
       <nav aria-label={`${current.name} pages`} className="sticky top-14 z-30 flex gap-1 overflow-x-auto border-b bg-background px-4 py-2 sm:px-6 lg:hidden">
         {VIEWS.map((item) => (
           <PageLink key={item.id} site={current.id} item={item} on={item.id === view} />
@@ -169,7 +191,8 @@ export function SiteShell({ me, current, view, children }: { me: Me; current: Si
           ))}
         </nav>
       </aside>
-      <main className="min-w-0 flex-1 lg:pl-56">
+      {/* The bar takes no room of its own from 1024px, so the page leaves room for it. */}
+      <main className="min-w-0 flex-1 lg:pt-14 lg:pl-56">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">{children}</div>
       </main>
     </>

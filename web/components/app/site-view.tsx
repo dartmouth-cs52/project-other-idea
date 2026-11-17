@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { cn } from "cn";
+import { AlertCircleIcon, Route } from "lucide-react";
 import { FieldWithButton, FormAlert, failureFrom, useFieldErrors, type Failure } from "@/components/form";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { api, type Me, type Reading, type Site } from "@/lib/app-api";
 import { CopyLink } from "./agent-pill";
 import { DeveloperEmail } from "./developer-email";
@@ -17,10 +20,13 @@ import { useInsights, useLive } from "./live";
 import { RANGES, daysFrom, siteHref, useAddress, type View } from "./nav";
 import { Overview } from "./overview";
 import { Card, CardTitle, DashboardSurface, DoneMark, FailedCard, PageHeader, Segmented, StepMark, StepTitle, when } from "./parts";
+import { BillingNotice } from "./upgrade";
 import { Questions } from "./questions";
+import { RoutesCard } from "./routes-card";
 import { SetupGate } from "./setup/setup-gate";
 import { SiteShell } from "./shell";
 import { DeleteSite, HelpDocs, Notes, SiteName, WidgetLook } from "./site-settings";
+import { TeachDrawer } from "./teach";
 import { FinishedGuides } from "./usage";
 
 /** How often the page asks whether the script has been seen, while waiting for it. */
@@ -29,6 +35,18 @@ const WAITING_MS = 5_000;
 const CONNECTED_MS = 60_000;
 
 type SiteRow = NonNullable<Me["sites"]>[number];
+
+/** Northpine, Haptic's own demo app. Its overview does not ask to be mapped. */
+const NOT_ASKED_TO_MAP = new Set(["demo.joinhaptic.com"]);
+
+/** Whether the overview asks for the signed-in screens. Every site but Northpine is asked until it has been mapped once. */
+function asksToMap(site: Site): boolean {
+  try {
+    return !NOT_ASKED_TO_MAP.has(new URL(site.origin).hostname);
+  } catch {
+    return true;
+  }
+}
 
 const SETTINGS_TABS = [
   { value: "general", name: "General" },
@@ -95,6 +113,7 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
         <Notes site={site} onChange={setSite} />
         <HelpDocs site={site} onChange={setSite} />
         <GuidingRules site={site} onChange={setSite} />
+        {site.connected && site.mapped > 0 && <MapApp site={site} reload={load} />}
         <PagesRead reading={pages.reading} />
       </>
     );
@@ -162,7 +181,11 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
           <Reconnecting failing={failing} />
           {range}
         </PageHeader>
+        {/* Asked for first until it has been done once: without it Haptic knows only the public pages. */}
+        {site.mapped === 0 && asksToMap(site) && <MapApp site={site} reload={load} />}
+        <BillingNotice me={me} />
         <Overview siteId={site.id} origin={site.origin} days={days} stamp={stamp} data={numbers.data} live={live} onOpen={openIt} />
+        {numbers.data?.routes && <RoutesCard site={site} metrics={numbers.data.routes} onChange={setSite} />}
       </>
     );
   }
@@ -174,6 +197,7 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
         {openGuide && site && (
           <GuideDrawer siteId={site.id} guideId={openGuide} stamp={live?.stamp} onClose={() => set({ guide: undefined })} onCorrected={(corrections) => setSite({ ...site, corrections })} />
         )}
+        {site && <TeachDrawer site={site} onChange={setSite} />}
       </SiteShell>
     </DashboardSurface>
   );
@@ -207,7 +231,7 @@ function PagesRead({ reading }: { reading: Reading | null }) {
           : "Haptic is still reading your public pages, following links, tabs and menus. It never submits a form or changes anything."}
       </p>
       {reading.pages.length > 0 && (
-        <ul className="grid max-h-56 gap-x-6 gap-y-1 overflow-y-auto rounded-lg border bg-card p-4 text-sm sm:grid-cols-2">
+        <ul className="grid grid-cols-1 max-h-56 gap-x-6 gap-y-1 overflow-y-auto rounded-lg border bg-card p-4 text-sm sm:grid-cols-2">
           {reading.pages.map((page) => (
             <li key={page.path} className="truncate">
               <span>{page.title || page.path}</span> <span className="text-muted-foreground">{page.path}</span>
@@ -280,7 +304,104 @@ function Setup({ site, pages, onChange }: { site: Site; pages: Pages; onChange: 
       </Card>
 
       <Connection site={site} onChange={onChange} />
+
+      <Card>
+        <StepTitle mark={<StepMark n={4} />}>Show Haptic the screens behind your login</StepTitle>
+        <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
+          Once the script connects, one button here has Haptic go through your signed-in app by itself, in your own browser, so it knows where
+          everything is before your first user asks.
+        </p>
+      </Card>
     </div>
+  );
+}
+
+/**
+ * Starts a mapping run: the company's own app opens in a new tab with a pass
+ * in its address, and the widget there goes through the app by itself
+ * (src/widget/map.ts in the widget). The count here goes up as pages arrive,
+ * because the page asks for the site again every so often.
+ */
+function MapApp({ site, reload }: { site: Site; reload: () => void }) {
+  const [start, setStart] = useState(site.origin);
+  const [busy, setBusy] = useState(false);
+  const [opened, setOpened] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const done = site.mapped > 0;
+
+  // While a run is under way in the other tab, the count is asked for often enough to watch it climb.
+  useEffect(() => {
+    if (!opened) return;
+    const timer = setInterval(() => document.visibilityState === "visible" && reload(), WAITING_MS);
+    const stop = setTimeout(() => setOpened(false), 30 * 60_000);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(stop);
+    };
+  }, [opened, reload]);
+
+  async function begin(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setBusy(true);
+    // The tab is opened now, while the click still counts as theirs, and sent on once the link is ready.
+    // Opened after the wait, a browser would block it as a popup.
+    const tab = window.open("", "_blank");
+    try {
+      const { url } = await api<{ url: string }>(`/sites/${site.id}/map`, { method: "POST", body: { url: start.trim() } });
+      if (tab) {
+        // Their app gets no handle on this page.
+        tab.opener = null;
+        tab.location.replace(url);
+        setOpened(true);
+      } else {
+        setError("Your browser stopped the new tab. Allow popups for this page, then start again.");
+      }
+    } catch (failure) {
+      tab?.close();
+      setError((failure as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <StepTitle mark={done ? <DoneMark /> : <Route className="size-5 text-muted-foreground" aria-hidden />}>
+        {done ? `${site.mapped} signed-in ${site.mapped === 1 ? "screen" : "screens"} mapped` : "Show Haptic the screens behind your login"}
+      </StepTitle>
+      <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
+        {done
+          ? "Haptic knows these screens: where their links and buttons lead, and what is behind each menu, tab and dialog. Map again after a big change to your product."
+          : "So far Haptic has only read your public pages. Sign in to your app in this browser, then start. Your app opens in a new tab and Haptic goes through it by itself: it visits each page and opens menus, tabs and dialogs to see what is there. It takes a few minutes, and you can pause or stop it at any time."}
+      </p>
+      <ul className="flex max-w-[65ch] list-disc flex-col gap-1 pl-5 text-sm leading-5 text-muted-foreground">
+        <li>It skips anything that looks like it saves, sends, deletes, pays or signs out, and it never types or submits a form.</li>
+        <li>While it presses a button, it stops the page from sending changes. No guard is perfect, so use a test or demo account if you have one.</li>
+        <li>It keeps the names of buttons, links and fields. Never what is in a field or a table.</li>
+        <li>Haptic will describe your app as this account sees it, so use an account that sees what your users see.</li>
+      </ul>
+      <form onSubmit={begin} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="flex flex-1 flex-col gap-2">
+          <Label htmlFor={`map-${site.id}`}>Where your app starts once you are signed in</Label>
+          <Input id={`map-${site.id}`} value={start} onChange={(event) => setStart(event.target.value)} placeholder={site.origin} className="h-11 bg-card px-3.5 md:text-base" />
+        </div>
+        <Button type="submit" size="xl" variant={done ? "secondary" : "default"} disabled={busy}>
+          {done ? "Map again" : "Start mapping"}
+        </Button>
+      </form>
+      {opened && !error && (
+        <p className="text-sm text-muted-foreground">
+          Your app is open in a new tab. Press Start in the panel at the top of it. If no panel shows, the script is not on that page yet.
+        </p>
+      )}
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircleIcon />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+    </Card>
   );
 }
 
@@ -317,7 +438,7 @@ function ReadPages({ pages }: { pages: Pages }) {
       </p>
       {stalled && !done && <p className="text-sm text-muted-foreground">Reading stopped for now. It picks up again when you reload this page.</p>}
       {reading.pages.length > 0 && (
-        <ul className="grid max-h-56 gap-x-6 gap-y-1 overflow-y-auto rounded-lg border bg-card p-4 text-sm sm:grid-cols-2">
+        <ul className="grid grid-cols-1 max-h-56 gap-x-6 gap-y-1 overflow-y-auto rounded-lg border bg-card p-4 text-sm sm:grid-cols-2">
           {reading.pages.map((page) => (
             <li key={page.path} className="truncate">
               <span>{page.title || page.path}</span> <span className="text-muted-foreground">{page.path}</span>

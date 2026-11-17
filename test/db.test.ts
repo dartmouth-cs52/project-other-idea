@@ -187,9 +187,11 @@ function onRecord(...looks: (Record<string, unknown> | undefined)[]) {
     return Promise.resolve(found ? [found] : []);
   };
   const store = new Store(sql as unknown as ConstructorParameters<typeof Store>[0], 3, { reportWaitsMs: [0, 0, 0] });
-  /** What was written, without the looks. */
-  const written = () => sent.filter((query) => !query.text.startsWith("select"));
-  return { store, sent, written, looks: () => look };
+  /** What was written to the guide, without the looks, and without what a guide's ending does to verified routes. */
+  const written = () => sent.filter((query) => !query.text.startsWith("select") && !query.text.startsWith("update routes"));
+  /** The writes that trust the verified routes behind a finished guide's steps (src/server/routes.ts). */
+  const trusted = () => sent.filter((query) => query.text.startsWith("update routes r set confirmed = true"));
+  return { store, sent, written, trusted, looks: () => look };
 }
 
 /** The guide as a look finds it: still open, with its newest step. */
@@ -216,7 +218,7 @@ test("a report of finished for a guide with no recorded step is not stored as fi
   const said = await quiet(() => store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished" }));
   assert.deepEqual(written(), [], "no ending is written, so the guide stays one that never reported one");
   assert.equal(looks(), 3, "it looked again each time, in case the step was still on its way");
-  assert.match(said.join("\n"), /reported finished, which its steps on record do not bear out, so no ending is kept/);
+  assert.match(said.join("\n"), /reported finished, but it has no step on record, so no ending is kept/);
 
   // The same for a guide that is not on record at all: one whose first question the off switch or the budget refused.
   const refused = onRecord(undefined);
@@ -231,10 +233,12 @@ test("finished is stored when the guide's steps on record bear it out", async ()
     { n: 0, status: "done", pointed: true },
     { n: 3, status: "continue", pointed: true },
   ]) {
-    const { store, written, looks } = onRecord(guideWith(step));
+    const { store, written, trusted, looks } = onRecord(guideWith(step));
     await store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished" });
     assert.equal(looks(), 1);
     assert.equal(written().length, 1);
+    // A finished guide trusts the routes behind its steps.
+    assert.equal(trusted().length, 1);
     assert.match(written()[0]!.text, /^update guides set outcome = \?, ended_at = now\(\) where id = \? and site_id = \? and outcome is null$/);
     assert.deepEqual(written()[0]!.values, ["finished", GUIDE, SITE.id]);
   }
@@ -249,6 +253,33 @@ test("a report that arrives before its step's row is written waits for it", asyn
   assert.deepEqual(written().map((query) => query.values), [["finished", GUIDE, SITE.id]]);
 });
 
+test("a report is checked against the step it names, which it waits for, and a later step on record does not change it", async () => {
+  // The visitor used the control the last reply (step 1) pointed at, and the widget reported finished at once, naming
+  // step 1. The report was held up, and the look at what came of the click (step 2) was written first: the model found
+  // nothing more there. Step 1's own row comes on the next look.
+  const { store, sent, written, looks } = onRecord(
+    { ...guideWith({ n: 2, status: "stuck", pointed: false }), named: false },
+    { ...guideWith({ n: 1, status: "done", pointed: true }), named: true },
+  );
+  await store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished", step: 1 });
+  assert.equal(looks(), 2, "it waited for the step it names, though a newer one was on record");
+  assert.ok(sent[0]!.values.includes(1), "the step is looked up by its number");
+  assert.deepEqual(written().map((query) => query.values), [["finished", GUIDE, SITE.id]]);
+
+  // A step that never comes: what is on record at the last look is what is kept, as for a widget that names none.
+  const never = onRecord({ ...guideWith({ n: 2, status: "stuck", pointed: false }), named: false });
+  const said = await quiet(() => never.store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished", step: 1 }));
+  assert.equal(never.looks(), 3);
+  assert.deepEqual(never.written().map((query) => query.values), [["nothing_to_point_at", GUIDE, SITE.id]]);
+  assert.match(said.join("\n"), /but the newest step 2 on record does not bear it out, so it is kept as nothing_to_point_at/);
+
+  // The step it names, found at once, is the one judged: here it bears finished out, and nothing more is looked at.
+  const found = onRecord({ ...guideWith({ n: 0, status: "done", pointed: true }), named: true });
+  await found.store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished", step: 0 });
+  assert.equal(found.looks(), 1);
+  assert.deepEqual(found.written().map((query) => query.values), [["finished", GUIDE, SITE.id]]);
+});
+
 test("a report of finished that the record contradicts is stored as the ending on record, at once", async () => {
   const cases: [Parameters<typeof guideWith>[0], string][] = [
     [{ n: 0, status: "done", pointed: false }, "shown"],
@@ -259,10 +290,12 @@ test("a report of finished that the record contradicts is stored as the ending o
     [{ n: 1, status: "done", pointed: false, mode: "cannot_help", reason: "off_topic" }, "off_topic"],
   ];
   for (const [step, kept] of cases) {
-    const { store, written, looks } = onRecord(guideWith(step));
+    const { store, written, trusted, looks } = onRecord(guideWith(step));
     const said = await quiet(() => store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished" }));
     assert.equal(looks(), 1, "a later step would not change how this one ended");
     assert.deepEqual(written().map((query) => query.values), [[kept, GUIDE, SITE.id]]);
+    // Only an ending the record bears out trusts routes.
+    assert.deepEqual(trusted(), []);
     assert.match(said.join("\n"), new RegExp(`it is kept as ${kept}`));
   }
 });

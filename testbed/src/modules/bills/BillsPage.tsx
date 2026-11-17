@@ -194,7 +194,7 @@ function BillsBody() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1.35fr]">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1.35fr]">
         <Link to="/bills?status=overdue" className="block rounded-lg hover:ring-2 hover:ring-brand/20">
           <Stat label="Overdue" value={money(overdueTotal, "USD", { compact: true })} hint={`${counts.overdue ?? 0} bills`} delta={{ value: "Pay first", good: false }} />
         </Link>
@@ -220,7 +220,7 @@ function BillsBody() {
           onRowClick={(b) => navigate(`/bills/${b.id}`)}
           toolbar={
             <>
-              <Input aria-label="Search bills" placeholder="Search vendor or bill number" className="w-64" value={q} onChange={(e) => setParam("q", e.target.value)} />
+              <Input aria-label="Search bills" placeholder="Search vendor or bill number" className="w-full sm:w-64" value={q} onChange={(e) => setParam("q", e.target.value)} />
               <Select
                 aria-label="Vendor"
                 className="w-48"

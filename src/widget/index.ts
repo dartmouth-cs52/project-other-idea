@@ -1,7 +1,11 @@
 import { actingAllowedAt, DEFAULT_APPEARANCE, localDate, MODES, STREAM_TYPE, TURN_VERSION, type Mode, type PublicSiteConfig, type TurnReply, type TurnRequest } from "../shared/types.ts";
+import { POINTER_BLUE } from "../shared/colour.ts";
 import { loadActing, type GateConfig } from "./acting-code.ts";
 import { Guide, type HandoffWay, type Reporter, type Watch } from "./guide.ts";
 import { startLearning, visitorId } from "./learn.ts";
+import { loadMapper, mappingAsked } from "./map-pass.ts";
+import { loadTeaching, takeTeachToken, teachingHeld } from "./teach-code.ts";
+import { showNotice } from "./teach-notice.ts";
 import { currentPath } from "./snapshot.ts";
 import { Ui } from "./ui.ts";
 
@@ -22,24 +26,51 @@ import { Ui } from "./ui.ts";
 // ring, and the question kept on show. It is never on otherwise.
 
 const script = document.currentScript as HTMLScriptElement | null;
+// True in a tab where someone at the company is mapping their app (map.ts).
+const mapping = mappingAsked();
 
 async function boot() {
   const site = script?.dataset.site;
   if (!script || !site) return console.warn("[Haptic] The script tag needs a data-site attribute.");
-  if (document.querySelector("haptic-root")) return;
+  if (document.querySelector("haptic-root, haptic-teach")) return;
   const api = new URL(script.src).origin;
+  // A link from the dashboard's "Teach Haptic" carries a token in the fragment. It leaves the address bar at once (teach.ts).
+  const teachToken = takeTeachToken();
 
   // The launcher shows up even if the config can't be fetched. Only the look depends on it.
   let config: PublicSiteConfig = { name: "", appearance: DEFAULT_APPEARANCE };
   try {
     const response = await fetch(`${api}/v1/sites/${encodeURIComponent(site)}`);
-    if (response.status === 403 || response.status === 404) return console.warn(`[Haptic] ${(await response.json()).error}`);
+    if (response.status === 403 || response.status === 404) {
+      const error = (await response.json()).error;
+      // Someone who opened a teaching link is told why nothing can be taught here. A visitor is not.
+      if (teachToken !== undefined) showNotice(`Haptic can't be taught here: ${error}`, POINTER_BLUE);
+      return console.warn(`[Haptic] ${error}`);
+    }
     if (response.ok) config = await response.json();
   } catch (error) {
     console.warn("[Haptic] Couldn't load the site's settings.", error);
   }
-  // Switched off for this site. Nothing is drawn, and nothing is said about it on the customer's page.
-  if (config.off) return;
+  // Switched off for this site. Nothing is drawn, and nothing is said about it on the customer's page, except to someone who came to teach.
+  if (config.off) {
+    if (teachToken !== undefined) showNotice("Haptic is switched off on this site, so it can't be taught here. Switch it on in your Haptic dashboard first.", POINTER_BLUE);
+    return;
+  }
+
+  // Teach mode: someone at the company showing Haptic a task. Nothing is guided and the model is never asked while it lasts.
+  // It is a file of its own, widget-teach.js, loaded only for a teaching link or a teaching session this tab already holds.
+  if (teachToken !== undefined || teachingHeld()) {
+    const teach = await loadTeaching(script);
+    if (!teach) {
+      console.warn("[Haptic] Teach mode couldn't be loaded.");
+      showNotice(
+        teachToken !== undefined
+          ? "Haptic's teach mode couldn't be loaded on this page. Reload the page, or start again from your Haptic dashboard."
+          : "Haptic's teach mode couldn't be loaded on this page. Your steps so far are kept in this tab: reload the page to carry on.",
+        POINTER_BLUE,
+      );
+    } else if (await teach.startTeaching(api, site, teachToken, POINTER_BLUE)) return;
+  }
 
   // The reply comes as lines of JSON. The first lines say what kind of reply
   // it is (on a site with Answers on) and name the control to point at, each as
@@ -164,6 +195,8 @@ async function boot() {
   };
   const blocked = Array.isArray(config.blocked) ? config.blocked : [];
   const guide = new Guide(ui, sendTurn, gateConfig, report, handoff, blocked);
+  // A tab that is mapping the app does only that: no guide is picked up, and its presses are not learned from as a visitor's would be.
+  if (mapping) return loadMapper({ api, site, host: ui.host, blocked });
   // A guide that was acting when the last page went carries on only once the code that acts is in.
   if (actingReady) void actingReady.then(() => guide.resume());
   else guide.resume();

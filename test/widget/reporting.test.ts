@@ -46,7 +46,8 @@ test("a guide's steps carry one id, its question leaves masked but for what the 
     await session.untilState("finished");
     assert.equal(session.requests[1]?.guide, first?.guide, "the second step carried another id");
     await session.until(() => sent.length === 1, "the ending to be reported");
-    assert.deepEqual(sent, [{ guide: first?.guide, outcome: "finished", site: "site_widget_test" }]);
+    // It names the step its ending rests on: the second, counting from 0, whose reply ended the guide.
+    assert.deepEqual(sent, [{ guide: first?.guide, outcome: "finished", step: 1, site: "site_widget_test" }]);
     // "Did this help?" is in the ask box, and the answer is reported for the same guide.
     await session.page.locator("haptic-root .helped button", { hasText: "Yes" }).click();
     await session.until(() => sent.length === 2, "the answer to be reported");
@@ -173,12 +174,14 @@ test("a guide that got there is reported finished the moment its last pointer sh
     await session.until(async () => (await session.pointed()) === "billing", "the last pointer");
     await session.until(() => outcomes(sent).length === 1, "the ending to be reported while the last pointer is on show");
     const guide = session.requests[0]?.guide;
-    assert.deepEqual(sent, [{ guide, outcome: "finished", site: "site_widget_test" }]);
+    // It names the step whose reply put the last pointer up, so the server judges that step, not the look that follows.
+    assert.deepEqual(sent, [{ guide, outcome: "finished", step: 1, site: "site_widget_test" }]);
     // The visitor uses it, and the look at what came of it is a step of the same guide. Nothing is reported twice.
     await session.page.locator("#billing").click();
     const look = await session.untilAsked(3);
     assert.equal(look.guide, guide, "the last look carried another id, or none");
     assert.equal(look.closing, true);
+    assert.equal(look.step, 2, "the look is the step after the one the report named");
     await session.untilState("finished");
     await session.page.waitForTimeout(300);
     assert.deepEqual(outcomes(sent), ["finished"]);
@@ -210,7 +213,7 @@ test("a first answer that points at a link to another site is reported finished 
     await session.page.locator("#portal").click();
     await session.page.waitForURL(/localhost.*\/portal/);
     await session.until(() => outcomes(sent).length > 0, "the ending to be reported");
-    assert.deepEqual(sent, [{ guide: session.requests[0]?.guide, outcome: "finished", site: "site_widget_test" }]);
+    assert.deepEqual(sent, [{ guide: session.requests[0]?.guide, outcome: "finished", step: 0, site: "site_widget_test" }]);
     assert.equal(session.requests.length, 1, "nothing was asked from the other site");
   } finally {
     await session.close();

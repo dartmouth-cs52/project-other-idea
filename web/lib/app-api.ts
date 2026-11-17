@@ -41,6 +41,36 @@ export interface Me {
   sites?: { id: string; name: string; origin: string; connected: boolean }[];
 }
 
+/** The company's Team page: worker/team.ts. */
+export interface Team {
+  /** An owner or admin, who may add people, change roles and remove people. */
+  canManage: boolean;
+  members: { id: string; name: string | null; email: string; role: "owner" | "admin" | "member" | string; joined: string; you: boolean }[];
+  /** Added, and not signed in yet. */
+  invites: { id: string; email: string; invitedAt: string; invitedBy: string | null }[];
+  /** Whole email domains approved for the company: anyone at one joins when they sign in. */
+  domains: string[];
+}
+
+/** The company's billing page: worker/billing.ts. */
+export interface Billing {
+  /** Stripe's keys are on the server, so a plan can be bought. */
+  ready: boolean;
+  testMode: boolean;
+  /** An owner or admin, who may buy, switch and open Stripe's portal. */
+  canManage: boolean;
+  plan: { id: string; name: string };
+  subscription: { status: string; cancelAt: string | null; periodEnd: string | null } | null;
+  hasCustomer: boolean;
+  /** The billing period under way, or the calendar month without a subscription. End is exclusive. */
+  period: { start: string; end: string; kind: "billing" | "month" };
+  finished: number;
+  /** Of those, how many Stripe has. */
+  sent: number;
+  sites: { id: string; name: string; finished: number }[];
+  plans: import("./billing-plans").PaidPlan[];
+}
+
 export interface Reading {
   read: number;
   max: number;
@@ -75,18 +105,68 @@ export interface Correction {
   createdAt: string;
 }
 
+/** One step someone taught Haptic, with the sentence the dashboard shows it as. Names only, never what was typed. */
+export interface TaughtStep {
+  kind: "press" | "choose" | "type" | "check" | "uncheck" | "enter";
+  path: string;
+  role: string;
+  label: string;
+  context?: string;
+  dialog?: string;
+  choice?: string;
+  row?: true;
+  /** Its words say it saves, sends, pays or deletes: always the visitor's click. */
+  commits?: true;
+  /** Left for the visitor in Do it with me. */
+  leave?: true;
+  note?: string;
+  /** "On /budgets, press New budget". */
+  text: string;
+  /** The recorder couldn't read a name for its control. It has to be named or deleted before saving. */
+  unnamed: boolean;
+}
+
+/** A route someone taught Haptic by doing the task, as saved. */
+export interface TaughtRoute {
+  id: string;
+  question: string;
+  steps: TaughtStep[];
+  createdAt: string;
+  by?: string;
+}
+
+/** A teach session: waiting for the tab to open, under way, steps ready to review, or done with. */
+export interface TeachSession {
+  id: string;
+  question: string;
+  status: "waiting" | "teaching" | "ready" | "saved" | "cancelled" | "expired";
+  createdAt: string;
+  expiresAt: string;
+  by: string | null;
+  stepCount: number;
+  steps: TaughtStep[] | null;
+}
+
 export interface Site {
   id: string;
   name: string;
   origin: string;
   allowedOrigins: string[];
+  routesMode: "off" | "shadow" | "serve";
   scriptUrl: string;
-  /** `launcher` is the Ask button's own colour. Missing means Ink. */
-  appearance: { accent: string; position: "bottom-right" | "bottom-left"; launcherLabel: string; launcher?: string };
+  /** `launcher` is the Ask button's own colour, as it is drawn. Missing means Ink. `accent` is always Haptic's blue. */
+  appearance: { accent: string; position: "bottom-right"; launcherLabel: string; launcher?: string };
+  /**
+   * The launcher's colour is read from the site once, when the site is added. `waiting` is true until that has
+   * finished for the site's address or a person has chosen a colour. `source` says where the colour came from.
+   */
+  launcherMatch?: { waiting: boolean; source: "matched" | "chosen" | null };
   notes: string;
   docs: {
     budget: number;
     used: number;
+    /** The longest request that adds a doc, in characters as sent, and what to say when one is longer. */
+    bodyLimit: { max: number; message: string };
     list: { title: string; source: string; pasted: boolean; chars: number; inPrompt: boolean }[];
   };
   /** Answering in words from the docs. `chosen` is null while the site follows the default, which is on once it has docs. */
@@ -94,8 +174,12 @@ export interface Site {
   connected: boolean;
   origins: SeenOrigin[];
   reading: Reading | null;
+  /** Screens mapped from a signed-in browser at the company. */
+  mapped: number;
   corrections: Correction[];
   blocked: ControlName[];
+  /** Routes taught by doing the task. Absent from a server older than Teach Haptic. */
+  taught?: TaughtRoute[];
 }
 
 export type Outcome =
@@ -144,6 +228,25 @@ export interface Insights {
   health: HealthGroup[];
   /** Groups the company was told about in the last month. */
   alerts: { key: string; sent_at: string; emailed: boolean }[];
+  /** How often questions repeat, and how verified routes are doing. Null until db/migrations/0008_routes is applied. */
+  routes: RouteMetrics | null;
+}
+
+/** How often questions repeat, and how verified routes are doing. The same shape src/shared/route-metrics.ts describes. */
+export interface RouteMetrics {
+  guides: number;
+  repeated_guides: number;
+  looked_up: number;
+  repeats: number;
+  servable: number;
+  agreed: number;
+  disagreed: number;
+  served: number;
+  served_used: number;
+  served_ms: number | null;
+  model_ms: number | null;
+  routes: number;
+  trusted_routes: number;
 }
 
 /** One of a site's newest questions, with the step it has reached. */

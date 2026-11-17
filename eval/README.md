@@ -28,7 +28,7 @@ A fixed set of questions with known right answers, on Haptic's own demo and on r
 | `gitlab` | A public project on GitLab.com (held out, recorded in part) | DevOps platforms | 8 | 23 |
 | `moodle` | Moodle's demo school (held out, recorded in part) | learning systems | 9 | 33 |
 
-`corrections` holds 7 more cases on the demo app, for a site with corrections and controls ruled out (see [Corrections and controls never to point at](#corrections-and-controls-never-to-point-at)), and is not in the counts above. The Answers benchmark, for replies in words, is separate: see [The Answers benchmark](#the-answers-benchmark).
+`corrections` holds 7 more cases on the demo app, for a site with corrections and controls ruled out (see [Corrections and controls never to point at](#corrections-and-controls-never-to-point-at)), and is not in the counts above. Nor is `northpine`, 17 cases from 3 guides on Northpine, the test app in `testbed/`, all about forms (see [Forms, and what they need before the submit button](#forms-and-what-they-need-before-the-submit-button)). The Answers benchmark, for replies in words, is separate: see [The Answers benchmark](#the-answers-benchmark).
 
 Three more held-out guide sets, `horilla`, `dhis2` and `finefoods`, have no case file: they are only run whole. See [Three fresh held-out apps](#three-fresh-held-out-apps).
 
@@ -175,6 +175,7 @@ With no key to hand, start the **Benchmark** workflow from the repository's Acti
 - **status agrees** is reported beside the score and is not part of it, because models differ on whether a guide's last click is "continue" or "done". A reply can also be "stuck", when the model finds no way forward. The cases do not expect it, so it counts against status agreement only.
 - **clean sentence** is how often the model's sentence needed no tidying (`tidySay` in `src/server/rules.ts`): no tag, no character with no width, no stray space and no closing brace left over from the reply's format. The server tidies every sentence, so a visitor never sees the difference, but a low figure means the setting is fighting the reply's format. It is not known when a server answered.
 - **within the rules** is how often the server changed nothing else about it (`src/server/rules.ts`). It drops a sentence that holds a web address, an email address, a phone number, a messaging handle, an account to pay or a request to hand over a secret, cuts a reply that runs long, and takes off bold and code marks. A low figure means visitors are reading less than the model wrote, or the model is writing marks it should not. Each case's `broke` in the results file names the rule. It is not known when a server answered.
+- **Captions beside the pointer** is how long the sentence beside the pointer is, over the replies whose sentence the widget shows beside a pointer: those that point, are not stuck and are not an answer in words. It gives the typical caption's length in words, the share of 6 words or fewer, and the share that also tells a step after the one pointed at ("then choose Sign out"). That last share counts only captions that say so with "then", "after that", "afterwards" or "I'll point", so it is a floor: read the long captions too before trusting a low one. The pointer shows where the control is, so a caption is the action and the control's label, like "Click Sign out." (`src/server/prompt.ts`). The score cannot see how long a caption is, and before 17 November 2026 the typical one on the live server had grown to 16 words with nobody noticing, so it is printed beside the score (`eval/captions.ts`).
 - **typical ms** is the middle step, start to finish. **slow ms** is the step that nine in ten are faster than. **ms to pointer** is how long until the model had named the control, which is when the pointer starts to move. Compare timings only within one run: the service's speed drifts from hour to hour.
 - **What the widget gave the model to work with** has nothing to do with the model: how many controls a page had, how many pages were cut at the widget's limit of 300, how many controls had no name, and on how many steps the right control was not listed at all.
 - **followed planted text** counts the hostile cases where the pointer went where text on the page told it to.
@@ -194,6 +195,20 @@ npm run eval -- --models claude-sonnet-5-5 --cases corrections --without-correct
 ```
 
 The second run takes the corrections and the list away, which shows what they change. **pointed at a ruled-out control** counts every pointer at one of the file's ruled-out controls, and must be 0 with the list in place: the server takes such a reply back whatever the model wrote. The Benchmark workflow takes the same choices, as `cases` and `corrections`.
+
+### Forms, and what they need before the submit button
+
+The widget marks a field `required` or `invalid` (see [what a form needs before its button](../docs/widget.md#what-a-form-needs-before-its-button)), and the rules say a form's button comes after every field it requires that the visitor has not filled in during the guide. `eval/cases/northpine.json` checks what the model makes of that, on a product that, like most, marks only its optional fields:
+
+- **invite** asks how to invite someone and names no department. After the email, the right step is Department. Pointing at Send invite there is the failure these cases were added for.
+- **invite-turned-back** has the visitor type half an address and press Send invite early. The form shows two messages and marks the email invalid, and the right step is one of those two fields, not "done".
+- **company-website** asks to change one field of a settings form that already holds saved values. The right steps are that field and Save changes. Walking through Legal name and the address there is the opposite failure.
+
+```bash
+npm run eval -- --models claude-sonnet-5-5 --cases northpine --yes
+```
+
+These cases were recorded with a widget that listed Personal note as `optional`, a mark the widget does not send, and before it marked the unmarked fields of such a form as `required`. So in them Department carries no mark, and the model has to work out from Personal note alone that it is needed, which the rules do not tell it to do. Record them again before reading their score: with Northpine running (`cd testbed && npm run dev`) and its site built as `eval/guides/northpine.ts` says, `npm run eval:record -- northpine invite company-website` records these three guides and no others.
 
 ### Before switching Answers on for a site
 
@@ -238,7 +253,7 @@ A guide set with a guide that no run could ever score as reached is refused, wit
 
 **Following the widget.** A widget that reports `guideState` on its host element looks once more after "done" with a pointer, and the runner waits for that before judging. A "continue" with no pointer while it is "watching" means "do this": the runner presses the key the sentence names, or says in the log that it could not do what was asked. With no `guideState`, a "done" with a pointer ends the guide as before. Straight after a click that loads a new page there is no widget on it yet, so a widget that has reported its state before is waited for on the new page, for up to 20 seconds, before that is decided.
 
-Under the table, **on the way** shows what the rate hides: steps against the script, runs that ended on "done" with a pointer, runs where the model said done and the script says the visitor is not there, passes by the answer in words, passes that then pointed at more, passes after asking for something already done, answers the widget set aside when it asked again for the same step, closing questions, and questions asked only because the visitor scrolled (a step can ask the visitor to scroll first with `scrollFirst`).
+Under the table, **on the way** shows what the rate hides: steps against the script, runs that ended on "done" with a pointer, runs where the model said done and the script says the visitor is not there, passes by the answer in words, passes that then pointed at more, passes after asking for something already done, answers the widget set aside when it asked again for the same step, closing questions, and questions asked only because the visitor scrolled (a step can ask the visitor to scroll first with `scrollFirst`). **Captions beside the pointer** is the same table as for single steps, over every step of every run, less the answers the widget set aside, which no visitor saw.
 
 `--trace` writes, beside the results file, the whole request the widget sent at every answer (the controls, the event, the history, the page text), the message this checkout's server would build from it, the reply, and what the visitor did.
 
@@ -269,6 +284,7 @@ Two limits. Messages sent over a WebSocket that is already open are counted and 
 These guide files no longer match what the widget sends, and are not recorded again until the widget work under way has settled. The whole-guide runs do not depend on them.
 
 - `parabank`: its matchers describe the widget before it was reworked.
+- `northpine`: its three form guides carry an `optional` mark the widget does not send, and none of the `required` marks it does (see [Forms](#forms-and-what-they-need-before-the-submit-button)).
 - `ui5`, `wikipedia`, `toolshop` (five marks) and `orangehrm` (the chip's cross, the sort arrows): `unlisted` marks on controls the widget now lists. Toolshop's `{ label: "Excavator" }` no longer fits, and orangehrm's unnamed fields are now named.
 - The guides whose scripts changed on 15 November 2026: antdpro `rule-template` and `basic-form`, grafana `find-panel-data`, jira `export-spreadsheet` (new start), orangehrm `new-department` and `rejected-leave`, toolshop `buy-circular-saw` (new question) and `pay-in-instalments`, and the toolshop guides that name the signed-in customer.
 - The guides whose ends changed on 16 November 2026, whose last cases may differ: parabank `update-phone` (now ends on Update Profile, unpressed), grafana `delete-panel` (Delete counts only with The Basics selected). The ends of jira `opened-this-week`, orangehrm `shortlisted-candidates` and `rejection-emails`, and the answers of joinhaptic `pricing` and `what-it-reads`, changed too, which whole-guide runs alone use.

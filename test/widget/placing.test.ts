@@ -174,7 +174,7 @@ test("the tip of the pointer stays on the control when something else sits on it
   }
 });
 
-test("the launcher moves out of the way of a control in its corner, and back when the guide moves on", async () => {
+test("the launcher moves up out of the way of a control in its corner, and back when the guide moves on", async () => {
   const page = `<h1>Wizard</h1><button type="button">Back</button>
     <button id="next" type="button" style="position:fixed;right:24px;bottom:24px;padding:10px 24px">Next</button>`;
   const session = await start(page, (request, index) => (index === 0 ? point(request, "Next", "Click Next.") : words("You are on the last step.")));
@@ -184,7 +184,9 @@ test("the launcher moves out of the way of a control in its corner, and back whe
     await session.page.waitForTimeout(700);
     const next = (await session.page.locator("#next").boundingBox())!;
     const launcher = await ours(session, ".launcher");
-    assert.ok(launcher.right < next.x || launcher.left > next.x + next.width, "the launcher covers the Next button");
+    // Up the right side, above the button: never along the bottom or to the left.
+    assert.ok(launcher.bottom <= next.y, `the launcher covers the Next button: ${JSON.stringify({ launcher, next })}`);
+    assert.equal(Math.round((await session.page.evaluate(() => window.innerWidth)) - launcher.right), 20, "the launcher moved sideways, not up");
     assert.equal(await hitAt(session, { left: next.x, right: next.x + next.width, top: next.y, bottom: next.y + next.height }), "next");
     await session.page.locator("#next").click();
     await session.untilState("finished");
@@ -216,13 +218,16 @@ test("the space around the launcher and the ask box takes no clicks: a page butt
 // Where the launcher sits while no guide runs. Sites keep their own controls
 // in the window's lower corners: a chat button, a Feedback tab, a "Customize"
 // button pinned there, and at the foot of a page the footer's last links,
-// which no scrolling brings out from under the launcher.
+// which no scrolling brings out from under the launcher. It moves up the right
+// side of the window, off them, and never sideways or to the left.
 
 const overlap = (a: Box, b: Box) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 const boxOf = async (session: Session, selector: string): Promise<Box> => {
   const box = (await session.page.locator(selector).boundingBox({ timeout: 5000 }))!;
   return { left: box.x, top: box.y, right: box.x + box.width, bottom: box.y + box.height };
 };
+/** How far the launcher's right edge is from the window's: 20 pixels wherever it has moved up to. */
+const inFromRight = async (session: Session) => Math.round((await session.page.evaluate(() => window.innerWidth)) - (await ours(session, ".launcher")).right);
 /** The launcher is free of every one of these controls, and a click at the middle of each lands on it. */
 async function launcherClearOf(session: Session, selectors: string[]): Promise<Box> {
   const launcher = await ours(session, ".launcher");
@@ -259,6 +264,7 @@ test("the launcher does not sit on a Feedback tab and a Customize button pinned 
     await session.page.waitForTimeout(300);
     const launcher = await launcherClearOf(session, ["#feedback", "#customize"]);
     assert.ok(launcher.left > 683, `the launcher left its side: ${JSON.stringify(launcher)}`);
+    assert.equal(await inFromRight(session), 20, "the launcher moved sideways, not up");
   } finally {
     await session.close();
   }
@@ -297,13 +303,15 @@ test("when the window is resized, the launcher moves off a control that came int
   }
 });
 
-test("the site's own corner wins: a launcher set to the lower left stays on the left, beside the page's button there", async () => {
-  const page = `<h1>Account</h1><button id="cookies" type="button" style="position:fixed;left:16px;bottom:16px;width:120px;height:40px">Cookie settings</button>`;
-  const session = await start(page, () => words("Use Cookie settings."), "/", { appearance: { position: "bottom-left" } });
+test("the launcher is on the right on every site, even one stored with it on the left, and moves up off the page's button there", async () => {
+  const page = `<h1>Account</h1><button id="cookies" type="button" style="position:fixed;right:16px;bottom:16px;width:120px;height:40px">Cookie settings</button>`;
+  // A site stored on the left before that choice went: the type no longer allows it.
+  const session = await start(page, () => words("Use Cookie settings."), "/", { appearance: { position: "bottom-left" as "bottom-right" } });
   try {
     await session.page.waitForTimeout(300);
     const launcher = await launcherClearOf(session, ["#cookies"]);
-    assert.ok(launcher.right < 683, `the launcher left the site's side: ${JSON.stringify(launcher)}`);
+    assert.ok(launcher.left > 683, `the launcher is not on the right: ${JSON.stringify(launcher)}`);
+    assert.equal(await inFromRight(session), 20, "the launcher moved sideways, not up");
   } finally {
     await session.close();
   }
@@ -314,7 +322,8 @@ test("the site's own corner wins: a launcher set to the lower left stays on the 
 // above or below the list, over whatever the page has there. On Northpine's
 // new budget page, scrolling the Owner list after Haptic pointed at Avery
 // Stone left the ring and its sentence floating over the form above the list,
-// and moving with the scroll.
+// and moving with the scroll. Where the sentence waits once the choice is out
+// of the list, at the list's edge, is test/widget/scrolling.test.ts's.
 
 const PEOPLE = ["Avery Stone", ...Array.from({ length: 30 }, (_, n) => `Person ${n + 1}`)];
 const PICKER = `<h1>New budget</h1>
@@ -364,7 +373,7 @@ const scrollList = async (session: Session, top: number) => {
   await session.page.waitForTimeout(150);
 };
 
-test("a choice the visitor scrolls out of its list takes the ring, the pointer and the caption with it, and they come back with it (Northpine: they floated over the form above the Owner list)", async () => {
+test("a choice the visitor scrolls out of its list takes the ring and the pointer with it, never draws the ring outside the list, and they come back with it (Northpine: they floated over the form above the Owner list)", async () => {
   const sentence = "Avery Stone is already the owner, so click Avery Stone.";
   const session = await start(PICKER, (request) => point(request, "Avery Stone", sentence));
   try {
@@ -385,7 +394,7 @@ test("a choice the visitor scrolls out of its list takes the ring, the pointer a
     // Wholly out of the list, and then far down it.
     for (const top of [option.bottom - option.top + 20, 200, 600]) {
       await scrollList(session, top);
-      assert.deepEqual(await drawn(session), { pointer: false, caption: "" }, `with the list scrolled to ${top}, the pointer or the caption is still drawn for a choice out of view`);
+      assert.equal((await drawn(session)).pointer, false, `with the list scrolled to ${top}, the pointer is still drawn for a choice out of view`);
     }
     ringsWithin(await ringsSeen(session), list);
 
@@ -413,26 +422,6 @@ test("a choice out of its list's view when it is pointed at is scrolled to, and 
     assert.ok(option.top >= list.top && option.bottom <= list.bottom, `Person 25 was not scrolled into the list's view: ${JSON.stringify(option)}`);
     assert.ok(ring.top <= option.top && ring.bottom >= option.bottom, `the ring is not round Person 25: ${JSON.stringify(ring)}`);
     assert.deepEqual(await drawn(session), { pointer: true, caption: "Click Person 25." });
-  } finally {
-    await session.close();
-  }
-});
-
-test("a control the visitor scrolls out of the window takes the pointer and the caption with it, and they come back with it", async () => {
-  const sentence = "Click Export.";
-  const session = await start(`<h1>Report</h1><button id="export" type="button">Export</button><div style="height:3000px"></div>`, (request) => point(request, "Export", sentence));
-  try {
-    await session.ask("export the report");
-    await session.untilState("pointing");
-    await session.page.waitForTimeout(700);
-    assert.deepEqual(await drawn(session), { pointer: true, caption: sentence });
-    await session.page.evaluate(() => window.scrollTo(0, 1200));
-    await session.page.waitForTimeout(150);
-    assert.deepEqual(await drawn(session), { pointer: false, caption: "" }, "the pointer or the caption was left where Export was");
-    await session.page.evaluate(() => window.scrollTo(0, 0));
-    await session.page.waitForTimeout(150);
-    assert.deepEqual(await drawn(session), { pointer: true, caption: sentence }, "the pointer and the caption did not come back with Export");
-    assert.equal(session.requests.length, 1, "scrolling the page was taken for a step");
   } finally {
     await session.close();
   }

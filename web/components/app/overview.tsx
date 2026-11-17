@@ -51,7 +51,7 @@ export function Overview({
   return (
     <>
       <HeadlineTiles data={headline.data} days={days} error={headline.error} />
-      <div className="grid gap-6 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <Latest siteId={siteId} live={live} onOpen={onOpen} className="lg:col-span-3" />
         <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
           <HeadlineChart data={headline.data} />
@@ -178,7 +178,7 @@ function CantFindSummary({ siteId, data }: { siteId: string; data: Insights | nu
       {rows.length ? (
         <ul className="flex flex-col divide-y border-t">
           {rows.map((row) => (
-            <li key={row.key} className="grid items-center gap-x-6 gap-y-1 px-5 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_8rem_9rem]">
+            <li key={row.key} className="grid grid-cols-1 items-center gap-x-6 gap-y-1 px-5 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_8rem_9rem]">
               <span className="min-w-0 truncate">
                 <span className="font-medium">&ldquo;{row.question}&rdquo;</span>
                 <span className="text-muted-foreground">

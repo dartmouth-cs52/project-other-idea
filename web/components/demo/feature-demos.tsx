@@ -266,7 +266,7 @@ export function PrivacyDemo() {
       label="A payment form being filled in, beside the list of what Haptic reads. The list shows field names only, never the typed values, and the email address is masked."
       className="text-sm leading-5"
     >
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <MockWindow compact address={`${APP_DOMAIN}/billing`}>
           <div className="flex h-[316px] flex-col gap-3 p-4">
             <h4 className="flex h-6 items-center text-base font-medium tracking-tight">Payment details</h4>

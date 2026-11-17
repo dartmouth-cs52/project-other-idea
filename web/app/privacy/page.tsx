@@ -46,9 +46,9 @@ export default function Privacy() {
       <p>
         When someone asks Haptic for help, it reads the page they are on. That means the names of buttons, links and
         fields, where each link leads, whether a box is ticked or a section is open, which option is chosen in lists
-        and menus the page draws itself, the page title and headings, the page&apos;s address within the product, and
-        short pieces of visible text. While it is guiding someone it also notes which control they used and what
-        changed on the page.
+        and menus the page draws itself, whether a field is marked as required or as not accepted, the page title and
+        headings, the page&apos;s address within the product, and short pieces of visible text. While it is guiding
+        someone it also notes which control they used and what changed on the page.
       </p>
       <p>
         Haptic does not send what people type into fields, or anything inside an area the page marks as one they
@@ -65,7 +65,9 @@ export default function Privacy() {
       <p>
         Haptic does note whether a field is marked as not accepted, by the page itself or by the browser&apos;s own
         check, such as an email field that holds no email address, so it can ask for the field to be fixed before
-        moving on. That is a yes or a no, and nothing of what was typed.
+        moving on. It notes the same of an email address with no dot in its domain, which the browser accepts and
+        nearly every form does not. That is a yes or a no, and nothing of what was typed. Whether a field is empty or
+        filled in is not noted: a field the page requires is listed as required either way.
       </p>
       <p>
         Before anything leaves the browser, in what it reads, in the page&apos;s address and in the question itself,
@@ -147,6 +149,21 @@ export default function Privacy() {
         different people on different networks have seen it, so a name that only one person sees, like the title of
         their own document, is never used. The names, with when each was first and last seen and how often, are kept
         until the company asks us to delete them. The company can switch this off.
+      </p>
+      <p>
+        A company can teach Haptic a task by doing it in its own product. Someone at the company starts it from the
+        dashboard, which opens the product with a link that works once, for half an hour, and only on that
+        company&apos;s site. While they do the task, Haptic notes which buttons, links, fields and lists they use,
+        each by its name and the section of the page it is in, which option they chose in a list, and the page&apos;s
+        address within the product. It
+        never reads what they type, and it masks email addresses and long numbers the same way as above. A control in a
+        table&apos;s row is kept by its name only when other rows have one of the same name, such as Edit, never by the
+        record&apos;s own name; a name elsewhere on the page can still be kept. The person reviews the steps in the dashboard before anything is used. Saving keeps only the steps they
+        kept, with the company&apos;s site, with any notes added and the name of who taught them, and deletes the
+        recording, with any steps they deleted. Haptic uses the saved steps to guide anyone who asks how to do the same
+        task, until the company removes them or teaches the task again, and then the record of that teaching is deleted
+        too. A recording the person discards is deleted at once, and one nobody saves is deleted once it is a week old,
+        by a check that runs every day. Teaching asks the AI nothing.
       </p>
       <p>
         From a visit where nobody asks Haptic anything, we keep nothing else about the visitor. For each web address

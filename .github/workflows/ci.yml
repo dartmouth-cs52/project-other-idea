@@ -64,3 +64,12 @@ jobs:
           cache-dependency-path: testbed/package-lock.json
       - run: npm ci
       - run: npm run build
+      # Northpine is the live demo, and the page under Haptic on a phone. A page wider than the phone puts everything
+      # fixed to the window off the screen, Haptic's launcher among them, and a field with small words makes the phone
+      # zoom in. Every page is looked at as a phone shows it (scripts/phone-check.ts).
+      - name: Check every page fits a phone
+        run: |
+          npx playwright install --with-deps chromium
+          npx vite preview --port 4200 --strictPort > preview.log 2>&1 &
+          for attempt in $(seq 1 30); do curl -sf http://localhost:4200/ > /dev/null && break; sleep 1; done
+          npm run -s phone:check

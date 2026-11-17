@@ -63,6 +63,13 @@ interface LabStore extends LabSettings {
   reset: () => void;
 }
 
+/**
+ * The widget this build was made with. Saved settings are marked with it, so
+ * after a deploy that changes the widget's address or site, the new tag wins
+ * over the one an earlier visit left in the browser.
+ */
+const WIDGET_BUILD = `${LAB_DEFAULTS.widgetSrc} ${LAB_DEFAULTS.widgetSite}`;
+
 export const useLab = create<LabStore>()(
   persist(
     (set) => ({
@@ -70,7 +77,19 @@ export const useLab = create<LabStore>()(
       set: (patch) => set(patch),
       reset: () => set({ ...LAB_DEFAULTS, open: true }),
     }),
-    { name: "northpine-lab", version: 1 },
+    {
+      name: "northpine-lab",
+      version: 1,
+      partialize: (state) => ({ ...state, widgetBuild: WIDGET_BUILD }),
+      merge: (saved, current) => {
+        const { widgetBuild, ...rest } = (saved ?? {}) as Partial<LabSettings> & { widgetBuild?: string };
+        if (widgetBuild !== WIDGET_BUILD) {
+          delete rest.widgetSrc;
+          delete rest.widgetSite;
+        }
+        return { ...current, ...rest };
+      },
+    },
   ),
 );
 

@@ -40,7 +40,7 @@ export function EntitiesPage() {
           {() => (
             <div className="flex flex-col gap-5">
               <EntityTable />
-              <div className="grid gap-5 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                 <Defaults />
                 <Intercompany />
               </div>
@@ -195,7 +195,7 @@ function AddEntityWizard({ open, onOpenChange }: { open: boolean; onOpenChange: 
       }
     >
       <div className="flex flex-col gap-5">
-        <div className="overflow-x-auto pb-1">
+        <div className="relative overflow-x-auto pb-1">
           <Stepper steps={STEPS} current={step} />
         </div>
         {step === 0 ? (

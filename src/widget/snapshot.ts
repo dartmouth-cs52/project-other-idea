@@ -779,9 +779,10 @@ let typedPattern: { of: string[]; pattern?: RegExp } = { of: [] };
  * that name is "Hello, [typed]", and a list's "Search for “divorce lawyer”"
  * while the search box holds it is "Search for “[typed]”". Every piece of text
  * a reading sends passes through it (`cleanText` below), so what the visitor
- * typed is never sent, wherever the page shows it again.
+ * typed is never sent, wherever the page shows it again. Outside a reading,
+ * and outside `withTyping`, it changes nothing.
  */
-function withoutTyping(text: string): string {
+export function withoutTyping(text: string): string {
   if (!typed.length || text.length < MIN_ECHO) return text;
   if (typedPattern.of !== typed) {
     const escaped = [...typed].sort((a, b) => b.length - a.length).map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+"));
@@ -790,6 +791,31 @@ function withoutTyping(text: string): string {
   return text.replace(typedPattern.pattern!, TYPED);
 }
 const cleanText = (text: string, max = 80): string => maskAndTrim(withoutTyping(text), max, own);
+
+/**
+ * Runs `read` with what the page's fields hold now in hand, as a reading has
+ * it, so a name read in it through this file (`nameOf`, `shownWords`,
+ * `withoutTyping`) has every place that repeats what a field holds put as
+ * "[typed]", before it is cut to length, as a reading's names have. A reading
+ * lets the fields' values go as it ends, so a name read after one otherwise
+ * keeps them. Teach mode (teach.ts) names a group, a list and a control the
+ * reading did not list itself, and passes every step through here before it
+ * keeps it. No question is given, so nothing a field holds is left readable.
+ * A reading taken inside `read` lets the values go as it ends, as any does.
+ */
+export function withTyping<T>(read: () => T): T {
+  const [ownBefore, askedBefore] = [own, asked];
+  own = new Set();
+  asked = "";
+  pageDocuments = documentsOfPage();
+  typed = typedValues();
+  try {
+    return read();
+  } finally {
+    typed = [];
+    [own, asked] = [ownBefore, askedBefore];
+  }
+}
 
 /**
  * Reads the page. `ignore` is Haptic's own element. `question` is what the
@@ -1163,6 +1189,7 @@ export function takeSnapshot(ignore: Element, question = "", near = (ignore as E
   );
   let usable = mergeCells(reach.kept);
   markChosen(usable);
+  markRequiredByOptional(usable);
   nameRows(usable);
   tellTwinsApart(usable);
   for (const c of usable) {
@@ -1748,53 +1775,6 @@ function seenOf(el: Element, rect: DOMRect, facts: Map<Element, BoxFacts>): Seen
   return { rect: new DOMRect(left, top, right - left, bottom - top), fixed: position === "fixed" };
 }
 
-/** A box around a control that cuts off what is drawn of it: across, down, or both. */
-export interface Clip {
-  box: Element;
-  across: boolean;
-  down: boolean;
-}
-
-/**
- * The boxes around a control that cut off what is drawn of it, nearest first:
- * those `seenOf` clips it by while it is in view, like a list, a table or a
- * panel that scrolls. The page is not one, since its scrolling is the
- * window's. Only styles decide which boxes they are, so the pointer, which
- * follows a control every frame, reads them once and reads where the boxes
- * are as it goes (`drawnPart`). Undefined when the control, or a box it is
- * drawn in, is clipped to nothing: none of it is ever drawn.
- */
-export function clipsOf(el: Element): Clip[] | undefined {
-  const facts = new Map<Element, BoxFacts>();
-  const own = factsOf(el, facts);
-  if (own.clippedAway) return undefined;
-  const clips: Clip[] = [];
-  let position = own.position;
-  for (let node = drawnParent(el), depth = 0; node && depth < 100; node = drawnParent(node), depth++) {
-    if (!isElement(node)) continue;
-    if (isPageEdge(node)) break;
-    const box = factsOf(node, facts);
-    if (!laysOut(box, position)) continue;
-    if (box.position !== "static" || position === "fixed") position = box.position === "static" ? "relative" : box.position;
-    if (box.clippedAway) return undefined;
-    if (box.overflowX === "visible" && box.overflowY === "visible") continue;
-    clips.push({ box: node, across: box.overflowX !== "visible", down: box.overflowY !== "visible" });
-  }
-  return clips;
-}
-
-/** The part of a control's box that the boxes clipping it let be drawn, where they are now. Undefined when none of it is. */
-export function drawnPart(rect: DOMRect, clips: Clip[]): DOMRect | undefined {
-  let [left, top, right, bottom] = [rect.left, rect.top, rect.right, rect.bottom];
-  for (const clip of clips) {
-    const box = clip.box.getBoundingClientRect();
-    if (clip.across) [left, right] = [Math.max(left, box.left), Math.min(right, box.right)];
-    if (clip.down) [top, bottom] = [Math.max(top, box.top), Math.min(bottom, box.bottom)];
-    if (right - left <= 0 || bottom - top <= 0) return undefined;
-  }
-  return clips.length ? new DOMRect(left, top, right - left, bottom - top) : rect;
-}
-
 /**
  * Whether a box lies where no scrolling can bring it: above the top of the
  * page, or before its start, as a link that skips to the content is parked
@@ -2305,7 +2285,10 @@ function markChosen(candidates: Candidate[]) {
     return [...Array.from(c.el.classList), ...Array.from(slot?.classList ?? [])].filter((name) => MARKS_CHOSEN.test(name));
   };
   for (const row of rows.values()) {
-    if (row.length < 2 || row.some((c) => c.state?.some((state) => ["current", "selected", "pressed", "checked"].includes(state)))) continue;
+    // An option a list says is selected, which is only the one the keys are on (`onlyHighlighted`), is listed as no
+    // more, but the row has still said which it marks: a class name there marks that one too, as "option-current" does.
+    const says = (c: Candidate) => c.el.getAttribute("aria-selected") === "true" || c.state?.some((state) => ["current", "selected", "pressed", "checked"].includes(state));
+    if (row.length < 2 || row.some(says)) continue;
     const each = row.map(marks);
     const seen = new Map<string, number>();
     for (const names of each) for (const name of new Set(names)) seen.set(name, (seen.get(name) ?? 0) + 1);
@@ -2999,13 +2982,67 @@ function isRequired(el: Element, role: string): boolean {
   return names.some(markedRequired);
 }
 
+/** Words that mark a field as one its form can be sent without: "Personal note (optional)", "Phone, optional". */
+const OPTIONAL_MARK = /\(\s*optional\s*\)|\boptional$/i;
+/**
+ * Fields that a form marking only what is optional requires the rest of.
+ * A tick box, a switch or a choice among buttons is left as the page says:
+ * one alone is rarely required, and one marked optional says nothing of the
+ * fields around it.
+ */
+const REQUIRED_UNLESS_OPTIONAL = new Set(["textbox", "combobox", "select", "spinbutton"]);
+
+/**
+ * Marks as required the fields a form needs when it says so the other way
+ * round: it marks the fields it can be sent without, "(optional)", and no
+ * field as required. That is how many forms are written (it is GOV.UK's rule),
+ * and without it the model takes the unmarked fields for optional too. On
+ * Northpine's invite, which marks only "Personal note (optional)", the guide
+ * said Department was optional and pointed at "Send invite", and the form
+ * then asked for a department. The form is a <form>, or the dialog it is in
+ * when there is none. A dropdown that offers no empty choice always has one
+ * made, so it can never hold the form up and is not marked. Nothing a field
+ * holds is read: the mark comes from the page's own words and markup.
+ */
+function markRequiredByOptional(candidates: Candidate[]) {
+  const formOf = (el: Element) => el.closest("form") ?? el.closest(DIALOGS);
+  const fields = new Map<Element, Candidate[]>();
+  for (const c of candidates) {
+    if (!REQUIRED_UNLESS_OPTIONAL.has(c.role)) continue;
+    const form = formOf(c.el);
+    if (!form) continue;
+    const list = fields.get(form);
+    if (list) list.push(c);
+    else fields.set(form, [c]);
+  }
+  for (const list of fields.values()) {
+    if (!list.some((c) => OPTIONAL_MARK.test(c.label)) || list.some((c) => c.state?.includes("required"))) continue;
+    for (const c of list) {
+      if (OPTIONAL_MARK.test(c.label) || c.state?.includes("disabled") || isReadOnly(c.el) || alwaysChosen(c.el)) continue;
+      c.state = ["required", ...(c.state ?? [])];
+    }
+  }
+}
+
+/** Whether a field can be read and not changed: what it holds is the page's, not the visitor's to fill in. */
+function isReadOnly(el: Element): boolean {
+  return (el as HTMLInputElement).readOnly === true || el.getAttribute("aria-readonly") === "true";
+}
+
+/** A dropdown the browser draws that always shows one of its choices: it takes one choice, and none of its choices is empty. */
+function alwaysChosen(el: Element): boolean {
+  return isTag(el, "select") && !el.multiple && el.size <= 1 && !Array.from(el.options).some((option) => option.value === "");
+}
+
 /**
  * Whether the page or the browser says what a field holds will not do. The
  * page says so with aria-invalid. The browser says so by its own check of the
  * field's type, pattern, length or range, such as "charlie" in an email field,
  * which the model cannot see because what was typed is never read: without
- * this it takes the field as filled in and moves on. Only that yes or no is
- * read. An empty field the form requires is not invalid: "required" says that.
+ * this it takes the field as filled in and moves on. An email address with no
+ * dot in its domain will not do either, though the browser takes it (see
+ * `notAnAddress`). Only that yes or no is read. An empty field the form
+ * requires is not invalid: "required" says that.
  */
 function isInvalid(el: Element, role: string): boolean {
   if (!CAN_BE_REQUIRED.has(role)) return false;
@@ -3014,7 +3051,31 @@ function isInvalid(el: Element, role: string): boolean {
   const field = el as Partial<HTMLInputElement>;
   // A field the browser does not check, being disabled or read-only, is not the visitor's to fix.
   const validity = field.willValidate ? field.validity : undefined;
-  return !!validity && !validity.valid && !validity.valueMissing;
+  if (validity && !validity.valid && !validity.valueMissing) return true;
+  return !!validity && notAnAddress(el);
+}
+
+/**
+ * Whether an email field holds an address that the browser's own check
+ * passed and that no form sends to: its domain has no dot, or ends in a
+ * single character or in digits. The browser follows the HTML standard,
+ * which takes "theochain@dad" for an address on a local network, so the
+ * guide saw the field as filled in, pointed at "Send invite", and the form
+ * refused it. It is called only once the browser's check has passed, so the
+ * rest of the address is already well formed. Only an <input type="email">
+ * is checked: a text field whose autocomplete says email may be a sign-in
+ * field that takes a user name too. An empty field is not invalid. Only the
+ * yes or no leaves the browser.
+ */
+function notAnAddress(el: Element): boolean {
+  if (!isTag(el, "input") || el.type !== "email") return false;
+  // An email field that takes several addresses takes them with commas between.
+  const addresses = (el.multiple ? el.value.split(",") : [el.value]).map((address) => address.trim()).filter(Boolean);
+  return addresses.some((address) => {
+    const labels = address.slice(address.lastIndexOf("@") + 1).split(".");
+    const ending = labels[labels.length - 1]!;
+    return labels.length < 2 || ending.length < 2 || /^\d+$/.test(ending);
+  });
 }
 
 /**
@@ -3077,12 +3138,83 @@ function stateOf(el: Element, role: string): string[] {
   else if (expanded === "false") state.push("collapsed");
   const current = el.getAttribute("aria-current");
   if (current && current !== "false") state.push("current");
-  if (el.getAttribute("aria-selected") === "true") state.push("selected");
+  if (el.getAttribute("aria-selected") === "true" && !onlyHighlighted(el, role)) state.push("selected");
   if (el.getAttribute("aria-pressed") === "true") state.push("pressed");
   const checkable = isTag(el, "input") && (el.type === "checkbox" || el.type === "radio");
   if ((checkable && el.checked) || el.getAttribute("aria-checked") === "true") state.push("checked");
   if (isTag(el, "details") ? el.open : el.tagName === "SUMMARY" && (el.parentElement as HTMLDetailsElement | null)?.open) state.push("expanded");
   return state;
+}
+
+/**
+ * Whether an option that says it is selected means only that the keys are on
+ * it, not that it is the one chosen. Such an option is not said to be
+ * selected, nor highlighted: where the keys are moves with the mouse, so it
+ * would fill what changed with noise, and the model reads "highlighted" as
+ * chosen all the same.
+ *
+ * cmdk, which shadcn/ui's Command and Combobox are built on, says
+ * aria-selected and data-selected of whichever option is highlighted, the
+ * first one as soon as the list opens, and never says which one is chosen.
+ * Northpine: with Owner still showing "Choose a person", the first person
+ * was listed as selected, and the model told the visitor they were already
+ * the owner. Other lists a combobox opens do the same (the ARIA practices'
+ * combobox examples, older Downshift), so an option is not the chosen one
+ * either when the combobox that opened its list shows other words. Where
+ * the combobox shows nothing that can be read, a field typed in or a box
+ * with no words, what the option says stands, as it does in a list of tabs,
+ * a grid, a list that allows several choices and a list of its own, whose
+ * selection moves with the keys.
+ */
+function onlyHighlighted(el: Element, role: string): boolean {
+  if (role !== "option") return false;
+  if (el.hasAttribute("cmdk-item") && el.getAttribute("data-selected") === el.getAttribute("aria-selected")) return true;
+  const listbox = el.closest('[role="listbox"]');
+  if (listbox?.getAttribute("aria-multiselectable") === "true") return false;
+  const list = listbox ?? el.parentElement;
+  if (!list) return false;
+  const shown = shownByComboboxes(el, list);
+  if (!shown.length) return false;
+  const option = squashed((el as HTMLElement).innerText ?? el.textContent ?? "");
+  // An option can say more than the combobox shows of it ("Avery Stone Controller", shown as "Avery Stone"), and a
+  // combobox more than the option ("Sort: Newest"), so either holding the other is the combobox showing it.
+  return !!option && !shown.some((words) => words.includes(option) || option.includes(words));
+}
+
+/**
+ * What the comboboxes that opened an option's list show, squashed, those that
+ * show any words: one that points at the option as the one the keys are on,
+ * or names the list, or a box around it like the popup it opens, as the box
+ * it controls. A field typed in, or a box that holds one, shows what the
+ * visitor typed, which is never read, so it shows nothing here. What the
+ * others show is the visitor's choice: it is compared here and let go, never
+ * kept or sent, and can only take a state away.
+ */
+function shownByComboboxes(option: Element, list: Element): string[] {
+  const root = option.getRootNode() as Document | ShadowRoot;
+  const shown: string[] = [];
+  for (const box of root.querySelectorAll('[role~="combobox"], [aria-haspopup="listbox"]')) {
+    if (list.contains(box) || holdsTyping(box) || box.querySelector('[contenteditable]:not([contenteditable="false"])')) continue;
+    const pointsAt = !!option.id && box.getAttribute("aria-activedescendant") === option.id;
+    const controls = ["aria-controls", "aria-owns"].some((name) =>
+      (box.getAttribute(name) ?? "")
+        .split(/\s+/)
+        .slice(0, 3)
+        .some((id) => {
+          const opened = id ? root.getElementById?.(id) : null;
+          return !!opened && !opened.contains(box) && opened.contains(list);
+        }),
+    );
+    if (!pointsAt && !controls) continue;
+    const words = squashed((box as HTMLElement).innerText ?? box.textContent ?? "");
+    if (words) shown.push(words);
+  }
+  return shown;
+}
+
+/** Words run together in lower case with nothing between them, for telling whether one text holds another. */
+function squashed(text: string): string {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function hrefOf(el: Element): string | undefined {
