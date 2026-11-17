@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { api, type Outcome, type Site, type TaughtRoute, type TaughtStep, type TeachSession } from "@/lib/app-api";
 import { StepMark, when } from "./parts";
 
@@ -15,11 +16,12 @@ import { StepMark, when } from "./parts";
 // there shows a bar and records which controls are used. Here the person
 // watches for the steps, reviews them (delete one, add a note, name a control
 // the recorder could not, leave the last click to the visitor) and saves them
-// as a taught route. Saved routes are listed in "How Haptic guides here".
+// as a taught route. Saved routes are listed under Knowledge, in "Taught by doing".
 //
-// The buttons live in several places (a failed guide, "What people can't
-// find", "How Haptic guides here"), and the review drawer is mounted once,
-// with the taught routes. A small store joins them.
+// The buttons live in several places (a failed guide's drawer, "What people
+// can't find" under Gaps, "Taught by doing" under Knowledge), and the review
+// drawer is mounted once for the site, on every page of it. A small store
+// joins them.
 
 interface Active {
   siteId: string;
@@ -182,7 +184,7 @@ function StepDetails({ step }: { step: TaughtStep }) {
   return <span className="block text-sm text-muted-foreground">{details.join(" ")}</span>;
 }
 
-/** How Haptic guides here: the routes taught so far, steps waiting for review, and a way to teach a new one. */
+/** Taught by doing: the routes taught so far, steps waiting for review, and a way to teach a new one. */
 export function TaughtRoutes({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
   const [sessions, setSessions] = useState<TeachSession[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -217,7 +219,6 @@ export function TaughtRoutes({ site, onChange }: { site: Site; onChange: (site: 
   const waiting = sessions.filter((session) => session.status === "ready" || session.status === "teaching");
   return (
     <div className="flex flex-col gap-3">
-      <h3 className="text-base font-medium">Taught by doing</h3>
       {waiting.length > 0 && (
         <ul className="flex flex-col divide-y rounded-lg border bg-card">
           {waiting.map((session) => (
@@ -242,7 +243,7 @@ export function TaughtRoutes({ site, onChange }: { site: Site; onChange: (site: 
           {[...taught].reverse().map((route) => (
             <li key={route.id} className="flex flex-col gap-2 px-4 py-3 text-sm sm:flex-row sm:items-start sm:justify-between sm:gap-4">
               <div className="min-w-0">
-                <span className="block text-base">{route.question}</span>
+                <span className="block">{route.question}</span>
                 <span className="block text-muted-foreground">
                   {route.steps.length} {route.steps.length === 1 ? "step" : "steps"}, taught{route.by ? ` by ${route.by}` : ""} {when(route.createdAt)}.
                 </span>
@@ -273,7 +274,6 @@ export function TaughtRoutes({ site, onChange }: { site: Site; onChange: (site: 
       )}
       <TeachTask siteId={site.id} />
       <Failure message={error} onRetry={failedRemove ? () => remove(failedRemove) : undefined} />
-      <TeachDrawer site={site} onChange={onChange} />
     </div>
   );
 }
@@ -286,8 +286,12 @@ interface Kept {
   name: string;
 }
 
-/** Follows a teach session while it runs, then holds the review. A new session starts a new review. */
-function TeachDrawer({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
+/**
+ * Follows a teach session while it runs, then holds the review. A new session
+ * starts a new review. It is mounted once for the site, beside every page, so
+ * a button on any of them opens it.
+ */
+export function TeachDrawer({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
   const current = useActive();
   if (!current || current.siteId !== site.id) return null;
   return <TeachPanel key={current.sessionId ?? "new"} mine={current} site={site} onChange={onChange} />;
@@ -337,12 +341,6 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
     };
   }, [sessionId, following, load]);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setActive(null);
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
-
   const close = () => setActive(null);
   const steps = session?.steps ?? [];
   const reviewing = session?.status === "ready" && kept && !saved;
@@ -386,25 +384,15 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
   const deleted = steps.length - (kept?.length ?? steps.length);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-foreground/20" onClick={close}>
-      <aside
-        role="dialog"
-        aria-modal="true"
-        aria-label="Teach Haptic"
-        className="flex h-full w-full max-w-xl flex-col gap-4 overflow-y-auto border-l bg-background p-6"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <p className="text-sm text-muted-foreground">Teach Haptic</p>
-            <h2 className="text-2xl font-medium tracking-[-0.02em]">{mine.question}</h2>
-          </div>
-          <Button variant="secondary" onClick={close} autoFocus>
-            Close
-          </Button>
-        </div>
+    <Sheet open onOpenChange={(open) => !open && close()}>
+      <SheetContent className="gap-0 overflow-y-auto">
+        <SheetHeader className="gap-2 border-b p-5 pr-12">
+          <SheetDescription>Teach Haptic</SheetDescription>
+          <SheetTitle className="text-lg leading-6">{mine.question}</SheetTitle>
+        </SheetHeader>
+        <div className="flex flex-col gap-4 p-5">
 
-        {mine.starting && <p className="text-base text-muted-foreground">Opening your site in a new tab…</p>}
+        {mine.starting && <p className="text-sm leading-5 text-muted-foreground">Opening your site in a new tab…</p>}
         {mine.error && <Failure message={`Couldn't start teaching. ${mine.error}`} onRetry={() => void beginTeaching(site.id, mine.question, mine.from)} />}
         {loadError && <Failure message={`Couldn't check on the teaching tab. ${loadError}`} onRetry={() => void load()} />}
 
@@ -412,13 +400,13 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
           <div className="flex flex-col gap-3 rounded-xl border bg-muted p-4">
             {mine.blocked ? (
               <>
-                <p className="text-base">Your browser didn&apos;t open the new tab. Open your site to start teaching:</p>
-                <a href={mine.url} target="_blank" rel="noopener noreferrer" className="w-fit text-base font-medium underline underline-offset-4">
+                <p className="text-sm leading-5">Your browser didn&apos;t open the new tab. Open your site to start teaching:</p>
+                <a href={mine.url} target="_blank" rel="noopener noreferrer" className="w-fit text-sm font-medium underline underline-offset-4">
                   Open {new URL(mine.url ?? site.origin).host} to teach
                 </a>
               </>
             ) : (
-              <p className="text-base">
+              <p className="text-sm leading-5">
                 {session?.status === "teaching"
                   ? "Recording in the other tab. Do the task there as a visitor would, then press Done on Haptic's bar."
                   : "Your site is opening in a new tab, with Haptic's bar across it. Do the task there as a visitor would, then press Done on the bar."}
@@ -435,7 +423,7 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
 
         {session?.status === "expired" && (
           <div className="flex flex-col gap-3">
-            <p className="text-base">This teaching link expired before the steps came in.</p>
+            <p className="text-sm leading-5">This teaching link expired before the steps came in.</p>
             <Button className="self-start" onClick={() => void beginTeaching(site.id, mine.question, mine.from)}>
               Start again
             </Button>
@@ -443,17 +431,17 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
         )}
         {session?.status === "cancelled" && (
           <div className="flex flex-col gap-3">
-            <p className="text-base">Teaching was cancelled, so nothing was recorded.</p>
+            <p className="text-sm leading-5">Teaching was cancelled, so nothing was recorded.</p>
             <Button className="self-start" onClick={() => void beginTeaching(site.id, mine.question, mine.from)}>
               Start again
             </Button>
           </div>
         )}
-        {session?.status === "saved" && !saved && <p className="text-base">These steps are saved already. They are under How Haptic guides here.</p>}
+        {session?.status === "saved" && !saved && <p className="text-sm leading-5">These steps are saved already. They are under Knowledge, in Taught by doing.</p>}
 
         {reviewing && (
           <>
-            <p className="text-base text-muted-foreground">
+            <p className="text-sm leading-5 text-muted-foreground">
               Check the steps. Delete any that aren&apos;t part of the task, and add a note where a step needs one, like which option to pick. Nothing is used until you save.
             </p>
             <ol className="flex flex-col gap-3">
@@ -467,7 +455,7 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
                         <StepMark n={index + 1} />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-base">{step.text}</p>
+                        <p className="text-sm leading-5">{step.text}</p>
                         {step.context && <p className="text-sm text-muted-foreground">In {step.context}.</p>}
                         {step.commits && <p className="text-sm text-muted-foreground">It saves or sends, so the visitor always makes this click.</p>}
                       </div>
@@ -539,7 +527,7 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
 
         {saved && (
           <div className="flex flex-col gap-3">
-            <p className="text-base">
+            <p className="text-sm leading-5">
               Saved. When someone asks something like &ldquo;{saved.question}&rdquo;, Haptic guides them this way, checking each step against the page they see.
             </p>
             <ol className="flex flex-col gap-1.5 text-sm">
@@ -558,7 +546,8 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
             </Button>
           </div>
         )}
-      </aside>
-    </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }

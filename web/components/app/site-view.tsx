@@ -1,29 +1,57 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { cn } from "cn";
 import { FieldWithButton, FormAlert, failureFrom, useFieldErrors, type Failure } from "@/components/form";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api, type Reading, type Site } from "@/lib/app-api";
-import { InstallOptions } from "./install-options";
+import { api, type Me, type Reading, type Site } from "@/lib/app-api";
+import { hostOf } from "@/lib/setup";
 import { CopyLink } from "./agent-pill";
 import { DeveloperEmail } from "./developer-email";
-import { SetupGate } from "./setup/setup-gate";
+import { Gaps } from "./gaps";
+import { GuideDrawer } from "./guide-drawer";
 import { GuidingRules } from "./guiding-rules";
-import { InsightsView } from "./insights-view";
-import { SiteSettings } from "./site-settings";
-import { Card, CardTitle, DoneMark, FailedCard, StepMark, when } from "./parts";
+import { InstallOptions } from "./install-options";
+import { useInsights, useLive } from "./live";
+import { RANGES, daysFrom, siteHref, useAddress, type View } from "./nav";
+import { Overview } from "./overview";
+import { Card, CardTitle, DashboardSurface, DoneMark, FailedCard, PageHeader, Segmented, StepMark, StepTitle, when } from "./parts";
+import { Questions } from "./questions";
+import { SetupGate } from "./setup/setup-gate";
+import { SiteShell } from "./shell";
+import { DeleteSite, HelpDocs, Notes, WidgetLook } from "./site-settings";
+import { TeachDrawer } from "./teach";
+import { FinishedGuides } from "./usage";
 
 /** How often the page asks whether the script has been seen, while waiting for it. */
 const WAITING_MS = 5_000;
+/** Once connected, the site's own details change rarely. Its questions are kept current by live.ts. */
 const CONNECTED_MS = 60_000;
 
-/** One site: the three setup steps until it connects, then what its users asked. */
-export function SiteView({ siteId, onDeleted }: { siteId: string; onDeleted: () => void }) {
+type SiteRow = NonNullable<Me["sites"]>[number];
+
+const SETTINGS_TABS = [
+  { value: "general", name: "General" },
+  { value: "install", name: "Install" },
+  { value: "usage", name: "Usage" },
+] as const;
+type SettingsTab = (typeof SETTINGS_TABS)[number]["value"];
+
+/**
+ * One site, inside its frame. Until the script connects, the first page is the
+ * three setup steps. After that it is the overview, and every page that shows
+ * questions is kept current while it is open.
+ */
+export function SiteView({ me, row, view, onDeleted }: { me: Me; row: SiteRow; view: View; onDeleted: () => void }) {
+  const { params, set } = useAddress();
+  const days = daysFrom(params.get("days"));
+  const openGuide = params.get("guide");
+  const tab: SettingsTab = SETTINGS_TABS.find((item) => item.value === params.get("tab"))?.value ?? "general";
   const [site, setSite] = useState<Site | null>(null);
-  const [view, setView] = useState<"overview" | "settings">("overview");
   const [error, setError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const siteId = row.id;
 
   const load = useCallback(async () => {
     try {
@@ -38,10 +66,7 @@ export function SiteView({ siteId, onDeleted }: { siteId: string; onDeleted: () 
   useEffect(() => {
     const first = setTimeout(load, 0);
     const timer = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void load();
-        setRefreshKey((key) => key + 1);
-      }
+      if (document.visibilityState === "visible") void load();
     }, site?.connected ? CONNECTED_MS : WAITING_MS);
     return () => {
       clearTimeout(first);
@@ -50,55 +75,149 @@ export function SiteView({ siteId, onDeleted }: { siteId: string; onDeleted: () 
   }, [load, site?.connected]);
 
   const pages = useReading(site);
+  const connected = site?.connected === true;
+  // The pages that show questions, and so are kept current. Knowledge and Settings show none, and ask for nothing
+  // while they are open, unless a guide is open beside them.
+  const counted = view === "overview" || view === "questions" || view === "gaps";
+  const { live, failing } = useLive(connected && (counted || openGuide) ? siteId : null);
+  // The numbers wait for the first live answer, so they are asked for once and not twice. If live can't be reached they go ahead without it.
+  const stamp = live?.stamp ?? (failing ? "unreachable" : undefined);
+  const numbers = useInsights(connected && counted && stamp ? siteId : null, days, stamp);
+  const openIt = useCallback((guide: string) => set({ guide }, "push"), [set]);
 
-  if (error && !site) return <FailedCard title="Couldn't load your site" message={error} retry={() => void load()} />;
-  if (!site) return <Card><p className="text-base text-muted-foreground">Loading your site</p></Card>;
+  const range = <Segmented label="Time range" value={days} onChange={(next) => set({ days: next === 30 ? undefined : String(next) })} options={RANGES.map((value) => ({ value, name: `${value} days` }))} />;
 
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-4xl font-medium tracking-[-0.03em]">{site.name}</h1>
-          <p className="text-base text-muted-foreground">{site.origin}</p>
-        </div>
-        <div role="tablist" aria-label="Site" className="flex gap-2">
-          {(
-            [
-              ["overview", "Overview"],
-              ["settings", "Settings"],
-            ] as const
-          ).map(([value, name]) => (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              aria-selected={view === value}
-              onClick={() => setView(value)}
-              className={`inline-flex h-8 items-center rounded-full px-3.5 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${
-                view === value ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-secondary"
-              }`}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {view === "settings" ? (
-        <SiteSettings site={site} onChange={setSite} onDeleted={onDeleted} />
-      ) : site.connected ? (
+  let page;
+  if (error && !site) page = <FailedCard title="Couldn't load your site" message={error} retry={() => void load()} />;
+  else if (!site) page = <p className="text-sm text-muted-foreground">Loading your site</p>;
+  else if (view === "knowledge") {
+    page = (
+      <>
+        <PageHeader title="Knowledge" note="What Haptic reads before it answers, and what you have corrected." />
+        <Notes site={site} onChange={setSite} />
+        <HelpDocs site={site} onChange={setSite} />
+        <GuidingRules site={site} onChange={setSite} />
+        <PagesRead reading={pages.reading} />
+      </>
+    );
+  } else if (view === "settings") {
+    page = (
+      <>
+        <PageHeader title="Settings" note={`${site.name}, ${hostOf(site.origin)}`} />
+        <Segmented tabs label="Settings" value={tab} onChange={(next) => set({ tab: next === "general" ? undefined : next })} options={SETTINGS_TABS} />
+        {tab === "general" && (
+          <>
+            <WidgetLook site={site} onChange={setSite} />
+            <DeleteSite site={site} onDeleted={onDeleted} />
+          </>
+        )}
+        {tab === "install" && (site.connected ? <InstallHealth site={site} reading={pages.reading} onChange={setSite} /> : <Setup site={site} pages={pages} onChange={setSite} />)}
+        {tab === "usage" && <FinishedGuides siteId={site.id} onOpen={openIt} />}
+      </>
+    );
+  } else if (!site.connected) {
+    page =
+      view === "overview" ? (
         <>
-          <InsightsView siteId={site.id} origin={site.origin} refreshKey={refreshKey} onCorrected={(corrections) => setSite({ ...site, corrections })} />
-          <GuidingRules site={site} onChange={setSite} />
-          <InstallHealth site={site} reading={pages.reading} onChange={setSite} />
-        </>
-      ) : (
-        <>
+          <PageHeader title={`Set up ${site.name}`} note="This page changes by itself when the script connects." />
           <SetupGate site={site} />
           <Setup site={site} pages={pages} onChange={setSite} />
         </>
+      ) : (
+        <>
+          <PageHeader title={view === "questions" ? "Questions" : "Gaps"} />
+          <Card>
+            <CardTitle>Nothing here yet</CardTitle>
+            <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">Questions show up once the script is on your site and someone asks Haptic something.</p>
+            <Link href={siteHref(site.id)} className={cn(buttonVariants({ variant: "secondary" }), "self-start")}>
+              Finish setup
+            </Link>
+          </Card>
+        </>
+      );
+  } else if (numbers.error) {
+    page = <FailedCard level={2} title="Couldn't load the questions" message={numbers.error} retry={numbers.retry} />;
+  } else if (view === "questions") {
+    page = (
+      <>
+        <PageHeader title="Questions" note={`Everything asked on ${hostOf(site.origin)}, newest first.`}>
+          <Reconnecting failing={failing} />
+          {range}
+        </PageHeader>
+        <Questions data={numbers.data} live={live} onOpen={openIt} />
+      </>
+    );
+  } else if (view === "gaps") {
+    page = (
+      <>
+        <PageHeader title="Gaps" note="What people could not find, and where guides stop.">
+          {range}
+        </PageHeader>
+        <Gaps siteId={site.id} data={numbers.data} onOpen={openIt} />
+      </>
+    );
+  } else {
+    page = (
+      <>
+        <PageHeader title="Overview" note={`${site.name}, ${hostOf(site.origin)}`}>
+          <Reconnecting failing={failing} />
+          {range}
+        </PageHeader>
+        <Overview siteId={site.id} origin={site.origin} days={days} stamp={stamp} data={numbers.data} live={live} onOpen={openIt} />
+      </>
+    );
+  }
+
+  return (
+    <DashboardSurface>
+      <SiteShell me={me} current={row} view={view}>
+        {page}
+        {openGuide && site && (
+          <GuideDrawer siteId={site.id} guideId={openGuide} stamp={live?.stamp} onClose={() => set({ guide: undefined })} onCorrected={(corrections) => setSite({ ...site, corrections })} />
+        )}
+        {site && <TeachDrawer site={site} onChange={setSite} />}
+      </SiteShell>
+    </DashboardSurface>
+  );
+}
+
+/**
+ * A page that keeps itself current says nothing about it: new questions simply
+ * arrive. It speaks up only when it has stopped hearing from the server, so
+ * nobody takes what is on screen for the latest.
+ */
+function Reconnecting({ failing }: { failing: boolean }) {
+  if (!failing) return null;
+  return (
+    <span className="text-sm text-muted-foreground" role="status">
+      Reconnecting
+    </span>
+  );
+}
+
+/** The public pages Haptic read when the site was added. */
+function PagesRead({ reading }: { reading: Reading | null }) {
+  if (!reading || reading.read === 0) return null;
+  return (
+    <Card>
+      <CardTitle>
+        {reading.read} public {reading.read === 1 ? "page" : "pages"} read
+      </CardTitle>
+      <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
+        {reading.done
+          ? "Haptic has read your public pages, so it knows what your product calls things. Screens behind your login are read live, on the page each person is looking at."
+          : "Haptic is still reading your public pages, following links, tabs and menus. It never submits a form or changes anything."}
+      </p>
+      {reading.pages.length > 0 && (
+        <ul className="grid max-h-56 gap-x-6 gap-y-1 overflow-y-auto rounded-lg border bg-card p-4 text-sm sm:grid-cols-2">
+          {reading.pages.map((page) => (
+            <li key={page.path} className="truncate">
+              <span>{page.title || page.path}</span> <span className="text-muted-foreground">{page.path}</span>
+            </li>
+          ))}
+        </ul>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -153,11 +272,8 @@ function Setup({ site, pages, onChange }: { site: Site; pages: Pages; onChange: 
       <ReadPages pages={pages} />
 
       <Card>
-        <div className="flex items-center gap-3">
-          <StepMark n={2} />
-          <h2 className="text-2xl font-medium tracking-[-0.02em]">Add the script to your site</h2>
-        </div>
-        <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
+        <StepTitle mark={<StepMark n={2} />}>Add the script to your site</StepTitle>
+        <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
           One tag on every page, including the pages behind your login. If someone else looks after your code, send them the install page.
         </p>
         <InstallOptions scriptUrl={site.scriptUrl} siteId={site.id} live={site} />
@@ -166,7 +282,6 @@ function Setup({ site, pages, onChange }: { site: Site; pages: Pages; onChange: 
       </Card>
 
       <Connection site={site} onChange={onChange} />
-      <GuidingRules site={site} onChange={onChange} />
     </div>
   );
 }
@@ -180,11 +295,8 @@ function ReadPages({ pages }: { pages: Pages }) {
   if (done && reading.read === 0) {
     return (
       <Card>
-        <div className="flex items-center gap-3">
-          <StepMark n={1} />
-          <h2 className="text-2xl font-medium tracking-[-0.02em]">Haptic could not read your site</h2>
-        </div>
-        <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
+        <StepTitle mark={<StepMark n={1} />}>Haptic could not read your site</StepTitle>
+        <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
           The address did not answer, or it sends visitors somewhere else, such as a sign in page. You can carry on. Haptic reads each page live once the
           script is on it, so guides still work.
         </p>
@@ -197,13 +309,10 @@ function ReadPages({ pages }: { pages: Pages }) {
 
   return (
     <Card>
-      <div className="flex items-center gap-3">
-        {done ? <DoneMark /> : <StepMark n={1} />}
-        <h2 className="text-2xl font-medium tracking-[-0.02em]">
+      <StepTitle mark={done ? <DoneMark /> : <StepMark n={1} />}>
           {reading.read} {reading.read === 1 ? "page" : "pages"} read
-        </h2>
-      </div>
-      <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
+        </StepTitle>
+      <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
         {done
           ? "Haptic has read your public pages, so it knows what your product calls things. Screens behind your login are read live, on the page each person is looking at."
           : "Haptic is reading your public pages, following links, tabs and menus. It never submits a form or changes anything."}
@@ -233,13 +342,10 @@ function Connection({ site, onChange }: { site: Site; onChange: (site: Site) => 
   const [failure, setFailure] = useState<Failure | null>(null);
   return (
     <Card>
-      <div className="flex items-center gap-3">
-        <StepMark n={3} />
-        <h2 className="text-2xl font-medium tracking-[-0.02em]">See it connect</h2>
-      </div>
+      <StepTitle mark={<StepMark n={3} />}>See it connect</StepTitle>
       {refused.length ? (
         <div className="flex flex-col gap-3">
-          <p className="max-w-[65ch] text-base leading-6">
+          <p className="max-w-[65ch] text-sm leading-5">
             The script is running, but on an address this site does not allow yet. Haptic stays hidden there until you allow it, and then shows up
             within a minute. Only allow an address you know is yours.
           </p>
@@ -251,7 +357,7 @@ function Connection({ site, onChange }: { site: Site; onChange: (site: Site) => 
           <FormAlert failure={failure} />
         </div>
       ) : (
-        <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
+        <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
           Waiting for the script. Once the tag is on your site, open any page with it, and this changes within a few seconds.
         </p>
       )}
@@ -328,7 +434,7 @@ function AllowedOrigins({ site, onChange }: { site: Site; onChange: (site: Site)
   }
   return (
     <div className="flex flex-col gap-3">
-      <h3 className="text-base font-medium">Where Haptic may run</h3>
+      <h3 className="text-sm font-medium">Where Haptic may run</h3>
       <ul className="flex flex-col divide-y rounded-lg border bg-card">
         {site.allowedOrigins.map((origin) => (
           <li key={origin} className="flex items-center justify-between gap-4 px-4 py-2 text-sm">

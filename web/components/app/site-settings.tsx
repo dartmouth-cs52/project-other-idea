@@ -15,28 +15,15 @@ const HEX = /^#[0-9a-f]{6}$/i;
 const POINTER_PATH =
   "M3.271 4.871A1.678 1.678 0 0 1 5.604 2.907L19.822 9.597A1.678 1.678 0 0 1 19.705 12.684L13.956 14.875A.622.622 0 0 0 13.643 15.139L10.506 20.431A1.678 1.678 0 0 1 7.444 20.021Z";
 
-/** A site's settings: how the widget looks, what Haptic should know, its help docs, and deleting the site. */
-export function SiteSettings({ site, onChange, onDeleted }: { site: Site; onChange: (site: Site) => void; onDeleted: () => void }) {
-  return (
-    <div className="flex flex-col gap-6">
-      <LookAndNotes site={site} onChange={onChange} />
-      <HelpDocs site={site} onChange={onChange} />
-      <DeleteSite site={site} onDeleted={onDeleted} />
-    </div>
-  );
-}
-
-/** The widget's colour, corner and button label, and the company's notes, saved together. */
-function LookAndNotes({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
+/** The widget's colour, corner and button label. */
+export function WidgetLook({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
   const [accent, setAccent] = useState(site.appearance.accent);
   const [position, setPosition] = useState(site.appearance.position);
   const [label, setLabel] = useState(site.appearance.launcherLabel);
-  const [notes, setNotes] = useState(site.notes);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [failure, setFailure] = useState<Failure | null>(null);
-  const fields = useFieldErrors({ accent: "accent", launcherLabel: "launcher-label", notes: "notes" });
-  const changed =
-    accent.toUpperCase() !== site.appearance.accent.toUpperCase() || position !== site.appearance.position || label.trim() !== site.appearance.launcherLabel || notes.trim() !== site.notes;
+  const fields = useFieldErrors({ accent: "accent", launcherLabel: "launcher-label" });
+  const changed = accent.toUpperCase() !== site.appearance.accent.toUpperCase() || position !== site.appearance.position || label.trim() !== site.appearance.launcherLabel;
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -48,7 +35,7 @@ function LookAndNotes({ site, onChange }: { site: Site; onChange: (site: Site) =
     if (fields.show(found)) return;
     setStatus("saving");
     try {
-      onChange(await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { appearance: { accent, position, launcherLabel: label }, notes } }));
+      onChange(await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { appearance: { accent, position, launcherLabel: label } } }));
       setStatus("saved");
     } catch (failure) {
       if (!fields.showRefusal(failure)) setFailure(failureFrom("Couldn't save your changes", failure));
@@ -57,7 +44,7 @@ function LookAndNotes({ site, onChange }: { site: Site; onChange: (site: Site) =
   }
 
   return (
-    <form onSubmit={save} className="flex flex-col gap-6" noValidate>
+    <form onSubmit={save} noValidate>
       <Card>
         <CardTitle>How the widget looks</CardTitle>
         <div className="grid gap-6 md:grid-cols-2">
@@ -104,7 +91,7 @@ function LookAndNotes({ site, onChange }: { site: Site; onChange: (site: Site) =
                     onClick={() => setPosition(corner)}
                     className={cn(
                       "inline-flex h-8 items-center rounded-full px-3.5 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                      position === corner ? "bg-primary text-primary-foreground" : "bg-card text-foreground hover:bg-secondary",
+                      position === corner ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-secondary",
                     )}
                   >
                     {corner === "bottom-right" ? "Bottom right" : "Bottom left"}
@@ -128,11 +115,44 @@ function LookAndNotes({ site, onChange }: { site: Site; onChange: (site: Site) =
           </div>
           <Preview accent={HEX.test(accent) ? accent : site.appearance.accent} position={position} label={label.trim() || "Ask"} />
         </div>
+        <div className="flex flex-wrap items-center gap-4">
+          <Button type="submit" size="xl" disabled={!changed || status === "saving"}>
+            {status === "saving" ? "Saving" : "Save changes"}
+          </Button>
+          {status === "saved" && !changed && <span className="text-sm text-muted-foreground">Saved. The widget picks it up within a minute.</span>}
+        </div>
+        <FormAlert failure={failure} />
       </Card>
+    </form>
+  );
+}
 
+/** The company's own notes, which Haptic reads before every answer. */
+export function Notes({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
+  const [notes, setNotes] = useState(site.notes);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const fields = useFieldErrors({ notes: "notes" });
+  const changed = notes.trim() !== site.notes;
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setFailure(null);
+    setStatus("saving");
+    try {
+      onChange(await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { notes } }));
+      setStatus("saved");
+    } catch (failure) {
+      if (!fields.showRefusal(failure)) setFailure(failureFrom("Couldn't save your notes", failure));
+      setStatus("idle");
+    }
+  }
+
+  return (
+    <form onSubmit={save} noValidate>
       <Card>
         <CardTitle>What Haptic should know</CardTitle>
-        <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
+        <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
           In your own words. What your product calls things, where settings live, and what people often get wrong. Haptic reads this before every
           answer.
         </p>
@@ -150,18 +170,16 @@ function LookAndNotes({ site, onChange }: { site: Site; onChange: (site: Site) =
           className="min-h-40 bg-card px-3.5 py-3 md:text-base"
         />
         <FieldError id="notes" error={fields.errors.notes} />
-        <p id="notes-hint" className="text-sm text-muted-foreground">
-          {notes.length.toLocaleString()} of 20,000 characters
-        </p>
+        <div className="flex flex-wrap items-center gap-4">
+          <Button type="submit" size="xl" disabled={!changed || status === "saving"}>
+            {status === "saving" ? "Saving" : "Save notes"}
+          </Button>
+          <p id="notes-hint" className="text-sm text-muted-foreground">
+            {status === "saved" && !changed ? "Saved. Haptic reads them within a minute." : `${notes.length.toLocaleString()} of 20,000 characters`}
+          </p>
+        </div>
+        <FormAlert failure={failure} />
       </Card>
-
-      <div className="flex flex-wrap items-center gap-4">
-        <Button type="submit" size="xl" disabled={!changed || status === "saving"}>
-          {status === "saving" ? "Saving" : "Save changes"}
-        </Button>
-        {status === "saved" && !changed && <span className="text-sm text-muted-foreground">Saved. The widget picks it up within a minute.</span>}
-      </div>
-      <FormAlert failure={failure} />
     </form>
   );
 }
@@ -189,7 +207,7 @@ function Preview({ accent, position, label }: { accent: string; position: Site["
 }
 
 /** The company's help docs: what is in the prompt, what is left out, and adding or removing one. */
-function HelpDocs({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
+export function HelpDocs({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
   const [mode, setMode] = useState<"url" | "paste">("url");
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
@@ -248,14 +266,14 @@ function HelpDocs({ site, onChange }: { site: Site; onChange: (site: Site) => vo
   return (
     <Card>
       <CardTitle>Help docs</CardTitle>
-      <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
+      <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
         Your help articles, as written. Haptic uses them to find the right control and the words your product uses. Whole docs go in, in this order,
         until the room is full.
       </p>
-      <label className="flex max-w-[65ch] items-start gap-3 text-base leading-6">
+      <label className="flex max-w-[65ch] items-start gap-3 text-sm leading-5">
         <input
           type="checkbox"
-          className="mt-1 size-4 shrink-0 accent-primary"
+          className="mt-0.5 size-4 shrink-0 accent-primary"
           checked={site.answers.on}
           onChange={(event) => void setAnswers(event.target.checked)}
         />
@@ -280,7 +298,7 @@ function HelpDocs({ site, onChange }: { site: Site; onChange: (site: Site) => vo
           {docs.list.map((doc) => (
             <li key={doc.source} className="flex items-center justify-between gap-4 px-4 py-3">
               <span className="flex min-w-0 flex-col">
-                <span className="truncate text-base">{doc.title}</span>
+                <span className="truncate text-sm font-medium">{doc.title}</span>
                 <span className="truncate text-sm text-muted-foreground">
                   {[doc.pasted ? "Pasted" : doc.source, `${doc.chars.toLocaleString()} characters`, doc.inPrompt ? null : "left out, over the limit"].filter(Boolean).join(", ")}
                 </span>
@@ -308,7 +326,7 @@ function HelpDocs({ site, onChange }: { site: Site; onChange: (site: Site) => vo
               onClick={() => choose(value)}
               className={cn(
                 "inline-flex h-8 items-center rounded-full px-3.5 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                mode === value ? "bg-primary text-primary-foreground" : "bg-card text-foreground hover:bg-secondary",
+                mode === value ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-secondary",
               )}
             >
               {name}
@@ -378,7 +396,7 @@ function HelpDocs({ site, onChange }: { site: Site; onChange: (site: Site) => vo
 }
 
 /** Deletes the site and everything recorded on it, once the person types its address. */
-function DeleteSite({ site, onDeleted }: { site: Site; onDeleted: () => void }) {
+export function DeleteSite({ site, onDeleted }: { site: Site; onDeleted: () => void }) {
   const host = new URL(site.origin).host;
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
@@ -402,7 +420,7 @@ function DeleteSite({ site, onDeleted }: { site: Site; onDeleted: () => void }) 
   return (
     <Card>
       <CardTitle>Delete this site</CardTitle>
-      <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
+      <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
         The script tag stops working at once, and every question, guide and setting for this site is deleted. This cannot be undone.
       </p>
       <form onSubmit={remove} noValidate>

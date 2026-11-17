@@ -1,25 +1,27 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, ExternalLink, Minus } from "lucide-react";
 import { cn } from "cn";
 import { buttonVariants } from "@/components/ui/button";
 import { api } from "@/lib/app-api";
 import { countChange, duration, durationChange, hostOf, rateChange, utcDayLabel, type Change } from "@/lib/setup";
 import type { Headline as HeadlineData } from "@/worker/insights";
-import { Card } from "./parts";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Card, Panel } from "./parts";
 
 /**
- * The top of a site's dashboard: four numbers for the chosen range, each
- * against the same number of days before, and a small chart of guides started
- * and finished each day. A site nobody has asked anything yet says what will
- * show here and when, rather than a row of zeros.
+ * The numbers at the top of a site's dashboard, for the chosen range: four of
+ * them, each against the same number of days before, and a count for each day.
+ * They are asked for again whenever `refreshKey` changes, and the ones on
+ * screen stay while newer ones are on their way.
  */
-export function Headline({ siteId, origin, days, ranges, refreshKey }: { siteId: string; origin?: string; days: number; ranges: ReactNode; refreshKey: number }) {
+export function useHeadline(siteId: string | null, days: number, refreshKey: string | number | undefined) {
   const [data, setData] = useState<HeadlineData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!siteId) return;
     let live = true;
     api<HeadlineData>(`/sites/${siteId}/metrics?days=${days}`)
       .then((result) => live && (setData(result), setError(null)))
@@ -29,38 +31,27 @@ export function Headline({ siteId, origin, days, ranges, refreshKey }: { siteId:
     };
   }, [siteId, days, refreshKey]);
 
-  const title = (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <h2 className="text-2xl font-medium tracking-[-0.02em]">Last {days} days</h2>
-      {ranges}
-    </div>
-  );
+  return { data, error: data ? null : error };
+}
 
+/** The four numbers, in a row. While another range loads, the numbers on screen stay, dimmed, so nothing jumps. */
+export function HeadlineTiles({ data, days, error }: { data: HeadlineData | null; days: number; error?: string | null }) {
   if (error && !data) {
     return (
-      <section className="flex flex-col gap-4">
-        {title}
-        <Card>
-          <p className="text-base text-muted-foreground">{error}</p>
-        </Card>
-      </section>
+      <Card>
+        <p className="text-sm text-muted-foreground">{error}</p>
+      </Card>
     );
   }
   if (!data) {
     return (
-      <section className="flex flex-col gap-4">
-        {title}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-hidden>
-          {[0, 1, 2, 3].map((key) => (
-            <div key={key} className="h-[148px] rounded-xl border bg-muted" />
-          ))}
-        </div>
-      </section>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-hidden>
+        {[0, 1, 2, 3].map((key) => (
+          <Skeleton key={key} className="h-[148px] rounded-xl" />
+        ))}
+      </div>
     );
   }
-  if (!data.asked) return <Waiting origin={origin} title={title} />;
-
-  // While another range loads, the numbers on screen stay, dimmed, so nothing jumps.
   const stale = data.days !== days;
   const period = `the previous ${data.days} days`;
   const rate = (p: HeadlineData["now"]) => (p.counted ? p.countedFinished / p.counted : null);
@@ -68,64 +59,98 @@ export function Headline({ siteId, origin, days, ranges, refreshKey }: { siteId:
   const finishRate = rate(now);
 
   return (
-    <section className={cn("flex flex-col gap-4 transition-opacity duration-200", stale && "opacity-60")} aria-busy={stale}>
-      {title}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Tile label="Guides finished" value={now.finished.toLocaleString()} note="The number billing counts. Free during early access." change={countChange(now.finished, before.finished, period)} />
-        <Tile
-          label="Finish rate"
-          value={finishRate === null ? null : `${Math.round(finishRate * 100)}%`}
-          empty="No guides to count yet"
-          note="Of the questions Haptic could guide, the share that finished."
-          change={rateChange(finishRate, rate(before), period)}
-        />
-        <Tile
-          label="Questions Haptic couldn't guide"
-          value={now.unguided.toLocaleString()}
-          note={now.started ? `${Math.round((now.unguided / now.started) * 100)}% of ${now.started.toLocaleString()} questions. Stuck, not in the help docs, given up on, or said it didn't help.` : "Stuck, not in the help docs, given up on, or said it didn't help."}
-          change={countChange(now.unguided, before.unguided, period)}
-        />
-        <Tile
-          label="Median time to finish"
-          value={now.medianMsToFinish === null ? null : duration(now.medianMsToFinish)}
-          empty="No finished guides yet"
-          note="From the question to the last step."
-          change={durationChange(now.medianMsToFinish, before.medianMsToFinish, period)}
-        />
-      </div>
-      <Card className="gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-          <h3 className="text-base font-medium">
-            Guides started and finished, each day <span className="text-sm font-normal text-muted-foreground">in UTC</span>
-          </h3>
-          <ul className="flex items-center gap-4 text-sm text-muted-foreground" aria-label="Legend">
-            <li className="flex items-center gap-2">
-              <span className="size-2.5 rounded-[2px] bg-muted-foreground" aria-hidden />
-              Started
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="size-2.5 rounded-[2px] bg-foreground" aria-hidden />
-              Finished
-            </li>
-          </ul>
-        </div>
-        <DailyChart daily={data.daily} />
-      </Card>
-    </section>
+    <div className={cn("grid gap-4 transition-opacity duration-200 sm:grid-cols-2 xl:grid-cols-4", stale && "opacity-60")} aria-busy={stale}>
+      <Tile label="Guides finished" better="up" value={now.finished.toLocaleString()} note="The number billing counts. Free during early access." change={countChange(now.finished, before.finished, period)} />
+      <Tile
+        label="Finish rate"
+        better="up"
+        value={finishRate === null ? null : `${Math.round(finishRate * 100)}%`}
+        empty="No guides to count yet"
+        note="Of the questions Haptic could guide, the share that finished."
+        change={rateChange(finishRate, rate(before), period)}
+      />
+      <Tile
+        label="Questions Haptic couldn't guide"
+        better="down"
+        value={now.unguided.toLocaleString()}
+        note={now.started ? `${Math.round((now.unguided / now.started) * 100)}% of ${now.started.toLocaleString()} questions. Stuck, not in the help docs, given up on, or said it didn't help.` : "Stuck, not in the help docs, given up on, or said it didn't help."}
+        change={countChange(now.unguided, before.unguided, period)}
+      />
+      <Tile
+        label="Median time to finish"
+        better="down"
+        value={now.medianMsToFinish === null ? null : duration(now.medianMsToFinish)}
+        empty="No finished guides yet"
+        note="From the question to the last step."
+        change={durationChange(now.medianMsToFinish, before.medianMsToFinish, period)}
+      />
+    </div>
   );
 }
 
-function Tile({ label, value, empty = "None yet", note, change }: { label: string; value: string | null; empty?: string; note: string; change: Change | null }) {
-  const Icon = change?.direction === "up" ? ArrowUpRight : change?.direction === "down" ? ArrowDownRight : Minus;
+/** Guides started and finished, a bar for each day of the range. */
+export function HeadlineChart({ data }: { data: HeadlineData | null }) {
   return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-xl border bg-muted p-6" data-metric={label}>
+    <Panel
+      title={
+        <>
+          Guides each day <span className="text-sm font-normal text-muted-foreground">in UTC</span>
+        </>
+      }
+      aside={
+        <ul className="flex items-center gap-4 text-xs text-muted-foreground" aria-label="Legend">
+          <li className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-muted-foreground" aria-hidden />
+            Started
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-foreground" aria-hidden />
+            Finished
+          </li>
+        </ul>
+      }
+    >
+      <div className="px-5 pb-4">{data ? <DailyChart daily={data.daily} /> : <Skeleton className="h-[168px]" />}</div>
+    </Panel>
+  );
+}
+
+/** The change as two parts: what moved, such as "Up 12%", and against what, such as "on the previous 30 days". */
+function partsOf(text: string): [string, string] {
+  const found = /^(.*?) ((?:on|as|in|than) the previous .*)$/.exec(text);
+  return found ? [found[1]!, found[2]!] : [text, ""];
+}
+
+/**
+ * One number. Under it, which way it moved against the days before: green when
+ * that is the way it should go, red when it is not, grey when it did not move.
+ * `better` says which way is good, since more finished guides is good and more
+ * questions Haptic couldn't guide is not. The arrow and the words say the
+ * same as the colour, so nobody has to tell red from green to read it.
+ */
+function Tile({ label, value, empty = "None yet", note, change, better }: { label: string; value: string | null; empty?: string; note: string; change: Change | null; better: "up" | "down" }) {
+  const Icon = change?.direction === "up" ? ArrowUpRight : change?.direction === "down" ? ArrowDownRight : Minus;
+  const tone = !change || change.direction === "same" ? "text-muted-foreground" : change.direction === better ? "text-success" : "text-destructive";
+  const [moved, against] = change ? partsOf(change.text) : ["", ""];
+  return (
+    <div className="flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-5" data-metric={label}>
       {/* Two lines kept for the label, so the numbers line up across the row when one label wraps. */}
       <span className="text-sm font-medium text-muted-foreground sm:min-h-10">{label}</span>
-      {value === null ? <span className="text-2xl font-medium tracking-[-0.02em] text-muted-foreground">{empty}</span> : <span className="text-4xl font-medium tracking-[-0.03em]">{value}</span>}
+      {value === null ? (
+        <span className="text-2xl font-medium tracking-[-0.02em] text-muted-foreground">{empty}</span>
+      ) : (
+        // Keyed by the number, so a new one arrives from just below. That is the only sign the page gives that it changed.
+        <span key={value} className="text-4xl font-medium tracking-[-0.03em] motion-safe:animate-in motion-safe:duration-200 motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1">
+          {value}
+        </span>
+      )}
       {change && (
-        <span className="flex items-start gap-1 text-sm text-foreground">
-          <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
-          {change.text}
+        <span className="flex items-start gap-1 text-sm">
+          <Icon className={cn("mt-0.5 size-4 shrink-0", tone)} aria-hidden />
+          <span>
+            <span className={cn("font-medium", tone)}>{moved}</span>
+            {against && <span className="text-muted-foreground"> {against}</span>}
+          </span>
         </span>
       )}
       <span className="text-xs leading-4 text-muted-foreground">{note}</span>
@@ -134,7 +159,7 @@ function Tile({ label, value, empty = "None yet", note, change }: { label: strin
 }
 
 /** For a site no one has asked anything yet: what the top of the dashboard will hold, and when. */
-function Waiting({ origin, title }: { origin?: string; title: ReactNode }) {
+export function HeadlineWaiting({ origin }: { origin?: string }) {
   const items = [
     ["Guides finished", "Each guide where the person reached the end. The number billing counts, free during early access."],
     ["Finish rate", "Of the questions Haptic could guide, the share that finished."],
@@ -143,11 +168,10 @@ function Waiting({ origin, title }: { origin?: string; title: ReactNode }) {
   ];
   return (
     <section className="flex flex-col gap-4">
-      {title}
       <Card>
         <div className="flex flex-col gap-2">
-          <h3 className="text-2xl font-medium tracking-[-0.02em]">Your numbers start with the first question</h3>
-          <p className="max-w-[65ch] text-base leading-6 text-muted-foreground">
+          <h2 className="text-base font-medium">Your numbers start with the first question</h2>
+          <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
             A minute after someone asks Haptic something{origin ? ` on ${hostOf(origin)}` : ""}, these show here, each against the days before, with a chart
             of every day. Try it yourself to see the first one.
           </p>
