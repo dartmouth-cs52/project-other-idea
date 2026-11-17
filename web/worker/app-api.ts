@@ -383,8 +383,9 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string, 
     taught: (site.context.taught ?? []).map(routeView),
     reading: readingSummary(site.reading, site.context.pages ?? []),
     setup: setupOf(site.context),
-    // The pointer is Haptic's blue on every site, whatever was saved before.
-    appearance: { ...DEFAULT_APPEARANCE, ...site.context.appearance, accent: POINTER_BLUE },
+    // The pointer is Haptic's blue on every site, whatever was saved before. The launcher is the colour visitors see:
+    // one saved too light before colours were darkened on saving is shown darkened here too.
+    appearance: drawnAppearance(site.context.appearance),
     // Whether the launcher's colour is still being read from the site, and where the one it has came from.
     launcherMatch: { waiting: launcher.waiting, source: launcher.source },
     notes: site.context.notes ?? "",
@@ -392,6 +393,15 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string, 
     // On means answering in words from the docs. Chosen is null when the site follows the default: on once it has docs.
     answers: { on: answersOn(site.context), chosen: site.context.answers?.enabled ?? null },
   };
+}
+
+/** A site's look as visitors see it: Haptic's blue for the pointer, and the launcher as launcherColour draws it. */
+function drawnAppearance(saved: Partial<Appearance> | undefined): Appearance {
+  const look: Appearance = { ...DEFAULT_APPEARANCE, ...saved, accent: POINTER_BLUE };
+  const drawn = launcherColour(saved?.launcher);
+  if (drawn === INK) delete look.launcher;
+  else look.launcher = drawn;
+  return look;
 }
 
 /** The docs as the settings page lists them: no text, and whether each one is in the prompt. */

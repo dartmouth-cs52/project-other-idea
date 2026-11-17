@@ -78,6 +78,8 @@ export interface Dashboard {
   site(id?: string): Promise<Record<string, any>>;
   /** Forgets a site's launcher colour and that it was ever read, as a site added a moment ago. */
   forgetLauncher(id?: string): void;
+  /** Saves a launcher colour as it was saved before colours were darkened on saving and before matching existed. */
+  saveOldLauncher(colour: string, id?: string): void;
   close(): Promise<void>;
 }
 
@@ -190,7 +192,11 @@ export async function startDashboard(): Promise<Dashboard> {
       // Where the setup screens are, kept in the context as worker/setup-api.ts keeps it. Most seeded sites were
       // set up before there were setup screens, so they have none, and the dashboard keeps them.
       setup: row.context.setup ?? null,
-      appearance: { ...row.context.appearance, accent: POINTER_BLUE },
+      appearance: (() => {
+        const { launcher: _saved, ...look } = row.context.appearance ?? {};
+        const drawn = launcherColour(row.context.appearance?.launcher);
+        return { ...look, accent: POINTER_BLUE, ...(drawn === INK ? {} : { launcher: drawn }) };
+      })(),
       launcherMatch: { waiting: launcher.waiting, source: launcher.source },
       notes: row.context.notes ?? "",
       docs: { budget: 60000, used: 0, list: [] },
@@ -311,6 +317,9 @@ export async function startDashboard(): Promise<Dashboard> {
     },
     async site(id = SITE) {
       return (await siteStatus(id)) ?? {};
+    },
+    saveOldLauncher(colour, id = SITE) {
+      exec(db, `update sites set context = jsonb_set(context - 'launcherMatch' - 'launcherChosen', '{appearance,launcher}', '"${colour}"') where id = '${id}'`);
     },
     forgetLauncher(id = SITE) {
       exec(db, `update sites set context = jsonb_set(context - 'launcherMatch' - 'launcherChosen', '{appearance}', (context->'appearance') - 'launcher') where id = '${id}'`);

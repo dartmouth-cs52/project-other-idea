@@ -198,6 +198,19 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     });
   });
 
+  test("a light colour saved before colours were darkened shows as visitors see it, darker, and is not read over", async () => {
+    dash.saveOldLauncher("#FACC15");
+    const tab = await dash.open(`/dashboard/?site=${SITE}&view=settings`);
+    await closing(tab, async () => {
+      const field = tab.locator("#launcher");
+      await field.waitFor();
+      assert.equal(await field.inputValue(), launcherColour("#FACC15"), "the field shows the colour visitors see");
+      // Saved before matching existed, so it counts as a person's choice and is not read from the site.
+      await tab.waitForTimeout(2500);
+      assert.equal(await field.inputValue(), launcherColour("#FACC15"));
+    });
+  });
+
   test("renaming a site changes its name in the bar, and its address goes once the name is its own", async () => {
     const tab = await dash.open(`/dashboard/?site=${SITE}&view=settings`);
     await closing(tab, async () => {
