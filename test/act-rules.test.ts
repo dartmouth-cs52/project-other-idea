@@ -129,8 +129,6 @@ test("a link's address commits as a button's words do: its path, its query and a
 test("an address plainly opens a form when it ends in the word frameworks give that page, and nothing else in it commits", () => {
   const forms = [
     "/cards/new", "/cards/new/", "https://app.test/cards/new", "/bills/vendors/new", "/reimbursements/new?kind=mileage", "/people/7/edit", "/people/:id/edit", "/mail/compose",
-    // Laravel's form page, and Django's and CakePHP's, when nothing follows them.
-    "/photos/create", "/users/add/",
     // An app that keeps its place after "#/".
     "/app#/cards/new",
   ];
@@ -138,6 +136,9 @@ test("an address plainly opens a form when it ends in the word frameworks give t
   const others = [
     // Where a visit can be the act itself.
     "/invites/send", "/expenses/7/approve", "/cards/request", "/items/5/delete", "/logout", "/cart/add?item=5", "/photos/create?now=1",
+    // "create" and "add" name a form page in some frameworks (Laravel, Django, CakePHP) and the act itself in as many
+    // shops: a visit to "/wishlist/42/add" adds, on a plain GET that nothing here can see. They say nothing either way.
+    "/photos/create", "/users/add/", "/cart/42/add", "/wishlist/42/add", "/app#/albums/create",
     // "new" is not the last word, or something else in the address commits.
     "/cards/new/start", "/checkout/new", "/posts/new?publish=1", "/delete#/cards/new", "/app#/cards/approve",
     // Nothing that says a form.
