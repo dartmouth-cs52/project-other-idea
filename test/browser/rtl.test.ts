@@ -12,7 +12,9 @@ import { ask, BROWSERS, ends, idOf, launch, page, point, startHarness, type Harn
 // direction, inside a bubble that stays where it is.
 
 const BODY = `<main style="font:14px system-ui;padding:40px"><h1>الفريق</h1><button id="invite">دعوة زميل</button></main>`;
-const LTR = page(BODY);
+// The same Arabic page twice, differing only in its direction. The language a page declares can change the font a
+// browser draws the widget's words in (Firefox does), which is not what is compared here.
+const LTR = page(BODY).replace("<html>", '<html lang="ar">');
 const RTL = page(BODY).replace("<html>", '<html dir="rtl" lang="ar">');
 const QUESTION = "كيف أدعو زميلًا؟";
 const ANSWER = "افتح صفحة الفريق ثم اضغط على دعوة زميل.";

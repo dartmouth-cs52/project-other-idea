@@ -52,9 +52,13 @@ const BUDGETS = shell(`
 
 const DETAIL = shell(`<h1>Marketing</h1><button type="button">Add owner</button><button type="button">Share</button>`);
 
-/** One page in Arabic, written right to left at /rtl and the same page left to right at /ltr, so the bar can be compared on both. */
+/**
+ * One page in Arabic, written right to left at /rtl and left to right at /ltr, so the bar can be compared on both. Only
+ * the direction differs: the language a page declares can change the font a browser draws the bar's words in (Firefox
+ * does), which is not what is compared.
+ */
 const ARABIC = shell(`<h1>الميزانيات</h1><button type="button">ميزانية جديدة</button>`);
-const SIDED: Record<string, string> = { "/ltr": ARABIC, "/rtl": ARABIC.replace("<html>", '<html dir="rtl" lang="ar">') };
+const SIDED: Record<string, string> = { "/ltr": ARABIC.replace("<html>", '<html lang="ar">'), "/rtl": ARABIC.replace("<html>", '<html dir="rtl" lang="ar">') };
 
 /**
  * Pages that repeat what was typed in a field in a name teach mode reads for
