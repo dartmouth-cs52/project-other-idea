@@ -4,11 +4,13 @@
 # be started by hand from the Actions tab. Pull requests never run it, so
 # nothing goes live before a merge.
 #
-# It uses the same two repository secrets as the site's deploy, under Settings,
+# It uses the same three repository secrets as the site's deploy, under Settings,
 # Secrets and variables, Actions:
 #   CLOUDFLARE_API_TOKEN   a Cloudflare API token made from the "Edit Cloudflare Workers" template
 #   CLOUDFLARE_ACCOUNT_ID  the Cloudflare account the Worker lives in
-# and one more, which the server needs to call a real model:
+#   DATABASE_URL           Neon's connection string for the haptic project's main branch,
+#                          which the deploy brings up to date with db/migrations before it publishes
+# Without any of these the deploy stops before it starts. One more is for the model:
 #   ANTHROPIC_API_KEY      copied onto the Worker as a secret on every deploy
 # Without it the deploy still goes ahead, and the server works only while
 # HAPTIC_MODEL in wrangler.jsonc is "mock".
@@ -27,6 +29,7 @@ on:
       - "wrangler.jsonc"
       - "package.json"
       - "package-lock.json"
+      - "db/migrations/**"
   workflow_dispatch:
 
 # One deploy at a time. A second one waits for the first to finish.
@@ -46,10 +49,17 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Check the Cloudflare secrets are set
+      # A deploy without the database's secret would publish code whose tables may not exist yet, so it stops here.
+      - name: Check the secrets are set
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "::error::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID under Settings, Secrets and variables, Actions."
+            exit 1
+          fi
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::Add DATABASE_URL, Neon's connection string for the haptic project's main branch, under Settings, Secrets and variables, Actions. Without it no migration is applied, and code that needs a new table fails."
             exit 1
           fi
 
@@ -83,16 +93,12 @@ jobs:
         run: npx tsx --test --test-concurrency=1 test/widget/gate.test.ts test/widget/acting-redteam.test.ts
 
       # Before the publish, so new code finds its tables. Migrations only add, so the code
-      # already live keeps working on the migrated database.
+      # already live keeps working on the migrated database. The site's deploy runs this too,
+      # and the runner skips a migration the other deploy applied at the same moment.
       - name: Apply database migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "::warning::There is no DATABASE_URL secret, so migrations were not applied. Run npm run db:migrate by hand."
-            exit 0
-          fi
-          npm run db:migrate
+        run: npm run db:migrate
 
       # Builds the widget, packs it into the Worker and publishes it.
       - name: Build and publish

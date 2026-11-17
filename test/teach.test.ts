@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { before, describe, test } from "node:test";
 import { checkAction } from "../src/shared/act-rules.ts";
 import {
@@ -23,7 +24,7 @@ const { createApp } = await import("../src/server/app.ts");
 const { MemoryTeachStore, NeonTeachStore, stepsToKeep } = await import("../src/server/teach.ts");
 const { buildSystemPrompt, buildUserMessage, taughtRoutePrompt } = await import("../src/server/prompt.ts");
 const { actingFor } = await import("../src/server/acting.ts");
-const { closeTeaching, forgetOldTeaching, removeTaught, reviewedSteps, saveTaught, startTeaching, stepViews, TeachRefused } = await import("../web/worker/teach.ts");
+const { closeTeaching, forgetOldTeaching, removeTaught, reviewedSteps, saveTaught, startTeaching, stepViews, teachApi, TEACH_NOT_SET_UP, TeachRefused } = await import("../web/worker/teach.ts");
 type TeachSite = import("../web/worker/teach.ts").TeachSite;
 
 // Teach Haptic: one-time tokens, what a recorded step may hold, matching a
@@ -483,6 +484,34 @@ test("from a failed guide, the tab opens where that guide started, on its own al
   await assert.rejects(startTeaching(standIn().sql, teachSite, teacher, { guide }), /That guide isn't on this site/);
 });
 
+test("until the teach migration is applied, the list says teaching isn't set up, and every other call is refused saying so", async (t) => {
+  const logged = t.mock.method(console, "error", () => {});
+  // What Neon's driver throws for a table the database doesn't have.
+  const missing = standIn(() => {
+    throw Object.assign(new Error('relation "teach_sessions" does not exist'), { code: "42P01" });
+  });
+  const call = (method: string, rest = "", kind: "teach" | "taught" = "teach", question = "how do I add a budget") =>
+    teachApi(missing.sql, teachSite, "org", teacher, method, kind, rest, async () => ({ question }));
+  assert.deepEqual(await call("GET"), { status: 200, body: { sessions: [], unavailable: TEACH_NOT_SET_UP } });
+  const notSetUp = (error: unknown) => error instanceof TeachRefused && error.status === 503 && error.message === TEACH_NOT_SET_UP;
+  const session = "0b6f2c1e-6a1d-4c3e-9f2a-3d4c5b6a7e8f";
+  await assert.rejects(call("POST"), notSetUp, "starting one");
+  await assert.rejects(call("GET", session), notSetUp, "following one");
+  await assert.rejects(call("POST", session), notSetUp, "saving one");
+  await assert.rejects(call("DELETE", session), notSetUp, "stopping one");
+  await assert.rejects(call("DELETE", "a1b2c3d4", "taught"), notSetUp, "removing a route");
+  assert.match(String(logged.mock.calls[0]?.arguments[0]), /db\/migrations\/0014_teach_sessions\.sql/, "the log names the migration");
+  assert.match(String(logged.mock.calls[0]?.arguments[1]), /relation "teach_sessions" does not exist/, "and gives Postgres's own words");
+
+  // A refusal made before the database is asked is still that refusal.
+  await assert.rejects(call("POST", "", "teach", " ? "), (error: unknown) => error instanceof TeachRefused && error.status === 400);
+  // Any other failure is still the server's own, which the API answers as one.
+  const down = standIn(() => {
+    throw new Error("Neon is down");
+  });
+  await assert.rejects(teachApi(down.sql, teachSite, "org", teacher, "POST", "teach", "", async () => ({ question: "how do I add a budget" })), /Neon is down/);
+});
+
 test("review: delete steps, add notes, leave the last click, and name an unnamed control or delete it", () => {
   const recorded = [step({}), step({ label: "" }), step({ kind: "type", role: "textbox", label: "Budget name" }), step({ label: "Create budget", commits: true }), step({ label: "Done" })];
   assert.throws(() => reviewedSteps(recorded, { steps: [{ n: 0 }, { n: 1 }] }), /Step 2 is an unnamed control on \/budgets\. Type the words on it, or delete the step\./);
@@ -635,5 +664,36 @@ describe("what a teach session keeps, against Postgres", { skip: TEST_DATABASE_U
     assert.equal(session!.saved_at, null, "not marked saved");
     assert.ok(Array.isArray(session!.steps), "its steps are kept, to try again");
     assert.ok(!(await siteNow()).context.taught!.some((route) => route.question === "how do I export expenses"));
+  });
+});
+
+/** A database like the live one was when Teach Haptic shipped: every migration but the one that makes teach_sessions. */
+const UNMIGRATED = testDatabase("teach_unmigrated");
+
+describe("before and after the teach migration, against Postgres", { skip: TEST_DATABASE_URL ? false : "set TEST_DATABASE_URL to a local, empty database to run these" }, () => {
+  const ORG = "11111111-1111-4111-8111-111111111111";
+  const SITE = "site_teach02";
+  const sql = psqlSql(UNMIGRATED) as unknown as Parameters<typeof startTeaching>[0];
+  before(() => {
+    freshDatabase(UNMIGRATED);
+    exec(UNMIGRATED, "drop table teach_sessions");
+    exec(UNMIGRATED, `insert into sites (id, company_id, name, origin, allowed_origins, context) values ('${SITE}', '${ORG}', 'Test', '${ORIGIN}', '{${ORIGIN}}', '${JSON.stringify({ ...site, id: SITE })}')`);
+  });
+
+  test("starting is refused saying teaching isn't set up, the list says so, and once the migration is applied teaching starts", async (t) => {
+    t.mock.method(console, "error", () => {});
+    const here = { ...teachSite, id: SITE };
+    const call = (method: string) => teachApi(sql, here, ORG, teacher, method, "teach", "", async () => ({ question: "how do I add a budget" }));
+    await assert.rejects(call("POST"), (error: unknown) => error instanceof TeachRefused && error.status === 503 && error.message === TEACH_NOT_SET_UP);
+    assert.deepEqual(await call("GET"), { status: 200, body: { sessions: [], unavailable: TEACH_NOT_SET_UP } });
+
+    exec(UNMIGRATED, readFileSync(new URL("../db/migrations/0014_teach_sessions.sql", import.meta.url), "utf8"));
+    assert.equal((await call("POST")).status, 201);
+    const listed = (await call("GET")).body as { sessions: { question: string; status: string }[]; unavailable?: string };
+    assert.deepEqual(
+      listed.sessions.map(({ question, status }) => ({ question, status })),
+      [{ question: "how do I add a budget", status: "waiting" }],
+    );
+    assert.equal(listed.unavailable, undefined);
   });
 });

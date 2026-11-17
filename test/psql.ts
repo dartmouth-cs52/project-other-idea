@@ -71,8 +71,9 @@ function script(text: string, values: unknown[]): string {
       return place === undefined ? whole : place === 0 ? "NULL" : `$${place}`;
     });
   const writes = /^(update|insert|delete)\b/i.test(statement);
-  // A write without RETURNING has no rows to read back.
-  const wrapped = writes && !/\breturning\b/i.test(statement) ? statement : `with t as (${statement}) select coalesce(json_agg(t), '[]'::json) from t`;
+  // A write without RETURNING has no rows to read back, nor has a statement that changes the schema, which a CTE can't hold.
+  const rows = /^(select|with|values|table)\b/i.test(statement) || (writes && /\breturning\b/i.test(statement));
+  const wrapped = rows ? `with t as (${statement}) select coalesce(json_agg(t), '[]'::json) from t` : statement;
   return `${wrapped} \\bind ${params.map(bound).join(" ")} \\g\n\\echo ${SEPARATOR}\n`;
 }
 
