@@ -114,7 +114,7 @@ export function PayBillModal({ bill, open, onOpenChange }: { bill: Bill; open: b
                   options={(Object.keys(METHOD_LABELS) as Vendor["paymentMethod"][]).map((m) => ({ value: m, label: METHOD_LABELS[m], description: METHOD_HINTS[m], icon: METHOD_ICONS[m] }))}
                 />
               </Field>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Pay from">
                   {(id) => (
                     <NativeSelect id={id} value={fromEntity} onChange={(e) => setFromEntity(e.target.value)}>

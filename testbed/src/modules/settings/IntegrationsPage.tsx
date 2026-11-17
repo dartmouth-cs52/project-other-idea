@@ -60,7 +60,7 @@ function Grid() {
   const [configuring, setConfiguring] = useState<Integration | null>(null);
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {list.map((i) => (
           <IntegrationCard key={i.id} integration={i} onConnect={() => setConnecting(i)} onDisconnect={() => setDisconnecting(i)} onConfigure={() => setConfiguring(i)} />
         ))}

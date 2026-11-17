@@ -159,14 +159,15 @@ export function InviteModal({ open, onOpenChange, allowed, reason }: { open: boo
             </Callout>
           ) : null}
           <div className="flex flex-col gap-2">
-            <div className="grid grid-cols-[minmax(0,1fr)_160px_32px] gap-2 text-[13px] font-medium">
+            {/* On a phone the role goes under the address, and these headings would not line up. */}
+            <div className="grid grid-cols-[minmax(0,1fr)_160px_32px] gap-2 text-[13px] font-medium max-sm:hidden">
               <span>Email address</span>
               <span>Role</span>
               <span />
             </div>
             {rows.map((r, i) => (
               <div key={r.key} className="flex flex-col gap-1">
-                <div className="grid grid-cols-[minmax(0,1fr)_160px_32px] items-center gap-2">
+                <div className="grid grid-cols-[minmax(0,1fr)_32px] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_160px_32px]">
                   <Input
                     type="email"
                     autoFocus={i === 0}
@@ -176,7 +177,7 @@ export function InviteModal({ open, onOpenChange, allowed, reason }: { open: boo
                     value={r.email}
                     onChange={(e) => update(r.key, { email: e.target.value })}
                   />
-                  <NativeSelect aria-label={`Role for email ${i + 1}`} value={r.role} onChange={(e) => update(r.key, { role: e.target.value as Role })}>
+                  <NativeSelect className="max-sm:row-start-2" aria-label={`Role for email ${i + 1}`} value={r.role} onChange={(e) => update(r.key, { role: e.target.value as Role })}>
                     {ROLES.map((role) => (
                       <option key={role} value={role}>
                         {ROLE_LABELS[role]}
@@ -184,9 +185,15 @@ export function InviteModal({ open, onOpenChange, allowed, reason }: { open: boo
                     ))}
                   </NativeSelect>
                   {rows.length > 1 ? (
-                    <IconButton icon={<X />} label={`Remove email ${i + 1}`} size="icon-sm" onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))} />
+                    <IconButton
+                      icon={<X />}
+                      label={`Remove email ${i + 1}`}
+                      size="icon-sm"
+                      className="max-sm:col-start-2 max-sm:row-start-1"
+                      onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
+                    />
                   ) : (
-                    <span />
+                    <span className="max-sm:col-start-2 max-sm:row-start-1" />
                   )}
                 </div>
                 {errors[r.key] ? <p className="text-xs text-danger">{errors[r.key]}</p> : null}
@@ -197,7 +204,7 @@ export function InviteModal({ open, onOpenChange, allowed, reason }: { open: boo
             </Button>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Department" error={depError} hint="Everyone in this invite joins it. Their manager is the department's manager.">
               {(id) => (
                 <Combobox

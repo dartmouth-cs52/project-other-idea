@@ -51,7 +51,7 @@ export function DeveloperPage() {
             <div className="flex flex-col gap-5">
               <ApiKeys onCreate={() => setCreating(true)} />
               <Webhooks />
-              <div className="grid gap-5 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                 <SigningSecret />
                 <UsageAlerts />
               </div>
@@ -222,7 +222,7 @@ function CreateKeyModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
         </FieldGrid>
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-2 text-[13px] font-medium">Scopes</legend>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {SCOPES.map((s) => (
               <Checkbox key={s.value} label={s.label} checked={scopes.includes(s.value)} onCheckedChange={(v) => setScopes((x) => (v ? [...x, s.value] : x.filter((y) => y !== s.value)))} />
             ))}
@@ -346,7 +346,7 @@ function WebhookModal({ value, onClose }: { value: Webhook | "new" | null; onClo
         </Field>
         <fieldset>
           <legend className="mb-2 text-[13px] font-medium">Events</legend>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {EVENTS.map((ev) => (
               <Checkbox key={ev} label={<span className="font-mono text-[12.5px]">{ev}</span>} checked={events.includes(ev)} onCheckedChange={(v) => setEvents((x) => (v ? [...x, ev] : x.filter((y) => y !== ev)))} />
             ))}

@@ -97,7 +97,7 @@ export function MultiSelect({ value, onChange, options, placeholder = "Add…", 
       <Popover
         open={open}
         onOpenChange={setOpen}
-        className="w-72 p-0"
+        className="w-72 max-w-[calc(100vw-1rem)] p-0"
         trigger={
           <button type="button" id={id} aria-label={ariaLabel} className="h-6 cursor-pointer rounded px-1.5 text-[12.5px] text-ink-3 hover:bg-sunken hover:text-ink">
             {placeholder}

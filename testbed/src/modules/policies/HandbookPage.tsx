@@ -34,7 +34,7 @@ export function HandbookPage() {
 function ReadOnly() {
   const current = useHandbook((s) => s.versions[0]);
   return (
-    <div className="grid gap-5 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
       <Card className="lg:col-span-2" title="Expense policy" description={`Version ${current.n}, updated ${date(current.at)}`}>
         {/* Our own stored handbook HTML, written by the editor below. */}
         <article className={prose} dangerouslySetInnerHTML={{ __html: current.html }} />
@@ -65,7 +65,7 @@ function Editor() {
   };
 
   return (
-    <div className="grid gap-5 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
       <div className="flex flex-col gap-3 lg:col-span-2">
         <div className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-2 text-[13px] text-ink-3">

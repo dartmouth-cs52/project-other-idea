@@ -143,10 +143,20 @@ export interface Opened {
  * the server would tell it: its look, and its acting when the site has it on.
  * `config` puts other settings in their place, such as acting for a test page.
  */
-export async function open(browser: Browser, set: GuideSet, path: string, answer: Answer, site?: SiteContext, config?: Partial<PublicSiteConfig>): Promise<Opened> {
+export async function open(
+  browser: Browser,
+  set: GuideSet,
+  path: string,
+  answer: Answer,
+  site?: SiteContext,
+  config?: Partial<PublicSiteConfig>,
+  device?: string,
+): Promise<Opened> {
   // A site that forbids scripts from elsewhere would block the tag. Its owner would allow it; here the rule is set aside.
   // On a site other people use, a service worker could send requests the net below never sees, so none is allowed to start.
-  const context = await browser.newContext({ bypassCSP: true, viewport: { width: 1366, height: 800 }, ...(set.sandbox ? {} : { serviceWorkers: "block" }) });
+  // `device` opens it as Playwright's phone or tablet of that name does, with its screen, touch and zoom, instead of a laptop's window.
+  const screen = device ? phone(device) : { viewport: { width: 1366, height: 800 } };
+  const context = await browser.newContext({ bypassCSP: true, ...screen, ...(set.sandbox ? {} : { serviceWorkers: "block" }) });
   // The net goes on first, so that every route added after it, the widget's own among them, is asked before it.
   const net = set.sandbox ? undefined : await watch(context, set);
   const api = set.hasTag ? set.origin : WIDGET_ORIGIN;
@@ -220,6 +230,14 @@ export async function open(browser: Browser, set: GuideSet, path: string, answer
   await dismiss(page, set.dismiss);
   await page.waitForTimeout(BEFORE_ASKING_MS);
   return { page, close: () => context.close(), ...(net ? { net } : {}) };
+}
+
+/** Playwright's description of a phone or tablet, by the name it gives it, like "iPhone 13". */
+function phone(name: string): Record<string, unknown> {
+  const { devices } = createRequire(import.meta.url)("playwright") as { devices: Record<string, Record<string, unknown>> };
+  const found = devices[name];
+  if (!found) throw new Error(`Playwright has no device called "${name}".`);
+  return found;
 }
 
 /**

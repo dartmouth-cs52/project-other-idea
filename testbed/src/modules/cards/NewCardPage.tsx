@@ -174,9 +174,9 @@ function IssueWizard() {
         description="Set who holds it, what kind it is, and how much it can spend. You can change limits later."
       />
       <UnsavedGuard when={dirty} />
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
         <div className="flex flex-col gap-5">
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <Stepper steps={STEPS} current={step} />
           </div>
           <Panel
@@ -257,8 +257,9 @@ function IssueWizard() {
                     <Field label="Apartment, suite or floor" optional>
                       {(id) => <Input id={id} value={d.line2} onChange={(e) => set("line2", e.target.value)} autoComplete="off" />}
                     </Field>
-                    <div className="grid grid-cols-[1fr_110px_120px] gap-3">
-                      <Field label="City" error={errors.city}>
+                    {/* City on a line of its own on a phone, with State and ZIP code under it. */}
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_110px_120px]">
+                      <Field label="City" error={errors.city} className="col-span-2 sm:col-span-1">
                         {(id) => <Input id={id} value={d.city} onChange={(e) => set("city", e.target.value)} aria-invalid={!!errors.city} />}
                       </Field>
                       <Field label="State" error={errors.state}>
@@ -293,7 +294,7 @@ function IssueWizard() {
 
             {step === 2 ? (
               <div className="flex flex-col gap-5">
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Field label="Spending limit" error={errors.amount}>
                     {(id) => <Input id={id} prefix="$" inputMode="decimal" value={d.amount} onChange={(e) => set("amount", e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" aria-invalid={!!errors.amount} />}
                   </Field>
@@ -469,7 +470,7 @@ export function RequestCardPage({ blocked }: { blocked?: string }) {
             <Field label="What's it for?" error={errors.purpose}>
               {(id) => <Input id={id} value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="e.g. Figma subscription" aria-invalid={!!errors.purpose} />}
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Expected spend" error={errors.amount}>
                 {(id) => <Input id={id} prefix="$" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} aria-invalid={!!errors.amount} />}
               </Field>

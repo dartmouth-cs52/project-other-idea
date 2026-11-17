@@ -39,7 +39,7 @@ export function SitesIndex({ me }: { me: Me }) {
         </Link>
       </PageHeader>
       <BillingNotice me={me} />
-      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {sites
           ? sites.map((site) => (
               <li key={site.id}>

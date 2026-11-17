@@ -45,6 +45,7 @@ Haptic loads from `http://localhost:4000/widget.js` with site `site_testbed`. Ru
 - Never show a full card number, account number, tax ID or secret unless the person presses Reveal. Show them masked by default.
 - Link between areas with real paths: a transaction links to its card, a card to its holder, a bill to its vendor.
 - No em dashes in UI copy or comments. Use a period or a comma.
+- Make it fit a phone. It is the live demo, and Haptic is tried on it from phones. Give a grid with breakpoint columns `grid-cols-1` below them, make a box that scrolls sideways `relative`, and put rows of fixed-width fields on two lines below `sm`. `npm run phone:check` checks every page at 320px and 390px, and CI runs it.
 
 ## Things a guide has to cope with
 

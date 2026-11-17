@@ -112,7 +112,7 @@ export async function start(
   pages: string | Record<string, string>,
   script: Script,
   path = "/",
-  settings: { acting?: PublicSiteConfig["acting"]; appearance?: Partial<PublicSiteConfig["appearance"]>; present?: boolean } = {},
+  settings: { acting?: PublicSiteConfig["acting"]; appearance?: Partial<PublicSiteConfig["appearance"]>; present?: boolean; device?: string } = {},
 ): Promise<Session> {
   const served = typeof pages === "string" ? { "/": pages } : pages;
   // The tag as a page that asks for presentation mode writes it: data-present="1", there before the widget's script runs.
@@ -147,6 +147,7 @@ export async function start(
     },
     undefined,
     { ...(settings.acting ? { acting: settings.acting } : {}), ...(settings.appearance ? { appearance: { ...DEFAULT_APPEARANCE, ...settings.appearance } } : {}) },
+    settings.device,
   );
   const until: Session["until"] = async (check, what, ms = 8000) => {
     for (const deadline = Date.now() + ms; Date.now() < deadline; ) {

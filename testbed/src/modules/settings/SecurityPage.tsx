@@ -21,7 +21,7 @@ export function SecurityPage() {
           <div className="flex flex-col gap-5">
             <RequireTwoFactor />
             <Sso />
-            <div className="grid gap-5 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               <SessionTimeout />
               <PasswordPolicy />
             </div>
@@ -279,7 +279,7 @@ function Sessions() {
         </Button>
       }
     >
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full min-w-[600px] text-[13px]">
           <thead className="bg-sunken text-left text-[12px] text-ink-3">
             <tr>

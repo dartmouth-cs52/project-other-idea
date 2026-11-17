@@ -103,7 +103,7 @@ export function LearnedStep({ site, pages, onChange, onBack, onNext }: { site: S
     >
       {list.length > 0 && (
         <section className="flex flex-col gap-3" aria-label="Pages read">
-          <ul className="grid gap-x-6 gap-y-0 rounded-xl border bg-card px-4 py-2 sm:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-x-6 gap-y-0 rounded-xl border bg-card px-4 py-2 sm:grid-cols-2">
             {(all ? list : list.slice(0, PAGES_SHOWN)).map((page) => (
               <li key={page.path} className="flex min-w-0 items-center justify-between gap-3 border-b py-2 text-sm last:border-b-0 sm:[&:nth-last-child(2):nth-child(odd)]:border-b-0">
                 <span className="min-w-0 truncate">

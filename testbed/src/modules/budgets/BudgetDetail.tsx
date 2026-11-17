@@ -168,7 +168,7 @@ function BudgetDetail({ budget }: { budget: Budget }) {
           <Stat label="Forecast, end of month" value={money(forecast, "USD", { compact: true })} delta={forecast > monthlyAmount ? { value: `${money(forecast - monthlyAmount, "USD", { compact: true })} over`, good: false } : { value: "Under budget", good: true }} />
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
           <Card title="Spend vs budget" description="Running total this month against an even pace" className="lg:col-span-2">
             <Progress value={p} tone={t} className="mb-4" />
             <div className="h-64">

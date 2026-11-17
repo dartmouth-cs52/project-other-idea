@@ -240,7 +240,7 @@ export function OnboardingPage() {
         </Link>
       </header>
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-10">
-        <div className="overflow-x-auto pb-1">
+        <div className="relative overflow-x-auto pb-1">
           <Stepper steps={STEPS} current={step} />
         </div>
         <section className="rounded-xl border border-line bg-panel shadow-sm">
@@ -308,7 +308,7 @@ export function OnboardingPage() {
                     { value: "physical", label: "Physical", description: "Arrives in 5 to 7 days.", icon: <CreditCard /> },
                   ]}
                 />
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Field label="Card nickname">{(id) => <Input id={id} value={card.nickname} onChange={(e) => setCard({ ...card, nickname: e.target.value })} />}</Field>
                   <Field label="Monthly limit" error={errors.limit}>
                     {(id) => <Input id={id} inputMode="numeric" prefix="$" value={card.limit} onChange={(e) => setCard({ ...card, limit: e.target.value.replace(/[^\d]/g, "") })} />}

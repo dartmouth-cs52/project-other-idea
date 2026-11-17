@@ -305,7 +305,7 @@ function Board({ items, people, onReject }: { items: Approval[]; people: Map<str
   return (
     <DndContext sensors={sensors} onDragStart={(e) => setDragging(items.find((x) => x.id === e.active.id) ?? null)} onDragCancel={() => setDragging(null)} onDragEnd={onDragEnd}>
       {/* Scrolls sideways on narrow screens. */}
-      <div className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-2">
+      <div className="relative -mx-1 flex gap-4 overflow-x-auto px-1 pb-2">
         {STAGES.map((s) => (
           <Column key={s.id} stage={s.id} label={s.label} hint={s.who} count={columns[s.id].length}>
             {columns[s.id].length === 0 ? <p className="px-2 py-6 text-center text-[12.5px] text-ink-3">{s.id === "done" ? "Nothing decided yet." : "Nothing at this stage."}</p> : null}

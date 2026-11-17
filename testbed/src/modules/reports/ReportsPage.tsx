@@ -130,7 +130,7 @@ function ReportsBody() {
           <h2 className="text-[15px] font-semibold">Start from a template</h2>
           <p className="text-[13px] text-ink-3">Each one opens in the report builder, where you can change anything before saving.</p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {TEMPLATES.map((t) => {
             const Icon = CHART_ICON[t.spec.chart];
             const locked = t.advanced && !advanced.enabled;

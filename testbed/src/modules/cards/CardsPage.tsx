@@ -222,7 +222,7 @@ function CardsBody({ view, scoped }: { view: View; scoped: Card[] }) {
 
   const toolbar = (
     <>
-      <div className="relative w-64">
+      <div className="relative w-full sm:w-64">
         <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-ink-3" />
         <Input aria-label="Search cards" placeholder="Search by name, holder or last 4" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} className="pl-8" />
       </div>
@@ -261,7 +261,7 @@ function CardsBody({ view, scoped }: { view: View; scoped: Card[] }) {
           {rows.length === 0 ? (
             <NoCards onClear={() => setFilters(NO_FILTERS)} />
           ) : (
-            <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {rows.slice(0, 48).map((c) => {
                 const rule = freezeRule(c);
                 return (
@@ -403,7 +403,7 @@ function FilterPopover({ filters, onChange, count }: { filters: Filters; onChang
   return (
     <Popover
       align="start"
-      className="w-80"
+      className="w-80 max-w-[calc(100vw-1rem)]"
       trigger={
         <Button size="sm">
           <Filter /> Filter

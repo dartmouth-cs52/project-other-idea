@@ -76,7 +76,7 @@ function DepartmentTree() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-lg border border-line bg-panel p-4 shadow-xs">
           <p className="text-[12.5px] text-ink-3">Departments</p>
           <p className="tabular text-[22px] font-semibold">{departments.length}</p>
@@ -106,103 +106,106 @@ function DepartmentTree() {
         }
         bodyClassName="p-0"
       >
-        <div role="treegrid" aria-label="Departments" className="text-[13px]">
-          <div role="row" className="grid grid-cols-[minmax(220px,1.4fr)_minmax(180px,1fr)_110px_140px_80px_48px] border-b border-line bg-sunken px-4 py-2 text-[12px] font-medium text-ink-3">
-            <span role="columnheader">Department</span>
-            <span role="columnheader">Manager</span>
-            <span role="columnheader" className="text-right">
-              People
-            </span>
-            <span role="columnheader" className="text-right">
-              Monthly budget
-            </span>
-            <span role="columnheader" className="text-right">
-              GL code
-            </span>
-            <span role="columnheader" className="sr-only">
-              Actions
-            </span>
-          </div>
-          {rows.map(({ d, level }) => {
-            const kids = childrenOf(d.id);
-            const open = !collapsed.includes(d.id);
-            const manager = d.managerId ? people.get(d.managerId) : undefined;
-            const direct = headcount.get(d.id) ?? 0;
-            const all = total(d);
-            const targets = departments.filter((x) => x.id !== d.parentId && !isUnder(x.id, d.id, deps)).sort((a, b) => a.name.localeCompare(b.name));
-            const items: MenuEntry[] = [
-              { label: "Edit department", icon: <Pencil />, disabled: !manage.allowed, onSelect: () => setEditing(d) },
-              // "Move to" opens a submenu of every department it could go under. On purpose.
-              {
-                label: "Move to",
-                icon: <FolderInput />,
-                disabled: !manage.allowed,
-                items: [
-                  ...(d.parentId ? [{ label: "Top level", onSelect: () => move(d, null) }, { separator: true, label: "" }] : []),
-                  ...targets.map((t) => ({ label: t.name, onSelect: () => move(d, t.id) })),
-                ],
-              },
-              { label: "View people", icon: <Users />, onSelect: () => navigate(`/people?department=${d.id}`) },
-              { separator: true, label: "" },
-              {
-                label: all ? `Delete (move its ${all} people first)` : "Delete department",
-                icon: <Trash2 />,
-                danger: true,
-                disabled: !manage.allowed || all > 0 || kids.length > 0,
-                onSelect: () => setDeleting(d),
-              },
-            ];
-            return (
-              <div
-                key={d.id}
-                role="row"
-                aria-level={level}
-                aria-expanded={kids.length ? open : undefined}
-                className="group grid grid-cols-[minmax(220px,1.4fr)_minmax(180px,1fr)_110px_140px_80px_48px] items-center border-b border-line px-4 py-2 last:border-0 hover:bg-sunken/50"
-              >
-                <span role="gridcell" className="flex min-w-0 items-center gap-1.5" style={{ paddingLeft: (level - 1) * 24 }}>
-                  {kids.length ? (
-                    <button
-                      type="button"
-                      aria-label={open ? `Collapse ${d.name}` : `Expand ${d.name}`}
-                      onClick={() => setCollapsed((c) => (open ? [...c, d.id] : c.filter((x) => x !== d.id)))}
-                      className="grid size-6 cursor-pointer place-items-center rounded text-ink-3 hover:bg-line hover:text-ink"
-                    >
-                      {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-                    </button>
-                  ) : (
-                    <span className="size-6" />
-                  )}
-                  <span className={cn("truncate", level === 1 && "font-medium")}>{d.name}</span>
-                  {kids.length ? <span className="text-xs text-ink-3">{kids.length === 1 ? "1 team" : `${kids.length} teams`}</span> : null}
-                </span>
-                <span role="gridcell" className="min-w-0">
-                  {manager ? (
-                    <Link to={`/people/${manager.id}`} className="block hover:underline">
-                      <Person person={manager} sub={manager.title} />
+        {/* Wider than a phone, so it scrolls sideways inside the card there. */}
+        <div className="relative overflow-x-auto">
+          <div role="treegrid" aria-label="Departments" className="min-w-[760px] text-[13px]">
+            <div role="row" className="grid grid-cols-[minmax(220px,1.4fr)_minmax(180px,1fr)_110px_140px_80px_48px] border-b border-line bg-sunken px-4 py-2 text-[12px] font-medium text-ink-3">
+              <span role="columnheader">Department</span>
+              <span role="columnheader">Manager</span>
+              <span role="columnheader" className="text-right">
+                People
+              </span>
+              <span role="columnheader" className="text-right">
+                Monthly budget
+              </span>
+              <span role="columnheader" className="text-right">
+                GL code
+              </span>
+              <span role="columnheader" className="sr-only">
+                Actions
+              </span>
+            </div>
+            {rows.map(({ d, level }) => {
+              const kids = childrenOf(d.id);
+              const open = !collapsed.includes(d.id);
+              const manager = d.managerId ? people.get(d.managerId) : undefined;
+              const direct = headcount.get(d.id) ?? 0;
+              const all = total(d);
+              const targets = departments.filter((x) => x.id !== d.parentId && !isUnder(x.id, d.id, deps)).sort((a, b) => a.name.localeCompare(b.name));
+              const items: MenuEntry[] = [
+                { label: "Edit department", icon: <Pencil />, disabled: !manage.allowed, onSelect: () => setEditing(d) },
+                // "Move to" opens a submenu of every department it could go under. On purpose.
+                {
+                  label: "Move to",
+                  icon: <FolderInput />,
+                  disabled: !manage.allowed,
+                  items: [
+                    ...(d.parentId ? [{ label: "Top level", onSelect: () => move(d, null) }, { separator: true, label: "" }] : []),
+                    ...targets.map((t) => ({ label: t.name, onSelect: () => move(d, t.id) })),
+                  ],
+                },
+                { label: "View people", icon: <Users />, onSelect: () => navigate(`/people?department=${d.id}`) },
+                { separator: true, label: "" },
+                {
+                  label: all ? `Delete (move its ${all} people first)` : "Delete department",
+                  icon: <Trash2 />,
+                  danger: true,
+                  disabled: !manage.allowed || all > 0 || kids.length > 0,
+                  onSelect: () => setDeleting(d),
+                },
+              ];
+              return (
+                <div
+                  key={d.id}
+                  role="row"
+                  aria-level={level}
+                  aria-expanded={kids.length ? open : undefined}
+                  className="group grid grid-cols-[minmax(220px,1.4fr)_minmax(180px,1fr)_110px_140px_80px_48px] items-center border-b border-line px-4 py-2 last:border-0 hover:bg-sunken/50"
+                >
+                  <span role="gridcell" className="flex min-w-0 items-center gap-1.5" style={{ paddingLeft: (level - 1) * 24 }}>
+                    {kids.length ? (
+                      <button
+                        type="button"
+                        aria-label={open ? `Collapse ${d.name}` : `Expand ${d.name}`}
+                        onClick={() => setCollapsed((c) => (open ? [...c, d.id] : c.filter((x) => x !== d.id)))}
+                        className="grid size-6 cursor-pointer place-items-center rounded text-ink-3 hover:bg-line hover:text-ink"
+                      >
+                        {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                      </button>
+                    ) : (
+                      <span className="size-6" />
+                    )}
+                    <span className={cn("truncate", level === 1 && "font-medium")}>{d.name}</span>
+                    {kids.length ? <span className="text-xs text-ink-3">{kids.length === 1 ? "1 team" : `${kids.length} teams`}</span> : null}
+                  </span>
+                  <span role="gridcell" className="min-w-0">
+                    {manager ? (
+                      <Link to={`/people/${manager.id}`} className="block hover:underline">
+                        <Person person={manager} sub={manager.title} />
+                      </Link>
+                    ) : (
+                      <span className="text-ink-3">No manager</span>
+                    )}
+                  </span>
+                  <span role="gridcell" className="tabular text-right">
+                    <Link to={`/people?department=${d.id}`} className="hover:underline">
+                      {all}
                     </Link>
-                  ) : (
-                    <span className="text-ink-3">No manager</span>
-                  )}
-                </span>
-                <span role="gridcell" className="tabular text-right">
-                  <Link to={`/people?department=${d.id}`} className="hover:underline">
-                    {all}
-                  </Link>
-                  {kids.length ? <span className="block text-[11.5px] text-ink-3">{direct} directly</span> : null}
-                </span>
-                <span role="gridcell" className="tabular text-right">
-                  {d.budgetMonthly ? money(d.budgetMonthly, "USD", { compact: true }) : <span className="text-ink-3">None</span>}
-                </span>
-                <span role="gridcell" className="text-right font-mono text-[12px] text-ink-3">
-                  {d.glCode}
-                </span>
-                <span role="gridcell" className="flex justify-end">
-                  <Menu label={`Actions for ${d.name}`} trigger={<IconButton icon={<MoreHorizontal />} label={`Actions for ${d.name}`} size="icon-sm" />} items={items} />
-                </span>
-              </div>
-            );
-          })}
+                    {kids.length ? <span className="block text-[11.5px] text-ink-3">{direct} directly</span> : null}
+                  </span>
+                  <span role="gridcell" className="tabular text-right">
+                    {d.budgetMonthly ? money(d.budgetMonthly, "USD", { compact: true }) : <span className="text-ink-3">None</span>}
+                  </span>
+                  <span role="gridcell" className="text-right font-mono text-[12px] text-ink-3">
+                    {d.glCode}
+                  </span>
+                  <span role="gridcell" className="flex justify-end">
+                    <Menu label={`Actions for ${d.name}`} trigger={<IconButton icon={<MoreHorizontal />} label={`Actions for ${d.name}`} size="icon-sm" />} items={items} />
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </Card>
 

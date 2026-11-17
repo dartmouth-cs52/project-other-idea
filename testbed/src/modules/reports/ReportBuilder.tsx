@@ -218,12 +218,12 @@ function Builder({ saved, initial }: { saved: SavedReport | undefined; initial: 
       />
 
       <DndContext sensors={sensors} onDragStart={(e) => setDragging(String(e.active.id).replace("field:", "") as FieldKey)} onDragEnd={onDragEnd} onDragCancel={() => setDragging(null)}>
-        <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
           <FieldsPanel spec={spec} advanced={advanced.enabled} onRows={setRows} onGroup={addGroup} onFilter={addFilter} />
 
           <div className="flex min-w-0 flex-col gap-5">
             <Card bodyClassName="flex flex-col gap-4">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <DropZone id="zone-group" label="Group by" hint={spec.groupBy.length > 1 ? "First field is rows, second is columns." : "Drag a field here, or use + next to it. Add two for a pivot."}>
                   {spec.groupBy.map((g, i) => (
                     <span key={g} className="inline-flex h-7 items-center gap-1.5 rounded-md bg-brand-soft pr-1 pl-2.5 text-[12.5px] font-medium text-brand">
@@ -467,7 +467,7 @@ function FilterChip({ filter, open, onOpenChange, onChange, onRemove }: { filter
       <Popover
         open={open}
         onOpenChange={onOpenChange}
-        className="w-72 p-0"
+        className="w-72 max-w-[calc(100vw-1rem)] p-0"
         trigger={
           <button type="button" className="h-full cursor-pointer rounded-l-md pr-1.5 pl-2.5 hover:bg-sunken">
             <span className="text-ink-3">{def.label}:</span> <span className={cn("font-medium", !filter.values.length && "text-warn")}>{summary}</span>

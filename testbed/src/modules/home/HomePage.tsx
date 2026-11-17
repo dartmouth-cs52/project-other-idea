@@ -104,7 +104,7 @@ function HomeBody() {
         </Link>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Card title="Spend over time" description="Cleared and pending card spend" className="lg:col-span-2" actions={null}>
           <SpendChart transactions={tx} />
         </Card>
@@ -113,13 +113,13 @@ function HomeBody() {
         </Card>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <SetupChecklist />
         <RecentActivity transactions={tx.slice(0, 8)} />
         <UpcomingBills bills={bills} />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <BudgetWatch />
         <LiveFeed />
       </div>

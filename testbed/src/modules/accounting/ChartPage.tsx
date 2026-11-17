@@ -95,7 +95,7 @@ function ChartBody({ onAdd }: { onAdd: (parentId: string) => void }) {
   return (
     <Card bodyClassName="p-0">
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-        <Input aria-label="Search accounts" placeholder="Search by code or name" className="w-64" value={q} onChange={(e) => setQ(e.target.value)} />
+        <Input aria-label="Search accounts" placeholder="Search by code or name" className="w-full sm:w-64" value={q} onChange={(e) => setQ(e.target.value)} />
         <Button size="sm" variant="ghost" onClick={() => setExpanded(new Set(accounts.map((a) => a.id)))}>
           Expand all
         </Button>
@@ -108,7 +108,7 @@ function ChartBody({ onAdd }: { onAdd: (parentId: string) => void }) {
         </span>
       </div>
       {/* Wider than the card, so it scrolls sideways inside it. The add button sits in the last column, on purpose. */}
-      <div className="overflow-x-auto" data-scroll="chart">
+      <div className="relative overflow-x-auto" data-scroll="chart">
         <table role="treegrid" aria-label="Chart of accounts" className="w-full min-w-[1480px] text-[13px]">
           <thead className="bg-sunken text-left text-[12px] text-ink-3">
             <tr>
@@ -241,7 +241,7 @@ function AddAccountModal({ parentId, open, onOpenChange }: { parentId: string | 
         </>
       }
     >
-      <div className="grid gap-3 sm:grid-cols-[120px_1fr]">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[120px_1fr]">
         <Field label="Parent account" className="sm:col-span-2">
           {(id) => <Combobox id={id} value={parent} onChange={setParent} options={accounts.map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} placeholder="None (top level)" />}
         </Field>
