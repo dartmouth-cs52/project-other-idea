@@ -5,6 +5,7 @@ import { TurnError } from "../src/server/model.ts";
 import { isBlocked, type ControlName } from "../src/shared/corrections.ts";
 import type { SiteContext } from "../src/shared/types.ts";
 import { modelAsker, parseModel, serverAsker, type Asker } from "./ask.ts";
+import { captionRow, shownAsCaption } from "./captions.ts";
 import { KINDS, loadCaseFiles, plausibleRange, score, type Case } from "./cases.ts";
 
 // Runs every benchmark case against one or more models and prints how often
@@ -68,6 +69,8 @@ interface Run {
   ms: number;
   msToTarget: number;
   said: string;
+  /** The widget shows `said` in a caption beside the pointer, not in the chat (captions.ts). */
+  captioned: boolean;
   servedBy: string;
   tokens?: { input: number; cacheRead: number; cacheWrite: number; output: number };
   error?: string;
@@ -193,6 +196,11 @@ async function main() {
   });
   console.table(summary);
 
+  // How long the sentence beside the pointer is, which the score above does not see (captions.ts).
+  const captions = askers.map(({ name }) => ({ model: name, ...captionRow(of(name, (run) => !run.error && run.captioned).map((run) => run.said)) }));
+  console.log("Captions beside the pointer:");
+  console.table(captions);
+
   // The same score, cut three ways. A column per model.
   const cut = (title: string, groups: { label: string; keep: (run: Run) => boolean }[]) => {
     const rows = groups
@@ -262,7 +270,7 @@ async function main() {
   const out = `${RESULTS_DIR}${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
   await writeFile(
     out,
-    JSON.stringify({ at: new Date().toISOString(), models: askers.map((asker) => asker.name), repeat, summary, bySite, byKind, bySplit, pages, trapped, steadiness, runs }, null, 2) + "\n",
+    JSON.stringify({ at: new Date().toISOString(), models: askers.map((asker) => asker.name), repeat, summary, captions, bySite, byKind, bySplit, pages, trapped, steadiness, runs }, null, 2) + "\n",
   );
   console.log(`\nEvery answer is in ${out}`);
 }
@@ -280,6 +288,7 @@ async function runOne(name: string, ask: Asker, { file, site, item, ruledOut }: 
       ms: asked.ms,
       msToTarget: asked.msToTarget,
       said: asked.reply.say,
+      captioned: shownAsCaption(asked.reply),
       servedBy: asked.servedBy,
       ...(asked.clean !== undefined ? { clean: asked.clean } : {}),
       ...(asked.broke !== undefined ? { broke: asked.broke } : {}),
@@ -289,7 +298,7 @@ async function runOne(name: string, ask: Asker, { file, site, item, ruledOut }: 
     // Bad credentials fail every call the same way, so there's no point going on.
     if (error instanceof TurnError && error.status === 500) throw error;
     const message = error instanceof Error ? error.message : String(error);
-    return { ...base, pass: false, statusAgrees: false, unlisted: !!item.expect.unlisted, trapped: false, why: "", ms: 0, msToTarget: 0, said: "", servedBy: "", error: message };
+    return { ...base, pass: false, statusAgrees: false, unlisted: !!item.expect.unlisted, trapped: false, why: "", ms: 0, msToTarget: 0, said: "", captioned: false, servedBy: "", error: message };
   }
 }
 

@@ -24,6 +24,7 @@ import { hostOf } from "@/lib/setup";
 import { site as haptic } from "@/lib/site";
 import { BILLING_HREF, NEW_SITE_HREF, SITES_HREF, TEAM_HREF, VIEWS, siteHref, type View } from "./nav";
 import { SiteIcon, leaveFor } from "./parts";
+import { PlanLink } from "./upgrade";
 
 type SiteRow = NonNullable<Me["sites"]>[number];
 
@@ -115,6 +116,8 @@ export function TopBar({ me, current, className }: { me?: Me; current?: SiteRow;
         )}
       </nav>
       {me && (
+        <div className="flex shrink-0 items-center gap-2">
+        {me.approved && <PlanLink me={me} />}
         <DropdownMenu>
           <DropdownMenuTrigger className={cn(CRUMB, "shrink-0 data-popup-open:bg-muted")} aria-label="Account">
             <span className="inline-flex size-6 items-center justify-center rounded-full bg-secondary text-xs font-medium uppercase">{(firstName(me.user.name) ?? me.user.email).slice(0, 1)}</span>
@@ -146,6 +149,7 @@ export function TopBar({ me, current, className }: { me?: Me; current?: SiteRow;
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       )}
     </header>
   );
