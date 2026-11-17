@@ -985,8 +985,10 @@ export class Ui {
 
   /** Show the ask box busy with a message, or back to the input when `text` is empty. `paused` adds Carry on beside Stop. */
   setBusy(text: string, paused = false) {
-    // The ask box had the keyboard, and goes: the keyboard stays in the panel, so what the visitor types next is not the page's.
-    const typing = text !== "" && !this.form.hidden && this.form.contains(this.host.shadowRoot?.activeElement ?? null);
+    // The ask box had the keyboard, and goes: the keyboard stays in the panel, so what the visitor types next is not the
+    // page's. Inside a list or menu of the page's that keeps the keyboard to itself (`captor`), it goes back to that, as
+    // it always has, so its Escape still closes it.
+    const typing = text !== "" && !this.captor && !this.form.hidden && this.form.contains(this.host.shadowRoot?.activeElement ?? null);
     this.form.hidden = text !== "";
     this.status.hidden = text === "";
     this.statusText.textContent = text;
