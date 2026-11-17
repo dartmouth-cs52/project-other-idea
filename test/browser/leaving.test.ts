@@ -45,7 +45,7 @@ for (const name of BROWSERS) {
       assert.deepEqual(reports(), [], "a pointer not yet used is not an ending yet");
       await tab.goto("about:blank");
       await until(() => reports().length > 0);
-      assert.deepEqual(reports(), [{ guide: harness.turns[0]?.guide, outcome: "shown", site: "site_test" }]);
+      assert.deepEqual(reports(), [{ guide: harness.turns[0]?.guide, outcome: "shown", step: 0, site: "site_test" }]);
       await tab.close();
     });
 

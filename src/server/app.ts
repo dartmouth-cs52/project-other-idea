@@ -283,6 +283,8 @@ function parseReport(body: unknown): GuideReport | undefined {
   if (typeof raw.site !== "string") return undefined;
   const report: GuideReport = { site: raw.site };
   if (GUIDE_OUTCOMES.includes(raw.outcome as GuideOutcome)) report.outcome = raw.outcome as GuideOutcome;
+  // Only with an outcome, and only a step a turn request could have carried (parseTurn takes 0 to 100).
+  if (report.outcome && Number.isInteger(raw.step) && (raw.step as number) >= 0 && (raw.step as number) <= 100) report.step = raw.step as number;
   if (typeof raw.helped === "boolean") report.helped = raw.helped;
   if (raw.handoff === true) report.handoff = true;
   return report.outcome || report.helped !== undefined || report.handoff ? report : undefined;
