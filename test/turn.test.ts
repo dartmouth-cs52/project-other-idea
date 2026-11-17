@@ -421,22 +421,42 @@ test("tidying leaves alone what only looks like stray text", async () => {
   assert.equal(tidySay("</br>"), "");
 });
 
-test("a sentence is cut at a sentence end when it is too long to show", async () => {
+test("a sentence is cut at a sentence end when it is too long to show, and never part-way through one", async () => {
   const { tidySay, SAY_MAX_CHARS, SAY_MAX_SENTENCES } = await import("../src/server/model.ts");
+  const { checkSay } = await import("../src/server/rules.ts");
   const many = Array.from({ length: 9 }, (_, index) => `This is sentence number ${index + 1}.`);
   assert.equal(tidySay(many.join(" ")), many.slice(0, SAY_MAX_SENTENCES).join(" "));
   // Two long sentences: the second would go past the limit, so only the first is shown.
   const long = `Click Reports in the left menu, ${"then look down the list ".repeat(8)}for the one you want.`;
   assert.ok(long.length < SAY_MAX_CHARS && long.length * 2 > SAY_MAX_CHARS);
   assert.equal(tidySay(`${long} ${long}`), long);
-  // One sentence with no end in reach is cut at a word, and says that it was.
+  // One sentence with no end in reach is not shown cut, with or without a mark that says so: nothing of it is shown, and the caller's own sentence stands in.
   const endless = "Click " + "the next one and ".repeat(40) + "stop.";
-  const cut = tidySay(endless);
-  assert.ok(cut.length <= SAY_MAX_CHARS, `${cut.length} characters`);
-  assert.match(cut, /^Click the next one and .* (and|one|next|the)…$/);
+  assert.equal(tidySay(endless), "");
+  // A whole sentence before it is what is shown.
+  assert.equal(tidySay(`Click Reports. ${endless}`), "Click Reports.");
   // Short forms with full stops in them do not count as sentence ends.
   const short = "Pick a format, e.g. the CSV one. It opens in Excel, i.e. as a spreadsheet. Then save it.";
   assert.equal(tidySay(short), short);
+  // Whatever is tidied fits the check that follows, so the check never cuts it again: long sentences in any mix come out whole or not at all.
+  const pieces = ["Click Next.", long, "Open the Team offsite card, then press Freeze card to stop new charges on it right away.", endless, "Then save it."];
+  for (const first of pieces) {
+    for (const second of pieces) {
+      for (const third of pieces) {
+        const wrote = `${first} ${second} ${third}`;
+        const { say } = checkSay(tidySay(wrote));
+        assert.ok(say.length <= SAY_MAX_CHARS, wrote);
+        assert.ok(say === "" || /[.!?]$/.test(say), `shown cut: ${JSON.stringify(say)}`);
+        assert.ok(wrote.startsWith(say) && (say === "" || say.length === wrote.length || wrote[say.length] === " "), `not whole sentences: ${JSON.stringify(say)}`);
+      }
+    }
+  }
+  // Scripts with a stop of their own end a sentence at it. One written with no spaces between words ends at the last phrase that fits.
+  const hindi = "बाईं ओर के मेनू में रिपोर्ट पर क्लिक करें। ";
+  assert.equal(tidySay(hindi.repeat(12)), hindi.repeat(SAY_MAX_SENTENCES).trim());
+  const thai = "คลิกรายงานในเมนูด้านซ้ายแล้วเลื่อนลงไปที่รายการที่คุณต้องการ ";
+  const shownThai = tidySay(thai.repeat(8));
+  assert.ok(shownThai.length > SAY_MAX_CHARS * 0.6 && shownThai.length <= SAY_MAX_CHARS && thai.repeat(8).startsWith(`${shownThai} `), shownThai);
 });
 
 // A visitor read "Selecting For someone else so the card goes to…" on Northpine on 17 November 2026, and that step took

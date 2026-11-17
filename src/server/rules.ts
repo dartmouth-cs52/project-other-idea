@@ -608,9 +608,12 @@ function sentences(text: string): string[] {
   return pieces.filter((piece) => piece.trim());
 }
 
-/** The most a visitor is shown. Of 1,555 live sentences, every one that was fine had at most four sentences and 258 characters. */
+/**
+ * The most a visitor is shown. Of 1,555 live sentences, every one that was fine had at most four sentences and 258
+ * characters. The length is the check's own (`checkSay`), so what has been tidied to it is never cut again there.
+ */
 export const SAY_MAX_SENTENCES = 4;
-export const SAY_MAX_CHARS = 300;
+export const SAY_MAX_CHARS = MAX_STEP_SAY;
 
 // The sentence is one string in the reply's JSON, and it is read only when the
 // whole reply has arrived. So nothing wrong with it comes from cutting a reply
@@ -734,9 +737,15 @@ function withoutLeftovers(text: string): string {
 }
 
 /** Where one sentence ends and the next begins. A lower-case letter after the stop means it was a short form, like "e.g.". */
-const BETWEEN_SENTENCES = /[.!?…]["'”’»)\]]*(?=\s+[^\s\p{Ll}])|[。！？]["”’」』）]*(?=.)/gsu;
+const BETWEEN_SENTENCES = /[.!?…]["'”’»)\]]*(?=\s+[^\s\p{Ll}])|[。！？।॥؟۔]["”’」』）]*(?=.)/gsu;
+/** A space in a script written with no spaces between words (Thai, Lao, Khmer, Burmese), where a space ends a phrase or a sentence. */
+const PHRASE_SPACE = /(?<=[\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}])\s+(?=[\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}])/gu;
 
-/** Keeps to the limits above, cutting after a whole sentence wherever one ends in time. */
+/**
+ * Keeps to the limits above, cutting after a whole sentence wherever one ends in time. A sentence is never shown cut
+ * off part-way: one that is longer than the limit by itself is not shown at all, and the caller's own sentence
+ * stands in for it. (In the scripts above, the last phrase that fits ends it.)
+ */
 function capped(text: string, maxChars: number): string {
   let sentences = 0;
   let cut = 0;
@@ -748,9 +757,9 @@ function capped(text: string, maxChars: number): string {
   }
   if (text.length <= maxChars) return text;
   if (cut) return text.slice(0, cut);
-  // One sentence longer than the limit: stop at a word, and show that there was more.
-  const room = text.slice(0, maxChars - 1);
-  return room.slice(0, Math.max(room.lastIndexOf(" "), 0) || room.length).replace(/[\s,;:(–-]+$/, "") + "…";
+  let phrase = 0;
+  for (const space of text.slice(0, maxChars).matchAll(PHRASE_SPACE)) phrase = space.index;
+  return text.slice(0, phrase);
 }
 
 /**
@@ -758,8 +767,9 @@ function capped(text: string, maxChars: number): string {
  * line: no tags, no characters without width, no blank lines or double
  * spaces, a space after every full stop, nothing left over after the last
  * sentence, and no longer than a caption can show. A sentence that was fine
- * comes out exactly as it went in. An answer in words (answers.ts) is given
- * more room than a step's caption with `maxChars`.
+ * comes out exactly as it went in, and no sentence comes out cut part-way.
+ * An answer in words (answers.ts) is given more room than a step's caption
+ * with `maxChars`.
  */
 export function tidySay(say: string, maxChars = SAY_MAX_CHARS): string {
   const prose = say
