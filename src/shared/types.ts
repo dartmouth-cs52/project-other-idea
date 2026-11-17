@@ -70,10 +70,16 @@ export interface SiteSource {
 }
 
 export interface Appearance {
-  /** Hex color for the pointer and its highlight. */
+  /** Hex color for the pointer and its highlight. Blue unless the company changes it, so it stands out on any page. */
   accent: string;
   position: "bottom-right" | "bottom-left";
   launcherLabel: string;
+  /**
+   * Hex color for the launcher, the button people press to ask. Not set means Ink.
+   * This is the part of the widget a company matches to its own site: the launcher
+   * should look like it belongs there, and the pointer should not.
+   */
+  launcher?: string;
 }
 
 export const DEFAULT_APPEARANCE: Appearance = { accent: "#1E6EF4", position: "bottom-right", launcherLabel: "Ask" };
@@ -397,6 +403,13 @@ export interface TurnRequest {
  */
 export const GUIDE_OUTCOMES = ["finished", "shown", "stopped", "nothing_to_point_at", "loop", "step_limit", "error", "answered", "not_covered", "sensitive", "off_topic", "blocked"] as const;
 export type GuideOutcome = (typeof GUIDE_OUTCOMES)[number];
+
+/**
+ * The model on record for a step the server answered by itself, without
+ * asking one: a step past the cap on acting. Such a step never starts a
+ * guide's record, and a guide is not finished on one (src/server/db.ts).
+ */
+export const NO_MODEL = "none";
 
 /** A guide id, as the widget makes it with crypto.randomUUID(). */
 export const GUIDE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;

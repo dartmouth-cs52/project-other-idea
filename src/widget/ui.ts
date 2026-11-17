@@ -105,7 +105,7 @@ button { font: inherit; cursor: pointer; }
    never moves it, so a pointer resting on the dot's edge can't make it grow and shrink in turn. */
 .launch.mini { width: 32px; height: 32px; }
 .launcher { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; min-width: 40px; border: 0; border-radius: 999px;
-  padding: 0 16px 0 14px; background: #1c1917; color: #fafaf9; font-weight: 500;
+  padding: 0 16px 0 14px; background: var(--launcher, #1c1917); color: var(--launcher-ink, #fafaf9); font-weight: 500;
   /* The faint light edge is lost on a light page and keeps it in sight on a dark one. */
   box-shadow: 0 0 0 1px rgba(250,250,249,.16), 0 4px 14px rgba(0,0,0,.22);
   transition: height .3s var(--glide), min-width .3s var(--glide), padding .3s var(--glide), gap .3s var(--glide),
@@ -508,6 +508,13 @@ export class Ui {
     this.glideMs = this.present ? PRESENT_GLIDE_MS : GLIDE_MS;
     this.host = document.createElement("haptic-root");
     this.host.style.setProperty("--accent", this.present ? strongAccent(appearance.accent) : appearance.accent);
+    // The launcher takes the site's own colour when the company chose one. Only a six-digit hex is used: a property
+    // set to anything a browser can't read would leave the launcher with no background at all.
+    const launcher = /^#[0-9a-f]{6}$/i.test(appearance.launcher ?? "") ? appearance.launcher! : undefined;
+    if (launcher) {
+      this.host.style.setProperty("--launcher", launcher);
+      this.host.style.setProperty("--launcher-ink", inkOn(launcher));
+    }
     const root = this.host.attachShadow({ mode: "open" });
     const side = appearance.position === "bottom-left" ? "left" : "right";
     // Built from elements and a stylesheet object, never from text: a page whose
@@ -1446,6 +1453,8 @@ export class Ui {
   private hideHelped() {
     this.helped.hidden = true;
     this.onHelped = undefined;
+    // The dock is shorter by the row that went. A caption with no target sits above it, so it comes back down with it.
+    this.placeSaid();
   }
 
   /** Places a caption with nothing to point at above the launcher, and above the panel when it is open. */
@@ -2048,6 +2057,24 @@ function isLayer(el: Element): boolean {
 /** Whether two boxes are the same, to the pixel. */
 function sameBox(a: Box, b: Box): boolean {
   return Math.abs(a.left - b.left) < 1 && Math.abs(a.top - b.top) < 1 && Math.abs(a.right - b.right) < 1 && Math.abs(a.bottom - b.bottom) < 1;
+}
+
+/** How bright a six-digit hex colour is, from 0 for black to 1 for white, as contrast is worked out from. */
+function luminance(hex: string): number {
+  const light = (channel: number) => {
+    const value = channel / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  const [r, g, b] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)) as [number, number, number];
+  return 0.2126 * light(r) + 0.7152 * light(g) + 0.0722 * light(b);
+}
+
+/** The words and mark on a launcher of this colour: Paper or Ink, whichever is easier to read on it. */
+export function inkOn(hex: string): string {
+  const fill = luminance(hex);
+  const onPaper = (luminance("#fafaf9") + 0.05) / (fill + 0.05);
+  const onInk = (fill + 0.05) / (luminance("#1c1917") + 0.05);
+  return onPaper >= onInk ? "#fafaf9" : "#1c1917";
 }
 
 /**
