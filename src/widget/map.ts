@@ -128,6 +128,8 @@ const here = () => normalizePath(location.pathname);
 
 class Mapper {
   private readonly panel: HTMLElement;
+  /** What each of the panel's buttons does, by its place in the row. */
+  private actions: (() => void)[] = [];
   private busy = false;
 
   constructor(
@@ -139,6 +141,33 @@ class Mapper {
     const style = document.createElement("style");
     style.textContent = PANEL_CSS;
     (parts.host.shadowRoot ?? parts.host).append(style, this.panel);
+    this.listen();
+  }
+
+  /**
+   * The widget's element cancels a press on any button in it and puts a fresh
+   * copy of the button in its place (keepPressesOurs in ui.ts), so a listener
+   * on the button itself never hears it. The panel acts when a press that began
+   * on one of its buttons ends there, and on a click that comes without a
+   * press, from the keyboard.
+   */
+  private listen() {
+    const buttonIn = (event: Event) => event.composedPath().find((node): node is HTMLButtonElement => node instanceof HTMLButtonElement && this.panel.contains(node));
+    const act = (button: HTMLButtonElement | undefined) => button && this.actions[Number(button.dataset.index)]?.();
+    let pressed: string | undefined;
+    let actedAt = -Infinity;
+    this.panel.addEventListener("pointerdown", (event) => (pressed = event.button === 0 ? buttonIn(event)?.dataset.index : undefined));
+    this.panel.addEventListener("pointerup", (event) => {
+      const button = buttonIn(event);
+      const was = pressed;
+      pressed = undefined;
+      if (!button || was === undefined || button.dataset.index !== was) return;
+      actedAt = performance.now();
+      act(button);
+    });
+    this.panel.addEventListener("click", (event) => {
+      if (performance.now() - actedAt > 500) act(buttonIn(event));
+    });
   }
 
   async begin() {
@@ -180,12 +209,13 @@ class Mapper {
     body.textContent = text;
     const row = document.createElement("div");
     row.className = "row";
-    buttons.forEach(([name, onClick], index) => {
+    this.actions = buttons.map(([, onClick]) => onClick);
+    buttons.forEach(([name], index) => {
       const button = document.createElement("button");
       button.type = "button";
       button.textContent = name;
+      button.dataset.index = String(index);
       if (index === 0) button.className = "main";
-      button.addEventListener("click", onClick);
       row.append(button);
     });
     this.panel.append(heading, body, row);
