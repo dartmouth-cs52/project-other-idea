@@ -26,11 +26,12 @@ import type { AskBox, Ui } from "./ui.ts";
 // the panel again. While they are away nothing of theirs listens on the page.
 
 const CSS = `
-.panel { position: relative; }
-/* Above the panel, lined up with its edge on the launcher's side, one pill a line. The column takes no press itself. */
-.suggest { position: absolute; bottom: calc(100% + 13px); right: -1px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
-  width: max-content; pointer-events: none; animation: suggest-in .2s var(--glide); }
-.dock.left .suggest { right: auto; left: -1px; align-items: flex-start; }
+/* In the launcher's column just above the panel, lined up with its edge on the launcher's side, one pill a line. The column
+   takes no press itself, and never shows without the panel. */
+.dock > .suggest { pointer-events: none; }
+.suggest { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; margin-bottom: 3px; animation: suggest-in .2s var(--glide); }
+.dock.left .suggest { align-items: flex-start; }
+.dock:has(> .panel[hidden]) > .suggest { display: none; }
 .suggest .pill { display: block; max-width: 100%; pointer-events: auto; border: 1px solid rgba(28,25,23,.1); border-radius: 999px; padding: 9px 16px;
   background: #fff; color: #1c1917; font-weight: 500; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   box-shadow: 0 6px 20px rgba(28,25,23,.12), 0 1px 3px rgba(28,25,23,.08); transition: background-color .15s ease-out, border-color .15s ease-out, color .15s ease-out; }
@@ -43,7 +44,7 @@ const CSS = `
 
 /** Presentation mode: larger type, as the caption and "What I did" are, so the room can read them. */
 const PRESENT_CSS = `
-.suggest { bottom: calc(100% + 17px); gap: 12px; }
+.suggest { margin-bottom: 7px; gap: 12px; }
 .suggest .pill { padding: 12px 22px; font-size: 20px; line-height: 28px; box-shadow: 0 10px 28px rgba(28,25,23,.16), 0 2px 4px rgba(28,25,23,.1); }
 .suggest .pill:focus-visible { outline-width: 3px; outline-offset: 3px; }
 `;
@@ -128,12 +129,10 @@ class Suggestions {
   private fit(): boolean {
     const pills = Array.from(this.group.querySelectorAll<HTMLButtonElement>(".pill"));
     this.group.hidden = false;
-    const panel = this.group.parentElement?.getBoundingClientRect();
-    if (panel) {
-      // As wide as the room between the panel's far edge and the other side of the window, so a long one is cut, not pushed off.
-      const right = !this.group.matches(".dock.left .suggest");
-      this.group.style.maxWidth = `${Math.max(0, right ? panel.right - SIDE_ROOM : window.innerWidth - panel.left - SIDE_ROOM)}px`;
-    }
+    const panel = this.box.panel.getBoundingClientRect();
+    // As wide as the room between the panel's far edge and the other side of the window, so a long one is cut, not pushed off.
+    const right = !this.group.matches(".dock.left .suggest");
+    this.group.style.maxWidth = `${Math.max(0, right ? panel.right - SIDE_ROOM : window.innerWidth - panel.left - SIDE_ROOM)}px`;
     const pinned = new Map<Element, boolean>();
     for (let count = pills.length; count > 0; count--) {
       // The stack keeps to the panel, so with one fewer the others move down: each count is laid out and looked at afresh.
@@ -169,9 +168,9 @@ class Suggestions {
     if (on) {
       document.addEventListener("pointerdown", this.pressedPage, { capture: true, passive: true });
       window.addEventListener("resize", this.look, { passive: true });
-      if (typeof ResizeObserver === "function" && this.group.parentElement) {
+      if (typeof ResizeObserver === "function") {
         this.resized = new ResizeObserver(this.look);
-        this.resized.observe(this.group.parentElement);
+        this.resized.observe(this.box.panel);
       }
     } else {
       document.removeEventListener("pointerdown", this.pressedPage, { capture: true });

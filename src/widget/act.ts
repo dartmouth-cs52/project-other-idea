@@ -122,7 +122,7 @@ export async function perform(step: ActStep, ctx: ActContext): Promise<Outcome> 
     // The last press let through on its name alone may have started a save that came back since: nothing more is done.
     const last = ctx.session.lastPress;
     ctx.session.lastPress = undefined;
-    if (last && sentAfter(last.armed)) return pressSentStop(last.name, last.described);
+    if (last && sentAfter(last.armed, ours(ctx))) return pressSentStop(last.name, last.described);
     return await act(run);
   } catch (error) {
     if (error instanceof Halt) return error.outcome(run);
@@ -371,7 +371,7 @@ async function pressAndLookOnce(run: Run, kind: "link" | "button"): Promise<Outc
     pressing = watchPopups(el);
     // Armed right before the first event of the press, so that nothing that happened on the way there counts.
     if (run.plan.tripwire && !run.wire) {
-      const wire = tripwire(el, run.session.host, { byStart: true });
+      const wire = tripwire(el, run.session.host, { byStart: true, ignoreOrigins: ours(run.ctx) });
       run.wire = { wire, at: Date.now(), from: addressNow(), leaving: signs.leaving };
       run.onEnd(() => wire.stop());
     }
@@ -571,7 +571,7 @@ async function setTick(run: Run): Promise<Outcome> {
   // Left as it was: nothing for What I did.
   if (now === want) return run.done(`${capital(run.name)} was already ${tickWord(kind, want, true)}, so you left it.`);
   const did = tickLine(el, kind, cleanText(run.plan.name, 60), want, !!run.plan.mine);
-  const wire = run.plan.tripwire ? tripwire(el, run.session.host) : undefined;
+  const wire = run.plan.tripwire ? tripwire(el, run.session.host, { ignoreOrigins: ours(run.ctx) }) : undefined;
   if (wire) run.onEnd(() => wire.stop());
   const startedAt = Date.now();
   run.listen(el);
@@ -637,6 +637,9 @@ function tickWord(kind: "checkbox" | "radio" | "switch", on: boolean, state: boo
   if (kind === "radio") return state ? (on ? "chosen" : "not chosen") : on ? "chose" : "cleared";
   return state ? (on ? "ticked" : "not ticked") : on ? "ticked" : "unticked";
 }
+
+/** Haptic's own server, whose requests the tripwire leaves out: the widget's own outline of a page is not the page sending anything. */
+const ours = (ctx: ActContext): string[] => (ctx.config.own ? [ctx.config.own] : []);
 
 /** Where the page is: its path, its query and its "#" part. A visit that moved it is one the page made. */
 const addressNow = () => location.pathname + location.search + location.hash;
@@ -799,7 +802,7 @@ async function chooseNative(run: Run, select: HTMLSelectElement): Promise<Outcom
   const point = await getThere(run, select, run.plan, EYE_MS);
   await hoverTo(run, point.x, point.y);
   run.check();
-  const wire = run.plan.tripwire ? tripwire(select, run.session.host) : undefined;
+  const wire = run.plan.tripwire ? tripwire(select, run.session.host, { ignoreOrigins: ours(run.ctx) }) : undefined;
   if (wire) run.onEnd(() => wire.stop());
   const startedAt = Date.now();
   run.listen(select);
@@ -903,7 +906,7 @@ async function chooseCustom(run: Run): Promise<Outcome> {
   // Read while the list is on show: once it closes, the option's lines may be gone.
   const lead = leadWords(option, optionText);
   const multiple = popup.querySelector('[aria-multiselectable="true"]') !== null || popup.getAttribute("aria-multiselectable") === "true";
-  const wire = run.plan.tripwire ? tripwire(trigger, run.session.host) : undefined;
+  const wire = run.plan.tripwire ? tripwire(trigger, run.session.host, { ignoreOrigins: ours(run.ctx) }) : undefined;
   if (wire) run.onEnd(() => wire.stop());
   const startedAt = Date.now();
   // What the field shows now, typed search included, so that a pick that changed nothing is not taken for one that took.

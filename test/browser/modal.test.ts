@@ -134,7 +134,7 @@ for (const name of BROWSERS) {
       await tab.click("#open");
       await movedTo(tab, "settings");
       await tab.locator("haptic-root .launcher").click();
-      await tab.locator("haptic-root .ask input").press("Escape");
+      await tab.locator("haptic-root .ask textarea").press("Escape");
       assert.equal(await tab.locator("haptic-root .panel").isHidden(), true, "our panel closed");
       assert.equal(await tab.evaluate(() => (document.getElementById("settings") as HTMLDialogElement).open), true, "the dialog stayed open");
       await tab.close();

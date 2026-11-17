@@ -399,7 +399,7 @@ export async function actOn(browser: Browser, set: GuideSet, guide: Guide, optio
     const data = (): Promise<string> => page!.evaluate(`localStorage.getItem("northpine-data") ?? ""`);
     const dataBefore = await data();
     await page.locator("haptic-root .launcher").click();
-    await page.locator("haptic-root .ask input").fill(question);
+    await page.locator("haptic-root .ask textarea").fill(question);
     await page.locator("haptic-root .panel .doit").click();
     let lastChange = Date.now();
     let lastAsked = asked;
@@ -703,7 +703,7 @@ export async function actLive(browser: Browser, set: GuideSet, guide: Guide, liv
     let known = await data();
     let hapticChanged = false;
     await page.locator("haptic-root .launcher").click();
-    await page.locator("haptic-root .ask input").fill(question);
+    await page.locator("haptic-root .ask textarea").fill(question);
     await page.locator("haptic-root .panel .doit").click();
     const doItAt = Date.now();
     let lastChange = Date.now();

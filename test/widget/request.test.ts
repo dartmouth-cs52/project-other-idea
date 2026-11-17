@@ -46,8 +46,8 @@ test("every question carries the widget's version and the date where the visitor
     await page.goto(`${ORIGIN}/orders`);
     await page.waitForSelector("haptic-root", { state: "attached" });
     await page.locator("haptic-root .launcher").click();
-    await page.locator("haptic-root .ask input").fill("how do I export my orders?");
-    await page.locator("haptic-root .ask input").press("Enter");
+    await page.locator("haptic-root .ask textarea").fill("how do I export my orders?");
+    await page.locator("haptic-root .ask textarea").press("Enter");
     for (const until = Date.now() + 10_000; !asked.length && Date.now() < until; ) await page.waitForTimeout(50);
 
     assert.equal(asked.length, 1, "the widget asked once");

@@ -126,7 +126,7 @@ test("the first Do it on a site says what will happen, and nothing is asked unti
     // Asked again on the same site: straight to work.
     await session.page.locator("haptic-root .caption .close").click();
     await session.untilState("finished");
-    await session.page.locator("haptic-root .ask input").fill("can you issue another card");
+    await session.page.locator("haptic-root .ask textarea").fill("can you issue another card");
     await session.page.locator("haptic-root .panel .doit").click();
     await session.untilAsked(2);
     assert.equal(session.requests[1]!.mode, "act");
@@ -140,7 +140,7 @@ test("the visitor's words only colour Do it: Enter still asks to be shown, in an
   const session = await start(CARD_FORM, (request) => (request.mode === "act" ? handOver(request, "Issue card", "Ready.") : words("Use the form.")), "/", { acting: { ...ACTING_ON, confirmFirst: false } });
   try {
     await session.page.locator("haptic-root .launcher").click();
-    const input = session.page.locator("haptic-root .ask input");
+    const input = session.page.locator("haptic-root .ask textarea");
     const nudged = () => session.page.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.querySelector(".panel")!.classList.contains("nudged"));
     await input.fill("how do I issue a card");
     assert.equal(await nudged(), false);
@@ -179,8 +179,8 @@ test("Do it shows only where acting is allowed: not on a site without it, not on
     try {
       await session.page.locator("haptic-root .launcher").click();
       assert.equal(await doItShown(session), false, `Do it shows on ${what}`);
-      await session.page.locator("haptic-root .ask input").fill("can you issue a card");
-      await session.page.locator("haptic-root .ask input").press("Control+Enter");
+      await session.page.locator("haptic-root .ask textarea").fill("can you issue a card");
+      await session.page.locator("haptic-root .ask textarea").press("Control+Enter");
       await session.page.waitForTimeout(500);
       assert.ok(session.requests.every((request) => request.mode === undefined), `act mode was asked for on ${what}`);
     } finally {
@@ -705,5 +705,77 @@ test("each press is shown: the pointer glides to it and a ripple marks it, and w
     } finally {
       await session.close();
     }
+  }
+});
+
+// What the tripwire counts after an opener ------------------------------------------------------------------------
+//
+// On Northpine, Do it from the Budgets list stopped right after pressing New budget, every time: "Pressing New budget
+// sent something to the site". The button only opens the form page, and the page sent nothing. The request seen was
+// the widget's own: on coming to a new page it posts that page's outline to Haptic's server, within the second the
+// tripwire watches. What Haptic sends to its own server is not the page sending something.
+
+/** A budgets list whose New budget opens the form on a new address, as a single-page app does. `then` runs on the press too. */
+const BUDGETS = (then = "") => `${WATCH}<h1 id="title">Budgets</h1><button id="new" type="button" data-watch>New budget</button>
+  <form id="form" hidden><label>Budget name <input id="name" data-watch></label></form>
+  <script>
+    window.pressedAt = 0;
+    document.getElementById('new').addEventListener('click', () => {
+      window.pressedAt = performance.now();
+      history.pushState({}, '', '/budgets/new');
+      document.getElementById('title').textContent = 'New budget';
+      document.getElementById('new').remove();
+      document.getElementById('form').hidden = false;
+      ${then}
+    });
+  </script>`;
+
+/** The requests the page's own list has from the press on: where each went, and how long after the press it started. */
+const sentSincePress = (session: Session): Promise<{ to: string; after: number }[]> =>
+  session.page.evaluate(() => {
+    const at = (window as unknown as { pressedAt: number }).pressedAt;
+    return (performance.getEntriesByType("resource") as PerformanceResourceTiming[])
+      .filter((entry) => at && entry.startTime >= at - 50 && ["fetch", "xmlhttprequest", "beacon"].includes(entry.initiatorType))
+      .map((entry) => ({ to: new URL(entry.name).origin === location.origin ? new URL(entry.name).pathname : new URL(entry.name).origin + new URL(entry.name).pathname, after: Math.round(entry.startTime - at) }));
+  });
+
+test("an opener that takes the page to its form carries on when the only request in the second after it is Haptic's own", async () => {
+  const session = await start(
+    { "/budgets": BUDGETS() },
+    (request, index) => (index === 0 ? doing(request, "New budget", "click", "Clicking New budget to open the form.") : index === 1 ? doing(request, "Budget name", "type", "Typing Marketing.", "Marketing") : { ...words("Done."), mode: "act" }),
+    "/budgets",
+    { acting: ACTING_ON },
+  );
+  try {
+    await session.ask("can you make a new budget called Marketing", { act: true });
+    const second = await session.untilAsked(2, 15_000);
+    assert.match(second.event ?? "", /^You clicked button "New budget"\./);
+    // The widget did post the new page's outline to its own server within the second, which is what stopped it before.
+    const sent = await sentSincePress(session);
+    assert.ok(sent.some((request) => /\/v1\/outline$/.test(request.to) && request.after < 1000), `the outline was not posted in the second after the press: ${JSON.stringify(sent)}`);
+    assert.deepEqual(sent.filter((request) => request.to.startsWith("/")), [], "the page itself sent something");
+    await session.untilState("finished", 15_000);
+    assert.equal(await session.page.inputValue("#name"), "Marketing");
+    assert.doesNotMatch(await session.caption(), /sent something/);
+  } finally {
+    await session.close();
+  }
+});
+
+test("an opener whose press makes the page send a POST still stops acting, with the visitor told", async () => {
+  const session = await start(
+    { "/budgets": BUDGETS(`fetch('/data/0', { method: 'POST', body: '{}' });`) },
+    (request, index) => (index === 0 ? doing(request, "New budget", "click", "Clicking New budget to open the form.") : doing(request, "Budget name", "type", "Typing Marketing.", "Marketing")),
+    "/budgets",
+    { acting: ACTING_ON },
+  );
+  try {
+    await session.ask("can you make a new budget called Marketing", { act: true });
+    await session.untilState("finished", 15_000);
+    assert.equal(await session.caption(), "Pressing New budget sent something to the site, so I've stopped. Check that nothing was saved before going on.");
+    assert.equal(session.requests.length, 1, "acting asked for another step after the page sent something");
+    assert.equal(await session.page.inputValue("#name"), "");
+  } finally {
+    await session.close();
   }
 });

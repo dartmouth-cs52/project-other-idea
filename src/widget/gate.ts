@@ -75,6 +75,12 @@ export interface GateConfig {
   acting?: Omit<ActingSettings, "enabled">;
   /** `data-acting="off"` on the script tag. */
   pageOff?: boolean;
+  /**
+   * Haptic's own server, as an origin: where the widget's script came from. What the widget sends there (the outline
+   * of a page it has just come to, a step asked for, how a guide ended) is Haptic's, never the page's, and the
+   * tripwire does not count it.
+   */
+  own?: string;
 }
 
 /**
@@ -1211,8 +1217,8 @@ export function keyAllowed(el: Element, key: string, plan: ActPlan, session: Gat
  * that also came back within that second; a press's (`byStart`) counts one
  * that went out in it, however long it took.
  */
-function sentInWindow(entry: PerformanceResourceTiming, armed: number, byStart: boolean): boolean {
-  if (!DATA_REQUEST.has(entry.initiatorType)) return false;
+function sentInWindow(entry: PerformanceResourceTiming, armed: number, byStart: boolean, ignoreOrigins: string[] = []): boolean {
+  if (!DATA_REQUEST.has(entry.initiatorType) || fromOrigins(entry.name, ignoreOrigins)) return false;
   if (entry.startTime < armed - 50 || entry.startTime > armed + TRIPWIRE_MS) return false;
   return byStart || entry.responseEnd <= armed + TRIPWIRE_MS;
 }
@@ -1223,9 +1229,19 @@ function sentInWindow(entry: PerformanceResourceTiming, armed: number, byStart: 
  * press, found before Haptic acts again. Read from the page's own list of
  * finished requests; nothing is installed.
  */
-export function sentAfter(armed: number): boolean {
+export function sentAfter(armed: number, ignoreOrigins: string[] = []): boolean {
   try {
-    return (performance.getEntriesByType("resource") as PerformanceResourceTiming[]).some((entry) => sentInWindow(entry, armed, true));
+    return (performance.getEntriesByType("resource") as PerformanceResourceTiming[]).some((entry) => sentInWindow(entry, armed, true, ignoreOrigins));
+  } catch {
+    return false;
+  }
+}
+
+/** Whether an address is on one of these origins: Haptic's own server, whose requests are never the page's. */
+function fromOrigins(url: string, origins: string[]): boolean {
+  if (!origins.length) return false;
+  try {
+    return origins.includes(new URL(url, location.href).origin);
   } catch {
     return false;
   }
@@ -1248,18 +1264,10 @@ export function tripwire(el: Element, host: Element, options: { ignoreOrigins?: 
   let tripped = false;
   let resources: PerformanceObserver | undefined;
   let mutations: MutationObserver | undefined;
-  const ignored = (url: string) => {
-    try {
-      return (options.ignoreOrigins ?? []).includes(new URL(url, location.href).origin);
-    } catch {
-      return false;
-    }
-  };
   try {
     resources = new PerformanceObserver((list) => {
       for (const entry of list.getEntries() as PerformanceResourceTiming[]) {
-        if (!DATA_REQUEST.has(entry.initiatorType) || ignored(entry.name)) continue;
-        if (sentInWindow(entry, armed, !!options.byStart)) tripped = true;
+        if (sentInWindow(entry, armed, !!options.byStart, options.ignoreOrigins)) tripped = true;
       }
     });
     resources.observe({ type: "resource", buffered: false });

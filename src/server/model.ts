@@ -10,7 +10,7 @@ import type { Ceiling } from "./budget.ts";
 import { gaveUpNote, judgeNamed, namedButNotDone, namedButNotDoneNote, namedButNotPointed, namedButNotPointedNote, namedForTheGoal, namedForTheGoalNote, pressLeftToVisitor, wantsTheWay, type NamedVerdict } from "./check.ts";
 import { costOf } from "./prices.ts";
 import { answersOn, articlesOf, buildSystemPrompt, buildUserMessage } from "./prompt.ts";
-import { checkSay, SAY_MAX_CHARS, SAY_MAX_SENTENCES, SAY_WITHOUT_WORDS, tidySay, withoutBlame, type Rule } from "./rules.ts";
+import { checkSay, SAY_MAX_CHARS, SAY_MAX_SENTENCES, SAY_WITHOUT_WORDS, tidySay, withoutBlame, withoutReplyEnd, type Rule } from "./rules.ts";
 
 export { SAY_MAX_CHARS, SAY_MAX_SENTENCES, SAY_WITHOUT_WORDS, tidySay };
 
@@ -480,12 +480,15 @@ export async function measureTurn(
     }
   }
 
-  const wrote = answer.reply.say;
+  const wrote = answer.wrote ?? answer.reply.say;
   let finished: Finished;
+  /** None of the model's sentence could be shown, and a fixed one stands in for it. */
+  let wordless = false;
   if (answer.declined) finished = declinedReply(site, answers);
   else if (answers) finished = finishAnswer(site, request, answer.reply);
   else {
     const { say, broke } = checkSay(tidySay(wrote));
+    wordless = !say;
     // Nothing fit to show was left. The pointer, if there is one, still says where to go.
     finished = { reply: { ...asStep(answer.reply), say: say || (answer.reply.target ? SAY_WITHOUT_WORDS.pointing : SAY_WITHOUT_WORDS.nothing) }, cited: [], broke };
   }
@@ -500,6 +503,8 @@ export async function measureTurn(
       reply = { ...reply, do: "click", enter: null, say: pressed.say };
     }
     reply = { ...checked(asAct(reply), request, acting.settings.commitWords), mode: "act" };
+    // "This is the one to use." tells the visitor to use it. On a step Haptic does itself it says what Haptic is doing.
+    if (wordless && reply.do) reply = { ...reply, say: doingSay(reply.do, request.snapshot.elements.find((element) => element.id === reply.target)) };
     answer.acting = { ...actingMeasure, modelDo, ...(pressed ? { converted: true as const } : {}) };
   } else {
     // An answer's reply is already only its own fields (answers.ts). A guide's is its three.
@@ -536,6 +541,31 @@ export async function measureTurn(
   };
 }
 
+/** What Haptic is doing to a control, in words of its own, for each thing it can do. With the control's name: "Clicking Next." */
+const DOING: Record<Act, [named: string, unnamed: string]> = {
+  click: ["Clicking", "Clicking this one."],
+  type: ["Typing in", "Typing here."],
+  choose: ["Choosing in", "Choosing here."],
+  check: ["Ticking", "Ticking this one."],
+  uncheck: ["Unticking", "Unticking this one."],
+  press_enter: ["Pressing Enter in", "Pressing Enter here."],
+};
+/** The longest name of a control said back in such a sentence. A longer one is a description, not a name. */
+const MAX_NAMED = 40;
+
+/**
+ * The sentence for a step Haptic does when none of the model's own could be shown: what it is doing, to which
+ * control. The control's name is the page's text, so the sentence is held to the same rules as any other, and
+ * without a name that passes them it names nothing.
+ */
+function doingSay(act: Act, element: SnapElement | undefined): string {
+  const [named, unnamed] = DOING[act];
+  const name = (element?.label ?? "").replace(/\s+/g, " ").trim();
+  if (!name || name.length > MAX_NAMED) return unnamed;
+  const sentence = `${named} ${name}.`;
+  return checkSay(tidySay(sentence)).say === sentence ? sentence : unnamed;
+}
+
 /** A reply as the model wrote it, as a step: the fields of a guide's or an act reply, and none of an answer's. */
 function asStep(raw: ModelReply): TurnReply {
   const step: TurnReply = { target: raw.target, status: raw.status, say: raw.say };
@@ -554,6 +584,8 @@ function withoutMode(request: TurnRequest): TurnRequest {
 /** What the model returned, before the server has checked it. */
 interface Answer {
   reply: ModelReply;
+  /** The sentence exactly as the model wrote it, when the reading took the reply's own ending off it (`claudeTurn`). */
+  wrote?: string;
   /** The model that answered. After a fallback it is not the one asked for. */
   model: string;
   tokens?: TurnMeasure["tokens"];
@@ -668,7 +700,16 @@ async function claudeTurn(
   };
   if (response.stop_reason === "refusal") return { reply: { target: null, status: "stuck", say: SAY_WITHOUT_WORDS.nothing }, model: response.model, tokens, usd, declined: true };
   if (!response.parsed_output) throw new TurnError(502, `The model's reply couldn't be read (stop reason: ${response.stop_reason}).`, usd);
-  return { reply: response.parsed_output, model: response.model, tokens, usd };
+  // The reply is read whole, as JSON the provider's grammar holds to its shape, and its sentence is the last string in
+  // it. That string ends only at a plain quote mark, so a model that closes the reply its own way first (a brace, a
+  // bracket, the end of a code fence) has written that inside the sentence (rules.ts). The sentence is read up to
+  // there, so that the second look, the checks and the visitor all get the sentence and never the reply's closing.
+  const read = response.parsed_output;
+  const say = withoutReplyEnd(read.say);
+  if (say === read.say) return { reply: read, model: response.model, tokens, usd };
+  // Counts only: the server's log holds nothing the model wrote.
+  console.warn(`turn ${site.id} step ${request.step}: the reply's own ending was written into its sentence (${read.say.length - say.length} characters), and was taken off.`);
+  return { reply: { ...read, say }, wrote: read.say, model: response.model, tokens, usd };
 }
 
 /**

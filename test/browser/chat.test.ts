@@ -104,8 +104,8 @@ for (const name of BROWSERS) {
       const about = part(tab, ".about");
       assert.equal((await about.textContent())?.trim(), "Haptic is an AI guide and can be wrong.");
       assert.equal(await about.locator("a").getAttribute("href"), "https://joinhaptic.com/privacy/");
-      await part(tab, ".ask input").fill("invite someone");
-      await part(tab, ".ask input").press("Enter");
+      await part(tab, ".ask textarea").fill("invite someone");
+      await part(tab, ".ask textarea").press("Enter");
       assert.ok(await ringAround(tab, "#invite"));
       assert.equal(await about.isVisible(), true, "it is still there while the pointer shows a step");
     });
@@ -119,7 +119,7 @@ for (const name of BROWSERS) {
       await untilState(tab, "asking");
       assert.equal(await part(tab, ".question").textContent(), "invite someone");
       assert.equal(await statusLine(tab), "thinking: Thinking");
-      assert.equal(await part(tab, ".ask input").inputValue(), "", "the ask box is empty again, and still there");
+      assert.equal(await part(tab, ".ask textarea").inputValue(), "", "the ask box is empty again, and still there");
       assert.equal(await part(tab, ".ask").isVisible(), true);
       assert.equal(await part(tab, ".stop").isVisible(), true, "its button is the way to stop");
       assert.equal(await part(tab, ".send").isVisible(), false);
@@ -229,8 +229,8 @@ for (const name of BROWSERS) {
       await part(tab, ".launcher").click();
       assert.equal((await veil(tab)).display, "none", "with no glow on, its element is not displayed");
       await watchClasses(tab);
-      await part(tab, ".ask input").fill("invite someone");
-      await part(tab, ".ask input").press("Enter");
+      await part(tab, ".ask textarea").fill("invite someone");
+      await part(tab, ".ask textarea").press("Enter");
       const glow = tab.locator("haptic-veil .glow");
       await glow.waitFor({ state: "attached" });
       assert.equal(await guideState(tab), "asking");
@@ -374,24 +374,24 @@ for (const name of BROWSERS) {
       await part(tab, ".doit").click();
       assert.equal(await hint.textContent(), "Type what you want Haptic to do first, then press Do it.");
       assert.equal(await hint.isVisible(), true);
-      assert.equal(await tab.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.activeElement?.matches(".ask input")), true, "the keyboard is in the ask box");
+      assert.equal(await tab.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.activeElement?.matches(".ask textarea")), true, "the keyboard is in the ask box");
       // Typing takes it away.
-      await part(tab, ".ask input").pressSequentially("in");
+      await part(tab, ".ask textarea").pressSequentially("in");
       assert.equal(await hint.isVisible(), false);
-      await part(tab, ".ask input").fill("");
-      await part(tab, ".ask input").press("Enter");
+      await part(tab, ".ask textarea").fill("");
+      await part(tab, ".ask textarea").press("Enter");
       assert.equal(await hint.textContent(), "Type what you want to do first, then send it.");
       await part(tab, ".send").click();
       assert.equal(await hint.isVisible(), true);
       // Read out to a screen reader, and named as what the box needs.
       assert.equal(await hint.getAttribute("aria-live"), "polite");
-      assert.equal(await part(tab, ".ask input").getAttribute("aria-describedby"), await hint.getAttribute("id"));
+      assert.equal(await part(tab, ".ask textarea").getAttribute("aria-describedby"), await hint.getAttribute("id"));
       await sleep(300);
       assert.equal(harness.turns.length, 0, "nothing was asked");
       // A question sent takes it away.
       harness.script = () => new Promise(() => {});
-      await part(tab, ".ask input").fill("invite someone");
-      await part(tab, ".ask input").press("Enter");
+      await part(tab, ".ask textarea").fill("invite someone");
+      await part(tab, ".ask textarea").press("Enter");
       await turns(harness, 1);
       assert.equal(await hint.isVisible(), false);
     });

@@ -1425,7 +1425,7 @@ export class Guide {
    * The pointer is up and it is the visitor's turn. The chat stays open, as it does from the question to the last
    * step, and says so: it does not go on saying "Thinking" from the question just answered, which reads as Haptic
    * still working while it waits for them. The way to stop is in its ask box. If it would cover the control or its
-   * caption, it moves to the other side of the window while the pointer is there (Ui.keepLauncherOff).
+   * caption, it moves to the other side of the window while the pointer is there (Ui.settle).
    */
   private pointingNow() {
     this.ui.setBusy(SHOWING);

@@ -155,7 +155,7 @@ export async function start(
       const page = opened.page;
       // A guide that ended leaves the ask box open when it asks whether it helped.
       if (!(await page.locator("haptic-root .panel").isVisible())) await page.locator("haptic-root .launcher").click();
-      await page.locator("haptic-root .ask input").fill(goal);
+      await page.locator("haptic-root .ask textarea").fill(goal);
       await page.locator("haptic-root .panel .doit").click();
       const go = page.locator("haptic-root .panel .first .go");
       if (how.go !== false && (await go.isVisible())) await go.click();
