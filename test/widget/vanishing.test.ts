@@ -339,6 +339,81 @@ test("a dialog the page opens over the control by itself is noticed, and the ste
   }
 });
 
+// A page that keeps taking the pointed control away --------------------------------------------------------------
+//
+// From the review of 42ecfb6 (N9): a page that draws its button again under a new name every 900 ms. Each time, the
+// pointer's control was gone, and the next step was asked for: 32 requests in 40 seconds, until the guide's twenty
+// steps ran out. Three such questions in half a minute are enough. The model here answers at once, so that its
+// answer is not about a control that has gone again by the time it comes, which is another path with its own limit.
+
+/** Every ending the widget has reported, in order. */
+function endings(session: Session): unknown[] {
+  const sent: unknown[] = [];
+  session.page.on("request", (request: { url(): string; postData(): string | null }) => {
+    if (!/\/v1\/guides\/[^/]+\/report$/.test(request.url())) return;
+    const outcome = (JSON.parse(request.postData() ?? "{}") as { outcome?: string }).outcome;
+    if (outcome) sent.push(outcome);
+  });
+  return sent;
+}
+
+test("a page that keeps replacing the pointed control is asked about again three times, then the guide stops and says why", async () => {
+  const page = `<main><h1>Team</h1><div id="box"><button type="button">Invite</button></div></main>
+    <script>let n = 0; setInterval(() => { document.getElementById('box').innerHTML = '<button type="button">Invite ' + ++n + '</button>'; }, 900);</script>`;
+  const session = await start(page, (request) => {
+    const invite = request.snapshot.elements.find((element) => /^Invite/.test(element.label));
+    return invite ? { target: invite.id, status: "continue", say: "Click Invite." } : words("Wait for Invite to come back.", "continue");
+  });
+  const ended = endings(session);
+  try {
+    await session.ask("how do I invite someone");
+    await session.untilState("finished", 20_000);
+    assert.equal((await shown(session)).caption, "This page keeps taking away what I point at, so I've stopped for now. Ask again once it settles.");
+    assert.equal((await shown(session)).pointer, false, "the pointer was left up");
+    // The first question and three more. One whose control had gone again by the time its answer came is asked once
+    // more on top, as it always was, so a few more are allowed for.
+    const asked = session.requests.length;
+    assert.ok(asked >= 4 && asked <= 8, `${asked} questions were asked`);
+    // Three controls that went were asked about, each by its own name. The fourth ended the guide.
+    const went = new Set(session.requests.map((request) => request.event ?? "").filter((event) => / is no longer on the page\.$/.test(event)));
+    assert.equal(went.size, 3, JSON.stringify(session.requests.map((request) => request.event)));
+    await session.page.waitForTimeout(3000);
+    assert.equal(session.requests.length, asked, "it asked again after it stopped");
+    assert.deepEqual(ended, ["loop"]);
+  } finally {
+    await session.close();
+  }
+});
+
+test("a control the page draws again and again is pointed at on each new node, with no question and no stopping", async () => {
+  const page = `<main><h1>Team</h1><div id="box"><button type="button">Invite</button></div></main>
+    <script>setInterval(() => { document.getElementById('box').innerHTML = '<button type="button">Invite</button>'; }, 400);</script>`;
+  const session = await start(page, (request, index) => (index === 0 ? point(request, "Invite", "Click Invite.") : words("Done.")));
+  try {
+    await session.ask("how do I invite someone");
+    await session.untilState("pointing");
+    // Ten times and more: well past what would stop a guide whose control really went.
+    await session.page.waitForTimeout(4500);
+    assert.equal(session.requests.length, 1);
+    assert.notEqual(await session.state(), "finished");
+    // Between one drawing and the next the pointer may be down for a moment. It comes back on the Invite that is there.
+    await session.until(
+      async () =>
+        (await session.state()) === "pointing" &&
+        (await shown(session)).caption === "Click Invite." &&
+        (await session.page.evaluate(() => !!(document.querySelector("haptic-root") as Element & { pointedAt?: Element }).pointedAt?.isConnected)),
+      "the pointer and its sentence on the Invite now on the page",
+      2000,
+    );
+    // And the visitor's click on it is still heard as the step.
+    await session.page.locator("#box button").click();
+    const second = await session.untilAsked(2, 4000);
+    assert.match(second.event ?? "", /clicked button "Invite"/);
+  } finally {
+    await session.close();
+  }
+});
+
 // A row's action that shows only while the mouse is over the row ------------------------------------------------
 
 for (const [what, extra] of [

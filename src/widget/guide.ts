@@ -78,6 +78,17 @@ const MAX_AGAIN = 2;
 const MAX_MOVES = 3;
 const MOVES_MS = 30_000;
 const MOVES_SAY = "This page keeps changing its address, so I've stopped for now. Ask again once it settles.";
+/**
+ * How many times a guide asks again because the control its pointer was on
+ * went, or was covered, with nothing done to it, within `MOVES_MS`. A page
+ * that keeps replacing what is pointed at was asked about at each
+ * replacement, as far as the guide's twenty steps: 32 requests in 40 seconds
+ * for one that draws its button under a new name every 900 ms. Past it, the
+ * guide stops with `GONE_SAY`. A control the page only drew again is pointed
+ * at on its new node with no question, and does not count.
+ */
+const MAX_GONE = 3;
+const GONE_SAY = "This page keeps taking away what I point at, so I've stopped for now. Ask again once it settles.";
 /** How long after the visitor's click on a list's control the list is looked for, when it is their turn to pick from it. */
 const LIST_OPENS_MS = 200;
 /** How the visitor is named to the model while Haptic acts: Haptic's own steps are "You". */
@@ -349,6 +360,8 @@ export class Guide {
   private didOnShow?: { session: ActSession; closing: string; commit: string };
   /** When this guide asked again because the address changed under a question, and in which run: see `MAX_MOVES`. */
   private moves: { run: number; at: number }[] = [];
+  /** When this guide asked again because the control its pointer was on went or was covered, and in which run: see `MAX_GONE`. */
+  private gone: { run: number; at: number }[] = [];
 
   constructor(
     private readonly ui: Ui,
@@ -690,6 +703,16 @@ export class Guide {
     this.closings = 0;
     this.unconfirmed = undefined;
     forget();
+  }
+
+  /**
+   * Notes that the control the pointer was on went or was covered with nothing done to it, and that the next step is
+   * about to be asked for because of it. True when that is once too often for one guide in so short a time: `MAX_GONE`.
+   */
+  private goneOnceMore(run: number): boolean {
+    const now = Date.now();
+    this.gone = [...this.gone.filter((one) => one.run === run && now - one.at < MOVES_MS), { run, at: now }];
+    return this.gone.length > MAX_GONE;
   }
 
   /** Asks for the next step. Whatever goes wrong ends the guide with a sentence, so it is never left asking, and nothing is thrown into the page. */
@@ -1155,7 +1178,9 @@ export class Guide {
       ui.setBusy("Next step…");
       void settle(ui.host, { since: performance.now() }).then(() =>
         onceStaying(() => {
-          if (run === this.run) void this.turn(run, { event: gone });
+          if (run !== this.run) return;
+          if (this.goneOnceMore(run)) return this.finish(GONE_SAY, "loop");
+          void this.turn(run, { event: gone });
         }),
       );
     };
@@ -1178,6 +1203,7 @@ export class Guide {
           if (run !== this.run) return;
           const later = find();
           if (later) return showAgain(later);
+          if (this.goneOnceMore(run)) return this.finish(GONE_SAY, "loop");
           void this.turn(run, { event: gone, closing });
         }),
       );
