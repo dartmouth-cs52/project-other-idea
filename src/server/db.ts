@@ -292,7 +292,7 @@ export class Store {
    */
   private recordUnseen(guide: string, step: number, measure: TurnMeasure): Promise<void> {
     const unseen = measure.unseen?.length ? measure.unseen : null;
-    if (!unseen && !measure.reply.mode) return Promise.resolve();
+    if (!unseen && (!measure.reply.mode || measure.reply.mode === "act")) return Promise.resolve();
     return this.quietly("record controls an answer named that aren't in the product (has db/migrations/0007 been applied?)", async () => {
       await this.sql`update steps set unseen = ${unseen} where guide_id = ${guide} and n = ${step}`;
     });
@@ -306,7 +306,9 @@ export class Store {
    */
   private recordKind(guide: string, step: number, measure: TurnMeasure): Promise<void> {
     const { mode, reason } = measure.reply;
-    if (!mode) return Promise.resolve();
+    // An act step's mode is "act", which the column does not take: it says what kind of reply a guide's step was, on a
+    // site with Answers on. How acting went is in the server's log of counts (turnCounts in app.ts).
+    if (!mode || mode === "act") return Promise.resolve();
     return this.quietly("record what kind of reply a step was (has db/migrations/0005 been applied?)", async () => {
       await this.sql`
         update steps set mode = ${mode}, reason = ${reason ?? null}, sources = ${measure.cited}, overruled = ${measure.overruled ?? null}

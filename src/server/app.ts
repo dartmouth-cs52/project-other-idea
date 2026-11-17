@@ -1,4 +1,5 @@
 import {
+  ACT_VERSION,
   GUIDE_ID,
   GUIDE_OUTCOMES,
   MAX_ASKED,
@@ -13,6 +14,7 @@ import {
   type TurnReply,
   type TurnRequest,
 } from "../shared/types.ts";
+import { publicActing } from "./acting.ts";
 import type { Alert, Budget, Gate } from "./budget.ts";
 import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
 import { parseOutlineReport, visitorHash } from "./learned.ts";
@@ -35,6 +37,8 @@ export interface AppParts {
   loadSite(id: string, hurry?: boolean): Promise<SiteContext | undefined>;
   /** The widget bundle, as the text of one script. */
   widget(): Promise<string>;
+  /** The code that acts, widget-act.js, which the widget loads from beside itself on a site with acting on. Without it, such a site is guided by pointer. */
+  widgetActing?(): Promise<string>;
   /** How long browsers may keep the widget before asking again, in seconds. 0 for never. */
   widgetMaxAge: number;
   /** True when this caller has asked for too many steps lately. */
@@ -118,9 +122,10 @@ export function createApp(parts: AppParts) {
       });
     }
 
-    if (request.method === "GET" && url.pathname === "/widget.js") {
+    if (request.method === "GET" && (url.pathname === "/widget.js" || (url.pathname === "/widget-act.js" && parts.widgetActing))) {
       const cache = parts.widgetMaxAge > 0 ? `public, max-age=${parts.widgetMaxAge}` : "no-store";
-      return new Response(await parts.widget(), { headers: { ...cors, "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": cache } });
+      const script = url.pathname === "/widget.js" ? await parts.widget() : await parts.widgetActing!();
+      return new Response(script, { headers: { ...cors, "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": cache } });
     }
 
     const siteMatch = /^\/v1\/sites\/([^/]+)$/.exec(url.pathname);
@@ -132,6 +137,11 @@ export function createApp(parts: AppParts) {
       if (!allowed) return json(403, { error: `${origin} isn't an allowed origin for this site.` });
       const config: PublicSiteConfig = { name: site.name, appearance: site.appearance };
       if (await switchedOff(parts, site)) config.off = true;
+      else {
+        // Only a site with acting on says anything about it, so every other site's settings read as they always have.
+        const acting = publicActing(site);
+        if (acting) config.acting = acting;
+      }
       if (site.learn === false) config.learn = false;
       if (site.blocked?.length) config.blocked = site.blocked;
       const handoff = publicHandoff(site.handoff);
@@ -363,6 +373,57 @@ async function switchedOff(parts: AppParts, site: SiteContext): Promise<boolean>
   return site.off === true || (await parts.isOff?.(site)) === true;
 }
 
+/** One step in the server's log. Every value is a number, a yes or no, or a name from Haptic's own code. */
+export type TurnCounts = Record<string, string | number | boolean>;
+
+/** The roles the widget's reading gives a control. Any other text in a request's role is logged as "other", so nothing a page wrote reaches the log. */
+const LISTED_ROLES = new Set([
+  "button", "link", "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "option", "checkbox", "radio", "switch",
+  "combobox", "treeitem", "textbox", "searchbox", "slider", "spinbutton", "select", "clickable", "gridcell",
+]);
+
+/**
+ * One step as counts, for the server's log: nothing the visitor wrote and
+ * nothing from their page, not even its address. The fields on acting are
+ * there only when the widget asked to act: whether it was answered in act
+ * mode (or why not), what the model said to do, whether the server took
+ * over a click the model had left to the visitor, what the server's check
+ * left and why it removed the rest, and whether the step was the hand-over.
+ */
+export function turnCounts(request: TurnRequest, measure: TurnMeasure): TurnCounts {
+  const { reply } = measure;
+  const counts: TurnCounts = {
+    haptic: "turn",
+    site: request.site,
+    version: request.version ?? 1,
+    step: request.step,
+    closing: request.closing === true,
+    model: measure.model,
+    ms: measure.ms,
+    msToTarget: measure.msToTarget,
+    status: reply.status,
+    pointed: reply.target !== null,
+    // "pointed": the server pointed at the control the sentence named. "asked": the model was asked again. "logged": neither.
+    recheck: measure.recheck ? (measure.recheck.pointed ? "pointed" : measure.recheck.asked ? "asked" : "logged") : "none",
+  };
+  if (!measure.acting) return counts;
+  counts.acting = reply.mode === "act" ? "on" : (measure.acting.refused ?? "off");
+  if (reply.mode !== "act") return counts;
+  counts.capped = measure.acting.capped === true;
+  counts.modelDo = measure.acting.modelDo ?? "none";
+  // The model left a click on a control Haptic could press to the visitor, and the server made it Haptic's.
+  counts.converted = measure.acting.converted === true;
+  counts.do = reply.do ?? "none";
+  counts.withheld = reply.withheld ?? "none";
+  // Which act the check took away, and the kind of control it was on: "choose" on a "radio", "unfit".
+  counts.removed = reply.removed ?? "none";
+  const role = request.snapshot.elements.find((element) => element.id === reply.target)?.role;
+  counts.role = !role ? "none" : LISTED_ROLES.has(role) ? role : "other";
+  counts.commits = reply.commits === true;
+  counts.handover = reply.status === "done" && reply.target !== null && reply.commits === true && !reply.do;
+  return counts;
+}
+
 /** The widget only works on origins the site lists. Requests with no Origin header (same-origin GETs, curl) pass. */
 function originAllowed(site: SiteContext, origin: string | undefined): boolean {
   return !origin || site.allowedOrigins.includes(origin);
@@ -403,7 +464,18 @@ const text = (value: unknown, max: number): string => (typeof value === "string"
 const texts = (value: unknown, count: number, max: number): string[] =>
   Array.isArray(value) ? value.slice(0, count).map((item) => text(item, max)).filter(Boolean) : [];
 
-export function parseTurn(body: unknown): TurnRequest | undefined {
+/**
+ * The visitor's date, if it is one and could be today somewhere. By time zone
+ * alone their date is the server's, the day before or the day after. Anything
+ * further off is a clock set wrong, and the server's own date is the better guess.
+ */
+function plausibleToday(value: unknown, now: Date): string | undefined {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const days = (Date.parse(`${value}T00:00:00Z`) - Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00Z`)) / 86_400_000;
+  return Math.abs(days) <= 1 ? value : undefined;
+}
+
+export function parseTurn(body: unknown, now: Date = new Date()): TurnRequest | undefined {
   if (!body || typeof body !== "object") return undefined;
   const raw = body as Record<string, unknown>;
   const snap = raw.snapshot as Record<string, unknown> | undefined;
@@ -417,9 +489,12 @@ export function parseTurn(body: unknown): TurnRequest | undefined {
     if (item.icon) element.icon = text(item.icon, 40);
     if (item.href) element.href = text(item.href, 200);
     if (item.context) element.context = text(item.context, 120);
-    const state = texts(item.state, 6, 16);
+    // Room for a state that takes a few words, like one saying a control only shows while the mouse is over its box.
+    const state = texts(item.state, 8, 40);
     if (state.length) element.state = state;
     if (item.offscreen === "above" || item.offscreen === "below") element.offscreen = item.offscreen;
+    const options = texts(item.options, 12, 30);
+    if (options.length) element.options = options;
     elements.push(element);
   }
   const snapshot: Snapshot = {
@@ -442,5 +517,12 @@ export function parseTurn(body: unknown): TurnRequest | undefined {
   if (raw.event) request.event = text(raw.event, 600);
   if (raw.change) request.change = text(raw.change, 2000);
   if (raw.offTrack === true) request.offTrack = true;
+  if (raw.closing === true) request.closing = true;
+  // A widget from before the version number sends none. That is version 1, and is left unset.
+  if (Number.isInteger(raw.version) && (raw.version as number) >= 1 && (raw.version as number) <= 9999) request.version = raw.version as number;
+  // Acting is asked for only in these exact words, and only by a widget that understands act replies. Whether the site allows it is decided for each step (acting.ts).
+  if (raw.mode === "act" && (request.version ?? 1) >= ACT_VERSION) request.mode = "act";
+  const today = plausibleToday(raw.today, now);
+  if (today) request.today = today;
   return request;
 }

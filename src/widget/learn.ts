@@ -133,7 +133,7 @@ export function startLearning(send: (report: Omit<OutlineReport, "site">) => voi
     try {
       do {
         again = false;
-        await settle(host, 800, 6000);
+        await settle(host, { quietMs: 800, maxMs: 6000, patient: false });
         await idle();
         const outline = buildOutline(host);
         if (!outline || sent.has(outline.path)) continue;

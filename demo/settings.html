@@ -28,6 +28,12 @@
 <div class="tabs" role="tablist"><a role="tab" aria-selected="true" href="/demo/settings">General</a><a role="tab" href="/demo/settings-billing">Plan and billing</a><a role="tab" href="/demo/settings-security">Security</a></div>
 <form id="general"><label>Workspace name <input name="workspace" value="Acme"></label><label>Time zone <select><option>UTC</option><option>Eastern</option><option>Pacific</option></select></label><button class="primary">Save changes</button></form>
 <p id="general-result" role="status"></p>
+<section id="danger">
+  <h2>Danger zone</h2>
+  <p>Deleting the workspace removes its projects and members for good.</p>
+  <button type="button" id="delete-workspace">Delete workspace</button>
+  <p id="danger-result" role="status"></p>
+</section>
 </main>
 <script src="/demo/app.js"></script>
 <script src="/widget.js" data-site="site_demo" async></script>

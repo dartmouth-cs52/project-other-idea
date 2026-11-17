@@ -103,6 +103,30 @@ for (const name of BROWSERS) {
       await tab.close();
     });
 
+    test("a page whose address keeps changing while the model answers is asked about again three times, then the guide stops and says why", async () => {
+      // From the second review: a feed that moves its address every 700 ms made the widget hang up and ask again without end.
+      harness.turns.length = 0;
+      harness.hungUp = 0;
+      harness.pages.set("/feed", page(`<h1>Feed</h1><button id="thing">Thing</button><script>let n = 0; setInterval(() => history.pushState({}, "", "/feed/" + ++n + "-story"), 400);</script>`));
+      // A model that takes its time, as one does.
+      harness.script = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        return done();
+      };
+      const tab = await browser.newPage();
+      await tab.goto(`${harness.url}/feed`);
+      await ask(tab, "how do I find the thing");
+      await tab.waitForFunction(() => (document.querySelector("haptic-root") as Element & { guideState?: string }).guideState === "finished", null, { timeout: 20_000 });
+      const caption = await tab.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.querySelector(".caption span")?.textContent);
+      assert.equal(caption, "This page keeps changing its address, so I've stopped for now. Ask again once it settles.");
+      assert.equal(harness.turns.length, 4, "the first question and three more");
+      await tab.waitForTimeout(3000);
+      assert.equal(harness.turns.length, 4, "it asked again after it stopped");
+      assert.equal(harness.hungUp, 4);
+      await tab.close();
+      harness.pages.delete("/feed");
+    });
+
     test("going back while a step waits for a click is seen at once", async () => {
       harness.turns.length = 0;
       harness.script = (request, index) => {

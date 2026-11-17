@@ -77,7 +77,7 @@ export const faqs = [
   },
   {
     q: "Does Haptic click things for my users?",
-    a: "No. Haptic points and explains, and the person does the clicking. They stay in control, and they learn where things are.",
+    a: "Not unless you turn it on. By default Haptic points and explains, and the person does the clicking, so they stay in control and learn where things are. With Do it with me turned on, a person can ask Haptic to do the steps while they watch, and the final click is always theirs. It never presses anything that saves, sends, pays or deletes, and never types passwords or payment details.",
   },
   {
     q: "Does it work in apps behind a login?",
@@ -85,7 +85,7 @@ export const faqs = [
   },
   {
     q: "What does Haptic see on the page?",
-    a: "The names of buttons, links and fields, plus short pieces of visible text, so it knows what to point at. It never reads what people type into fields, and it masks emails, phone numbers and long numbers before anything leaves the browser.",
+    a: "The names of buttons, links and fields, plus short pieces of visible text, so it knows what to point at. It never sends what people type into fields. It looks at what fields hold only inside the browser, to leave it out wherever the page repeats it, in its text, headings, buttons, links and lists. The one exception is words a person also wrote in their question, which Haptic is sent anyway: a name they asked about stays readable in a list of search results. The page's address, and where its links lead, are sent with ids and numbers masked, so a page that writes a search into an address sends it there. Before anything leaves the browser it masks anything that looks like an email address, any run of five or more digits, and any eight or more digits written in groups, like a phone or card number. It does not mask real dates written in figures, shorter numbers like prices, or names, so text on the page can still hold personal details. One exception: an email address or a number of five or more digits that a person writes in their own question stays readable where exactly that value stands on its own on the page, so Haptic can find what they asked about. In the question itself it stays readable only when the page shows it that way, and is masked otherwise. Each question also carries the person's date, not their time zone or location, so Haptic knows what day it is. In Do it with me, Haptic checks that its own typing took by reading that field inside the browser, and never sends what it reads.",
   },
   {
     q: "How much does it cost?",

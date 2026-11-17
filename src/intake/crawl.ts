@@ -75,6 +75,11 @@ async function sitemapUrls(start: URL): Promise<string[]> {
   }
 }
 
+/** Whether a link is marked as opening a menu or unfolding something, which is then what a click on it does. */
+function opensSomething(haspopup: string | undefined, expanded: string | undefined): boolean {
+  return expanded !== undefined || !["", "false"].includes((haspopup ?? "").toLowerCase());
+}
+
 /** Outline of one page, plus the absolute URLs it links to and how many controls it has. */
 export function extractPage(html: string, url: string): { page: PageNode; found: string[]; controls: number } {
   const $ = cheerio.load(html);
@@ -83,6 +88,7 @@ export function extractPage(html: string, url: string): { page: PageNode; found:
   const unique = (items: string[], max: number) => [...new Set(items.filter(Boolean))].slice(0, max);
 
   const found: string[] = [];
+  const menus: string[] = [];
   const links = new Map<string, { label: string; to: string }>();
   $("a[href]").each((_, el) => {
     const href = $(el).attr("href") ?? "";
@@ -92,6 +98,12 @@ export function extractPage(html: string, url: string): { page: PageNode; found:
     target.hash = "";
     found.push(target.href);
     const text = label(el);
+    // A link that opens a menu or unfolds a section does that when clicked, so it is
+    // listed with the buttons, as the widget lists it. Its address is still a page to read.
+    if (opensSomething($(el).attr("aria-haspopup"), $(el).attr("aria-expanded"))) {
+      menus.push(text);
+      return;
+    }
     const to = normalizePath(target.pathname);
     if (text && links.size < 60) links.set(`${text}|${to}`, { label: text, to });
   });
@@ -105,7 +117,7 @@ export function extractPage(html: string, url: string): { page: PageNode; found:
     fields.push(cleanText(fromLabel || $(el).attr("aria-label") || $(el).attr("placeholder") || $(el).attr("name") || "", 60));
   });
 
-  const buttons = unique($("button, [role='button'], input[type='submit'], input[type='button'], summary").map((_, el) => label(el)).get(), 40);
+  const buttons = unique([...$("button, [role='button'], input[type='submit'], input[type='button'], summary").map((_, el) => label(el)).get(), ...menus], 40);
   const description = cleanText($('meta[name="description"]').attr("content") ?? "", 200);
   const page: PageNode = {
     path: normalizePath(new URL(url).pathname),
