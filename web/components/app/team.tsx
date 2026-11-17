@@ -54,17 +54,18 @@ export function TeamPage({ me }: { me: Me }) {
 
 function Loaded({ team, onChange }: { team: Team; onChange: (next: Team) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // A change that didn't go through is said in the panel it was made in, the way a form says it.
+  const [failed, setFailed] = useState<{ at: "people" | "invites"; failure: Failure } | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
 
-  async function act(key: string, path: string, method: "PATCH" | "DELETE", body?: unknown) {
+  async function act(key: string, title: string, path: string, method: "PATCH" | "DELETE", body?: unknown) {
     setBusy(key);
-    setError(null);
+    setFailed(null);
     try {
       onChange(await api<Team>(path, { method, body }));
       setRemoving(null);
     } catch (failure) {
-      setError((failure as Error).message);
+      setFailed({ at: path.startsWith("/team/invites/") ? "invites" : "people", failure: failureFrom(title, failure) });
     }
     setBusy(null);
   }
@@ -107,9 +108,9 @@ function Loaded({ team, onChange }: { team: Team; onChange: (next: Team) => void
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-48">
                         {member.role === "admin" ? (
-                          <DropdownMenuItem onClick={() => act(member.id, `/team/members/${member.id}`, "PATCH", { role: "member" })}>Make a member</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => act(member.id, "The role didn't change", `/team/members/${member.id}`, "PATCH", { role: "member" })}>Make a member</DropdownMenuItem>
                         ) : (
-                          <DropdownMenuItem onClick={() => act(member.id, `/team/members/${member.id}`, "PATCH", { role: "admin" })}>Make an admin</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => act(member.id, "The role didn't change", `/team/members/${member.id}`, "PATCH", { role: "admin" })}>Make an admin</DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem variant="destructive" onClick={() => setRemoving(member.id)}>
@@ -122,7 +123,7 @@ function Loaded({ team, onChange }: { team: Team; onChange: (next: Team) => void
                 {removing === member.id && (
                   <div className="flex flex-wrap items-center gap-2 pl-11">
                     <span className="text-sm">Remove {label}? They lose access to the dashboard.</span>
-                    <Button variant="destructive" size="sm" disabled={busy !== null} onClick={() => act(member.id, `/team/members/${member.id}`, "DELETE")}>
+                    <Button variant="destructive" size="sm" disabled={busy !== null} onClick={() => act(member.id, `${label} wasn't removed`, `/team/members/${member.id}`, "DELETE")}>
                       {busy === member.id ? "Removing" : "Remove"}
                     </Button>
                     <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => setRemoving(null)}>
@@ -134,10 +135,10 @@ function Loaded({ team, onChange }: { team: Team; onChange: (next: Team) => void
             );
           })}
         </ul>
-        {error && (
-          <p role="alert" className="border-t px-5 py-3 text-sm text-destructive">
-            {error}
-          </p>
+        {failed?.at === "people" && (
+          <div className="border-t px-5 py-3">
+            <FormAlert failure={failed.failure} />
+          </div>
         )}
       </Panel>
 
@@ -154,13 +155,18 @@ function Loaded({ team, onChange }: { team: Team; onChange: (next: Team) => void
                   </span>
                 </span>
                 {team.canManage && (
-                  <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => act(item.id, `/team/invites/${item.id}`, "DELETE")}>
+                  <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => act(item.id, "The invitation wasn't taken back", `/team/invites/${item.id}`, "DELETE")}>
                     {busy === item.id ? "Taking back" : "Take back"}
                   </Button>
                 )}
               </li>
             ))}
           </ul>
+          {failed?.at === "invites" && (
+            <div className="border-t px-5 py-3">
+              <FormAlert failure={failed.failure} />
+            </div>
+          )}
         </Panel>
       )}
 
@@ -213,6 +219,7 @@ function AddPerson({ onAdded }: { onAdded: (next: Team) => void }) {
         <FieldWithButton
           id="team-add-email"
           label="Their work email"
+          required
           error={fields.errors.email}
           hint="They get an email to sign in, and join as a member. You can make them an admin once they have."
           button={
@@ -224,6 +231,7 @@ function AddPerson({ onAdded }: { onAdded: (next: Team) => void }) {
         >
           <Input
             {...fields.control("email", { hint: true })}
+            required
             type="email"
             inputMode="email"
             autoComplete="off"

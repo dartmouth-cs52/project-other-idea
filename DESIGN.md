@@ -293,7 +293,9 @@ looks stark.
 - **Done green (#008932):** The small round tick that says a task is finished.
   Blue means in progress and green means done, so on a visitor's page the two
   never share a screen. Not for buttons or bubbles. In the dashboard it also
-  says good, as set out under Dashboard.
+  says good, as set out under Dashboard, and confirms in one line that
+  something the person asked for went through, such as an email sent or a
+  person added.
 - **Error red (#DC2626):** Forms. The star on a required field, the outline
   and message on a field that failed its check, and the alert when sending
   fails. It is shadcn's destructive colour. In the dashboard it also says bad,
@@ -456,8 +458,13 @@ Icons are Lucide at their default stroke, 16px.
 Components are shadcn/ui, restyled only through tokens and variants.
 
 - **Button:** Pills. Primary is Ink with Paper text. Secondary is the Border
-  grey. 32px by default, 36px in the navigation, 44px for the hero and forms.
-  One primary button per view.
+  grey. 32px by default, 36px in the navigation, 44px for the hero and forms,
+  and 28px for an action inside a row of a list, such as Take back. A ghost
+  button, words with a Muted fill under the mouse, is a way out or a lesser
+  action beside another button, such as Keep them. One primary button per
+  view. A button or menu item that deletes or removes something is shadcn's
+  destructive variant, Error red words on a faint red fill, and is never the
+  primary button.
 - **Navigation:** 64px tall. Pointer mark and "Haptic" on the left, links and
   one primary button on the right.
 - **Demo window:** A browser frame on Card, with the three window dots in their
@@ -539,7 +546,7 @@ Components are shadcn/ui, restyled only through tokens and variants.
   to type, the first such field takes the focus, and the line goes as soon as
   the person starts typing. A failure that is not one field's fault uses
   shadcn's alert, with an icon, a short title, one line of detail and, where
-  trying again could help, a Try again button, under the form's buttons. Success replaces the form with a thank you. Every form on the
+  trying again could help, a Try again button, under the form's buttons. Success replaces the form with a thank you. A form that adds to a list on the same page, such as adding someone to the team, stays where it is, with the new entry in the list and one line under the form saying it went through, so the next can be added. Every form on the
   site and in the dashboard works this way, sign-in included, and so do the
   server's refusals: one that names a field shows under that field. The parts
   are in `web/components/form.tsx`. A page, or part of one, that could not load
@@ -578,8 +585,8 @@ changes is the frame, the size of the type and one rule about surfaces.
 **Frame.** A 56px bar runs across the top and reads as a path. The pointer mark
 and Haptic come first and lead to the list of sites. The site comes next, and
 is a menu of the company's sites, with All sites and Add a site under them. Who
-is signed in is on the right, in a menu that names their company and holds Sign
-out. Inside a site its pages run down a 224px column on the left. Each is a
+is signed in is on the right, in a menu that names their company and holds Team,
+Billing and Sign out. Inside a site its pages run down a 224px column on the left. Each is a
 32px row with a 16px icon. The page you are on is Border grey with Ink text,
 and the others are Muted text. The bar and the column are both fixed to the
 window, so they and their lines stay where they are however far the page
@@ -620,6 +627,19 @@ and the card says so in one line instead of offering a field. The launcher
 sits bottom right on every site, where support chat usually lives, and that is
 not a setting. Deleting a site leads back to the list of sites.
 
+**Team and Billing.** These are the company's, not a site's, so they open from
+the menu on the right of the bar, in a frame with no column of pages, and a
+company with no site yet can reach them. Team lists everyone at the company,
+the owner first, with their role, then the people added who haven't signed in
+yet. Owners and admins add someone by email, which sends them a link to sign in
+as a member, make a member an admin and back, take back an invitation and
+remove someone. A removal is confirmed in its own row first, naming the person.
+Nobody changes or removes the owner or themselves. Members see the same list,
+and a card that says to ask an owner or admin. Billing has the plan, the
+finished guides counted this period against what the plan includes, and each
+site's count. Owners and admins choose or switch the plan, and open Stripe's
+portal for the card, invoices and cancelling.
+
 **Sites.** The first page after sign-in is the list, one card a site, for a
 company with one site as for one with several. A site opens when its card is
 pressed or a link names it. Sites whose script is running come first, the one
@@ -629,8 +649,8 @@ A card says how many questions the last seven days had and how many finished,
 the last fortnight as fourteen small bars, and the newest question. A site
 still waiting for its script says so in place of the numbers. A running site
 carries no badge to say it is running: the numbers say that, and the green
-tick is kept for a guide that finished, so a card never has two ticks that
-mean different things. The whole card is the way in. Add a site leads to the
+tick on a card is kept for a guide that finished, so a card never has two ticks
+that mean different things. The whole card is the way in. Add a site leads to the
 setup screens, which have a frame of their own.
 
 A site is shown with its own icon, the one its browser tab has, 20px in a 36px
@@ -689,7 +709,8 @@ What the person said outweighs how the guide ended, so one they said didn't
 help is red and one they said helped is green. Colour is never the only sign:
 the words beside every mark say the same, and the arrow beside a number points
 the way it moved. Colour stays on marks, arrows and the few words of a change.
-It is never a fill, a card, a bar or a button.
+It is never a fill, a card, a bar or a button, except the button or menu item
+that deletes or removes something, set out under Components.
 
 **Charts.** The two neutrals, and nothing else. Guides each day is a bar for
 each day of the range, in UTC, the same days the numbers above it count. Muted
@@ -855,7 +876,8 @@ stays. The rest below is proposed.
 - Don't replace the visitor's own mouse cursor.
 - Don't let the pointer or a caption cover the label it is pointing at.
 - Don't use Done green for anything but the finished mark, or Error red
-  outside a form, except to say good and bad in the dashboard.
+  outside a form, except to say good and bad in the dashboard, to confirm
+  there that something went through, and on a button that deletes or removes.
 - Don't add another colour, a gradient, an illustration or artwork. Paintings
   behind the demos were tried and turned down. The window dots on the demo
   frame and the thinking glow are the two exceptions.
