@@ -181,6 +181,20 @@ test("a field marked invalid is printed as sent, and the rules say not to move o
   for (const [name, prompt] of [["guide", rules], ["answers", withAnswers], ["act", buildSystemPrompt(site, "act")]] as const) assert.match(prompt, rule, name);
 });
 
+test('the rules say a caption is the action and the label, since the pointer shows where (Northpine, "lets log out": "Click the round button with your initials at the top right to open the account menu, then choose Sign out.")', () => {
+  // Every prompt a step can be asked with: the guide's, the one for a site with help docs (as Northpine is), and Do it's.
+  const withAnswers = buildSystemPrompt({ ...site, answers: { enabled: true } });
+  for (const [name, prompt] of [["guide", rules], ["answers", withAnswers], ["act", buildSystemPrompt(site, "act")]] as const) {
+    assert.match(prompt, /the pointer already shows the visitor where it is, so "say" is only what to do with it: the action and the element's visible label\. "Click Sign out\."/, name);
+    assert.match(prompt, /An element with no visible label is named by what it opens or does, like "Open your account menu\.", never by how it looks or where it sits\./, name);
+    assert.match(prompt, /Leave out where the element is, what it looks like, what comes after it, what else the visitor could do instead, and what is already filled in or selected/, name);
+    // What asked for the long ones is gone: the example that said where, the icon described with its place, and two sentences as the measure.
+    assert.doesNotMatch(prompt, /Click Settings in the top bar\./, name);
+    assert.doesNotMatch(prompt, /describe the icon and where it is/, name);
+    assert.doesNotMatch(prompt, /One or two short sentences/, name);
+  }
+});
+
 test("the question asked after the last step is worded as a closing one", () => {
   const at = new Date("2026-11-15T12:00:00Z");
   const closing = buildUserMessage({ ...request('The user clicked link "Billing".'), closing: true }, undefined, at);
@@ -545,14 +559,28 @@ async function sentFor(on: SiteContext, asked: TurnRequest, reply: TurnReply) {
   configure({ HAPTIC_MODEL: "claude-test", HAPTIC_RECHECK: "off", ANTHROPIC_API_KEY: "test" }, stand);
   try {
     const measure = await measureTurn(on, asked);
-    const params = sent[0] as unknown as { system: { text: string }[]; output_config: { format: { schema: { properties: object } } }; messages: { content: string }[] };
-    return { measure, system: params.system[0]?.text, fields: Object.keys(params.output_config.format.schema.properties), question: params.messages.at(-1)?.content };
+    const params = sent[0] as unknown as { system: { text: string }[]; output_config: { format: { schema: { properties: Record<string, { description?: string }> } } }; messages: { content: string }[] };
+    const properties = params.output_config.format.schema.properties;
+    return { measure, system: params.system[0]?.text, fields: Object.keys(properties), sayHint: properties.say?.description ?? "", question: params.messages.at(-1)?.content };
   } finally {
     configure({ HAPTIC_MODEL: "mock" });
   }
 }
 
 const later = (extra: Partial<TurnRequest>): TurnRequest => ({ ...request('You clicked link "Billing".'), ...extra });
+
+test('the reply\'s own words for "say" ask for the action and the label as the rules do, and in act mode for what Haptic is doing', async () => {
+  // The model reads the field's description as well as the rules. It said "One or two short sentences" while the rules
+  // had the same, and would contradict the rules now if it still did.
+  const guide = await sentFor(site, later({}), { target: "e3", status: "continue", say: "Click Update card." });
+  assert.match(guide.sayHint, /With a target, only the action and its visible label, like "Click Sign out\."/);
+  const answers = await sentFor({ ...site, answers: { enabled: true } }, later({}), { mode: "guide", target: "e3", status: "continue", say: "Click Update card." });
+  assert.match(answers.sayHint, /With "guide" and a target, only the action and its visible label, like "Click Sign out\."/);
+  assert.match(answers.sayHint, /With "answer", one to four sentences/);
+  const act = await sentFor(actingSite, later({ version: 3, mode: "act" }), { target: "e1", do: "click", enter: null, commits: false, status: "continue", say: "Opening Billing." });
+  assert.match(act.sayHint, /what you are doing, like "Opening Cards\."/);
+  for (const hint of [guide.sayHint, answers.sayHint, act.sayHint]) assert.doesNotMatch(hint, /one or two short sentences/i);
+});
 
 test("the model is asked for an act reply only when the widget asked to act and the site allows it", async () => {
   const guideReply: TurnReply = { target: "e3", status: "continue", say: "Click Update card." };
