@@ -11,6 +11,9 @@ import { GuideStatus, Segmented, useNow, when } from "./parts";
 
 type Show = "all" | "finished" | "unanswered" | "under_way";
 
+/** Under way and still moving. One that has gone quiet is shown as paused, and is not counted as under way. */
+const moving = (row: { outcome: string; paused?: boolean }) => row.outcome === "under_way" && !row.paused;
+
 /** The Worker sends this many of the newest questions. */
 const MOST = 100;
 
@@ -30,14 +33,14 @@ export function Questions({ data, live, onOpen }: { data: Insights | null; live:
       all: rows?.length ?? 0,
       finished: rows?.filter((row) => row.outcome === "finished").length ?? 0,
       unanswered: rows?.filter(unanswered).length ?? 0,
-      under_way: rows?.filter((row) => row.outcome === "under_way").length ?? 0,
+      under_way: rows?.filter(moving).length ?? 0,
     }),
     [rows],
   );
   const words = search.trim().toLowerCase();
   const shown = rows?.filter(
     (row) =>
-      (show === "all" || (show === "unanswered" ? unanswered(row) : row.outcome === show)) && (!words || row.question.toLowerCase().includes(words) || row.started_path.toLowerCase().includes(words)),
+      (show === "all" || (show === "unanswered" ? unanswered(row) : show === "under_way" ? moving(row) : row.outcome === show)) && (!words || row.question.toLowerCase().includes(words) || row.started_path.toLowerCase().includes(words)),
   );
 
   return (
@@ -88,7 +91,7 @@ export function Questions({ data, live, onOpen }: { data: Insights | null; live:
                     </button>
                   </TableCell>
                   <TableCell className="px-3 py-2.5">
-                    <GuideStatus outcome={row.outcome} helped={row.helped} step={row.step_count ? row.step_count - 1 : null} />
+                    <GuideStatus outcome={row.outcome} helped={row.helped} paused={row.paused} step={row.step_count ? row.step_count - 1 : null} />
                     {row.helped !== null && <span className="text-muted-foreground">, {row.helped ? "helped" : "did not help"}</span>}
                   </TableCell>
                   <TableCell className="hidden px-3 py-2.5 text-right text-muted-foreground tabular-nums md:table-cell">{row.step_count}</TableCell>

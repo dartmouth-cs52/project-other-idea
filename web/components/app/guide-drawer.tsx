@@ -49,7 +49,7 @@ export function GuideDrawer({
             {shown ? (
               <>
                 <span className="flex flex-wrap items-center text-foreground">
-                  <GuideStatus outcome={shown.outcome} helped={shown.helped} step={shown.steps.length ? shown.steps[shown.steps.length - 1]!.n : null} />
+                  <GuideStatus outcome={shown.outcome} helped={shown.helped} paused={shown.paused} step={shown.steps.length ? shown.steps[shown.steps.length - 1]!.n : null} />
                   {shown.helped !== null && <span className="text-muted-foreground">, {shown.helped ? "said it helped" : "said it did not help"}</span>}
                 </span>
                 <span>
@@ -70,7 +70,7 @@ export function GuideDrawer({
                 click cause this.
               </p>
             )}
-            {shown.steps.length === 0 && <p className="text-sm text-muted-foreground">{shown.outcome === "under_way" ? "Haptic is working out the first step." : "This guide ended before its first step."}</p>}
+            {shown.steps.length === 0 && <p className="text-sm text-muted-foreground">{shown.outcome !== "under_way" ? "This guide ended before its first step." : shown.paused ? "No first step has arrived." : "Haptic is working out the first step."}</p>}
             <ol className="flex flex-col gap-3">
               {shown.steps.map((step) => (
                 <li key={step.n} className="flex flex-col gap-2 rounded-xl border bg-card p-4 motion-safe:animate-in motion-safe:duration-200 motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1">

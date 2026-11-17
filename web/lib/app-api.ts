@@ -128,6 +128,8 @@ export interface Insights {
     step_count: number;
     helped: boolean | null;
     outcome: Outcome;
+    /** Under way, with nothing new for two minutes. See `paused` on LiveGuide. */
+    paused?: boolean;
     wrong_clicks: number;
     ms_to_pointer: number | null;
   }[];
@@ -150,6 +152,11 @@ export interface LiveGuide {
   step_count: number;
   helped: boolean | null;
   outcome: Outcome;
+  /**
+   * Still open, with no new step for two minutes, by the database's clock. The person has most likely
+   * walked away, so the dashboard says paused and not that Haptic is showing a step. A new step ends it.
+   */
+  paused?: boolean;
   /** When it last moved: its newest step, or its start. */
   moved_at: string;
   /** The step it is on, or ended on. Null before the first answer comes back. */
@@ -171,7 +178,7 @@ export interface SiteCard {
   /** Questions and finished guides in the last seven days. */
   guides: number;
   finished: number;
-  last: { question: string; started_at: string; outcome: Outcome } | null;
+  last: { question: string; started_at: string; outcome: Outcome; paused?: boolean } | null;
   /** The last fortnight, one entry for each day that had a question. */
   daily: { day: string; guides: number }[];
 }
@@ -195,6 +202,7 @@ export interface GroupGuide {
   started_at: string;
   helped: boolean | null;
   outcome: Outcome;
+  paused?: boolean;
   step_count: number;
 }
 
@@ -213,6 +221,7 @@ export interface GuideDetail {
   origin: string | null;
   helped: boolean | null;
   outcome: Outcome;
+  paused?: boolean;
   /** Steps asked again because the page changed while the model was answering. */
   cancelled_steps: number;
   steps: {

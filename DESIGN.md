@@ -569,6 +569,7 @@ the words, and the words stay in the text colour.
   guides the top row counts as ones Haptic couldn't guide.
 - **A grey dot** is one that was never Haptic's to answer: stopped by the
   visitor, left for a person, off topic, or a control the company ruled out.
+  It is also a guide under way that has gone quiet, which reads "Paused".
 
 What the person said outweighs how the guide ended, so one they said didn't
 help is red and one they said helped is green. Colour is never the only sign:
@@ -592,6 +593,14 @@ label and no dot. A new question is simply there, a step later it reads on,
 and the numbers above have moved. A question under way reads "Thinking", then
 "Showing step 2", with the shimmer, the same words the widget's status line
 uses, beside the blue pointer. A new row fades in from 4px above in 200ms.
+
+The pointer and the shimmer claim that someone is being shown a step right
+now, so they last only while that is likely. A guide with no new step for two
+minutes reads "Paused at step 2", still, beside a grey dot, because the person
+has most likely walked away and nobody can say otherwise. A new step brings
+the pointer back. After thirty minutes with no ending it is abandoned, as
+before, and only that is counted.
+
 The page speaks up only when it has stopped hearing from the server, with the
 word "Reconnecting" in Muted text where the time range is, so nobody takes
 what is on screen for the latest.

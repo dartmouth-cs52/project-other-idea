@@ -90,7 +90,7 @@ function Card({ site }: { site: SiteCard }) {
         {site.last ? (
           <>
             <span className="min-w-0 flex-1 truncate text-foreground">{site.last.question}</span>
-            <GuideStatus outcome={site.last.outcome} className="shrink-0" />
+            <GuideStatus outcome={site.last.outcome} paused={site.last.paused} className="shrink-0" />
             <span className="shrink-0 tabular-nums">{when(site.last.started_at)}</span>
           </>
         ) : (

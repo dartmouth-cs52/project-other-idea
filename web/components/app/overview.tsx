@@ -103,7 +103,7 @@ function Latest({ siteId, live, onOpen, className }: { siteId: string; live: Liv
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="truncate text-sm font-medium">{guide.question}</span>
                   <span className="flex min-w-0 items-center text-xs leading-5 text-muted-foreground">
-                    <GuideStatus outcome={guide.outcome} helped={guide.helped} step={guide.last?.n ?? null} className={cn("shrink-0", guide.outcome === "under_way" && "text-foreground")} />
+                    <GuideStatus outcome={guide.outcome} helped={guide.helped} paused={guide.paused} step={guide.last?.n ?? null} className={cn("shrink-0", guide.outcome === "under_way" && !guide.paused && "text-foreground")} />
                     <span className="truncate">{reached(guide)}</span>
                   </span>
                 </span>

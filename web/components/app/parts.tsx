@@ -213,10 +213,11 @@ export type Tone = "good" | "bad" | "quiet" | "live";
  * a guide that succeeded and one Haptic couldn't guide (worker/health.ts and
  * worker/insights.ts), so a red mark here is a guide the top row counts. What
  * the person said outweighs how the guide ended. Quiet is the rest: stopped by
- * the visitor, left for a person, off topic, or a control the company ruled out.
+ * the visitor, left for a person, off topic, a control the company ruled out,
+ * or one under way that has gone quiet and is shown as paused.
  */
-export function toneOf(outcome: Outcome, helped?: boolean | null): Tone {
-  if (outcome === "under_way") return "live";
+export function toneOf(outcome: Outcome, helped?: boolean | null, paused?: boolean): Tone {
+  if (outcome === "under_way") return paused ? "quiet" : "live";
   if (helped === true) return "good";
   if (helped === false) return "bad";
   if (outcome === "finished" || outcome === "answered" || outcome === "shown") return "good";
@@ -233,8 +234,8 @@ const DOT: Record<Exclude<Tone, "live">, string> = { good: "bg-success", bad: "b
  * got the person there another way, red when it couldn't, grey when it was
  * never Haptic's to answer.
  */
-export function StatusMark({ outcome, helped, className }: { outcome: Outcome; helped?: boolean | null; className?: string }) {
-  const tone = toneOf(outcome, helped);
+export function StatusMark({ outcome, helped, paused, className }: { outcome: Outcome; helped?: boolean | null; paused?: boolean; className?: string }) {
+  const tone = toneOf(outcome, helped, paused);
   if (tone === "live") return <Pointer bordered className={cn("pointer-shadow size-4 text-pointer", className)} />;
   if (tone === "good" && outcome === "finished") return <DoneMark className={cn("size-4", className)} />;
   return (
@@ -246,14 +247,19 @@ export function StatusMark({ outcome, helped, className }: { outcome: Outcome; h
 
 /**
  * How a guide stands: its mark, then a few words. One under way reads as the
- * widget's own status line does, with the shimmer. The words stay in the text
+ * widget's own status line does, with the shimmer. One that has had no new
+ * step for two minutes reads "Paused at step 2", still and grey, because
+ * nobody can say the person is still there. The words stay in the text
  * colour, so the mark is the only thing that carries the colour.
  */
-export function GuideStatus({ outcome, step, helped, className }: { outcome: Outcome; step?: number | null; helped?: boolean | null; className?: string }) {
+export function GuideStatus({ outcome, step, helped, paused, className }: { outcome: Outcome; step?: number | null; helped?: boolean | null; paused?: boolean; className?: string }) {
+  const first = step === null || step === undefined;
+  let words: ReactNode = OUTCOME_LABEL[outcome];
+  if (outcome === "under_way") words = paused ? (first ? "Paused before the first step" : `Paused at step ${step + 1}`) : <span className="shimmer">{first ? "Thinking" : `Showing step ${step + 1}`}</span>;
   return (
     <span className={cn("inline-flex items-center gap-1.5", className)}>
-      <StatusMark outcome={outcome} helped={helped} />
-      {outcome === "under_way" ? <span className="shimmer">{step === null || step === undefined ? "Thinking" : `Showing step ${step + 1}`}</span> : OUTCOME_LABEL[outcome]}
+      <StatusMark outcome={outcome} helped={helped} paused={paused} />
+      {words}
     </span>
   );
 }

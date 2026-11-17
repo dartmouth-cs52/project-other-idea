@@ -121,7 +121,7 @@ export function withLive(recent: Recent[], live: LiveGuide[] | undefined, since:
   const known = new Set(recent.map((row) => row.id));
   const merged = recent.map((row) => {
     const now = fresh.get(row.id);
-    return now ? { ...row, outcome: now.outcome, helped: now.helped, step_count: Math.max(row.step_count, now.step_count) } : row;
+    return now ? { ...row, outcome: now.outcome, paused: now.paused, helped: now.helped, step_count: Math.max(row.step_count, now.step_count) } : row;
   });
   const added: Recent[] = live
     .filter((guide) => !known.has(guide.id) && new Date(guide.started_at).getTime() >= since)
@@ -134,6 +134,7 @@ export function withLive(recent: Recent[], live: LiveGuide[] | undefined, since:
       step_count: guide.step_count,
       helped: guide.helped,
       outcome: guide.outcome,
+      paused: guide.paused,
       wrong_clicks: 0,
       ms_to_pointer: null,
     }));
