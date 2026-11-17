@@ -174,6 +174,8 @@ export interface Site {
   connected: boolean;
   origins: SeenOrigin[];
   reading: Reading | null;
+  /** Screens mapped from a signed-in browser at the company. */
+  mapped: number;
   corrections: Correction[];
   blocked: ControlName[];
   /** Routes taught by doing the task. Absent from a server older than Teach Haptic. */

@@ -1,6 +1,7 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { reportUsage } from "../shared/billing.ts";
 import { BLOCKED_SAY } from "../shared/corrections.ts";
+import { mappingAllowed } from "../shared/mapping.ts";
 import {
   cleanText,
   normalizePath,
@@ -11,12 +12,14 @@ import {
   ROUTES_MODES,
   type GuideOutcome,
   type GuideReport,
+  type PageNode,
   type PageOutline,
   type RoutesMode,
   type SiteContext,
   type TurnReply,
   type TurnRequest,
 } from "../shared/types.ts";
+import { mergeMapped } from "./mapped.ts";
 import { MAX_VISITORS, openingRows, outlineRows, visitorHash, withLearned, type LearnedLabel, type LearnedOpening } from "./learned.ts";
 import type { TurnMeasure } from "./model.ts";
 import { contextOf, storable, type RouteLookup, type RouteResult, type StoredRoute } from "./routes.ts";
@@ -290,6 +293,28 @@ export class Store {
         ) least
         where o.site_id = ${site.id} and o.route = least.route and o.control = least.control and o.label = least.label and o.href = least.href`;
     });
+  }
+
+  /** Whether `pass` lets its holder map this site right now. Read from the database each time: the pass may be seconds old. */
+  async mappingAllowed(site: string, pass: string): Promise<boolean> {
+    const rows = (await this.sql`select context->'mapping' as mapping from sites where id = ${site}`) as { mapping: SiteContext["mapping"] | null }[];
+    return mappingAllowed(site, rows[0]?.mapping ?? undefined, pass);
+  }
+
+  /**
+   * Puts one mapped page into a site's pages. The widget sends one page at a
+   * time and waits for each, so reading the pages and writing them back is
+   * not raced by another page from the same tab.
+   */
+  async saveMappedPage(site: string, page: PageNode): Promise<void> {
+    const rows = (await this.sql`select context->'pages' as pages from sites where id = ${site}`) as { pages: PageNode[] | null }[];
+    if (!rows[0]) return;
+    const pages = rows[0].pages ?? [];
+    const merged = mergeMapped(pages, page);
+    if (merged === pages) return;
+    await this.sql`
+      update sites set context = jsonb_set(jsonb_set(context, '{pages}', ${JSON.stringify(merged)}::jsonb), '{updatedAt}', to_jsonb(now()::text)), updated_at = now()
+      where id = ${site}`;
   }
 
   /**

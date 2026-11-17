@@ -6,6 +6,7 @@ import {
   STREAM_TYPE,
   type GuideOutcome,
   type GuideReport,
+  type PageNode,
   type PageOutline,
   type PublicSiteConfig,
   type SiteContext,
@@ -19,6 +20,7 @@ import { INK, launcherColour, POINTER_BLUE } from "../shared/colour.ts";
 import type { Alert, Budget, Gate } from "./budget.ts";
 import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
 import { networkHash, parseOutlineReport, visitorHash } from "./learned.ts";
+import { parseMapReport } from "./mapped.ts";
 import { ceilingFor, measureTurn, TurnCancelled, TurnError } from "./model.ts";
 import type { TurnMeasure } from "./model.ts";
 import { compareRoute, ownerSteers, ROUTE_MODEL, routeLookup, servedReply, type RouteLookup, type RouteResult, type StoredRoute } from "./routes.ts";
@@ -90,6 +92,18 @@ export interface AppParts {
    * It is absent when the caller's address is not known. Must not throw.
    */
   onOutline?(site: SiteContext, visitor: string, outline: PageOutline, network?: string): void;
+  /**
+   * Mapping an app from a signed-in browser at the company. `allowed` checks
+   * the pass against the site as it is stored now, not a held copy, because the
+   * pass was made a moment ago. `save` puts one page into the site's pages.
+   * Without this, mapping is not offered.
+   */
+  /** The mapper's script, served at /map.js. */
+  mapper?(): Promise<string>;
+  mapping?: {
+    allowed(site: SiteContext, pass: string): Promise<boolean>;
+    save(site: SiteContext, page: PageNode): Promise<void>;
+  };
   /** Told how a guide ended, whether it helped, or that the visitor asked for a person. Must not throw. */
   onReport?(site: SiteContext, guide: string, report: GuideReport): void;
   /** How the handoff form is posted to a company's webhook. The web's own fetch unless a test says otherwise. */
@@ -151,7 +165,8 @@ export function createApp(parts: AppParts) {
       });
     }
 
-    const scripts: Record<string, (() => Promise<string>) | undefined> = { "/widget.js": parts.widget, "/widget-act.js": parts.widgetActing, "/widget-teach.js": parts.widgetTeaching };
+    // The mapper, /map.js, is fetched only in a tab where someone at the company is mapping their app.
+    const scripts: Record<string, (() => Promise<string>) | undefined> = { "/widget.js": parts.widget, "/widget-act.js": parts.widgetActing, "/widget-teach.js": parts.widgetTeaching, "/map.js": parts.mapper };
     const scriptFor = request.method === "GET" ? scripts[url.pathname] : undefined;
     if (scriptFor) {
       const cache = parts.widgetMaxAge > 0 ? `public, max-age=${parts.widgetMaxAge}` : "no-store";
@@ -274,6 +289,21 @@ export function createApp(parts: AppParts) {
       // Without the widget's random id there is no way to count this visitor once, so the outline isn't used.
       if (site.learn === false || !report.visitor) return json(200, { ok: false });
       parts.onOutline?.(site, await visitorHash(site.id, report.visitor), report.outline, await networkHash(site.id, caller));
+      return json(200, { ok: true });
+    }
+
+    // A page of the company's own app, mapped from a signed-in browser there
+    // (src/widget/map.ts). The pass comes from the dashboard and is checked
+    // on every call. With no page, the widget is only asking whether its pass is good.
+    if (request.method === "POST" && url.pathname === "/v1/map") {
+      const report = parseMapReport(await readJson(request));
+      if (!report) return json(400, { error: "That isn't a valid mapping report." });
+      const site = await parts.loadSite(report.site, true);
+      if (!site) return json(404, { error: "No site with that id." });
+      if (!mayWrite(site, origin)) return json(403, { error: refusal(origin) });
+      if (await parts.overLimit(`${site.id} map ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
+      if (!parts.mapping || !(await parts.mapping.allowed(site, report.pass))) return json(403, { error: "This mapping link has run out. Start again from the dashboard." });
+      if (report.page) await parts.mapping.save(site, report.page);
       return json(200, { ok: true });
     }
 
