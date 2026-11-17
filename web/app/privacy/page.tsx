@@ -34,7 +34,7 @@ export default function Privacy() {
         If you ask us to email the install steps to your developer, we send them one email through Resend, from
         install@joinhaptic.com, with your email address so they can reply to you. Resend gets their address
         and the email, and nothing else. We do not keep their address. So that no address gets more than a few of
-        these emails, we keep a scrambled form of it with the site, your company, who sent it and when, and delete
+        these emails, and no one can keep trying to send them, we keep a scrambled form of it with the site, your company, who sent it and when, and delete
         that record once it is a day old, always within two days.
       </p>
       <p>

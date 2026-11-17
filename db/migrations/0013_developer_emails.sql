@@ -3,6 +3,10 @@
 -- limits: in any 24 hours, 3 from one company to one mailbox and 6 to it from
 -- everyone, 10 from a site, 20 from a company and 10 from one person.
 --
+-- And each try: every press that reaches the email service, sent or turned
+-- down, kept as a row of its own kind, so one person makes at most 30 in any
+-- hour. An email turned down comes off the count above; its try stays.
+--
 -- The address itself is never kept: `recipient` is a hash of the mailbox it
 -- reaches, written the same way however the address was (case, a +tag, dots
 -- on Gmail). Rows older than a day are deleted with each new email and by the
@@ -23,7 +27,10 @@ create table developer_emails (
   -- Pending from the moment it is counted until Resend takes it, then sent. A row left pending, by a
   -- request cut off between the two, may be tried again once, after a minute. Either way it counts.
   state text not null default 'pending' check (state in ('pending', 'sent')),
-  retried boolean not null default false
+  retried boolean not null default false,
+  -- An email, counted toward the day's limits, or a try, counted toward the hour's. A try's key is its own,
+  -- never a press's, and its state and retried mean nothing.
+  kind text not null default 'email' check (kind in ('email', 'try'))
 );
 create index developer_emails_company on developer_emails (company_id, sent_at);
 create index developer_emails_recipient on developer_emails (recipient, sent_at);

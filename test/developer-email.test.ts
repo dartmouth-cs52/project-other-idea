@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { developerEmail, emailText, INSTALL_FROM, UnsafeText } from "../web/worker/developer-email.ts";
 import {
+  TRIES_PER_PERSON,
   EMAILS_PER_ADDRESS,
   EMAILS_PER_MAILBOX,
   EMAILS_PER_COMPANY,
@@ -213,7 +214,7 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     addSite(SITE);
   };
   const sql = () => psqlSql(DB);
-  const rows = async () => (await sql().query(`select * from developer_emails order by sent_at`)) as { key: string; company_id: string; site_id: string; sender: string; recipient: string; sent_at: string }[];
+  const rows = async () => (await sql().query(`select * from developer_emails where kind = 'email' order by sent_at`)) as { key: string; company_id: string; site_id: string; sender: string; recipient: string; sent_at: string }[];
   const context = async () => (await sql().query(`select context from sites where id = $1`, [SITE]))[0]!.context as Row["context"];
   let presses = 0;
   const press = () => `press-${String(++presses).padStart(6, "0")}`;
@@ -231,13 +232,15 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     assert.match(idempotency ?? "", new RegExp(`^developer-email/${SITE}/[0-9a-f]{32}$`), "the press's key, bound to the site and the address");
     assert.ok(!idempotency?.includes("press-0001"));
     const [row] = await rows();
-    assert.deepEqual(Object.keys(row!).sort(), ["company_id", "key", "recipient", "retried", "sender", "sent_at", "site_id", "state"]);
+    assert.deepEqual(Object.keys(row!).sort(), ["company_id", "key", "kind", "recipient", "retried", "sender", "sent_at", "site_id", "state"]);
     assert.equal((row as unknown as { state: string }).state, "sent");
     assert.equal(row!.site_id, SITE);
     assert.equal(row!.company_id, ORG.id);
     assert.equal(row!.sender, USER.id);
     assert.match(row!.recipient, /^[0-9a-f]{32}$/);
-    assert.ok(!JSON.stringify(await rows()).includes("example.com"), "the address itself is not kept");
+    const all = await sql().query(`select * from developer_emails`);
+    assert.deepEqual(all.map((item) => (item as { kind: string }).kind).sort(), ["email", "try"], "the email, and its try");
+    assert.ok(!JSON.stringify(all).includes("example.com"), "the address itself is not kept, in either");
     assert.deepEqual((await context()).pages, [{ path: "/" }], "the site is untouched");
   });
 
@@ -322,7 +325,7 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     };
     return { delivered, fetcher, requests: () => requests };
   }
-  const counted = async () => Number((await sql().query(`select count(*)::int as n from developer_emails`))[0]!.n);
+  const counted = async () => Number((await sql().query(`select count(*)::int as n from developer_emails where kind = 'email'`))[0]!.n);
   /** Resend that never answers: the request that counted the email stops there, as a Worker cut off mid-request would. */
   const hangs = () => new Promise<Response>(() => {});
   const until = async (done: () => Promise<boolean>) => {
@@ -373,17 +376,17 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     // The first request counted the email and stopped before it heard from Resend.
     void call(sql(), press, { fetcher: hangs });
     await until(async () => (await counted()) === 1);
-    const [row] = (await sql().query(`select state from developer_emails`)) as { state: string }[];
+    const [row] = (await sql().query(`select state from developer_emails where kind = 'email'`)) as { state: string }[];
     assert.equal(row?.state, "pending");
     // Straight away: it may still be going, so nothing is sent again.
     const soon = await call(sql(), press, { fetcher });
     assert.equal(soon?.status, 409);
     assert.equal(sent.length, 0);
     // After the wait, once: the same request to Resend, which sends it if the first never got there.
-    exec(DB, `update developer_emails set sent_at = now() - interval '2 minutes'`);
+    exec(DB, `update developer_emails set sent_at = now() - interval '2 minutes' where kind = 'email'`);
     assert.deepEqual(await call(sql(), press, { fetcher }), { status: 200, body: { sent: true, to: "dev@example.com" } });
     assert.equal(sent.length, 1);
-    assert.equal(((await sql().query(`select state from developer_emails`))[0] as { state: string }).state, "sent");
+    assert.equal(((await sql().query(`select state from developer_emails where kind = 'email'`))[0] as { state: string }).state, "sent");
     assert.equal((await call(sql(), press, { fetcher }))?.status, 200);
     assert.equal(sent.length, 1, "and from then on it is answered from the record");
   });
@@ -393,12 +396,31 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     const press = { to: "dev@example.com", key: "crashed-press-02" };
     void call(sql(), press, { fetcher: hangs });
     await until(async () => (await counted()) === 1);
-    exec(DB, `update developer_emails set sent_at = now() - interval '2 minutes'`);
+    exec(DB, `update developer_emails set sent_at = now() - interval '2 minutes' where kind = 'email'`);
     const refused = resend(500);
     assert.equal((await call(sql(), press, { fetcher: refused.fetcher }))?.status, 502);
     assert.equal(await counted(), 1, "only the request that counted an email may take it off");
     assert.equal((await call(sql(), press, { fetcher: refused.fetcher }))?.status, 409);
     assert.equal(refused.sent.length, 1, "retried once, never again");
+  });
+
+  test("a retry of a half-done press past the cap on tries is refused, stays counted, and keeps its one retry for when tries are back", async () => {
+    reset();
+    const press = { to: "dev@example.com", key: "crashed-press-03" };
+    const tries = async () => Number((await sql().query(`select count(*)::int as n from developer_emails where kind = 'try'`))[0]!.n);
+    void call(sql(), press, { fetcher: hangs });
+    await until(async () => (await tries()) === 1);
+    exec(DB, `update developer_emails set sent_at = now() - interval '2 minutes' where kind = 'email'`);
+    exec(DB, `insert into developer_emails (key, kind, company_id, site_id, sender, recipient)
+      select 'try earlier ' || n, 'try', '${ORG.id}', '${SITE}', '${USER.id}', 'r' from generate_series(2, ${TRIES_PER_PERSON}) n`);
+    const { sent, fetcher } = resend();
+    assert.deepEqual((await call(sql(), press, { fetcher }))?.body, LIMIT);
+    assert.equal(sent.length, 0);
+    assert.equal(await counted(), 1, "it stays counted");
+    // An hour on, the person has tries again, and the press still has its one retry.
+    exec(DB, `update developer_emails set sent_at = now() - interval '2 hours' where kind = 'try'`);
+    assert.deepEqual(await call(sql(), press, { fetcher }), { status: 200, body: { sent: true, to: "dev@example.com" } });
+    assert.equal(sent.length, 1);
   });
 
   test("one key sent with two addresses is two emails, each with its own key, each sent and counted", async () => {
@@ -431,6 +453,30 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     assert.equal(unreachable?.status, 502);
     assert.match((unreachable?.body as { error: string }).error, /^The email service could not be reached\./);
     assert.equal((await rows()).length, 0);
+  });
+
+  test("forty presses Resend turns down make at most 30 requests to it, and after that the person is told the limit", async () => {
+    reset();
+    const { sent, fetcher } = resend(403);
+    const answers: (number | undefined)[] = [];
+    for (let i = 0; i < 40; i++) answers.push((await call(sql(), { to: "dev@example.com", key: press() }, { fetcher }))?.status);
+    assert.equal(sent.length, 30, "every press that reached Resend counted, turned down or not");
+    assert.deepEqual(answers.slice(0, 30), Array(30).fill(502));
+    assert.deepEqual(answers.slice(30), Array(10).fill(429));
+    assert.deepEqual((await call(sql(), { to: "other@example.com", key: press() }, { fetcher }))?.body, LIMIT, "the same single limit message");
+    assert.equal(sent.length, 30);
+  });
+
+  test("the cap on tries leaves a normal day alone: a few turned down, then every email the person may send that day goes", async () => {
+    reset();
+    const down = resend(500);
+    for (let i = 0; i < 5; i++) assert.equal((await call(sql(), { to: `dev${i}@example.com`, key: press() }, { fetcher: down.fetcher }))?.status, 502);
+    const { sent, fetcher } = resend();
+    const keys = Array.from({ length: EMAILS_PER_PERSON }, () => press());
+    for (const [i, key] of keys.entries()) assert.equal((await call(sql(), { to: `dev${i}@example.com`, key }, { fetcher }))?.status, 200);
+    // Retries of presses already sent are answered from the record, never reach Resend, and so aren't tries.
+    for (const [i, key] of keys.entries()) assert.equal((await call(sql(), { to: `dev${i}@example.com`, key }, { fetcher }))?.status, 200);
+    assert.equal(sent.length, EMAILS_PER_PERSON);
   });
 
   test(`one mailbox gets at most ${EMAILS_PER_ADDRESS} a day, however its address is written`, async () => {
@@ -498,15 +544,17 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
   /**
    * The real queries, with the insert held for 0.3 s after it has taken its view of the table, so presses at
    * the same moment always overlap and none sees another's row: only the locks, taken in the statement
-   * before it, make them wait their turn. Take either lock out of setup-api.ts and these tests fail.
+   * before it, make them wait their turn. Take any lock out of setup-api.ts and these tests fail. With
+   * `only`, just the inserts that match it are held.
    */
-  const slowWrites = () => {
+  const slowWrites = (only?: RegExp) => {
     const real = psqlSql(DB);
     const slow = ((strings: TemplateStringsArray, ...values: unknown[]) => real(strings, ...values)) as typeof real;
     slow.query = real.query;
     slow.transaction = (queries) => {
       const last = queries[queries.length - 1] as unknown as { text: string; params: unknown[] };
       assert.match(last.text, /on conflict \(key\) do nothing/);
+      if (only && !only.test(last.text)) return real.transaction(queries);
       const held = real.query(last.text.replace("on conflict (key) do nothing", "and pg_sleep(0.3)::text = '' on conflict (key) do nothing"), last.params);
       return real.transaction([...queries.slice(0, -1), held]);
     };
@@ -533,6 +581,20 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     const answers = await Promise.all(Array.from({ length: 9 }, (_, i) => call(slowWrites(), { to: "shared@example.net", key: press() }, { fetcher, ...who[i % 3] })));
     assert.equal(answers.filter((answer) => answer?.status === 200).length, EMAILS_PER_MAILBOX);
     assert.equal(sent.length, EMAILS_PER_MAILBOX);
+  });
+
+  test("the person's lock holds the cap on tries when presses overlap", async () => {
+    reset();
+    // Five tries left this hour. Only the try is held, so ten presses reach it together.
+    const left = 5;
+    exec(DB, `insert into developer_emails (key, kind, company_id, site_id, sender, recipient)
+      select 'try earlier ' || n, 'try', '${ORG.id}', '${SITE}', '${USER.id}', 'r' from generate_series(1, ${TRIES_PER_PERSON - left}) n`);
+    const { sent, fetcher } = resend();
+    const answers = await Promise.all(Array.from({ length: 10 }, (_, i) => call(slowWrites(/'try'/), { to: `overlap${i}@example.org`, key: press() }, { fetcher })));
+    assert.equal(sent.length, left);
+    assert.equal(answers.filter((answer) => answer?.status === 200).length, left);
+    assert.deepEqual(answers.filter((answer) => answer?.status !== 200).map((answer) => answer?.body), Array(10 - left).fill(LIMIT));
+    assert.equal((await rows()).length, left, "the presses turned away are not counted as emails");
   });
 
   test("records older than a day are deleted with the next email, and by the daily run", async () => {

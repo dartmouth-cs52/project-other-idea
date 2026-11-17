@@ -47,6 +47,12 @@ export const EMAILS_PER_SITE = 10;
 export const EMAILS_PER_COMPANY = 20;
 /** and from one person. */
 export const EMAILS_PER_PERSON = 10;
+/**
+ * The most presses one person may have reach Resend in any hour, sent or turned down. An email Resend turns
+ * down isn't counted above, so without this a person could press Send against a failing Resend for ever, on
+ * the account the sign-in email uses.
+ */
+export const TRIES_PER_PERSON = 30;
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -249,7 +255,7 @@ const COUNTS = `
   count(*) filter (where e.company_id = $3)::int as company,
   count(*) filter (where e.sender = $4)::int as person
   from developer_emails e
-  where e.sent_at > now() - interval '1 day' and (e.recipient = $1 or e.company_id = $3 or e.sender = $4)`;
+  where e.kind = 'email' and e.sent_at > now() - interval '1 day' and (e.recipient = $1 or e.company_id = $3 or e.sender = $4)`;
 
 /** How long a press left pending waits before it may be tried again, once. Longer than any request to Resend takes. */
 const PENDING_RETRY_AFTER = "1 minute";
@@ -279,6 +285,10 @@ async function pressOf(sql: Sql, key: string): Promise<Press | undefined> {
  * left pending, by a request cut off between counting and sending, may be
  * tried once more after a minute, with the same key, so Resend sends it only
  * if the first never reached it. Whatever happens then, it stays counted.
+ *
+ * Every press that is about to reach Resend is also a try, kept whether it is
+ * sent or turned down, and one person gets 30 tries in any hour. Past that the
+ * press is refused like any limit, and what it counted or claimed is given back.
  */
 async function emailDeveloper(call: SetupRequest, id: string, input: Record<string, unknown>): Promise<Answer> {
   const { sql, org, user, env } = call;
@@ -306,6 +316,8 @@ async function emailDeveloper(call: SetupRequest, id: string, input: Record<stri
   const sentAnswer: Answer = { status: 200, body: { sent: true, to: checked.email } };
   /** True when this request counted the email, and so may take it off if its own send fails. */
   let counted = false;
+  /** True when this request claimed a pending press's one retry. */
+  let claimed = false;
   try {
     let press = await pressOf(sql, key);
     if (!press) {
@@ -333,13 +345,33 @@ async function emailDeveloper(call: SetupRequest, id: string, input: Record<stri
     if (!counted) {
       if (press!.state === "sent") return sentAnswer;
       // Pending: being sent by another request right now, or left by one cut off before it heard back.
-      const claimed = await sql.query(
+      const retry = await sql.query(
         `update developer_emails set retried = true
         where key = $1 and state = 'pending' and not retried and sent_at < now() - interval '${PENDING_RETRY_AFTER}'
         returning key`,
         [key],
       );
-      if (!claimed.length) return refuse(409, `This email is on its way, or may have gone already. If it doesn't arrive, ${COPY_INSTEAD.charAt(0).toLowerCase()}${COPY_INSTEAD.slice(1)}`);
+      if (!retry.length) return refuse(409, `This email is on its way, or may have gone already. If it doesn't arrive, ${COPY_INSTEAD.charAt(0).toLowerCase()}${COPY_INSTEAD.slice(1)}`);
+      claimed = true;
+    }
+    // This press will reach Resend, so it is a try, if the person has a try left this hour. Checked as the row is
+    // written, after this person's lock, so presses at the same moment take turns.
+    const [, tried] = await sql.transaction([
+      sql.query(`select pg_advisory_xact_lock(hashtext('developer-email person ' || $1))`, [user.id]),
+      sql.query(
+        `insert into developer_emails (key, kind, company_id, site_id, sender, recipient)
+        select $1, 'try', $2, $3, $4, $5
+        where (select count(*) from developer_emails t where t.kind = 'try' and t.sender = $4 and t.sent_at > now() - interval '1 hour') < $6
+        on conflict (key) do nothing
+        returning key`,
+        [`try ${crypto.randomUUID()}`, org.id, site.id, user.id, recipient, TRIES_PER_PERSON],
+      ),
+    ]);
+    if (!(tried as unknown[]).length) {
+      // Nothing goes to Resend, so what this request counted comes off, and a claimed retry is left for later.
+      if (counted) await sql.query(`delete from developer_emails where key = $1 and state = 'pending' and not retried`, [key]);
+      if (claimed) await sql.query(`update developer_emails set retried = false where key = $1 and state = 'pending'`, [key]);
+      return refuse(429, LIMIT);
     }
   } catch (error) {
     if (!notMigrated(error)) throw error;
