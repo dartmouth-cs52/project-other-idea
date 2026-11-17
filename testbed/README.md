@@ -40,7 +40,9 @@ To load the app without Haptic, add `?lab.widget=0`.
 
 ## Online
 
-Northpine runs at https://demo.joinhaptic.com with Haptic on, so anyone can open it and press Ask. Its site is `site_5a6c4cb3e840`, on the Haptic company's account in the dashboard, with `haptic-notes.md` as its notes and a limit of 60 steps per visitor a day. It was built with `npm run tag -- --url https://demo.joinhaptic.com --name Northpine --notes testbed/haptic-notes.md --visitor-steps 60` and made live with `npm run site:publish -- site_5a6c4cb3e840`. To change what Haptic knows, edit the notes and run both again with `--id site_5a6c4cb3e840`. `wrangler.jsonc` says how to build and deploy the app itself.
+Northpine runs at https://demo.joinhaptic.com with Haptic on, so anyone can open it and press Ask. Its site is `site_5a6c4cb3e840`, on the Haptic company's account in the dashboard, with `haptic-notes.md` as its notes and a limit of 60 steps per visitor a day. It was built with `npm run tag -- --url https://demo.joinhaptic.com --name Northpine --notes testbed/haptic-notes.md --visitor-steps 60` and made live with `npm run site:publish -- site_5a6c4cb3e840`. To change what Haptic knows, edit the notes and run both again with `--id site_5a6c4cb3e840`. The notes are Haptic's, not the app's, so changing them does not redeploy the app.
+
+The app itself goes live on its own: every change to `testbed/` that lands on main is built, packed into the `northpine` Worker and deployed by `.github/workflows/deploy-demo.yml`, which then checks the demo serves the new build. A change to Markdown alone is skipped. `wrangler.jsonc` says how to deploy by hand.
 
 ## The test panel
 

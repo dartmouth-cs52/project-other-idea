@@ -1,0 +1,108 @@
+# Publishes Northpine, the test app in testbed/, to Cloudflare, which serves it at
+# demo.joinhaptic.com from the northpine Worker described in testbed/wrangler.jsonc.
+#
+# It runs when a change to the app lands on main, and can also be started by hand
+# from the Actions tab. Pull requests never run it, so nothing goes live before a merge.
+#
+# It uses two of the repository secrets the site's deploy uses, under Settings,
+# Secrets and variables, Actions:
+#   CLOUDFLARE_API_TOKEN   a Cloudflare API token made from the "Edit Cloudflare Workers" template
+#   CLOUDFLARE_ACCOUNT_ID  the Cloudflare account the Worker lives in
+# Northpine has no backend, so there is no database to migrate and no other secret.
+
+name: Deploy demo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "testbed/**"
+      # A change to the docs or Haptic's notes alone does not need a deploy.
+      - "!testbed/**/*.md"
+      - ".github/workflows/deploy-demo.yml"
+  workflow_dispatch:
+
+# One deploy at a time. A second one waits for the first to finish.
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: testbed
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check the secrets are set
+        working-directory: .
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID under Settings, Secrets and variables, Actions."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: testbed/package-lock.json
+
+      - run: npm ci
+
+      # Against the live widget and the demo's site. Without these the build points at
+      # localhost:4000 and site_testbed, and Haptic would be broken on the demo.
+      # The build also checks types.
+      - name: Build
+        env:
+          VITE_HAPTIC_SRC: https://widget.joinhaptic.com/widget.js
+          VITE_HAPTIC_SITE: site_5a6c4cb3e840
+        run: npm run build
+
+      # Into worker/site.generated.json, which worker/index.js serves.
+      - name: Pack the files into the Worker
+        run: node scripts/pack-site.mjs
+
+      # testbed/ does not install Wrangler, so this uses the version locked at the repository's
+      # top, the one the widget server deploys with, rather than whatever is newest that day.
+      - name: Publish
+        run: |
+          version=$(node -p "require('../package-lock.json').packages['node_modules/wrangler'].version")
+          npx --yes "wrangler@$version" deploy
+
+      # Up is not enough: the demo once kept serving an old build after a fix had merged. The
+      # page must load the scripts and styles this build made, whose names change with their contents.
+      - name: Check the demo serves this build
+        run: |
+          assets=$(grep -oE '/assets/[^"]+' dist/index.html || true)
+          if [ -z "$assets" ]; then
+            echo "::error::dist/index.html names no files in /assets/, so there is nothing to look for."
+            exit 1
+          fi
+          for attempt in 1 2 3 4 5; do
+            if page=$(curl --fail --silent --show-error https://demo.joinhaptic.com/); then
+              missing=0
+              for asset in $assets; do
+                if ! grep -qF "$asset" <<<"$page"; then missing=1; fi
+              done
+              if [ "$missing" = 0 ]; then
+                echo "demo.joinhaptic.com serves this build:"
+                echo "$assets"
+                exit 0
+              fi
+            fi
+            sleep 6
+          done
+          echo "::error::demo.joinhaptic.com did not serve this build after the deploy. It should load:"
+          echo "$assets"
+          exit 1
