@@ -340,10 +340,15 @@ export function HelpDocs({ site, onChange }: { site: Site; onChange: (site: Site
   async function add(event: FormEvent) {
     event.preventDefault();
     setFailure(null);
+    // A paste is held to the Worker's own limit, measured on the body exactly as it will be sent. One far over it
+    // would be cut off mid-upload, and the browser might then say the connection failed instead of what is wrong.
     const found =
       mode === "url"
         ? { url: url.trim() ? undefined : "Paste the address of a help article." }
-        : { title: title.trim() ? undefined : "Give the doc a title.", text: text.trim() ? undefined : "Paste the doc's text." };
+        : {
+            title: title.trim() ? undefined : "Give the doc a title.",
+            text: !text.trim() ? "Paste the doc's text." : JSON.stringify({ title, text }).length > docs.bodyLimit.max ? docs.bodyLimit.message : undefined,
+          };
     if (fields.show(found)) return;
     setBusy(true);
     try {

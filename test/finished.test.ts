@@ -177,7 +177,7 @@ describe("which guides are stored as finished", { skip: TEST_DATABASE_URL ? fals
     await step(plain, words, 0, HOME);
     const said = await hearing(() => report(plain, words, { outcome: "finished" }));
     assert.deepEqual(await kept(words), { outcome: "shown", ended: true, helped: null, step_count: 1, steps: 1, models: "mock" });
-    assert.match(said, /reported finished, which its steps on record do not bear out, so it is kept as shown/);
+    assert.match(said, /reported finished, but the newest step 0 on record does not bear it out, so it is kept as shown/);
   });
 
   test("a report of finished for a guide with no recorded step is not stored as finished", async () => {
@@ -253,6 +253,38 @@ describe("which guides are stored as finished", { skip: TEST_DATABASE_URL ? fals
     await step(plain, guide, 0, HOME, {}, false);
     await report(plain, guide, { outcome: "finished" });
     assert.deepEqual(await kept(guide), { outcome: "finished", ended: true, helped: null, step_count: 1, steps: 1, models: "mock" });
+  });
+
+  test("a report is judged by the step it names, so the look after the last control cannot change it", async () => {
+    // The visitor followed a step, and the last reply (step 1) pointed at what they asked for. They used it, and the widget
+    // reported finished at once, naming step 1. Then the look at what came of the click (step 2) was answered: the model
+    // found nothing more to point at. Here that look is written before the report is read, as when the report is held up.
+    const { step, report } = server();
+    const ask = async (guide: string) => {
+      await step(plain, guide, 0, HOME);
+      scriptMock({ target: "e1", status: "done", say: "This is the billing page. Home is here." });
+      await step(plain, guide, 1, BILLING, { event: 'The user clicked link "Billing".' });
+      scriptMock({ target: null, status: "stuck", say: "I don't see anything more to do here." });
+      await step(plain, guide, 2, BILLING, { event: 'The user clicked link "Home".', closing: true });
+      assert.deepEqual(await kept(guide), { outcome: null, ended: false, helped: null, step_count: 3, steps: 3, models: "mock,mock,mock" });
+    };
+    const named = newGuide();
+    await ask(named);
+    await report(plain, named, { outcome: "finished", step: 1 });
+    assert.equal((await kept(named))?.outcome, "finished");
+
+    // A widget too old to name its step is judged by the newest step on record, as before: here, the look that found nothing.
+    const unnamed = newGuide();
+    await ask(unnamed);
+    await hearing(() => report(plain, unnamed, { outcome: "finished" }));
+    assert.equal((await kept(unnamed))?.outcome, "nothing_to_point_at");
+
+    // A step that is never on record is waited for, and then the newest is what is judged.
+    const missing = newGuide();
+    await ask(missing);
+    const said = await hearing(() => report(plain, missing, { outcome: "finished", step: 7 }));
+    assert.equal((await kept(missing))?.outcome, "nothing_to_point_at");
+    assert.match(said, /but the newest step 2 on record does not bear it out/);
   });
 
   test("in Do it with me, the click that commits finishes the guide, also when the reply that pointed at it said continue", async () => {

@@ -413,7 +413,7 @@ describe("the billing page's calls", { skip: !TEST_DATABASE_URL && "set TEST_DAT
       env: { STRIPE_SECRET_KEY: KEY, STRIPE_WEBHOOK_SECRET: SECRET },
       sql: psqlSql(DB) as never,
       org: { id: ORG, name: "Example Co", role },
-      user: { id: "00000000-0000-4000-8000-0000000000aa", email: "dana@example.com", name: "Dana", emailVerified: true },
+      user: { email: "dana@example.com" },
       path,
       url: new URL(`https://joinhaptic.com/api/app${path}`),
     } satisfies BillingRequest).then((answer) => answer as { status: number; body: Record<string, unknown> });

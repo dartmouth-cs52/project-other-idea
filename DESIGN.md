@@ -472,8 +472,9 @@ Components are shadcn/ui, restyled only through tokens and variants.
 - **Caption:** Ink bubble with Paper text, 14px, at most 288px wide. Text only.
   It sits under the target, or above when the space under it is busy, and
   never over the next control.
-- **Launcher:** The pill in the bottom right corner that opens the chat. Ink
-  with Paper words. A company can give it its own site's colour, so it looks
+- **Launcher:** The pill in the bottom right corner that opens the chat. It
+  is on the right on every site and only ever moves up that side, to clear a
+  control of the page's, never across to the left. Ink with Paper words. A company can give it its own site's colour, so it looks
   like part of the site, the way a support button does. Its words are then
   Paper or Ink, whichever reads better on that colour. The pointer never takes
   the site's colour. The two have opposite jobs: the launcher belongs to the
@@ -481,7 +482,11 @@ Components are shadcn/ui, restyled only through tokens and variants.
   sidebar was tried and could hardly be found.
 - **Chat:** Haptic's home, in the bottom right corner where support chat
   usually lives. A Card panel holding the conversation and the ask box. It
-  stays open from the first question to the last step.
+  stays open from the first question to the last step. A 24px × in Muted
+  foreground sits in its top right corner, the same place whatever the chat
+  holds, with a Muted circle under the mouse. It closes the chat and nothing
+  else: a running guide carries on, and the launcher opens the chat again as
+  it was.
 - **Ask box:** shadcn's input group: a Muted field with the text on top and a
   round Ink send button on a row beneath. While Haptic is guiding, send becomes
   a stop button.
@@ -515,8 +520,8 @@ Components are shadcn/ui, restyled only through tokens and variants.
   that fails gets an Error red outline and one 13px line under it saying what
   to type, the first such field takes the focus, and the line goes as soon as
   the person starts typing. A failure that is not one field's fault uses
-  shadcn's alert, with an icon, a short title and one line of detail, under the
-  form's buttons. Success replaces the form with a thank you. Every form on the
+  shadcn's alert, with an icon, a short title, one line of detail and, where
+  trying again could help, a Try again button, under the form's buttons. Success replaces the form with a thank you. Every form on the
   site and in the dashboard works this way, sign-in included, and so do the
   server's refusals: one that names a field shows under that field. The parts
   are in `web/components/form.tsx`. A page, or part of one, that could not load
@@ -533,7 +538,8 @@ follow the glide, and the glow lasts exactly as long as the wait. Everything
 else is a fade, a small scale or a height change of 150 to 250ms that eases
 out. Nothing grows from nothing: things arrive from within a few percent of
 their final size. A click is acknowledged like a pressed button, with the mark
-dipping to 97 percent and back in a quarter of a second, and no ripple. With reduced motion on, the pointer jumps
+dipping to 97 percent and back in a quarter of a second, and no ripple, whether
+the person clicks or Haptic presses for them. With reduced motion on, the pointer jumps
 to its target, there is no glow and no shimmer, and each demo holds one still frame.
 
 Scrolling never changes what a demo shows. A demo waits on its first frame,
@@ -572,9 +578,12 @@ reason a customer gave.
 - **Questions.** Every question, newest first, as a table to search and filter.
   A row opens its guide.
 - **Gaps.** What the company can fix. What people can't find, guides that
-  stopped finishing, where people give up and the steps they click past.
+  stopped finishing, where people give up and the steps they click past. Each
+  question people can't find has Teach Haptic the right way beside See the
+  guides.
 - **Knowledge.** What Haptic reads and what the company has corrected. Notes,
-  help docs, corrections, the controls never to point at, and the pages read.
+  help docs, corrections, the routes taught by doing, the controls never to
+  point at, and the pages read.
 - **Settings.** Three tabs. General holds the site's name, the widget's two
   colours and deleting the site. Install holds the script and where it runs.
   Usage holds the finished guides, month by month, which are what billing
@@ -693,6 +702,16 @@ what was pointed at, and what Haptic said in the Ink caption bubble. The
 address holds the guide, so the link opens the same guide for someone else,
 and Back closes it.
 
+**Teaching.** Teach Haptic uses the same panel. A guide that did not get there
+has Teach Haptic the right way at the top of its panel, and pressing it closes
+the guide and opens the teaching panel in its place, so one panel is open at a
+time. Its title is Teach Haptic in Muted text over the question. It says the
+site is open in another tab while the task is done there, then lists the
+recorded steps as white cards, each with its number in a ring, Delete and Add
+a note, and Save this route as the one Ink button. The address does not hold
+it: closing it loses nothing, and steps waiting for review are listed under
+Knowledge, in Taught by doing, with Review.
+
 **Waiting.** While numbers load, Muted blocks hold the place of what is coming,
 at its size, so nothing jumps when it arrives. Once a page has numbers it keeps
 showing them while newer ones are on their way.
@@ -726,13 +745,16 @@ stays. The rest below is proposed.
   glide starts from the control just used. If nothing happens for about four
   seconds the mark pulses once, and no more often than that. In the widget the
   pointer goes with the mark between steps, and the next glide starts from
-  where it was. The mark breathes only when Haptic has done part of a task
-  itself and hands the last click to the person.
+  where it was. The mark holds still when Haptic hands a step to the person
+  too: no breathing, no halo.
 - **Say one thing.** A caption names the next action in a short sentence. It
   carries no buttons. In the widget it carries a small × that stops the guide,
   so there is a way out beside the pointer when the chat has been closed.
 - **Keep the conversation and the exit in view.** The chat stays open for the
   whole guide, with the question at the top and a stop button in the ask box.
+  Once anything is in the chat, a turning arrow on the far side of the ask
+  box's row starts over: it calls off a guide that is running and clears the
+  chat back to an empty ask box with the keyboard.
 - **Never cover the control.** When the chat would sit on the control being
   pointed at, or on its caption, it moves to the other side of the window
   while the pointer is there, and comes back when it has gone.
@@ -772,10 +794,12 @@ stays. The rest below is proposed.
   The launcher carries no tag. A customer can change the launcher's word, and
   cannot remove the line.
 - **Put the launcher away.** With the mouse over the launcher or focus on it,
-  a 20px white circle with an × fades in on its outer bottom corner, the right
-  one for a launcher on the right. It takes the launcher down to a 14px dot in
+  a 20px white circle with a − fades in on its outer bottom corner, the right
+  one for a launcher on the right. A −, not an ×: it minimizes, and nothing
+  closes, and the chat's own × close button would otherwise show beside it
+  with another meaning. It takes the launcher down to a 14px dot in
   the same place: the word fades first, then the pill draws in. The dot stays
-  that small while the mouse that pressed the × is still over it. Once the
+  that small while the mouse that pressed the − is still over it. Once the
   mouse comes back, or with focus, it opens to 32px and shows the pointer
   mark, growing in place without moving, and a click brings the launcher back
   without opening the panel. Minimized, the area that answers the mouse is a

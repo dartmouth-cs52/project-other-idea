@@ -48,7 +48,7 @@ const COMBO = `<h1>Rules</h1>
     for (const option of list.children) option.addEventListener('click', () => { list.hidden = true; size.setAttribute('aria-expanded', 'false'); document.getElementById('out').textContent = 'Showing ' + option.textContent; });
   </script>`;
 
-test("the caption lets clicks through to the page, all but its close button, and moves off a list that opens under it", async () => {
+test("the caption lets clicks through to the page, all but its close button, and keeps off a list that opens under it", async () => {
   const session = await start(COMBO, (request, index) => (index === 0 ? point(request, "Page size", "Open Page size and choose 50 / page.") : words("The table shows 50 rows.")));
   try {
     await session.ask("show 50 rows");
@@ -60,7 +60,7 @@ test("the caption lets clicks through to the page, all but its close button, and
     await session.page.waitForTimeout(100);
     assert.notEqual(await hitAt(session, before), "haptic", "the caption took a click meant for the list under it");
     assert.equal(await hitAt(session, await ours(session, ".caption .close")), "haptic", "the close button no longer takes clicks");
-    // Once something new shows under it, the caption moves to the other side of the control.
+    // A field that types has its caption above it from the start, so the list that opens under it is clear.
     await session.page.waitForTimeout(500);
     const moved = await ours(session, ".caption");
     const field = await session.page.locator("#size").boundingBox();
@@ -68,6 +68,46 @@ test("the caption lets clicks through to the page, all but its close button, and
     await session.page.locator("#o2").click();
     await session.untilAsked(2);
     assert.match(session.requests[1]!.event ?? "", /^The user chose "50 \/ page" from the list that combobox "Page size" opened\./);
+  } finally {
+    await session.close();
+  }
+});
+
+const INVITE = `<h1>Invite people</h1>
+  <label for="email" style="display:block;margin-top:120px">Email address</label>
+  <input id="email" type="email" placeholder="new.hire@example.com" style="width:320px;height:32px">
+  <div style="position:relative;margin-top:24px">
+    <button id="role" type="button" aria-haspopup="menu" aria-expanded="false" style="height:32px">Employee</button>
+    <div id="roles" role="menu" hidden style="position:absolute;top:38px;left:0;width:360px;background:#fff;border:1px solid #999">
+      ${["Employee", "Manager", "Admin"].map((role) => `<div role="menuitem" style="padding:10px">${role}</div>`).join("")}
+    </div>
+  </div>
+`;
+
+test("the caption goes above a text field, where the browser's own suggestions open below it, and below a button until something opens under it (Northpine: Chrome's saved addresses covered the caption on the invite's email field)", async () => {
+  const session = await start(INVITE, (request, index) =>
+    index === 0 ? point(request, "Email address", "Type the email of the person you want to invite.") : index === 1 ? point(request, "Employee", "Click Employee to pick their role.") : words("Done."),
+  );
+  try {
+    await session.ask("invite someone");
+    await session.untilState("pointing");
+    await session.page.waitForTimeout(700);
+    const field = (await session.page.locator("#email").boundingBox())!;
+    const overField = await ours(session, ".caption");
+    assert.ok(overField.bottom <= field.y, `the caption is not above the email field: its bottom is ${overField.bottom}, the field's top ${field.y}`);
+    await session.page.locator("#email").fill("sam@example.com");
+    await session.untilAsked(2, 10_000);
+    await session.untilState("pointing");
+    await session.page.waitForTimeout(700);
+    const button = (await session.page.locator("#role").boundingBox())!;
+    const underButton = await ours(session, ".caption");
+    assert.ok(underButton.top >= button.y + button.height, `the caption is not below the button: its top is ${underButton.top}, the button's bottom ${button.y + button.height}`);
+    // A menu the page opens by itself, where the caption is: the caption moves to the other side, and stays on show.
+    await session.page.evaluate(() => (document.getElementById("roles")!.hidden = false));
+    await session.page.waitForTimeout(700);
+    const moved = await ours(session, ".caption");
+    assert.ok(moved.bottom > moved.top, "the caption is not on show");
+    assert.ok(moved.bottom <= button.y, `the caption stayed on the menu: its bottom is ${moved.bottom}, the button's top ${button.y}`);
   } finally {
     await session.close();
   }
@@ -134,7 +174,7 @@ test("the tip of the pointer stays on the control when something else sits on it
   }
 });
 
-test("the launcher moves out of the way of a control in its corner, and back when the guide moves on", async () => {
+test("the launcher moves up out of the way of a control in its corner, and back when the guide moves on", async () => {
   const page = `<h1>Wizard</h1><button type="button">Back</button>
     <button id="next" type="button" style="position:fixed;right:24px;bottom:24px;padding:10px 24px">Next</button>`;
   const session = await start(page, (request, index) => (index === 0 ? point(request, "Next", "Click Next.") : words("You are on the last step.")));
@@ -144,7 +184,9 @@ test("the launcher moves out of the way of a control in its corner, and back whe
     await session.page.waitForTimeout(700);
     const next = (await session.page.locator("#next").boundingBox())!;
     const launcher = await ours(session, ".launcher");
-    assert.ok(launcher.right < next.x || launcher.left > next.x + next.width, "the launcher covers the Next button");
+    // Up the right side, above the button: never along the bottom or to the left.
+    assert.ok(launcher.bottom <= next.y, `the launcher covers the Next button: ${JSON.stringify({ launcher, next })}`);
+    assert.equal(Math.round((await session.page.evaluate(() => window.innerWidth)) - launcher.right), 20, "the launcher moved sideways, not up");
     assert.equal(await hitAt(session, { left: next.x, right: next.x + next.width, top: next.y, bottom: next.y + next.height }), "next");
     await session.page.locator("#next").click();
     await session.untilState("finished");
@@ -176,13 +218,16 @@ test("the space around the launcher and the ask box takes no clicks: a page butt
 // Where the launcher sits while no guide runs. Sites keep their own controls
 // in the window's lower corners: a chat button, a Feedback tab, a "Customize"
 // button pinned there, and at the foot of a page the footer's last links,
-// which no scrolling brings out from under the launcher.
+// which no scrolling brings out from under the launcher. It moves up the right
+// side of the window, off them, and never sideways or to the left.
 
 const overlap = (a: Box, b: Box) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 const boxOf = async (session: Session, selector: string): Promise<Box> => {
   const box = (await session.page.locator(selector).boundingBox({ timeout: 5000 }))!;
   return { left: box.x, top: box.y, right: box.x + box.width, bottom: box.y + box.height };
 };
+/** How far the launcher's right edge is from the window's: 20 pixels wherever it has moved up to. */
+const inFromRight = async (session: Session) => Math.round((await session.page.evaluate(() => window.innerWidth)) - (await ours(session, ".launcher")).right);
 /** The launcher is free of every one of these controls, and a click at the middle of each lands on it. */
 async function launcherClearOf(session: Session, selectors: string[]): Promise<Box> {
   const launcher = await ours(session, ".launcher");
@@ -219,6 +264,7 @@ test("the launcher does not sit on a Feedback tab and a Customize button pinned 
     await session.page.waitForTimeout(300);
     const launcher = await launcherClearOf(session, ["#feedback", "#customize"]);
     assert.ok(launcher.left > 683, `the launcher left its side: ${JSON.stringify(launcher)}`);
+    assert.equal(await inFromRight(session), 20, "the launcher moved sideways, not up");
   } finally {
     await session.close();
   }
@@ -257,13 +303,15 @@ test("when the window is resized, the launcher moves off a control that came int
   }
 });
 
-test("the site's own corner wins: a launcher set to the lower left stays on the left, beside the page's button there", async () => {
-  const page = `<h1>Account</h1><button id="cookies" type="button" style="position:fixed;left:16px;bottom:16px;width:120px;height:40px">Cookie settings</button>`;
-  const session = await start(page, () => words("Use Cookie settings."), "/", { appearance: { position: "bottom-left" } });
+test("the launcher is on the right on every site, even one stored with it on the left, and moves up off the page's button there", async () => {
+  const page = `<h1>Account</h1><button id="cookies" type="button" style="position:fixed;right:16px;bottom:16px;width:120px;height:40px">Cookie settings</button>`;
+  // A site stored on the left before that choice went: the type no longer allows it.
+  const session = await start(page, () => words("Use Cookie settings."), "/", { appearance: { position: "bottom-left" as "bottom-right" } });
   try {
     await session.page.waitForTimeout(300);
     const launcher = await launcherClearOf(session, ["#cookies"]);
-    assert.ok(launcher.right < 683, `the launcher left the site's side: ${JSON.stringify(launcher)}`);
+    assert.ok(launcher.left > 683, `the launcher is not on the right: ${JSON.stringify(launcher)}`);
+    assert.equal(await inFromRight(session), 20, "the launcher moved sideways, not up");
   } finally {
     await session.close();
   }

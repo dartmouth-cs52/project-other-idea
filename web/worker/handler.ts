@@ -5,11 +5,13 @@ import { checkRequest, cleanRequest, emailDomain, isPersonalEmail, type AccessFi
 import { appApi, approveLink, type AppEnv } from "./app-api";
 import { billingSweep, stripeWebhook, WEBHOOK_PATH } from "./billing";
 import { proxyAuth } from "./auth";
+import { boundedText } from "./body";
 import { database } from "./db";
 import { sendHealthAlerts } from "./health";
 import { HOOK_PATH, neonHook, type HookEnv } from "./neon-hook";
 import { forgetOldEmails } from "./setup-api";
 import { isPlaybookPath, playbook } from "./playbook";
+import { forgetOldTeaching } from "./teach";
 
 export interface Assets {
   fetch(request: Request): Promise<Response> | Response;
@@ -54,6 +56,8 @@ export async function daily(env: Env): Promise<void> {
   }
   // Each install email sent deletes the records older than a day. This catches a site that sends no more.
   await forgetOldEmails(database(env.DATABASE_URL)).catch((error: Error) => console.error("Could not delete old install email records:", error.message));
+  // Teach sessions nobody saved, a week on, and any steps a saved or closed one still holds.
+  await forgetOldTeaching(database(env.DATABASE_URL)).catch((error: Error) => console.error("Could not delete old teach sessions:", error.message));
 }
 
 export async function handle(request: Request, env: Env, assets: Assets): Promise<Response> {
@@ -111,8 +115,8 @@ async function requestAccess(request: Request, env: Env, url: URL): Promise<Resp
     return json({ error: "Too many requests. Try again in a minute." }, 429);
   }
 
-  const raw = await request.text();
-  if (raw.length > 8000) return json({ error: "That is too long." }, 413);
+  const raw = await boundedText(request, 8000);
+  if (raw === null) return json({ error: "That is too long." }, 413);
   let body: Record<string, unknown>;
   try {
     body = JSON.parse(raw) as Record<string, unknown>;

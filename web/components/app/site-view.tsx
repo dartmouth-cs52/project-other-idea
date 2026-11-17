@@ -21,6 +21,7 @@ import { Questions } from "./questions";
 import { SetupGate } from "./setup/setup-gate";
 import { SiteShell } from "./shell";
 import { DeleteSite, HelpDocs, Notes, SiteName, WidgetLook } from "./site-settings";
+import { TeachDrawer } from "./teach";
 import { FinishedGuides } from "./usage";
 
 /** How often the page asks whether the script has been seen, while waiting for it. */
@@ -174,6 +175,7 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
         {openGuide && site && (
           <GuideDrawer siteId={site.id} guideId={openGuide} stamp={live?.stamp} onClose={() => set({ guide: undefined })} onCorrected={(corrections) => setSite({ ...site, corrections })} />
         )}
+        {site && <TeachDrawer site={site} onChange={setSite} />}
       </SiteShell>
     </DashboardSurface>
   );

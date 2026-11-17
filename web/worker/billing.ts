@@ -27,7 +27,6 @@
 import { reportUsage } from "../../src/shared/billing";
 import { isTestKey, stripe, StripeError, verifiedEvent, type StripeEvent } from "../../src/shared/stripe";
 import { FREE_PLAN, lookupKey, paidPlan, paidPlans, planName, type PaidPlan } from "../lib/billing-plans";
-import type { SignedInUser } from "./auth";
 import { database, type Organization, type Sql } from "./db";
 
 export interface BillingEnv {
@@ -66,7 +65,8 @@ export interface BillingRequest {
   env: BillingEnv;
   sql: Sql;
   org: Organization;
-  user: SignedInUser;
+  /** Who is signed in. Only the address is used, as the new Stripe customer's email. Declared here so the tests at the top of the repository don't need Neon Auth's package. */
+  user: { email: string };
   path: string;
   url: URL;
 }

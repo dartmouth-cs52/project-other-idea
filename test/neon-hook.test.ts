@@ -97,8 +97,35 @@ function network(jwks: object, resend: (init: RequestInit) => Response) {
 let authN = 0;
 const env = (extra: object = {}) => ({ NEON_AUTH_URL: `https://auth${++authN}.example/neondb/auth`, RESEND_API_KEY: "re_test", ...extra });
 
-async function post(body: string, headers: Headers, hookEnv: ReturnType<typeof env>, net: ReturnType<typeof network>, now = Date.now()) {
-  return neonHook(new Request("https://joinhaptic.com/api/neon-auth-hook", { method: "POST", headers, body }), hookEnv, { fetch: net.fetch, now: () => now });
+async function post(body: string | ReadableStream<Uint8Array>, headers: Headers, hookEnv: ReturnType<typeof env>, net: ReturnType<typeof network>, now = Date.now()) {
+  const init = { method: "POST", headers, body, duplex: "half" } as RequestInit;
+  return neonHook(new Request("https://joinhaptic.com/api/neon-auth-hook", init), hookEnv, { fetch: net.fetch, now: () => now });
+}
+
+/** A body made only as it is read, one chunk a pull, which counts what was read and whether the rest was cancelled. */
+function counted(next: (pull: number) => Uint8Array | undefined) {
+  const seen = { pulls: 0, bytes: 0, cancelled: false };
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        const chunk = next(seen.pulls++);
+        if (!chunk) return controller.close();
+        seen.bytes += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        seen.cancelled = true;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { body, seen };
+}
+
+/** Text sent as its UTF-8 in pieces of `size` bytes, which can end inside a character. */
+function inPieces(text: string, size: number) {
+  const bytes = new TextEncoder().encode(text);
+  return counted((pull) => (pull * size < bytes.length ? bytes.subarray(pull * size, (pull + 1) * size) : undefined));
 }
 
 test("a signed sign-in link is emailed through Resend once, with the event id as the idempotency key", async () => {
@@ -156,6 +183,53 @@ test("a Resend failure or a missing key asks Neon to try again, and a bad signat
 
   const keysDown = { fetch: async () => new Response("", { status: 502 }), calls: [] };
   assert.equal((await post(body, await key.sign(body, now), env(), keysDown, now)).status, 503);
+});
+
+test("a body too long is refused before it is all read, and before Neon's keys are fetched", async () => {
+  const net = network({ keys: [] }, () => Response.json({ id: "x" }));
+  // 100 MB, Cloudflare's request limit, in 64 KiB chunks with no length given.
+  const chunk = new Uint8Array(64 * 1024).fill(0x20);
+  const chunked = counted((pull) => (pull < 1600 ? chunk : undefined));
+  const response = await post(chunked.body, new Headers({ "content-type": "application/json" }), env(), net);
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { message: "That is too long." });
+  // 64 KiB characters at three bytes each is 192 KiB, three chunks. The fourth goes over, and nothing after it is pulled.
+  assert.equal(chunked.seen.pulls, 4);
+  assert.equal(chunked.seen.bytes, 4 * chunk.byteLength);
+  assert.equal(chunked.seen.cancelled, true);
+  assert.equal(net.calls.length, 0);
+
+  // A length given up front that is too long is enough: nothing is read.
+  const declared = counted((pull) => (pull < 1600 ? chunk : undefined));
+  const told = await post(declared.body, new Headers({ "content-type": "application/json", "content-length": String(1600 * chunk.byteLength) }), env(), net);
+  assert.equal(told.status, 413);
+  assert.equal(declared.seen.pulls, 0);
+  assert.equal(net.calls.length, 0);
+});
+
+test("a signed event as long as the limit allows still passes, also sent in pieces that split its characters", async () => {
+  const key = await neonKey();
+  const now = Date.now();
+  // 64 KiB characters, nearly all "€", three bytes of UTF-8 each, so the body is near the limit in bytes too.
+  const room = 64 * 1024 - event({ padding: "" }).length;
+  const body = event({ padding: "€".repeat(room) });
+  assert.equal(body.length, 64 * 1024);
+  const headers = await key.sign(body, now);
+  const net = network({ keys: [key.jwk] }, () => Response.json({ id: "email_1" }));
+
+  assert.equal((await post(body, headers, env(), net, now)).status, 200);
+  // Pieces of 7 bytes end inside a "€" two times in three. The signature is checked over the text once decoded.
+  const pieces = inPieces(body, 7);
+  assert.equal((await post(pieces.body, headers, env(), net, now)).status, 200);
+  assert.equal(pieces.seen.bytes, new TextEncoder().encode(body).byteLength);
+  // A changed body still breaks the signature when it comes in pieces.
+  const changed = inPieces(body.replace("ada@", "eve@"), 7);
+  assert.equal((await post(changed.body, headers, env(), net, now)).status, 401);
+
+  // One character more is too long, though it is within three bytes a character: the limit is in characters, as before.
+  const longer = event({ padding: "€".repeat(room + 1) });
+  assert.equal((await post(longer, await key.sign(longer, now), env(), net, now)).status, 413);
+  assert.equal(net.calls.filter((call) => call.url.includes("resend")).length, 2);
 });
 
 test("each kind of link gets its own words, and what Neon sends is escaped", () => {

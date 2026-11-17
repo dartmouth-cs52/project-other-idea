@@ -10,6 +10,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { AlertCircleIcon } from "lucide-react";
 import { cn } from "cn";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/app-api";
 
@@ -174,14 +175,23 @@ export function FieldWithButton({
   );
 }
 
-/** A failure that is not one field's fault. It sits under the form's buttons. */
-export function FormAlert({ failure }: { failure: Failure | null }) {
+/** A failure that is not one field's fault. It sits under the form's buttons, with Try again where trying again could help. */
+export function FormAlert({ failure, retry }: { failure: Failure | null; retry?: () => void }) {
   if (!failure) return null;
   return (
     <Alert variant="destructive" className="px-3.5 py-3">
       <AlertCircleIcon />
       <AlertTitle>{failure.title}</AlertTitle>
-      <AlertDescription>{failure.detail}</AlertDescription>
+      {retry ? (
+        <AlertDescription className="flex flex-col items-start gap-2">
+          <span>{failure.detail}</span>
+          <Button variant="secondary" size="sm" onClick={retry}>
+            Try again
+          </Button>
+        </AlertDescription>
+      ) : (
+        <AlertDescription>{failure.detail}</AlertDescription>
+      )}
     </Alert>
   );
 }

@@ -51,7 +51,7 @@ const LABELS_READ = 1500;
 /** How long a report waits before each look for its guide's row. A Worker may keep working this long after it has answered. */
 const REPORT_RETRIES_MS = [0, 1000, 3000, 6000];
 
-/** A guide's newest step, as this server recorded it when it answered. Nothing in it is the widget's word. */
+/** The step a guide's ending rests on, as this server recorded it when it answered. Nothing in it is the widget's word. */
 export interface LastStep {
   n: number;
   status: TurnReply["status"];
@@ -275,14 +275,14 @@ export class Store {
 
   /**
    * Saves a site built by `npm run tag`. A site the team made by hand has no company until one claims it.
-   * Corrections and controls never to point at are made in the dashboard, so a publish keeps them unless it brings its own.
+   * Corrections, controls never to point at and taught routes are made in the dashboard, so a publish keeps them unless it brings its own.
    */
   async saveSite(site: SiteContext): Promise<void> {
     await this.sql`
       insert into sites (id, name, origin, allowed_origins, context)
       values (${site.id}, ${site.name}, ${site.origin}, ${site.allowedOrigins}, ${JSON.stringify(site)}::jsonb)
       on conflict (id) do update set name = excluded.name, origin = excluded.origin, allowed_origins = excluded.allowed_origins,
-        context = jsonb_strip_nulls(jsonb_build_object('corrections', sites.context->'corrections', 'blocked', sites.context->'blocked')) || excluded.context,
+        context = jsonb_strip_nulls(jsonb_build_object('corrections', sites.context->'corrections', 'blocked', sites.context->'blocked', 'taught', sites.context->'taught')) || excluded.context,
         updated_at = now()`;
   }
 
@@ -473,6 +473,13 @@ export class Store {
    * another ending, that one is kept instead, and when they show none, nothing
    * is kept. Every other outcome is free, and is kept as the widget reports it.
    *
+   * The step checked is the one the report names: the step whose reply the
+   * ending rests on (`GuideReport.step`). A step asked after it, like the look
+   * at what using the last control did, can be written before a report that
+   * was held up, and must not change how the guide ended. A report from a
+   * widget too old to name one is checked against the newest step on record,
+   * and so is one whose step never appears.
+   *
    * A guide's last step is written after its reply has gone out, and the
    * widget reports the ending straight after that reply, as the page may be
    * about to go. So the report can arrive before the guide's row exists, or
@@ -486,25 +493,30 @@ export class Store {
       const waits = this.reportWaitsMs;
       for (const [look, wait] of waits.entries()) {
         if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
-        // The kind of reply is read through to_jsonb, so a database without its column (db/migrations/0005) still answers.
+        // The step the report names when it is on record, and otherwise the newest (`named` says which it is). The kind
+        // of reply is read through to_jsonb, so a database without its column (db/migrations/0005) still answers.
+        const named = report.step ?? null;
         const [found] = await this.sql`
-          select g.outcome is null as open, newest.n, newest.status, newest.pointed, newest.model, newest.mode, newest.reason, newest.blocked
+          select g.outcome is null as open, step.n, step.status, step.pointed, step.model, step.mode, step.reason, step.blocked, step.named
           from guides g
           left join lateral (
             select s.n, s.status, s.target_role is not null as pointed, s.model, to_jsonb(s)->>'mode' as mode, to_jsonb(s)->>'reason' as reason,
-              s.target_role is null and s.said = ${BLOCKED_SAY} as blocked
-            from steps s where s.guide_id = g.id order by s.n desc limit 1
-          ) newest on true
+              s.target_role is null and s.said = ${BLOCKED_SAY} as blocked, s.n = ${named} as named
+            from steps s where s.guide_id = g.id order by s.n = ${named} desc nulls last, s.n desc limit 1
+          ) step on true
           where g.id = ${guide} and g.site_id = ${site.id}`;
         if (!found) continue;
         let outcome = report.outcome;
         if (outcome === "finished" && found.open) {
           const { n, status, pointed, model, mode, reason, blocked } = found;
           outcome = endingFor(n === null ? undefined : { n, status, pointed: pointed === true, model, mode, reason, blocked: blocked === true });
-          // Nothing on record settles it yet, and the step that would may still be on its way here.
-          if (!outcome && look < waits.length - 1) continue;
+          // The step the report names is not on record yet, or nothing on record settles it: the step that would may
+          // still be on its way here. At the last look, what is on record is what is kept.
+          const waiting = named !== null && found.named !== true;
+          if ((waiting || !outcome) && look < waits.length - 1) continue;
           if (outcome !== "finished") {
-            console.warn(`Guide ${guide} on ${site.id} was reported finished, which its steps on record do not bear out, so ${outcome ? `it is kept as ${outcome}` : "no ending is kept"}.`);
+            const which = n === null ? "it has no step on record" : `${found.named === true ? "" : "the newest "}step ${n} on record does not bear it out`;
+            console.warn(`Guide ${guide} on ${site.id} was reported finished, but ${which}, so ${outcome ? `it is kept as ${outcome}` : "no ending is kept"}.`);
           }
         }
         if (outcome && found.open) {

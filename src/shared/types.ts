@@ -1,4 +1,5 @@
 import type { ControlName, Correction } from "./corrections.ts";
+import type { TaughtRoute } from "./teach.ts";
 
 // Shapes shared by the widget (browser), the server and the intake CLI.
 // No DOM or Node APIs here.
@@ -47,6 +48,8 @@ export interface SiteContext {
   corrections?: Correction[];
   /** Controls Haptic must never point at, like "Delete workspace". Enforced by the server and the widget, not left to the prompt. */
   blocked?: ControlName[];
+  /** "Teach Haptic": routes someone at the company showed Haptic by doing the task in their app. See src/shared/teach.ts. */
+  taught?: TaughtRoute[];
   createdAt: string;
   updatedAt: string;
 }
@@ -72,7 +75,13 @@ export interface SiteSource {
 export interface Appearance {
   /** Hex color for the pointer and its highlight. Blue unless the company changes it, so it stands out on any page. */
   accent: string;
-  position: "bottom-right" | "bottom-left";
+  /**
+   * Always bottom right: the launcher is on the right on every site, and the
+   * widget reads nothing here. Kept so the shape of stored sites stays the
+   * same; a site stored as "bottom-left" before the choice went is shown on
+   * the right too.
+   */
+  position: "bottom-right";
   launcherLabel: string;
   /**
    * Hex color for the launcher, the button people press to ask. Not set means Ink.
@@ -304,7 +313,7 @@ export interface SnapElement {
   label: string;
   /** Icon name when the class gives one away, e.g. "settings" from lucide-settings. */
   icon?: string;
-  /** "disabled", "expanded", "collapsed", "current", "checked", "selected". */
+  /** "disabled", "required", "invalid", "expanded", "collapsed", "current", "checked", "selected". */
   state?: string[];
   /** Normalized path for same-site links, "external:host" for others. */
   href?: string;
@@ -492,6 +501,14 @@ export function isLearnableRoute(path: string): boolean {
 export interface GuideReport {
   site: string;
   outcome?: GuideOutcome;
+  /**
+   * With an outcome: the step whose reply the ending rests on, counting from
+   * 0, which is the last step the widget had an answer to. The server checks
+   * that step, so a step asked after it, like the look at what using the last
+   * control did, cannot change how it is kept. Absent from a widget older than
+   * this, and from one whose guide ended before any answer came.
+   */
+  step?: number;
   helped?: boolean;
   /** The visitor used the way to a person. */
   handoff?: true;
