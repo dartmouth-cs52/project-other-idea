@@ -176,10 +176,17 @@ function HelpDocs({ site, onChange }: { site: Site; onChange: (site: Site) => vo
 
   async function add(event: FormEvent) {
     event.preventDefault();
-    setBusy(true);
     setError(null);
+    const body = mode === "url" ? { url } : { title, text };
+    // The Worker's own rule, checked on the body exactly as it will be sent. A paste far over it would be cut off
+    // mid-upload, and the browser might then say the connection failed instead of what is wrong.
+    if (JSON.stringify(body).length > docs.bodyLimit.max) {
+      setError(docs.bodyLimit.message);
+      return;
+    }
+    setBusy(true);
     try {
-      onChange(await api<Site>(`/sites/${site.id}/docs`, { method: "POST", body: mode === "url" ? { url } : { title, text } }));
+      onChange(await api<Site>(`/sites/${site.id}/docs`, { method: "POST", body }));
       setUrl("");
       setTitle("");
       setText("");

@@ -362,6 +362,9 @@ function docsSummary(docs: Doc[]) {
   return {
     budget: DOCS_BUDGET,
     used,
+    // The page applies the same rule before sending a doc. A body far over it is refused before it is read
+    // in full, and the browser may then report a failed connection instead of this message.
+    bodyLimit: { max: DOC_BODY.max, message: DOC_BODY.message },
     list: docs.map((doc) => ({
       title: doc.title,
       source: doc.source,
