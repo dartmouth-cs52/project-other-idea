@@ -460,7 +460,7 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
                       <div className="min-w-0 flex-1">
                         <p className="text-sm leading-5">{step.text}</p>
                         {step.context && <p className="text-sm text-muted-foreground">In {step.context}.</p>}
-                        {step.commits && <p className="text-sm text-muted-foreground">It saves or sends, so the visitor always makes this click.</p>}
+                        {step.commits && <p className="text-sm text-muted-foreground">Its name says it saves, sends, pays or deletes, so the visitor always makes this click.</p>}
                       </div>
                       <Button variant="ghost" size="sm" onClick={() => setKept((list) => list && list.filter((_, at) => at !== index))} aria-label={`Delete step ${index + 1}`}>
                         Delete
