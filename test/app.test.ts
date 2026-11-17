@@ -243,6 +243,68 @@ test("a site that is switched off gets no launcher, and a step that still arrive
   }
 });
 
+test("a first question that the off switch or the budget refuses is not passed on to be recorded", async () => {
+  // The model is never asked for these, so they cost nothing to send: recording them would let anything that can
+  // send a request put questions of its choosing on a site's dashboard.
+  const closed = (why: "hour" | "caller"): AppParts["budget"] => ({ admit: async () => ({ gate: { open: false, why } }), settle: async () => ({ gate: { open: false, why }, alerts: [] }) });
+  const refusing: [string, Partial<AppParts>, SiteContext, string][] = [
+    ["the host's switch", { isOff: () => true }, site, FIXED_SAY.off],
+    ["the site's own setting", {}, { ...site, off: true }, FIXED_SAY.off],
+    ["the site's budget", { budget: closed("hour") }, site, FIXED_SAY.resting],
+    ["the visitor's limit for the day", { budget: closed("caller") }, site, FIXED_SAY.visitorLimit],
+  ];
+  const first = (headers: Record<string, string> = {}) =>
+    new Request("https://widget.test/v1/turn", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://app.test", ...headers }, body: JSON.stringify({ ...JSON.parse(turnBody), guide: GUIDE, step: 0 }) });
+  for (const [name, extra, served, say] of refusing) {
+    const asked: string[] = [];
+    const { app, turns } = makeApp(false, { onAsk: (request) => void asked.push(request.goal), ...extra }, [served]);
+    assert.equal((await (await app(first(), "1.1.1.1"))?.json()).say, say, name);
+    assert.match((await (await app(first({ Accept: STREAM_TYPE }), "1.1.1.1"))?.text()) ?? "", /"paused":true/, name);
+    assert.deepEqual(asked, [], name);
+    assert.deepEqual(turns, [], name);
+  }
+  // The same question on a site that is on and within its budget is passed on, before the model answers it.
+  const asked: string[] = [];
+  const { app, turns } = makeApp(false, { onAsk: (request) => void asked.push(request.goal), budget: { admit: async () => ({ gate: { open: true } }), settle: async () => ({ gate: { open: true }, alerts: [] }) } });
+  await app(first(), "1.1.1.1");
+  assert.deepEqual(asked, ["open billing"]);
+  assert.deepEqual(turns, ["open billing"]);
+});
+
+test("a request that names no origin may read a site's settings, and is refused everywhere that writes", async () => {
+  const handoffSite: SiteContext = { ...site, handoff: { webhook: "https://hooks.acme.test/haptic", secret: "s3cret" } };
+  const heard: string[] = [];
+  const { app, turns } = makeApp(false, {
+    onAsk: () => void heard.push("asked"),
+    onReport: () => void heard.push("report"),
+    onOutline: () => void heard.push("outline"),
+    fetch: (async () => (heard.push("webhook"), new Response("ok"))) as unknown as typeof fetch,
+  }, [handoffSite]);
+  // What a browser never sends: a POST with no Origin header. It is a program, whatever it says it is.
+  const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+    app(new Request(`https://widget.test${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) }), "1.1.1.1");
+  const writes: [string, unknown][] = [
+    ["/v1/turn", { ...JSON.parse(turnBody), guide: GUIDE }],
+    [`/v1/guides/${GUIDE}/report`, { site: site.id, outcome: "finished" }],
+    ["/v1/outline", { site: site.id, visitor: "3f2b8a52-6d0c-4e59-9a27-1c5e8d7f4b10", outline: { path: "/", title: "Home", headings: [], links: [{ label: "Billing", to: "/billing" }], buttons: [] } }],
+    ["/v1/handoff", { site: site.id, guide: GUIDE, email: "sam@example.com", note: "", path: "/", transcript: [{ role: "assistant", text: "Your refund is approved." }] }],
+  ];
+  for (const [path, body] of writes) {
+    const refused = await post(path, body);
+    assert.equal(refused?.status, 403, path);
+    assert.match((await refused?.json()).error, /needs an Origin header/, path);
+    // An origin written as the browser writes one for a page it will not name is not an allowed origin either.
+    assert.equal((await post(path, body, { Origin: "null" }))?.status, 403, path);
+  }
+  assert.deepEqual(heard, []);
+  assert.deepEqual(turns, []);
+  // The same four from a page of the site go through.
+  for (const [path, body] of writes) assert.equal((await post(path, body, { Origin: "https://app.test" }))?.status, 200, path);
+  assert.deepEqual(heard, ["asked", "report", "outline", "webhook", "report"]);
+  // The settings are public and reading them writes nothing: a browser's GET to its own origin names no origin.
+  assert.equal((await app(new Request(`https://widget.test/v1/sites/${site.id}`), "1.1.1.1"))?.status, 200);
+});
+
 // "Do it with me". A widget asks for it with mode "act"; the site must have it
 // on, at the page's path; and only then does the reply carry mode "act", the
 // echo the widget acts on. Everything else must be answered as it was before.
