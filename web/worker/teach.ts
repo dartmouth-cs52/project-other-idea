@@ -7,7 +7,7 @@
 // saves them as a taught route in the site's context, beside the corrections.
 //
 //   POST   /api/app/sites/:id/teach             start one: {question, guide?, path?}
-//   GET    /api/app/sites/:id/teach             the open ones and those waiting for review
+//   GET    /api/app/sites/:id/teach             the open ones and those waiting for review: {sessions, unavailable?}
 //   GET    /api/app/sites/:id/teach/:session    one, with its steps once they are in
 //   POST   /api/app/sites/:id/teach/:session    save it as a taught route: {steps: [{n, note?, name?}], leaveLast?}
 //   DELETE /api/app/sites/:id/teach/:session    close it without saving
@@ -28,7 +28,7 @@ import {
   type TaughtRoute,
   type TaughtStep,
 } from "../../src/shared/teach";
-import type { Sql } from "./db";
+import { notMigrated, type Sql } from "./db";
 
 /** A request the person can fix, or one for something that is not there. */
 export class TeachRefused extends Error {
@@ -337,8 +337,28 @@ export async function removeTaught(sql: Sql, site: TeachSite, orgId: string, id:
   return { taught: row.taught.map(routeView) };
 }
 
-/** Routes one teach request under /sites/:id. `rest` is what follows /teach or /taught. */
+/** What the dashboard says while the database has no teach_sessions table yet. */
+export const TEACH_NOT_SET_UP = "Teach Haptic isn't set up on this server yet.";
+
+/**
+ * Routes one teach request under /sites/:id. `rest` is what follows /teach or /taught.
+ *
+ * Until db/migrations/0014_teach_sessions.sql is applied, every teach request fails on its table. The list
+ * then answers with no sessions and why, in `unavailable`, so the dashboard says so before anyone presses
+ * a button, and any other request is refused with the same sentence. The log names the migration.
+ */
 export async function teachApi(sql: Sql, site: TeachSite, orgId: string, teacher: Teacher, method: string, kind: "teach" | "taught", rest: string, body: () => Promise<Record<string, unknown>>) {
+  try {
+    return await answer(sql, site, orgId, teacher, method, kind, rest, body);
+  } catch (error) {
+    if (!notMigrated(error)) throw error;
+    console.error("Teach Haptic needs db/migrations/0014_teach_sessions.sql, which isn't applied yet:", (error as Error).message);
+    if (kind === "teach" && !rest && method === "GET") return { status: 200, body: { sessions: [], unavailable: TEACH_NOT_SET_UP } };
+    throw new TeachRefused(503, TEACH_NOT_SET_UP);
+  }
+}
+
+async function answer(sql: Sql, site: TeachSite, orgId: string, teacher: Teacher, method: string, kind: "teach" | "taught", rest: string, body: () => Promise<Record<string, unknown>>) {
   if (kind === "taught") {
     if (method === "DELETE" && rest) return { status: 200, body: await removeTaught(sql, site, orgId, rest) };
     throw new TeachRefused(404, "Not found.");

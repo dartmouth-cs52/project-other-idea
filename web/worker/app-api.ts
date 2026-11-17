@@ -5,6 +5,7 @@
 //   GET    /api/app/sites/:id                   a site, its install health and how far the reading has got
 //   PATCH  /api/app/sites/:id                   change its name or the origins it may run on
 //   POST   /api/app/sites/:id/read              read a few more public pages
+//   POST   /api/app/sites/:id/map               a link that lets this person map their signed-in app from their own browser
 //   GET    /api/app/sites                       every site the company has, as the list of sites shows them
 //   GET    /api/app/sites/:id/insights          the dashboard: questions, outcomes, what to fix
 //   GET    /api/app/sites/:id/live              the newest questions and the step each is on, asked for every second or two
@@ -21,12 +22,14 @@
 //   POST   /api/app/approve                     approve it, and email the person a sign-in link
 //
 // The setup screens, the email to a developer and the dashboard's top numbers
-// are answered in setup-api.ts, and billing, under /api/app/billing, in billing.ts.
+// are answered in setup-api.ts, billing, under /api/app/billing, in billing.ts,
+// and the Team page, under /api/app/team, in team.ts.
 //
 // Every site is looked up together with the caller's organization, so a site
 // id, which is public, is never enough to read or change someone's data.
 
-import { answersOn, cleanText, DEFAULT_APPEARANCE, type Appearance, type Doc, type PageNode, type SiteContext } from "../../src/shared/types";
+import { MAPPING_FRAGMENT, MAPPING_PASS_MS, mappingHash, newMappingPass } from "../../src/shared/mapping";
+import { answersOn, cleanText, DEFAULT_APPEARANCE, ROUTES_MODES, type Appearance, type Doc, type PageNode, type RoutesMode, type SiteContext } from "../../src/shared/types";
 import { ANSWERS_DOCS_BUDGET, DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
 import { signedInUrl } from "../lib/dashboard";
@@ -35,6 +38,7 @@ import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./
 import { boundedText } from "./body";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
 import { billingRoutes, type BillingEnv } from "./billing";
+import { teamRoutes } from "./team";
 import { launcherState, matchLauncher, siteBrand } from "./brand";
 import { INK, launcherColour, POINTER_BLUE } from "../../src/shared/colour";
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
@@ -122,8 +126,10 @@ export async function appApi(request: Request, env: AppEnv, url: URL, later: Lat
     if (more) return reply(more.body, more.status);
     const billing = await billingRoutes({ request, env, sql, org, user, path, url });
     if (billing) return reply(billing.body, billing.status);
+    const people = await teamRoutes({ request, sql, org, user, path, sendLink: (email) => sendSignInLink(env, url.origin, email, signedInUrl(url.origin)) });
+    if (people) return reply(people.body, people.status);
 
-    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/live|\/brand|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?|\/teach(?:\/[^/]+)?|\/taught\/[^/]+)?$/.exec(path);
+    const match = /^\/sites\/([^/]+)(\/read|\/map|\/insights|\/live|\/brand|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?|\/teach(?:\/[^/]+)?|\/taught\/[^/]+)?$/.exec(path);
     if (match) {
       const id = match[1] ?? "";
       if (!SITE_ID.test(id)) throw new Refusal(404, "No such site.");
@@ -134,6 +140,7 @@ export async function appApi(request: Request, env: AppEnv, url: URL, later: Lat
       if (sub === "/docs" && request.method === "POST") return reply(await addDoc(sql, env, org, id, await body(request, DOC_BODY)), 201);
       if (sub === "/docs" && request.method === "DELETE") return reply(await removeDoc(sql, env, org, id, url.searchParams.get("source") ?? ""));
       if (sub === "/read" && request.method === "POST") return reply(await readSite(sql, env, org, id, (await body(request)).restart === true));
+      if (sub === "/map" && request.method === "POST") return reply(await startMapping(sql, org, id, await body(request)), 201);
       if (sub === "/insights" && request.method === "GET") {
         await ownedSite(sql, org, id);
         const days = Math.min(Math.max(Number(url.searchParams.get("days")) || 30, 1), 365);
@@ -275,11 +282,12 @@ interface SiteRow {
   allowed_origins: string[];
   context: SiteContext;
   reading: Reading | null;
+  routes_mode: RoutesMode;
   created_at: string;
 }
 
 async function ownedSite(sql: Sql, org: Organization, id: string): Promise<SiteRow> {
-  const rows = (await sql`select id, name, origin, allowed_origins, context, reading, created_at from sites where id = ${id} and company_id = ${org.id}`) as SiteRow[];
+  const rows = (await sql`select id, name, origin, allowed_origins, context, reading, routes_mode, created_at from sites where id = ${id} and company_id = ${org.id}`) as SiteRow[];
   if (!rows[0]) throw new Refusal(404, "No such site.");
   return rows[0];
 }
@@ -376,6 +384,7 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string, 
     name: site.name,
     origin: site.origin,
     allowedOrigins: site.allowed_origins,
+    routesMode: site.routes_mode,
     createdAt: site.created_at,
     scriptUrl: `${widget}/widget.js`,
     // Connected means the script has called from an origin the site allows. Seen but refused is the other common failure.
@@ -385,6 +394,8 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string, 
     blocked: site.context.blocked ?? [],
     taught: (site.context.taught ?? []).map(routeView),
     reading: readingSummary(site.reading, site.context.pages ?? []),
+    // Screens mapped from a signed-in browser at the company, which the reading of public pages cannot reach.
+    mapped: (site.context.pages ?? []).filter((page) => page.mapped).length,
     setup: setupOf(site.context),
     // The pointer is Haptic's blue on every site, whatever was saved before. The launcher is the colour visitors see:
     // one saved too light before colours were darkened on saving is shown darkened here too.
@@ -534,9 +545,11 @@ async function changeSite(sql: Sql, env: AppEnv, org: Organization, id: string, 
   if (input.answers !== undefined && typeof input.answers !== "boolean") throw new Refusal(400, "answers must be true or false.");
   // Switching Answers keeps how long an answer's article may go before it is marked as possibly out of date.
   const answers = typeof input.answers === "boolean" ? { ...site.context.answers, enabled: input.answers } : null;
+  const routesMode = input.routesMode === undefined ? site.routes_mode : (input.routesMode as RoutesMode);
+  if (!ROUTES_MODES.includes(routesMode)) throw new Refusal(400, "routesMode is off, shadow or serve.");
   // Only the fields given change, inside the context too, so a page read finishing meanwhile keeps its pages.
   await sql`
-    update sites set name = ${name}, allowed_origins = ${origins},
+    update sites set name = ${name}, allowed_origins = ${origins}, routes_mode = ${routesMode},
       context = jsonb_set(jsonb_set(context, '{appearance}', coalesce(${appearance === null ? null : JSON.stringify(appearance)}::jsonb, context->'appearance', '{}'::jsonb)),
         '{notes}', coalesce(to_jsonb(${notes}::text), context->'notes', '""'::jsonb))
         || jsonb_strip_nulls(jsonb_build_object('answers', ${answers === null ? null : JSON.stringify(answers)}::jsonb, 'launcherChosen', ${chosen}::boolean)),
@@ -554,13 +567,34 @@ async function readSite(sql: Sql, env: AppEnv, org: Organization, id: string, re
   if (!reading || reading.finishedAt) return readingSummary(reading, pages);
   const batch = await readMore(reading, env.BROWSER);
   const byPath = new Map(pages.map((page) => [page.path, page]));
-  for (const page of batch.pages) byPath.set(page.path, page);
+  // A page mapped from a signed-in browser is the fuller view of it, so the public reading does not replace it.
+  for (const page of batch.pages) if (!byPath.get(page.path)?.mapped) byPath.set(page.path, page);
   const merged = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
   const from = { origin: site.origin, startedAt: site.reading?.startedAt ?? null };
   if (await saveReadBatch(sql, { id, companyId: org.id, maxOrigins: MAX_ORIGINS }, from, batch, merged)) return readingSummary(batch.reading, merged);
   // The address changed while this batch was read, so it was dropped. Answer with the reading that is there now.
   const now = await ownedSite(sql, org, id);
   return readingSummary(now.reading, now.context.pages ?? []);
+}
+
+/**
+ * Makes a pass for mapping the signed-in app, and the link that carries it to
+ * the widget on the company's own site. The pass rides after the #, so their
+ * server never sees it, and only its hash is kept here. It works for two
+ * hours, from an address the site allows, and a new one replaces the last.
+ */
+async function startMapping(sql: Sql, org: Organization, id: string, input: Record<string, unknown>) {
+  const site = await ownedSite(sql, org, id);
+  const start = input.url === undefined || input.url === "" ? new URL(site.origin) : siteAddress(input.url);
+  if (!site.allowed_origins.includes(start.origin)) {
+    throw new Refusal(400, `Haptic isn't allowed to run on ${start.origin} yet. Add it under "Where Haptic may run", or start from ${site.origin}.`);
+  }
+  const pass = newMappingPass();
+  const expires = new Date(Date.now() + MAPPING_PASS_MS).toISOString();
+  const mapping = { hash: await mappingHash(id, pass), expires };
+  await sql`update sites set context = jsonb_set(context, '{mapping}', ${JSON.stringify(mapping)}::jsonb), updated_at = now() where id = ${id} and company_id = ${org.id}`;
+  start.hash = `${MAPPING_FRAGMENT}${pass}`;
+  return { url: start.href, expires };
 }
 
 // Approving access requests ---------------------------------------------------

@@ -21,7 +21,7 @@ const ANSWER = "افتح صفحة الفريق ثم اضغط على دعوة ز�
 const STEP = "اضغط على دعوة زميل.";
 
 /** The parts of the open chat whose places are compared between the two pages. */
-const PARTS = [".panel", ".dismiss", ".ask", ".ask input", ".send", ".about", ".about a", ".launcher", ".launcher svg", ".launcher span"];
+const PARTS = [".panel", ".dismiss", ".ask", ".ask textarea", ".send", ".about", ".about a", ".launcher", ".launcher svg", ".launcher span"];
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const part = (tab: Page, selector: string) => tab.locator(`haptic-root ${selector}`);
@@ -95,7 +95,7 @@ for (const name of BROWSERS) {
       // Send is on the right of the ask box, and the empty box's placeholder is on the left.
       const [askBox, send] = [await box(tab, ".ask"), await box(tab, ".send")];
       assert.ok(askBox.x + askBox.width - (send.x + send.width) <= 12 && send.x > askBox.x + askBox.width / 2, JSON.stringify({ askBox, send }));
-      assert.equal(await direction(tab, ".ask input"), "ltr");
+      assert.equal(await direction(tab, ".ask textarea"), "ltr");
       // The line about AI ends with its full stop.
       const about = await ends(part(tab, ".about"));
       assert.equal(about.first.char, "H");
@@ -114,11 +114,11 @@ for (const name of BROWSERS) {
       const tab = await visit("/rtl");
       await openChat(tab);
       // The ask box turns with the first letter typed.
-      const input = part(tab, ".ask input");
+      const input = part(tab, ".ask textarea");
       await input.fill("invite someone");
-      assert.equal(await direction(tab, ".ask input"), "ltr");
+      assert.equal(await direction(tab, ".ask textarea"), "ltr");
       await input.fill(QUESTION);
-      assert.equal(await direction(tab, ".ask input"), "rtl");
+      assert.equal(await direction(tab, ".ask textarea"), "rtl");
       await input.press("Enter");
       await part(tab, ".reply").waitFor();
 
@@ -135,7 +135,7 @@ for (const name of BROWSERS) {
       assert.ok(reply.x - thread.x <= 6, JSON.stringify({ thread, reply }));
       // The widget's own words beside them stay left to right, and so does the ask box, empty again.
       assert.equal(await direction(tab, ".sources .from"), "ltr");
-      assert.equal(await direction(tab, ".ask input"), "ltr");
+      assert.equal(await direction(tab, ".ask textarea"), "ltr");
     });
 
     test("a step's caption in Arabic reads right to left, with its × still after the words", async () => {

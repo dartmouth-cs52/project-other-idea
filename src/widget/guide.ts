@@ -6,6 +6,7 @@ import {
   MAX_ASKED,
   MAX_QUESTION,
   namedIn,
+  routeKey,
   standingAlone,
   type GuideOutcome,
   type GuideReport,
@@ -245,6 +246,8 @@ interface SavedGuide {
   event?: string;
   /** Set when that was something other than the step they were shown. */
   strayed?: boolean;
+  /** The route key of the control the visitor just used, so the next page's step can be matched to a verified route. */
+  after?: string;
   /** The pointer on show came with what the model called the last step, so the next question is a closing one. */
   closing?: boolean;
   /** How many closing questions the guide has asked. */
@@ -342,6 +345,14 @@ export class Guide {
   private stuck?: { el: WeakRef<Element>; page: string; count: number; step: number; said: string };
   /** The visitor's last action was not the step they were shown. Cleared once the next step is given. */
   private strayed = false;
+  /**
+   * Set when the visitor used the early pointer before the reply was in. Until
+   * the reply is handled, `last` still describes the step before, so this is
+   * what the next page must be told was used.
+   */
+  private usedEarly?: string;
+  /** Set on a page load: the route key of the control the visitor used on the page before. Cleared once the next step is given. */
+  private usedBefore?: string;
   /** Bumped whenever the guide is stopped or restarted, so stale async work can tell and bail. */
   private run = 0;
   private stopWaiting?: () => void;
@@ -665,6 +676,8 @@ export class Guide {
     this.thread = saved.thread ?? [];
     this.step = saved.step;
     this.strayed = saved.strayed === true;
+    // Which control was used on the page before, for the verified route the next step is looked up by.
+    this.usedBefore = saved.after;
     this.closings = saved.closings ?? 0;
     const here = currentPath();
     if (saved.acting) {
@@ -715,6 +728,8 @@ export class Guide {
     this.reported = undefined;
     this.last = undefined;
     this.stuck = undefined;
+    this.usedEarly = undefined;
+    this.usedBefore = undefined;
     this.strayed = false;
     this.showingLast = false;
     this.closings = 0;
@@ -834,6 +849,7 @@ export class Guide {
           shown.acted = what;
           // If this click loads a new page before the reply is in, the next page still needs to know about it.
           this.strayed = what.strayed;
+          this.usedEarly = what.onTarget && listed ? routeKey(listed) : undefined;
           // The step was shown and acted on, though its sentence is not in yet. Saved as done, so a page this
           // click loads asks the next step and does not ask this one again over the top of it.
           this.save(what.event, {
@@ -888,6 +904,7 @@ export class Guide {
     let reply: TurnReply;
     this.noteShownOwn(page.snapshot);
     this.lastSent = page.snapshot;
+    const after = this.usedKey();
     try {
       reply = await this.sendTurn(
         {
@@ -900,6 +917,7 @@ export class Guide {
           ...(told ? { event: told } : {}),
           ...(change ? { change } : {}),
           ...(this.strayed ? { offTrack: true } : {}),
+          ...(after ? { after } : {}),
           ...(closing ? { closing: true as const } : {}),
           ...(acting ? { mode: "act" as const } : {}),
         },
@@ -1023,6 +1041,8 @@ export class Guide {
     this.step++;
     this.previous = page.snapshot;
     this.last = listed ? { listed, used: false, page: pageState(page.snapshot), ...(el ? { el: new WeakRef(el) } : {}) } : undefined;
+    this.usedEarly = undefined;
+    this.usedBefore = undefined;
     this.strayed = false;
 
     // Only a finished guide is billed. It is finished when the visitor followed the steps and is now
@@ -1710,9 +1730,21 @@ export class Guide {
     this.ui.offerHandoff(config.label, open, send);
   }
 
+  /**
+   * The route key of the control the last step pointed at, when the visitor used it: the early pointer's, before its
+   * reply is in, or the one used on the page before a load. None after a wrong click. The server looks the next step's
+   * verified route up by it (src/server/routes.ts).
+   */
+  private usedKey(): string | undefined {
+    if (this.strayed) return undefined;
+    if (this.usedEarly) return this.usedEarly;
+    return this.last?.used ? routeKey(this.last.listed) : this.usedBefore;
+  }
+
   /** Saves the guide for the next page. `shown` is a step pointed at whose reply is still coming, counted as done. */
   private save(event?: string, shown?: { user: string; assistant: string }) {
     const history: HistoryTurn[] = shown ? [...this.history, { role: "user", text: shown.user }, { role: "assistant", text: shown.assistant }] : this.history;
+    const after = this.usedKey();
     const saved: SavedGuide = {
       ...(this.id ? { id: this.id } : {}),
       ...(this.reported ? { reported: this.reported } : {}),
@@ -1724,6 +1756,7 @@ export class Guide {
       savedAt: Date.now(),
       ...(event ? { event } : {}),
       ...(this.strayed ? { strayed: true } : {}),
+      ...(after ? { after } : {}),
       ...(this.showingLast ? { closing: true } : {}),
       ...(this.closings ? { closings: this.closings } : {}),
       ...(this.acting ? { acting: this.kept(this.acting) } : {}),

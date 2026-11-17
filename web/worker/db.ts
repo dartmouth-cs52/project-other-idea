@@ -14,6 +14,15 @@ export function database(url: string): Sql {
   return held.sql;
 }
 
+/**
+ * True for Postgres saying a table or column is missing: this Worker was
+ * deployed before a migration its code needs was applied (`npm run db:migrate`).
+ */
+export function notMigrated(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  return code === "42P01" || code === "42703";
+}
+
 export interface Organization {
   id: string;
   name: string;

@@ -41,6 +41,17 @@ export interface Me {
   sites?: { id: string; name: string; origin: string; connected: boolean }[];
 }
 
+/** The company's Team page: worker/team.ts. */
+export interface Team {
+  /** An owner or admin, who may add people, change roles and remove people. */
+  canManage: boolean;
+  members: { id: string; name: string | null; email: string; role: "owner" | "admin" | "member" | string; joined: string; you: boolean }[];
+  /** Added, and not signed in yet. */
+  invites: { id: string; email: string; invitedAt: string; invitedBy: string | null }[];
+  /** Whole email domains approved for the company: anyone at one joins when they sign in. */
+  domains: string[];
+}
+
 /** The company's billing page: worker/billing.ts. */
 export interface Billing {
   /** Stripe's keys are on the server, so a plan can be bought. */
@@ -141,6 +152,7 @@ export interface Site {
   name: string;
   origin: string;
   allowedOrigins: string[];
+  routesMode: "off" | "shadow" | "serve";
   scriptUrl: string;
   /** `launcher` is the Ask button's own colour, as it is drawn. Missing means Ink. `accent` is always Haptic's blue. */
   appearance: { accent: string; position: "bottom-right"; launcherLabel: string; launcher?: string };
@@ -162,6 +174,8 @@ export interface Site {
   connected: boolean;
   origins: SeenOrigin[];
   reading: Reading | null;
+  /** Screens mapped from a signed-in browser at the company. */
+  mapped: number;
   corrections: Correction[];
   blocked: ControlName[];
   /** Routes taught by doing the task. Absent from a server older than Teach Haptic. */
@@ -214,6 +228,25 @@ export interface Insights {
   health: HealthGroup[];
   /** Groups the company was told about in the last month. */
   alerts: { key: string; sent_at: string; emailed: boolean }[];
+  /** How often questions repeat, and how verified routes are doing. Null until db/migrations/0008_routes is applied. */
+  routes: RouteMetrics | null;
+}
+
+/** How often questions repeat, and how verified routes are doing. The same shape src/shared/route-metrics.ts describes. */
+export interface RouteMetrics {
+  guides: number;
+  repeated_guides: number;
+  looked_up: number;
+  repeats: number;
+  servable: number;
+  agreed: number;
+  disagreed: number;
+  served: number;
+  served_used: number;
+  served_ms: number | null;
+  model_ms: number | null;
+  routes: number;
+  trusted_routes: number;
 }
 
 /** One of a site's newest questions, with the step it has reached. */
