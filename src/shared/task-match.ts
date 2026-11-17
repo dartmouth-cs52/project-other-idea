@@ -103,9 +103,13 @@ const FILLER = new Set([
   "puedo", "je", "ich", "yo", "eu", "io", "ik", "kann", "peux", "posso", "kan",
 ]);
 
-/** Words that start what is said about the thing acted on: everything after one is a detail, not the thing itself. */
+/**
+ * Words that start what is said about the thing acted on: everything after one is a detail, not the thing itself.
+ * "Called" and "named" are among them: in "add a budget called Marketing programs" the thing is a budget.
+ */
 const PREPOSITIONS = new Set([
   "for", "to", "in", "on", "at", "with", "of", "from", "by", "into", "onto", "about", "under", "over", "than", "per", "via", "as", "so", "if", "because", "before", "after",
+  "called", "named", "titled", "labelled", "labeled",
   "para", "por", "en", "con", "de", "del", "al", "pour", "dans", "avec", "sur", "au", "aux", "fur", "zu", "zum", "zur", "im", "mit", "von", "vom", "auf", "voor", "naar", "met", "van", "op", "per", "da", "di", "nel", "nella", "sul",
 ]);
 

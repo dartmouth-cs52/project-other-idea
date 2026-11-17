@@ -492,6 +492,24 @@
       "asked": "change the shipping address",
       "match": false,
       "why": "another address"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "Can you add a budget called Marketing programs for the Marketing department?",
+      "match": true,
+      "why": "what it is called is a detail, as Do it with me is asked"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "add a budget named Q1 offsite with $20,000 a month",
+      "match": true,
+      "why": "its name and amount are details"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "add a card called Budget",
+      "match": false,
+      "why": "a card, whatever it is called"
     }
   ]
 }
