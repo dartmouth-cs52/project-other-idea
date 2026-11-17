@@ -11,6 +11,7 @@
 // id are read from the body, never from the other headers.
 // See https://neon.com/docs/auth/guides/webhooks
 
+import { boundedText } from "./body";
 import { sendEmail, signInEmail, type LinkType, type SendEnv } from "./sign-in-email";
 
 export interface HookEnv extends SendEnv {
@@ -43,8 +44,8 @@ export async function neonHook(request: Request, env: HookEnv, deps: HookDeps = 
   if (request.method !== "POST") return reply(405, "Use POST.");
   if (!env.NEON_AUTH_URL) return reply(503, "Sign-in is not set up on this server.");
 
-  const raw = await request.text();
-  if (raw.length > MAX_BODY) return reply(413, "That is too long.");
+  const raw = await boundedText(request, MAX_BODY);
+  if (raw === null) return reply(413, "That is too long.");
   let checked: Awaited<ReturnType<typeof verifyNeonSignature>>;
   try {
     checked = await verifyNeonSignature(raw, request.headers, keysFor(env.NEON_AUTH_URL, deps.fetch), deps.now());

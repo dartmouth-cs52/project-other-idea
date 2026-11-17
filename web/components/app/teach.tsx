@@ -1,15 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
-import { AlertCircleIcon } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Field, FormAlert, failureFrom, useFieldErrors, type Failure } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { api, type Outcome, type Site, type TaughtRoute, type TaughtStep, type TeachSession } from "@/lib/app-api";
-import { StepMark, when } from "./parts";
+import { FailedCard, StepMark, when } from "./parts";
 
 // Teach Haptic: someone at the company shows Haptic the right way by doing the
 // task in their own app. A button starts a teach session, which opens the site
@@ -161,23 +160,6 @@ export function TeachTask({ siteId }: { siteId: string }) {
   );
 }
 
-function Failure({ message, onRetry }: { message: string | null; onRetry?: () => void }) {
-  if (!message) return null;
-  return (
-    <Alert variant="destructive">
-      <AlertCircleIcon />
-      <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-        <span>{message}</span>
-        {onRetry && (
-          <Button variant="secondary" size="sm" onClick={onRetry}>
-            Retry
-          </Button>
-        )}
-      </AlertDescription>
-    </Alert>
-  );
-}
-
 /** A step's extras on the dashboard: where it is, its note, and whose click it is. */
 function StepDetails({ step }: { step: TaughtStep }) {
   const details = [step.context ? `In ${step.context}.` : "", step.leave || step.commits ? "The visitor makes this click." : "", step.note ? `Note: ${step.note}` : ""].filter(Boolean);
@@ -188,7 +170,7 @@ function StepDetails({ step }: { step: TaughtStep }) {
 /** Taught by doing: the routes taught so far, steps waiting for review, and a way to teach a new one. */
 export function TaughtRoutes({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
   const [sessions, setSessions] = useState<TeachSession[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const [failedRemove, setFailedRemove] = useState<TaughtRoute | null>(null);
   const current = useActive();
   const taught = site.taught ?? [];
@@ -206,13 +188,13 @@ export function TaughtRoutes({ site, onChange }: { site: Site; onChange: (site: 
   }, [loadSessions, current?.sessionId, taught.length]);
 
   async function remove(route: TaughtRoute) {
-    setError(null);
+    setFailure(null);
     setFailedRemove(null);
     try {
       const result = await api<{ taught: TaughtRoute[] }>(`/sites/${site.id}/taught/${route.id}`, { method: "DELETE" });
       onChange({ ...site, taught: result.taught });
     } catch (failure) {
-      setError(`Couldn't remove it. ${(failure as Error).message}`);
+      setFailure(failureFrom("Couldn't remove the route", failure));
       setFailedRemove(route);
     }
   }
@@ -274,10 +256,13 @@ export function TaughtRoutes({ site, onChange }: { site: Site; onChange: (site: 
         </p>
       )}
       <TeachTask siteId={site.id} />
-      <Failure message={error} onRetry={failedRemove ? () => remove(failedRemove) : undefined} />
+      <FormAlert failure={failure} retry={failedRemove ? () => remove(failedRemove) : undefined} />
     </div>
   );
 }
+
+/** The id of the field for a step's control name, when the recorder couldn't read one. */
+const nameId = (n: number) => `name-${n}`;
 
 /** A step being reviewed: which recorded step it is, and what the person added. */
 interface Kept {
@@ -304,14 +289,14 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
   const [kept, setKept] = useState<Kept[] | null>(null);
   const [leaveLast, setLeaveLast] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveFailure, setSaveFailure] = useState<{ failure: Failure; retry: boolean } | null>(null);
   const [saved, setSaved] = useState<TaughtRoute | null>(null);
   const sessionId = mine.sessionId;
-  // A failed save is brought into view, with its Retry, wherever the person had scrolled to.
-  const failure = useRef<HTMLDivElement>(null);
+  // A failed save is brought into view, with its Try again, wherever the person had scrolled to.
+  const saveAlert = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (saveError) failure.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [saveError]);
+    if (saveFailure) saveAlert.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [saveFailure]);
 
   const load = useCallback(async () => {
     if (!sessionId) return;
@@ -345,13 +330,14 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
   const close = () => setActive(null);
   const steps = session?.steps ?? [];
   const reviewing = session?.status === "ready" && kept && !saved;
-  const unnamedLeft = (kept ?? []).findIndex((item) => steps[item.n]?.unnamed && !item.name.trim());
-  const lastStep = kept?.length ? steps[kept[kept.length - 1]!.n] : undefined;
+  // A control the recorder couldn't name is a field that must be filled in, checked when the route is saved.
+  const names = useFieldErrors<string>(Object.fromEntries((kept ?? []).filter((item) => steps[item.n]?.unnamed).map((item) => [nameId(item.n), nameId(item.n)])));
 
   async function save() {
     if (!kept || !sessionId) return;
+    setSaveFailure(null);
+    if (names.show(Object.fromEntries(kept.filter((item) => steps[item.n]?.unnamed && !item.name.trim()).map((item) => [nameId(item.n), "Type the words on this control."])))) return;
     setSaving(true);
-    setSaveError(null);
     try {
       const result = await api<{ taught: TaughtRoute[]; route: TaughtRoute }>(`/sites/${site.id}/teach/${sessionId}`, {
         method: "POST",
@@ -364,7 +350,8 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
       onChange({ ...site, taught: result.taught });
     } catch (failure) {
       // The steps stay here and on the server until they are saved.
-      setSaveError(`The route wasn't saved. ${(failure as Error).message} Your review is kept.`);
+      const why = failureFrom("The route wasn't saved", failure);
+      setSaveFailure({ failure: { ...why, detail: `${why.detail} Your review is kept.` }, retry: true });
     } finally {
       setSaving(false);
     }
@@ -372,12 +359,12 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
 
   async function discard() {
     if (!sessionId) return close();
-    setSaveError(null);
+    setSaveFailure(null);
     try {
       await api(`/sites/${site.id}/teach/${sessionId}`, { method: "DELETE" });
       close();
     } catch (failure) {
-      setSaveError(`Couldn't discard it. ${(failure as Error).message}`);
+      setSaveFailure({ failure: failureFrom("Couldn't discard the steps", failure), retry: false });
     }
   }
 
@@ -397,8 +384,8 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
         <div className="flex flex-col gap-4 p-5">
 
         {mine.starting && <p className="text-sm leading-5 text-muted-foreground">Opening your site in a new tab…</p>}
-        {mine.error && <Failure message={`Couldn't start teaching. ${mine.error}`} onRetry={() => void beginTeaching(site.id, mine.question, mine.from)} />}
-        {loadError && <Failure message={`Couldn't check on the teaching tab. ${loadError}`} onRetry={() => void load()} />}
+        {mine.error && <FormAlert failure={{ title: "Couldn't start teaching", detail: mine.error }} retry={() => void beginTeaching(site.id, mine.question, mine.from)} />}
+        {loadError && <FailedCard level={2} title="Couldn't check on the teaching tab" message={loadError} retry={() => void load()} />}
 
         {sessionId && following && !mine.error && (
           <div className="flex flex-col gap-3 rounded-xl border bg-muted p-4">
@@ -422,6 +409,7 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
             <Button variant="ghost" size="sm" className="self-start" onClick={discard}>
               Stop teaching
             </Button>
+            <FormAlert failure={saveFailure?.failure ?? null} />
           </div>
         )}
 
@@ -471,12 +459,26 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
                     {/* What the person adds to a step sits under the step's words, past its number. */}
                     <div className="flex flex-col gap-3 pl-8">
                       {step.unnamed && (
-                        <div className="flex flex-col gap-2">
-                          <Label htmlFor={`name-${item.n}`} className="text-destructive">
-                            Haptic couldn&apos;t read a name for this control. Type the words on it, or delete the step.
-                          </Label>
-                          <Input id={`name-${item.n}`} value={item.name} maxLength={80} onChange={(event) => update(index, { name: event.target.value })} placeholder="The words on the control" className="h-10 bg-card" />
-                        </div>
+                        <Field
+                          id={nameId(item.n)}
+                          label="Words on this control"
+                          required
+                          error={names.errors[nameId(item.n)]}
+                          hint="Haptic couldn't read a name for this control. Type the words on it, or delete the step."
+                        >
+                          <Input
+                            {...names.control(nameId(item.n), { hint: true })}
+                            required
+                            value={item.name}
+                            maxLength={80}
+                            onChange={(event) => {
+                              update(index, { name: event.target.value });
+                              names.clear(nameId(item.n));
+                            }}
+                            placeholder="The words on the control"
+                            className="h-10 bg-card"
+                          />
+                        </Field>
                       )}
                       {item.noting ? (
                         // It wraps, so the whole note can be read back; it is still one line, so Enter adds none.
@@ -520,17 +522,16 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
                 Bring back the {deleted} deleted {deleted === 1 ? "step" : "steps"}
               </Button>
             )}
-            {lastStep && unnamedLeft >= 0 && <p className="text-sm text-destructive">Name step {unnamedLeft + 1} or delete it before saving.</p>}
-            <div ref={failure}>
-              <Failure message={saveError} onRetry={saveError?.startsWith("The route") ? () => void save() : undefined} />
-            </div>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => void save()} disabled={saving || !kept!.length || unnamedLeft >= 0}>
+              <Button onClick={() => void save()} disabled={saving || !kept!.length}>
                 {saving ? "Saving…" : "Save this route"}
               </Button>
               <Button variant="ghost" onClick={() => void discard()}>
                 Discard
               </Button>
+            </div>
+            <div ref={saveAlert}>
+              <FormAlert failure={saveFailure?.failure ?? null} retry={saveFailure?.retry ? () => void save() : undefined} />
             </div>
           </>
         )}

@@ -32,6 +32,7 @@ import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-
 import { signedInUrl } from "../lib/dashboard";
 import { pageControls } from "../lib/setup";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
+import { boundedText } from "./body";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
 import { siteBrand } from "./brand";
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
@@ -221,8 +222,8 @@ const DOC_BODY: BodyLimit = {
 const SITE_BODY: BodyLimit = { max: MAX_NOTES * 2 + 4_000, message: `Notes can be up to ${MAX_NOTES.toLocaleString()} characters.`, field: "notes" };
 
 async function body(request: Request, limit: BodyLimit = ANY_BODY): Promise<Record<string, unknown>> {
-  const text = await request.text();
-  if (text.length > limit.max) throw new Refusal(413, limit.message, limit.field);
+  const text = await boundedText(request, limit.max);
+  if (text === null) throw new Refusal(413, limit.message, limit.field);
   try {
     const value = JSON.parse(text || "{}");
     if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
@@ -382,6 +383,9 @@ function docsSummary(docs: Doc[], answers: boolean) {
   return {
     budget,
     used,
+    // The page applies the same rule before sending a doc. A body far over it can be refused before it is read
+    // in full, and the browser may then report a failed connection instead of this message.
+    bodyLimit: { max: DOC_BODY.max, message: DOC_BODY.message },
     list: docs.map((doc) => ({
       title: doc.title,
       source: doc.source,
