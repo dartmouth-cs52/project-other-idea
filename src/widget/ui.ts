@@ -21,8 +21,10 @@ const POINTER_TIP = { x: 3.81, y: 3.14 };
 const PRESENT_GLIDE_MS = 800;
 /** How many times larger the pointer is drawn in presentation mode. */
 const PRESENT_SCALE = 2;
-/** The cross on the caption's close button, and the arrow on the send button. */
+/** The cross on the caption's and the chat's close buttons, and the arrow on the send button. */
 const CROSS_PATH = "M18 6 6 18M6 6l12 12";
+/** The bar on the launcher's minimize button. Not a cross: it doesn't close anything, it makes the launcher a dot. */
+const MINUS_PATH = "M6 12h12";
 const ARROW_PATH = "M12 19V5M5 12l7-7 7 7";
 /** The square on the stop button, and the tick beside Done. */
 const SQUARE_PATH = "M6 6h12v12H6z";
@@ -583,7 +585,7 @@ export class Ui {
           "div",
           { class: "launch" },
           make("button", { class: "launcher", type: "button" }, icon(POINTER_PATH, { "aria-hidden": "true" }), make("span")),
-          make("button", { class: "hide", type: "button", "aria-label": "Minimize Haptic" }, icon(CROSS_PATH, { "aria-hidden": "true" })),
+          make("button", { class: "hide", type: "button", "aria-label": "Minimize Haptic" }, icon(MINUS_PATH, { "aria-hidden": "true" })),
         ),
       ),
     );

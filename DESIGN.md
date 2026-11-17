@@ -774,10 +774,12 @@ stays. The rest below is proposed.
   The launcher carries no tag. A customer can change the launcher's word, and
   cannot remove the line.
 - **Put the launcher away.** With the mouse over the launcher or focus on it,
-  a 20px white circle with an × fades in on its outer bottom corner, the right
-  one for a launcher on the right. It takes the launcher down to a 14px dot in
+  a 20px white circle with a − fades in on its outer bottom corner, the right
+  one for a launcher on the right. A −, not an ×: it minimizes, and nothing
+  closes, and the chat's own × close button would otherwise show beside it
+  with another meaning. It takes the launcher down to a 14px dot in
   the same place: the word fades first, then the pill draws in. The dot stays
-  that small while the mouse that pressed the × is still over it. Once the
+  that small while the mouse that pressed the − is still over it. Once the
   mouse comes back, or with focus, it opens to 32px and shows the pointer
   mark, growing in place without moving, and a click brings the launcher back
   without opening the panel. Minimized, the area that answers the mouse is a
