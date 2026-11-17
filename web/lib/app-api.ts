@@ -113,7 +113,9 @@ export type Outcome =
   // Haptic was asked for a control the company said never to point at.
   | "blocked"
   | "abandoned"
-  | "under_way";
+  | "under_way"
+  // Only in the count of how guides ended: under way, with no new step for two minutes. A single guide says so with `paused`.
+  | "paused";
 
 export interface Insights {
   days: number;
@@ -254,6 +256,7 @@ export const OUTCOME_LABEL: Record<Outcome, string> = {
   blocked: "A control you ruled out",
   abandoned: "Abandoned",
   under_way: "Under way",
+  paused: "Paused",
 };
 
 /** The viewer's clock against UTC in minutes, sent with anything counted by day, so a day starts at their midnight. */

@@ -56,7 +56,12 @@ export async function insights(sql: Sql, site: string, days: number) {
       from guides g where g.site_id = $1 and g.started_at >= $2`,
       [site, since],
     ),
-    sql.query(`select ${OUTCOME} as outcome, count(*)::int as count from guides g where g.site_id = $1 and g.started_at >= $2 group by 1 order by 2 desc`, [site, since]),
+    // How guides ended. One still open that has gone quiet is listed as paused, apart from those moving now, as it is everywhere else on the page.
+    sql.query(
+      `select case when (${OUTCOME}) = 'under_way' and ${PAUSED} then 'paused' else ${OUTCOME} end as outcome, count(*)::int as count
+      from guides g where g.site_id = $1 and g.started_at >= $2 group by 1 order by 2 desc`,
+      [site, since],
+    ),
     sql.query(
       `select g.id, g.question, g.started_at, g.started_path, g.origin, g.step_count, g.helped, ${OUTCOME} as outcome, ${PAUSED} as paused,
         (select count(*)::int from steps s where s.guide_id = g.id and s.strayed) as wrong_clicks,
