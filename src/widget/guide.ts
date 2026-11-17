@@ -1781,6 +1781,23 @@ function isTyped(el: Element): boolean {
   return isField(el) && !(el instanceof HTMLSelectElement) && !(el as HTMLInputElement).readOnly && !(el instanceof HTMLInputElement && el.type === "range");
 }
 
+/**
+ * Whether the browser itself filled in a field, from what it keeps: Chrome's autofill and the like. The field is then
+ * in the `:autofill` state as its input event arrives, and the event is not one of typing. Chrome sends a plain Event,
+ * and Firefox an InputEvent that replaces the text. Typing, pasting and dictating are InputEvents of other kinds.
+ */
+function filledByBrowser(event: Event, field: Element): boolean {
+  if (typeof InputEvent === "function" && event instanceof InputEvent && event.inputType !== "insertReplacementText") return false;
+  for (const state of [":autofill", ":-webkit-autofill"]) {
+    try {
+      return field.matches(state);
+    } catch {
+      // A browser that does not know this name for the state: try the other.
+    }
+  }
+  return false;
+}
+
 /** The element the keyboard is in, looking inside shadow roots. */
 function activeElement(): Element | null {
   let active = document.activeElement;
@@ -2019,8 +2036,12 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     switch (verdict.how) {
       case "clicked":
         return target.matches('[role="slider"], input[type="range"]') ? `${who} moved ${name}.` : `${who} clicked ${name}.`;
-      case "filled":
-        return `${who} filled in ${name}. You can't see what they entered.`;
+      case "filled": {
+        // Autofill fills a whole form, so the model is told to look at the fields around this one before asking for them.
+        const how = verdict.autofill ? " with the browser's autofill, which may have filled in other fields of the form too" : "";
+        const then = verdict.then === undefined ? "" : `, then clicked ${verdict.then ? `"${verdict.then}"` : "another control"}`;
+        return `${who} filled in ${name}${how}${then}. You can't see what they entered.`;
+      }
       case "opened":
         return `${who} clicked into ${name}, and a list of choices opened.`;
       case "key":
@@ -2129,7 +2150,9 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
   const onInput = (event: Event) => {
     const path = outside(event);
     if (!path) return;
-    feed({ type: "input", at: performance.now(), inTarget: path.includes(target), ...(byActor(event) ? {} : { byPage: true }) });
+    const inTarget = path.includes(target);
+    const autofill = inTarget && event.type === "input" && event.isTrusted && filledByBrowser(event, target);
+    feed({ type: "input", at: performance.now(), inTarget, ...(byActor(event) ? {} : { byPage: true }), ...(autofill ? { autofill } : {}) });
   };
   const onLeave = (event: Event) => {
     if (event.target === target) feed({ type: "left", at: performance.now() });
