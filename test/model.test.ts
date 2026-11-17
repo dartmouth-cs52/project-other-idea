@@ -444,7 +444,7 @@ const demoHome: Snapshot = {
   ],
 };
 const cannotFind = written({ mode: "cannot_help", status: "done", reason: "not_covered" });
-const opensAccount = written({ target: "e5", status: "continue", say: "Click the round A button at the top right to open the account menu." });
+const opensAccount = written({ target: "e5", status: "continue", say: "Open your account menu." });
 const deleteIt: TurnRequest = { site: withDocs.id, goal: "How do I delete this workspace?", step: 0, history: [], snapshot: demoHome };
 
 test('on a site with Answers on, "not covered" to a first question that asks for a way is asked about once more, and the second reply is the one sent', async () => {
@@ -454,7 +454,7 @@ test('on a site with Answers on, "not covered" to a first question that asks for
   assert.equal(sent.length, 2);
   assert.deepEqual(JSON.parse(sent[1]!.messages.at(-2)!.content as string), cannotFind);
   assert.match(sent[1]!.messages.at(-1)!.content as string, /says you can't help because nothing covers it\. The visitor asked for a way/);
-  assert.deepEqual(measure.reply, { target: "e5", status: "continue", say: "Click the round A button at the top right to open the account menu.", mode: "guide" });
+  assert.deepEqual(measure.reply, { target: "e5", status: "continue", say: "Open your account menu.", mode: "guide" });
   assert.deepEqual(measure.recheck, { named: "", asked: true, gaveUp: true });
   // The second reply's pointer goes out as soon as it is known, though the first reply declined.
   assert.deepEqual(early, ["e5"]);

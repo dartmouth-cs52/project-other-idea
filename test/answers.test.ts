@@ -60,9 +60,14 @@ test("a site without Answers gets the prompt the benchmark measured, to the lett
   // Guides prompt has changed: run the benchmark again before changing it here.
   // Changed on 17 November 2026 for the sentence on fields marked "invalid", without the benchmark run again:
   // the session that made it had no model key. Run it, and note the result here.
+  // Changed again on 17 November 2026, for the form rules of #55 (merged without this being updated) and the
+  // rules for writing "say" of #107, and neither has been benchmarked. The prompt before both, run once on all 572
+  // single steps (Benchmark run 44187080589, Claude Sonnet 5.5), pointed right on 510, and its captions were a
+  // typical 18 words, 2% of 6 words or fewer and 18% telling a later step. Run the benchmark on this prompt and
+  // compare (eval/README.md, "Captions beside the pointer"), and note the result here.
   const measured: Record<string, string> = {
-    demo: "d40c424f1e8e38b5f1fe0b6732e5141eddce05b1439b8bc9d25967211603aa06",
-    joinhaptic: "9414acd83cb4eada8d3a8fbe7496d7798813ee8dbbc32b23f32ad468e401a31b",
+    demo: "6d26c51d7f4e9a69fc2f96f1e3bd7eef20d4f284197ee6b2d1d90bb67d7cc5de",
+    joinhaptic: "0f8eee54d19afe17755e9fb1559183d77d0b6d0fa866b021ae9aada0f682e9e2",
   };
   for (const { name, file } of await loadCaseFiles(Object.keys(measured))) {
     const off = { ...file.site, answers: { enabled: false } };
