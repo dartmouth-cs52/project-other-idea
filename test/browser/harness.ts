@@ -155,9 +155,12 @@ export function page(body: string, head = ""): string {
 }
 
 /** CHROMIUM_PATH runs Chromium from a browser already on the machine, where Playwright's own download isn't there. */
-export async function launch(name: string): Promise<Browser> {
+export async function launch(name: string, how: { full?: boolean } = {}): Promise<Browser> {
   const executablePath = name === "chromium" ? process.env.CHROMIUM_PATH : undefined;
-  return ENGINES[name]!.launch(executablePath ? { executablePath } : {});
+  if (executablePath) return ENGINES[name]!.launch({ executablePath });
+  // Playwright runs Chromium's headless shell unless asked for the whole browser, and the shell lacks some of it, such
+  // as autofill. `npx playwright install chromium` downloads both.
+  return ENGINES[name]!.launch(how.full && name === "chromium" ? { channel: "chromium" } : {});
 }
 
 /** Opens the panel, types the question and sends it. */
