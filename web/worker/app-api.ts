@@ -59,6 +59,7 @@ const SITE_ID = /^site_[a-z0-9_]{3,40}$/;
 const MAX_SITES = 5;
 const MAX_ORIGINS = 20;
 const MAX_REFUSED_SHOWN = 5;
+const MAX_NOTES = 20_000;
 
 interface SeenOrigin {
   origin: string;
@@ -116,9 +117,9 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
       if (!SITE_ID.test(id)) throw new Refusal(404, "No such site.");
       const sub = match[2];
       if (!sub && request.method === "GET") return reply(await siteStatus(sql, env, org, id));
-      if (!sub && request.method === "PATCH") return reply(await changeSite(sql, env, org, id, await body(request)));
+      if (!sub && request.method === "PATCH") return reply(await changeSite(sql, env, org, id, await body(request, SITE_BODY)));
       if (!sub && request.method === "DELETE") return reply(await deleteSite(sql, org, id, await body(request)));
-      if (sub === "/docs" && request.method === "POST") return reply(await addDoc(sql, env, org, id, await body(request)), 201);
+      if (sub === "/docs" && request.method === "POST") return reply(await addDoc(sql, env, org, id, await body(request, DOC_BODY)), 201);
       if (sub === "/docs" && request.method === "DELETE") return reply(await removeDoc(sql, env, org, id, url.searchParams.get("source") ?? ""));
       if (sub === "/read" && request.method === "POST") return reply(await readSite(sql, env, org, id, (await body(request)).restart === true));
       if (sub === "/insights" && request.method === "GET") {
@@ -198,9 +199,30 @@ function minutesWest(url: URL): number {
   return Number.isFinite(asked) ? Math.min(Math.max(Math.round(asked), -840), 840) : 0;
 }
 
-async function body(request: Request): Promise<Record<string, unknown>> {
+/** How long a request body may be, in characters as sent, and what to say when it is longer. */
+interface BodyLimit {
+  max: number;
+  message: string;
+  /** The input to show the message under. */
+  field?: string;
+}
+
+const ANY_BODY: BodyLimit = { max: 20_000, message: "That is too long." };
+/**
+ * A pasted doc. Tidying drops indentation and blank lines, so a paste up to twice a doc's length can still
+ * fit, and JSON sends each line break, tab or quote as two characters, so its body can be four times as long.
+ */
+const DOC_BODY: BodyLimit = {
+  max: MAX_DOC_CHARS * 4 + 4_000,
+  message: `That is too long to add. One doc can be up to ${MAX_DOC_CHARS.toLocaleString()} characters. Split it, or paste the part that matters.`,
+  field: "text",
+};
+/** The settings form: the notes, each line break sent as two characters, and the widget's look beside them. */
+const SITE_BODY: BodyLimit = { max: MAX_NOTES * 2 + 4_000, message: `Notes can be up to ${MAX_NOTES.toLocaleString()} characters.`, field: "notes" };
+
+async function body(request: Request, limit: BodyLimit = ANY_BODY): Promise<Record<string, unknown>> {
   const text = await request.text();
-  if (text.length > 20_000) throw new Refusal(413, "That is too long.");
+  if (text.length > limit.max) throw new Refusal(413, limit.message, limit.field);
   try {
     const value = JSON.parse(text || "{}");
     if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
@@ -371,7 +393,6 @@ function docsSummary(docs: Doc[], answers: boolean) {
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
-const MAX_NOTES = 20_000;
 
 /** The widget's look, checked field by field. Anything not given keeps its value. */
 function appearanceFrom(input: unknown, current: Appearance): Appearance {
@@ -423,7 +444,8 @@ async function addDoc(sql: Sql, env: AppEnv, org: Organization, id: string, inpu
     const text = typeof input.text === "string" ? input.text : "";
     if (!title.trim()) throw new Refusal(400, "Give the doc a title.", "title");
     if (!text.trim()) throw new Refusal(400, "Paste the doc's text.", "text");
-    doc = pastedDoc(title, text.slice(0, MAX_DOC_CHARS * 2));
+    // DOC_BODY bounds the text, so it is tidied whole: a doc over the limit is refused with its real length, not cut short.
+    doc = pastedDoc(title, text);
   }
   if (doc.text.length < 40) {
     throw new Refusal(400, from === "url" ? "There was almost no text on that page. Paste the text instead." : "That is too short to help. Paste the whole article.", from);
