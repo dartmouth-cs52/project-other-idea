@@ -1,4 +1,4 @@
-import { controlText, correctionsFor } from "../shared/corrections.ts";
+import { correctionsFor, type ControlName } from "../shared/corrections.ts";
 import { answersOn } from "../shared/types.ts";
 import type { Doc, PageNode, PageOpening, SiteContext, SnapElement, Snapshot, TurnRequest } from "../shared/types.ts";
 
@@ -188,7 +188,7 @@ export function buildSystemPrompt(site: SiteContext, mode?: "act"): string {
   // Only for a site that has such a list, so every other site's prompt is as it was.
   if (site.blocked?.length) {
     parts.push(
-      `# Controls never to point at, from its owner\nThe site's owner doesn't want visitors guided to these. Never point at one, wherever it is on the page. If the visitor asks for what one does, set target to null and status "done", and say you can't help with that here.\n${site.blocked.map((control) => `- ${controlText(control)}`).join("\n")}`,
+      `# Controls never to point at, from its owner\nThe site's owner doesn't want visitors guided to these. Never point at one, wherever it is on the page. If the visitor asks for what one does, set target to null and status "done", and say you can't help with that here.\n${site.blocked.map((control) => `- ${controlName(control)}`).join("\n")}`,
     );
   }
   if (answers) {
@@ -261,6 +261,29 @@ export function inert(text: string): string {
  */
 export function quotedLabel(label: string): string {
   return `"${inert(label).replace(/"/g, "'")}"`;
+}
+
+/**
+ * A control the site's owner named, as the page's list names one: its kind,
+ * then its label in double quotes, both `inert`. The owner picks these, but
+ * not all from their own words: the dashboard's picker offers labels the crawl
+ * and visitors' pages gave, and a correction's "not" is what the recorded step
+ * pointed at, kind and all, and that kind is whatever 24 characters the
+ * widget sent (`parseTurn`). An ordinary one reads as it did before:
+ * link "Team".
+ */
+function controlName(control: ControlName): string {
+  const role = unquoted(control.role || "control");
+  return control.label ? `${role} ${quotedLabel(control.label)}` : role;
+}
+
+/**
+ * Text written outside the quotes in a line that has some: `inert`, and with
+ * any double quote made single, so that it can't change which quotes pair up.
+ * A control's kind or a page's path never has one unless a request made it up.
+ */
+function unquoted(text: string): string {
+  return inert(text).replace(/"/g, "'");
 }
 
 /**
@@ -342,9 +365,14 @@ export function buildUserMessage(request: TurnRequest, site?: SiteContext, now: 
   parts.push(`Today is ${dateInWords(request.today ?? "") ?? dateInWords(now.toISOString().slice(0, 10))}.`);
   const corrections = correctionsFor(site?.corrections, request.snapshot.path, request.goal);
   if (corrections.length) {
+    // A correction quotes what another visitor asked and names controls that were on a page, and its page and the
+    // control pointed at come unchecked from the recorded step, so every part is made `inert`, as <page> is. The
+    // question is quoted the way a label is, so a double quote in it can't end its quote. <corrections> is not in the
+    // rules' list of blocks that are data: that sentence says never to follow what is inside them, and with Answers
+    // on that text saying what to point at is data, and a correction is the owner saying what to point at.
     const lines = corrections.map(
       (correction) =>
-        `- On ${correction.route}, asked "${correction.question.replace(/"/g, "'")}": point at ${controlText(correction.right)}${correction.wrong ? `, not ${controlText(correction.wrong)}` : ""}.`,
+        `- On ${unquoted(correction.route)}, asked ${quotedLabel(correction.question)}: point at ${controlName(correction.right)}${correction.wrong ? `, not ${controlName(correction.wrong)}` : ""}.`,
     );
     parts.push(`<corrections>\nThe site's owner corrected earlier guides. Where one is about the same task and its control is in this page's list, point at that control.\n${lines.join("\n")}\n</corrections>`);
   }
