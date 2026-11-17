@@ -228,7 +228,7 @@ export function TaughtRoutes({ site, onChange }: { site: Site; onChange: (site: 
                 <span className="block">{session.question}</span>
                 <span className="text-muted-foreground">
                   {session.status === "ready"
-                    ? `${session.stepCount} ${session.stepCount === 1 ? "step" : "steps"} waiting for review. Nothing is used until you save.`
+                    ? `${session.stepCount} ${session.stepCount === 1 ? "step" : "steps"} waiting for review. Nothing is used until you save, and steps nobody saves are deleted after a week.`
                     : "Being taught in another tab."}
                 </span>
               </span>
@@ -447,6 +447,7 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
           <>
             <p className="text-sm leading-5 text-muted-foreground">
               Check the steps. Delete any that aren&apos;t part of the task, and add a note where a step needs one, like which option to pick. Nothing is used until you save.
+              Saving keeps only the steps left here and deletes the recording. Discard deletes all of it.
             </p>
             <ol className="flex flex-col gap-3">
               {kept!.map((item, index) => {

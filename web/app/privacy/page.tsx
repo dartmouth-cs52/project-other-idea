@@ -148,10 +148,12 @@ export default function Privacy() {
         address within the product. It
         never reads what they type, and it masks email addresses and long numbers the same way as above. A control in a
         table&apos;s row is kept by its name only when other rows have one of the same name, such as Edit, never by the
-        record&apos;s own name; a name elsewhere on the page can still be kept. The person reviews the steps in the dashboard before anything is used. Saved steps are
-        kept with the company&apos;s site, with any notes added and the name of who taught them, until the company
-        removes them, and Haptic uses them to guide anyone who asks how to do the same task. Steps nobody
-        saves are deleted after a week. Teaching asks the AI nothing.
+        record&apos;s own name; a name elsewhere on the page can still be kept. The person reviews the steps in the dashboard before anything is used. Saving keeps only the steps they
+        kept, with the company&apos;s site, with any notes added and the name of who taught them, and deletes the
+        recording, with any steps they deleted. Haptic uses the saved steps to guide anyone who asks how to do the same
+        task, until the company removes them or teaches the task again, and then the record of that teaching is deleted
+        too. A recording the person discards is deleted at once, and one nobody saves is deleted once it is a week old,
+        by a check that runs every day. Teaching asks the AI nothing.
       </p>
       <p>
         From a visit where nobody asks Haptic anything, we keep nothing else about the visitor. For each web address

@@ -15,8 +15,9 @@
 -- done with it. Never what was typed. They wait here for the person to review
 -- them in the dashboard. Saving keeps them as a taught route in the site's
 -- context (sites.context: taught), beside the corrections, so the widget
--- server reads them with the site. A session not saved is deleted after
--- seven days, when the next one is made for the same site.
+-- server reads them with the site. Saving or discarding sets steps to null
+-- here, and a session not saved is deleted after seven days, by the site
+-- Worker's daily schedule (web/worker/teach.ts: forgetOldTeaching).
 create table teach_sessions (
   id uuid primary key default gen_random_uuid(),
   site_id text not null references sites(id) on delete cascade,

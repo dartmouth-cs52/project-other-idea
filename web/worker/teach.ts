@@ -159,7 +159,8 @@ export async function startTeaching(sql: Sql, site: TeachSite, teacher: Teacher,
     path ??= row.started_path;
   }
   if (question.replace(/[^\p{L}\p{N}]/gu, "").length < 3) throw new TeachRefused(400, "Write the question Haptic should learn to answer, like “how do I add a budget”.");
-  // Sessions nobody saved go after a week, so no recorded steps are kept for long without a reason.
+  // Sessions nobody saved go after a week, so no recorded steps are kept for long without a reason. The daily clean-up
+  // (forgetOldTeaching) does the same for every site.
   await sql`delete from teach_sessions where site_id = ${site.id} and saved_at is null and created_at < now() - ${`${KEEP_UNSAVED_DAYS} days`}::interval`;
   const [counted] = (await sql`
     select count(*)::int as waiting from teach_sessions
@@ -198,11 +199,25 @@ export async function getTeaching(sql: Sql, siteId: string, id: string): Promise
   return view(await sessionRow(sql, siteId, id), true);
 }
 
-/** Closes a session without saving. A tab still teaching is told so the next time it asks. */
+/** Closes a session without saving, and deletes the steps it recorded. A tab still teaching is told so the next time it asks. */
 export async function closeTeaching(sql: Sql, siteId: string, id: string): Promise<TeachSessionView> {
   await sessionRow(sql, siteId, id);
-  await sql`update teach_sessions set cancelled_at = now() where id = ${id} and site_id = ${siteId} and saved_at is null and cancelled_at is null`;
+  await sql`update teach_sessions set cancelled_at = now(), steps = null where id = ${id} and site_id = ${siteId} and saved_at is null and cancelled_at is null`;
   return getTeaching(sql, siteId, id);
+}
+
+/**
+ * The daily clean-up (handler.ts). On every site, whether or not anyone
+ * teaches again: a session nobody saved is deleted a week after it was made,
+ * and no session that was saved or closed keeps the steps it recorded. Saving
+ * and closing delete them already, so the second only finds a session from
+ * before they did.
+ */
+export async function forgetOldTeaching(sql: Sql): Promise<void> {
+  await sql.transaction([
+    sql`delete from teach_sessions where saved_at is null and created_at < now() - ${`${KEEP_UNSAVED_DAYS} days`}::interval`,
+    sql`update teach_sessions set steps = null where steps is not null and (saved_at is not null or cancelled_at is not null)`,
+  ]);
 }
 
 /**
@@ -241,8 +256,11 @@ export function reviewedSteps(recorded: TaughtStep[], input: Record<string, unkn
 
 /**
  * Saves a session's reviewed steps as a taught route. A route for the same
- * question replaces the one before. If saving fails, the session keeps its
- * steps, so the person can try again.
+ * question replaces the one before. The route is then the only copy: the
+ * session keeps when it was saved and by whom, and no longer the steps it
+ * recorded, nor those the reviewer deleted. A route that goes, replaced or
+ * past the most a site keeps, takes the session it was saved from with it.
+ * If saving fails, the session keeps its steps, so the person can try again.
  */
 export async function saveTaught(sql: Sql, site: TeachSite, orgId: string, id: string, input: Record<string, unknown>) {
   const row = await sessionRow(sql, site.id, id);
@@ -258,22 +276,42 @@ export async function saveTaught(sql: Sql, site: TeachSite, orgId: string, id: s
     ...(row.created_by_name ? { by: row.created_by_name } : {}),
   };
   const key = questionKey(row.question);
-  const taught = [...(site.context.taught ?? []).filter((item) => questionKey(item.question) !== key), route].slice(-MAX_TAUGHT_ROUTES);
+  const before = site.context.taught ?? [];
+  const taught = [...before.filter((item) => questionKey(item.question) !== key), route].slice(-MAX_TAUGHT_ROUTES);
+  const gone = before.filter((item) => !taught.includes(item)).map((item) => item.question);
   // Both or neither: a route is never saved without its session saying so, nor the reverse.
   await sql.transaction([
     sql`
       update sites set context = jsonb_set(context, '{taught}', ${JSON.stringify(taught)}::jsonb), updated_at = now()
       where id = ${site.id} and company_id = ${orgId}`,
-    sql`update teach_sessions set saved_at = now() where id = ${id} and site_id = ${site.id} and saved_at is null`,
+    sql`update teach_sessions set saved_at = now(), steps = null where id = ${id} and site_id = ${site.id} and saved_at is null`,
+    sql`delete from teach_sessions where site_id = ${site.id} and id <> ${id} and saved_at is not null and question = any(${gone}::text[])`,
   ]);
   return { taught: taught.map(routeView), route: routeView(route) };
 }
 
+/**
+ * Removes a taught route, and the session it was saved from, so nothing of it
+ * is left. Both are read from the site as it is now, in one transaction, so a
+ * route saved meanwhile is kept.
+ */
 export async function removeTaught(sql: Sql, site: TeachSite, orgId: string, id: string) {
   if (!ROUTE_ID.test(id)) throw new TeachRefused(404, "No such route.");
-  const taught = (site.context.taught ?? []).filter((route) => route.id !== id);
-  await sql`update sites set context = jsonb_set(context, '{taught}', ${JSON.stringify(taught)}::jsonb), updated_at = now() where id = ${site.id} and company_id = ${orgId}`;
-  return { taught: taught.map(routeView) };
+  const [, updated] = await sql.transaction([
+    sql`
+      delete from teach_sessions where site_id = ${site.id} and saved_at is not null and question in (
+        select route->>'question' from sites, jsonb_array_elements(coalesce(context->'taught', '[]'::jsonb)) as route
+        where sites.id = ${site.id} and sites.company_id = ${orgId} and route->>'id' = ${id})`,
+    sql`
+      update sites set context = jsonb_set(context, '{taught}', coalesce((
+          select jsonb_agg(route order by at) from jsonb_array_elements(coalesce(context->'taught', '[]'::jsonb)) with ordinality as listed(route, at)
+          where route->>'id' <> ${id}), '[]'::jsonb)), updated_at = now()
+      where id = ${site.id} and company_id = ${orgId}
+      returning context->'taught' as taught`,
+  ]);
+  const row = (updated as { taught: TaughtRoute[] }[] | undefined)?.[0];
+  if (!row) throw new TeachRefused(404, "No such site.");
+  return { taught: row.taught.map(routeView) };
 }
 
 /** Routes one teach request under /sites/:id. `rest` is what follows /teach or /taught. */

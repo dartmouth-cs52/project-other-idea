@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { before, describe, test } from "node:test";
 import { checkAction } from "../src/shared/act-rules.ts";
 import {
   cleanTaughtSteps,
@@ -16,13 +16,15 @@ import {
   type TaughtStep,
 } from "../src/shared/teach.ts";
 import { ACT_VERSION, DEFAULT_APPEARANCE, type SiteContext, type TurnRequest } from "../src/shared/types.ts";
+import { exec, freshDatabase, psqlSql, TEST_DATABASE_URL, testDatabase } from "./psql.ts";
 
 process.env.HAPTIC_MODEL = "mock";
 const { createApp } = await import("../src/server/app.ts");
 const { MemoryTeachStore, NeonTeachStore, stepsToKeep } = await import("../src/server/teach.ts");
 const { buildSystemPrompt, buildUserMessage } = await import("../src/server/prompt.ts");
 const { actingFor } = await import("../src/server/acting.ts");
-const { reviewedSteps, saveTaught, startTeaching, stepViews, TeachRefused } = await import("../web/worker/teach.ts");
+const { closeTeaching, forgetOldTeaching, removeTaught, reviewedSteps, saveTaught, startTeaching, stepViews, TeachRefused } = await import("../web/worker/teach.ts");
+type TeachSite = import("../web/worker/teach.ts").TeachSite;
 
 // Teach Haptic: one-time tokens, what a recorded step may hold, matching a
 // question to a taught route, and what the route adds to the prompt.
@@ -451,7 +453,7 @@ test("a save that fails leaves the steps where they were, so it can be tried aga
   const update = sent.find((item) => item.text.startsWith("update sites"))!;
   assert.match(update.text, /jsonb_set\(context, '\{taught\}', \?::jsonb\)/);
   assert.match(update.text, /where id = \? and company_id = \?/);
-  assert.ok(sent.some((item) => /update teach_sessions set saved_at = now\(\) where id = \? and site_id = \? and saved_at is null/.test(item.text)));
+  assert.ok(sent.some((item) => /update teach_sessions set saved_at = now\(\), steps = null where id = \? and site_id = \? and saved_at is null/.test(item.text)), "saved, and the recording cleared");
   await assert.rejects(
     saveTaught(standIn((text) => (text.startsWith("select") ? [{ ...session, finished_at: null, steps: null }] : [])).sql, teachSite, "org", session.id, { steps: [{ n: 0 }] }),
     /The steps haven't come in yet/,
@@ -467,4 +469,78 @@ test("a site published again keeps its taught routes", async () => {
   }) as unknown as ConstructorParameters<typeof Store>[0];
   await new Store(sql).saveSite(site);
   assert.match(sent[0]!, /'taught', sites\.context->'taught'/);
+});
+
+/** This file's own database, when TEST_DATABASE_URL is set. */
+const DB = testDatabase("teach");
+
+describe("what a teach session keeps, against Postgres", { skip: TEST_DATABASE_URL ? false : "set TEST_DATABASE_URL to a local, empty database to run these" }, () => {
+  const ORG = "11111111-1111-4111-8111-111111111111";
+  const SITE = "site_teach01";
+  const sql = psqlSql(DB) as unknown as Parameters<typeof startTeaching>[0];
+  const quoted = (value: unknown) => `'${JSON.stringify(value).replace(/'/g, "''")}'`;
+  before(() => {
+    freshDatabase(DB);
+    exec(DB, `insert into sites (id, company_id, name, origin, allowed_origins, context) values ('${SITE}', '${ORG}', 'Test', '${ORIGIN}', '{${ORIGIN}}', ${quoted({ ...site, id: SITE })})`);
+  });
+  const rows = async (text: string, values: unknown[] = []) => (await (sql as unknown as { query(text: string, values: unknown[]): Promise<Record<string, unknown>[]> }).query(text, values));
+  const siteNow = async (): Promise<TeachSite> => (await rows("select id, origin, allowed_origins, context from sites where id = $1", [SITE]))[0] as unknown as TeachSite;
+  /** A session as the widget server leaves it once the tab has posted its steps. */
+  async function recorded(question: string, steps: TaughtStep[]): Promise<string> {
+    const { session } = await startTeaching(sql, await siteNow(), teacher, { question });
+    exec(DB, `update teach_sessions set claimed_at = now(), claim_hash = repeat('e', 64), finished_at = now(), steps = ${quoted(steps)} where id = '${session.id}'`);
+    return session.id;
+  }
+  const holding = async (words: string) => Number((await rows("select count(*)::int as n from teach_sessions where steps::text like $1 or question like $1", [`%${words}%`]))[0]!.n);
+
+  test("saving keeps only the reviewed route: the recording, with the step the reviewer deleted, is cleared from the session", async () => {
+    const id = await recorded("how do I add a budget", [step({}), step({ kind: "choose", role: "radio", label: "Plan for Zebulon Quackenbush", choice: "Pro" }), step({ label: "Create budget", commits: true })]);
+    await saveTaught(sql, await siteNow(), ORG, id, { steps: [{ n: 0 }, { n: 2 }] });
+    const [session] = await rows("select steps, saved_at from teach_sessions where id = $1", [id]);
+    assert.equal(session!.steps, null, "the session no longer holds the recording");
+    assert.ok(session!.saved_at, "and says it was saved");
+    const route = (await siteNow()).context.taught!.find((item) => item.question === "how do I add a budget")!;
+    assert.deepEqual(route.steps.map((item) => item.label), ["New budget", "Create budget"], "the route holds what was reviewed");
+    assert.equal(await holding("Quackenbush"), 0, "the deleted step is nowhere");
+  });
+
+  test("discarding a recording clears it from the session", async () => {
+    const id = await recorded("how do I invite a teammate", [step({ label: "Invite Zebulon Quackenbush" })]);
+    await closeTeaching(sql, SITE, id);
+    const [session] = await rows("select steps, cancelled_at from teach_sessions where id = $1", [id]);
+    assert.equal(session!.steps, null);
+    assert.ok(session!.cancelled_at);
+    assert.equal(await holding("Quackenbush"), 0);
+  });
+
+  test("a route replaced by a new one, or removed, leaves nothing of it in any session", async () => {
+    const first = await recorded("how do I add a card", [step({ label: "New card" })]);
+    await saveTaught(sql, await siteNow(), ORG, first, { steps: [{ n: 0 }] });
+    const second = await recorded("How do I add a card?", [step({ label: "Add card" })]);
+    await saveTaught(sql, await siteNow(), ORG, second, { steps: [{ n: 0 }] });
+    assert.equal((await rows("select id from teach_sessions where id = $1", [first])).length, 0, "the replaced route's session is gone");
+    const route = (await siteNow()).context.taught!.find((item) => item.question === "How do I add a card?")!;
+    const { taught } = await removeTaught(sql, await siteNow(), ORG, route.id);
+    assert.ok(!taught.some((item) => /add a card/i.test(item.question)));
+    assert.ok(!(await siteNow()).context.taught!.some((item) => /add a card/i.test(item.question)), "the route is gone");
+    assert.equal(await holding("add a card"), 0, "and so is its session");
+  });
+
+  test("every day, sessions nobody saved go a week after they were made, and no saved or closed session keeps steps", async () => {
+    const unsaved = await recorded("how do I freeze a card", [step({ label: "Freeze Zebulon Quackenbush's card" })]);
+    // A session saved before saving cleared the recording, as one on a database that had this table first would be.
+    const older = await recorded("how do I add a vendor", [step({ label: "Add vendor" }), step({ label: "Vendor Xantippe Ollerenshaw" })]);
+    exec(DB, `update teach_sessions set saved_at = now() where id = '${older}'`);
+    // A month on, with nobody starting a session.
+    exec(DB, `update teach_sessions set created_at = now() - interval '30 days'`);
+    await forgetOldTeaching(sql);
+    assert.equal((await rows("select id from teach_sessions where id = $1", [unsaved])).length, 0, "the unsaved session is gone");
+    assert.equal(Number((await rows("select count(*)::int as n from teach_sessions where saved_at is null and created_at < now() - interval '7 days'"))[0]!.n), 0);
+    assert.equal(Number((await rows("select count(*)::int as n from teach_sessions where steps is not null and (saved_at is not null or cancelled_at is not null)"))[0]!.n), 0, "no saved or closed session holds steps");
+    assert.equal(await holding("Quackenbush"), 0);
+    assert.equal(await holding("Ollerenshaw"), 0);
+    // As the review checked it: a session started after that, and then the saved rows that still hold steps.
+    await startTeaching(sql, await siteNow(), teacher, { question: "how do I add a card" });
+    assert.equal(Number((await rows("select count(*)::int as n from teach_sessions where saved_at is not null and steps is not null"))[0]!.n), 0);
+  });
 });
