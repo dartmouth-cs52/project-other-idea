@@ -348,6 +348,54 @@ for (const name of BROWSERS) {
       await glow.waitFor({ state: "detached", timeout: 1000 });
     });
 
+    test("the glow is Haptic's blue on every site, whatever the site's accent", async () => {
+      harness.script = () => new Promise(() => {});
+      const band = async () => {
+        await ask(tab, "invite someone");
+        await tab.locator("haptic-veil .glow").waitFor({ state: "attached" });
+        return tab.evaluate(() => getComputedStyle(document.querySelector("haptic-veil")!.shadowRoot!.querySelector(".glow i")!).backgroundImage);
+      };
+      const blue = await band();
+      for (const colour of ["rgb(119, 208, 254)", "rgb(82, 148, 255)", "rgb(132, 96, 238)"]) assert.ok(blue.includes(colour), `${colour} in ${blue}`);
+      // A site whose accent is green: its pointer is green, and the glow is the same blue.
+      harness.config = { ...harness.config, appearance: { ...harness.config.appearance, accent: "#16a34a" } };
+      await tab.reload();
+      await part(tab, ".launcher").waitFor();
+      assert.equal(await band(), blue);
+      assert.equal(await part(tab, ".ring").evaluate((ring) => getComputedStyle(ring).borderTopColor), "rgb(22, 163, 74)");
+    });
+
+    test("Send and Do it pressed with nothing typed say what to do, under the ask box, and ask nothing", async () => {
+      harness.config = { ...harness.config, acting: { confirmFirst: false } };
+      await tab.reload();
+      await part(tab, ".launcher").click();
+      const hint = part(tab, ".empty");
+      assert.equal(await hint.isVisible(), false);
+      await part(tab, ".doit").click();
+      assert.equal(await hint.textContent(), "Type what you want Haptic to do first, then press Do it.");
+      assert.equal(await hint.isVisible(), true);
+      assert.equal(await tab.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.activeElement?.matches(".ask input")), true, "the keyboard is in the ask box");
+      // Typing takes it away.
+      await part(tab, ".ask input").pressSequentially("in");
+      assert.equal(await hint.isVisible(), false);
+      await part(tab, ".ask input").fill("");
+      await part(tab, ".ask input").press("Enter");
+      assert.equal(await hint.textContent(), "Type what you want to do first, then send it.");
+      await part(tab, ".send").click();
+      assert.equal(await hint.isVisible(), true);
+      // Read out to a screen reader, and named as what the box needs.
+      assert.equal(await hint.getAttribute("aria-live"), "polite");
+      assert.equal(await part(tab, ".ask input").getAttribute("aria-describedby"), await hint.getAttribute("id"));
+      await sleep(300);
+      assert.equal(harness.turns.length, 0, "nothing was asked");
+      // A question sent takes it away.
+      harness.script = () => new Promise(() => {});
+      await part(tab, ".ask input").fill("invite someone");
+      await part(tab, ".ask input").press("Enter");
+      await turns(harness, 1);
+      assert.equal(await hint.isVisible(), false);
+    });
+
     test("on a dark page the glow is screened in, so its colour shows", async () => {
       harness.pages.set("/dark", page(`<main style="font:14px system-ui;padding:40px;min-height:100vh;background:#0c0a09;color:#e7e5e4"><h1>Team</h1><button id="invite">Invite teammate</button></main>`, "<style>body{margin:0}</style>"));
       harness.script = () => new Promise(() => {});

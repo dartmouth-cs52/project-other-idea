@@ -130,8 +130,9 @@
    comes in at the top edge and falls towards the bottom, slower the longer the wait, and goes on off the page, fading,
    the moment the reply arrives. The fall itself is set in the demo's code (web/components/demo/kit.tsx).
    It is multiplied into the page, so words and buttons stay sharp through it. The band is one element as tall as
-   the page. Its colour is Pointer blue with its neighbours on either side, in one gradient mixed in OKLCH so the
-   hues melt into each other, and a mask gives it a bell with no flat top and no edge. */
+   the page. Its colour is Pointer blue (#1E6EF4) with its neighbours on either side, written down once and the same
+   in the widget on every site (GLOW in src/widget/ui.ts), in one gradient mixed in OKLCH so the hues melt into each
+   other, and a mask gives it a bell with no flat top and no edge. */
 .thinking-glow {
   --glow-a: #77d0fe;
   --glow-b: #5294ff;
@@ -150,13 +151,6 @@
   opacity: 1;
   visibility: visible;
   transition: opacity 0.3s ease-out;
-}
-@supports (color: oklch(from red l c h)) {
-  .thinking-glow {
-    --glow-a: oklch(from var(--pointer) 0.82 calc(c * 0.5) calc(h - 28));
-    --glow-b: oklch(from var(--pointer) 0.68 calc(c * 0.85) h);
-    --glow-c: oklch(from var(--pointer) 0.6 calc(c * 0.95) calc(h + 30));
-  }
 }
 /* On a dark page, multiplying would lose the colour, so it is screened in. */
 @media (prefers-color-scheme: dark) {
