@@ -10,6 +10,7 @@ import { Spark } from "./chart";
 import { usePolled } from "./live";
 import { NEW_SITE_HREF, siteHref } from "./nav";
 import { GuideStatus, PageHeader, SiteIcon, useNow, when } from "./parts";
+import { BillingNotice } from "./upgrade";
 
 /** How often the list of sites asks what is new. Each card is a few counts, so this is slower than a site's own page. */
 const SITES_MS = 3_000;
@@ -37,6 +38,7 @@ export function SitesIndex({ me }: { me: Me }) {
           Add a site
         </Link>
       </PageHeader>
+      <BillingNotice me={me} />
       <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {sites
           ? sites.map((site) => (

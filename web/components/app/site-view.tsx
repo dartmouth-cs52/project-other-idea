@@ -20,6 +20,7 @@ import { useInsights, useLive } from "./live";
 import { RANGES, daysFrom, siteHref, useAddress, type View } from "./nav";
 import { Overview } from "./overview";
 import { Card, CardTitle, DashboardSurface, DoneMark, FailedCard, PageHeader, Segmented, StepMark, StepTitle, when } from "./parts";
+import { BillingNotice } from "./upgrade";
 import { Questions } from "./questions";
 import { RoutesCard } from "./routes-card";
 import { SetupGate } from "./setup/setup-gate";
@@ -182,6 +183,7 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
         </PageHeader>
         {/* Asked for first until it has been done once: without it Haptic knows only the public pages. */}
         {site.mapped === 0 && asksToMap(site) && <MapApp site={site} reload={load} />}
+        <BillingNotice me={me} />
         <Overview siteId={site.id} origin={site.origin} days={days} stamp={stamp} data={numbers.data} live={live} onOpen={openIt} />
         {numbers.data?.routes && <RoutesCard site={site} metrics={numbers.data.routes} onChange={setSite} />}
       </>

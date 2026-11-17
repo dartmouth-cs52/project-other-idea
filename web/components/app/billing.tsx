@@ -15,6 +15,7 @@ import { api, type Billing, type Me } from "@/lib/app-api";
 import { monthTotal, type PaidPlan } from "@/lib/billing-plans";
 import { pricing, site } from "@/lib/site";
 import { siteHref } from "./nav";
+import { forgetBilling, Reasons } from "./upgrade";
 import { Card, CardTitle, DashboardSurface, FailedCard, PageHeader, Panel, PanelEmpty } from "./parts";
 
 const dollars = (amount: number) => amount.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: Number.isInteger(amount) ? 0 : 2 });
@@ -75,6 +76,8 @@ function Loaded({ billing, onChange }: { billing: Billing; onChange: (next: Bill
     try {
       const answer = await api<{ url?: string } & Partial<Billing>>(path, { method: "POST", body: body ?? {} });
       if (answer.url) return window.location.assign(answer.url);
+      // The plan in the bar across the top and the notices ask again, and see the change.
+      forgetBilling();
       onChange(answer as Billing);
     } catch (error) {
       // Switching plan is done here; checkout and the portal are Stripe's own pages, opened from here.
@@ -84,6 +87,7 @@ function Loaded({ billing, onChange }: { billing: Billing; onChange: (next: Bill
   }
 
   const trouble = subscription && ["past_due", "unpaid", "incomplete"].includes(subscription.status);
+  const plans = <Plans billing={billing} busy={busy} onCheckout={(plan) => go(plan, "/billing/checkout", { plan })} onSwitch={(plan) => go(plan, "/billing/plan", { plan })} />;
 
   return (
     <>
@@ -102,7 +106,7 @@ function Loaded({ billing, onChange }: { billing: Billing; onChange: (next: Bill
         <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
           {subscription && current
             ? subscription.cancelAt
-              ? `${dollars(current.monthlyUsd)} a month with ${current.includedGuides.toLocaleString()} finished guides included. Cancelled: it ends on ${day(subscription.cancelAt)}, and Haptic keeps working after that.`
+              ? `${dollars(current.monthlyUsd)} a month with ${current.includedGuides.toLocaleString()} finished guides included. Cancelled, so it ends on ${day(subscription.cancelAt)}. Haptic keeps working after that, on early access.`
               : `${dollars(current.monthlyUsd)} a month with ${current.includedGuides.toLocaleString()} finished guides included. Renews on ${subscription.periodEnd ? day(subscription.periodEnd) : "the first of the month"}.`
             : subscription
               ? "A plan agreed with us. Email us to change it."
@@ -117,9 +121,10 @@ function Loaded({ billing, onChange }: { billing: Billing; onChange: (next: Bill
         <FormAlert failure={failure} />
       </Card>
 
+      {/* During early access the plans come first: choosing one is what this page is for. On a paid plan, what has been used this period is. */}
+      {!subscription && plans}
       <Usage billing={billing} plan={current} />
-
-      <Plans billing={billing} busy={busy} onCheckout={(plan) => go(plan, "/billing/checkout", { plan })} onSwitch={(plan) => go(plan, "/billing/plan", { plan })} />
+      {subscription && plans}
     </>
   );
 }
@@ -153,7 +158,7 @@ function Usage({ billing, plan }: { billing: Billing; plan: PaidPlan | undefined
         {plan && total && (
           <p className="text-sm leading-5 text-muted-foreground">
             {total.extra
-              ? `${total.extra.toLocaleString()} over, at ${each(plan.overageUsd)} each: ${dollars(total.overage)}. This period comes to ${dollars(total.total)} so far, before tax.`
+              ? `${total.extra.toLocaleString()} over, at ${each(plan.overageUsd)} each, which is ${dollars(total.overage)}. This period comes to ${dollars(total.total)} so far, before tax.`
               : `Nothing over yet. This period comes to ${dollars(total.monthly)}, before tax.`}
           </p>
         )}
@@ -183,10 +188,12 @@ function Plans({ billing, busy, onCheckout, onSwitch }: { billing: Billing; busy
 
   return (
     <Card>
-      <CardTitle>Plans</CardTitle>
+      <CardTitle>{subscription ? "Plans" : "Choose a plan"}</CardTitle>
       <ul className="grid gap-4 md:grid-cols-2">
         {billing.plans.map((plan) => {
           const current = plan.id === billing.plan.id;
+          const detail = pricing.plans.find((item) => item.id === plan.id)?.detail;
+          const thisMonth = monthTotal(plan, billing.finished);
           return (
             <li key={plan.id} className="flex flex-col gap-3 rounded-lg border p-4">
               <div className="flex items-baseline justify-between gap-3">
@@ -197,8 +204,14 @@ function Plans({ billing, busy, onCheckout, onSwitch }: { billing: Billing; busy
                 </span>
               </div>
               <p className="text-sm leading-5 text-muted-foreground">
+                {detail ? `${detail} ` : ""}
                 {plan.includedGuides.toLocaleString()} finished guides a month included, then {each(plan.overageUsd)} each.
               </p>
+              {!current && billing.finished > 0 && (
+                <p className="text-sm leading-5">
+                  With this {billing.period.kind === "billing" ? "period" : "month"}&apos;s {billing.finished.toLocaleString()} finished guides, {plan.name} would come to {dollars(thisMonth.total)}.
+                </p>
+              )}
               <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
                 {current ? (
                   <span className="text-sm text-muted-foreground">Your plan</span>
@@ -232,12 +245,13 @@ function Plans({ billing, busy, onCheckout, onSwitch }: { billing: Billing; busy
           );
         })}
       </ul>
+      {!subscription && <Reasons />}
       <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
         {!billing.ready
           ? "Paying through the dashboard isn't switched on yet."
           : !billing.canManage
             ? "Only an owner or admin of your company can change the plan."
-            : "Payment is through Stripe. Each month is billed on the first: the plan's fee for the month ahead, and any guides over the included amount from the month before."}{" "}
+            : "Payment is through Stripe. Each month is billed on the first, with the plan's fee for the month ahead and any guides over the included amount from the month before. Cancel whenever you like."}{" "}
         For a larger rollout, email{" "}
         <a className="underline underline-offset-2" href={`mailto:${site.email}`}>
           {site.email}
