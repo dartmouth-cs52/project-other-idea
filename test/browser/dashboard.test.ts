@@ -16,6 +16,25 @@ async function eventually(check: () => Promise<boolean>, message: string, ms = 1
 }
 
 const shows = (row: Locator, words: string) => row.getByText(words).first().waitFor({ timeout: 10_000 });
+
+/** What the focus ring is drawn round, by its name, or null when there is none on the page. */
+const ringOn = (tab: Page) =>
+  tab.evaluate(() => {
+    const el = document.querySelector(":focus-visible");
+    if (!el) return null;
+    const style = getComputedStyle(el);
+    const drawn = style.boxShadow !== "none" || (style.outlineStyle !== "none" && parseFloat(style.outlineWidth) > 0);
+    return drawn ? (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().slice(0, 40) : null;
+  });
+
+// Safari, and Firefox on a Mac, never give a button or a link the focus when it is clicked: the focus goes to the page.
+// Chromium gives it to them, so it is made to click the same way here. After such a click, a script that moves the
+// focus has it drawn as if the keyboard had moved it, ring and all, in every browser.
+const CLICKS_LIKE_SAFARI = `document.addEventListener("mousedown", (event) => {
+  if (!(event.target instanceof Element) || !event.target.closest("button, a[href]")) return;
+  event.preventDefault();
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+}, true);`;
 const closing = async (tab: Page, work: () => Promise<void>) => {
   try {
     await work();
@@ -74,6 +93,59 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
       await shows(panel, "Press Issue card.");
       dash.end(guide);
       await shows(panel, "Finished");
+    });
+  });
+
+  test("a menu or a guide used with the mouse leaves no focus ring behind once the page has changed, in a browser that clicks like Safari", async () => {
+    const tab = await dash.open("/dashboard/?view=sites");
+    await closing(tab, async () => {
+      await tab.addInitScript(CLICKS_LIKE_SAFARI);
+      await tab.reload();
+      await tab.getByRole("heading", { name: "Sites" }).waitFor({ timeout: 10_000 });
+
+      // Team is chosen and the page changes at once. Once the menu has faded out, the focus was put back on Account, in
+      // the bar that stays, and drawn as from the keyboard: a blue ring round a button nobody pressed, on the new page.
+      await tab.getByRole("button", { name: "Account" }).click();
+      await tab.getByRole("menuitem", { name: "Team" }).click();
+      await tab.getByRole("heading", { name: "Team", exact: true }).waitFor({ timeout: 10_000 });
+      await tab.waitForTimeout(600);
+      assert.equal(await ringOn(tab), null, "choosing Team with the mouse left the focus ring on the page");
+
+      // The panel's Close button took the focus as the panel opened, ring and all.
+      await tab.goto(new URL(`/dashboard/?site=${SITE}&view=questions`, tab.url()).href);
+      await tab.locator("main button", { hasText: "How do I issue a new card?" }).first().click();
+      const panel = tab.getByRole("dialog");
+      await panel.waitFor({ timeout: 10_000 });
+      await tab.waitForTimeout(400);
+      assert.equal(await ringOn(tab), null, "opening a guide with the mouse put the focus ring on the panel");
+      await panel.getByRole("button", { name: "Close" }).click();
+      await panel.waitFor({ state: "detached", timeout: 10_000 });
+      await tab.waitForTimeout(400);
+      assert.equal(await ringOn(tab), null, "closing a guide with the mouse left the focus ring on the page");
+    });
+  });
+
+  test("from the keyboard, a menu or a guide that closes puts the focus back on what opened it, with its ring", async () => {
+    const tab = await dash.open("/dashboard/?view=sites");
+    await closing(tab, async () => {
+      await tab.getByRole("heading", { name: "Sites" }).waitFor({ timeout: 10_000 });
+      await tab.getByRole("button", { name: "Account" }).focus();
+      await tab.keyboard.press("Enter");
+      await tab.getByRole("menuitem", { name: "Team" }).focus();
+      await tab.keyboard.press("Enter");
+      await tab.getByRole("heading", { name: "Team", exact: true }).waitFor({ timeout: 10_000 });
+      await eventually(async () => (await ringOn(tab)) === "Account", "after Enter on Team the focus should be back on Account, with its ring");
+
+      await tab.goto(new URL(`/dashboard/?site=${SITE}&view=questions`, tab.url()).href);
+      const row = tab.locator("main button", { hasText: "How do I issue a new card?" }).first();
+      await row.focus();
+      await tab.keyboard.press("Enter");
+      const panel = tab.getByRole("dialog");
+      await panel.waitFor({ timeout: 10_000 });
+      await eventually(() => panel.evaluate((el) => el.contains(document.activeElement)), "the focus should go into the panel as it opens");
+      await tab.keyboard.press("Escape");
+      await panel.waitFor({ state: "detached", timeout: 10_000 });
+      await eventually(async () => /How do I issue a new card\?/.test((await ringOn(tab)) ?? ""), "after Escape the focus should be back on the guide's row, with its ring");
     });
   });
 

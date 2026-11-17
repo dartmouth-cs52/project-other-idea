@@ -6,6 +6,7 @@ import { ChevronDown, Copy } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { AGENTS, type Agent } from "@/lib/agents";
+import { byKeyboard } from "@/lib/focus";
 import { copyText, openAppLink } from "@/lib/hand-off";
 import { agentPrompt, playbookUrl } from "@/lib/install";
 import { installStatus, pillLabel, type SeenOriginLike } from "@/lib/setup";
@@ -114,7 +115,9 @@ export function AgentPill({ siteId, live, className }: { siteId: string; live?: 
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Positioner sideOffset={8} align="end" className="z-50 outline-none">
-              <Menu.Popup className="flex min-w-60 origin-[var(--transform-origin)] flex-col rounded-lg border bg-card p-1 text-sm shadow-sm transition-[opacity,scale] duration-150 ease-out outline-none data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 motion-reduce:transition-none">
+              <Menu.Popup
+                finalFocus={byKeyboard}
+                className="flex min-w-60 origin-[var(--transform-origin)] flex-col rounded-lg border bg-card p-1 text-sm shadow-sm transition-[opacity,scale] duration-150 ease-out outline-none data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 motion-reduce:transition-none">
                 <Menu.Item onClick={copy} className="flex h-9 cursor-default items-center gap-2.5 rounded-md px-2.5 outline-none select-none data-[highlighted]:bg-muted">
                   <Copy className="size-4 text-muted-foreground" />
                   Copy prompt
