@@ -1800,6 +1800,11 @@ function filledByBrowser(event: Event, field: Element): boolean {
   return false;
 }
 
+/** A field a visitor fills in: one text is typed into, or a dropdown. Clicking into one is not yet using it. */
+function isFieldToFill(el: Element | null | undefined): boolean {
+  return !!el && (isTyped(el) || el instanceof HTMLSelectElement);
+}
+
 /** The element the keyboard is in, looking inside shadow roots. */
 function activeElement(): Element | null {
   let active = document.activeElement;
@@ -2013,6 +2018,7 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
       known: !!first && (listing.has(first) || !isNew(first)),
       inPopup: !onTarget && !!first && (opened || insidePopup(path, first)),
       aroundTarget: !onTarget && !opened && !!first && first.contains(target),
+      field: !!first && isFieldToFill(first instanceof HTMLLabelElement ? first.control : first),
     };
   };
   const fate = (): Fate => {
@@ -2153,7 +2159,11 @@ function waitForAction(target: Element, listed: SnapElement | undefined, host: E
     const path = outside(event);
     if (!path) return;
     const inTarget = path.includes(target);
-    const autofill = inTarget && event.type === "input" && event.isTrusted && filledByBrowser(event, target);
+    // Another field is heard as it is typed in or filled. Its change event, when it is left, says nothing more, and
+    // arrives between the browser's autofill of that field and of the pointed one.
+    if (!inTarget && event.type !== "input") return;
+    const field = inTarget ? target : path[0] instanceof Element ? path[0] : undefined;
+    const autofill = event.type === "input" && event.isTrusted && !!field && filledByBrowser(event, field);
     feed({ type: "input", at: performance.now(), inTarget, ...(byActor(event) ? {} : { byPage: true }), ...(autofill ? { autofill } : {}) });
   };
   const onLeave = (event: Event) => {
