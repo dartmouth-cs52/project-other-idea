@@ -1,0 +1,74 @@
+# Opens the dashboard as it ships, in a real browser, and checks that it keeps
+# itself current: a question written to the database shows on the open page,
+# step by step, with no reload. The pages are the ones `next build` writes, and
+# the numbers come from a real Postgres through the Worker's own queries.
+#
+# It runs when the dashboard, its queries or the tables under them change.
+# About three minutes. The tests are in test/browser/dashboard.test.ts.
+
+name: Dashboard tests
+
+on:
+  pull_request:
+    paths:
+      - "web/app/**"
+      - "web/components/**"
+      - "web/lib/**"
+      - "web/worker/**"
+      - "web/package.json"
+      - "db/migrations/**"
+      - "test/psql.ts"
+      - "test/browser/dashboard*"
+      - ".github/workflows/dashboard-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "web/app/**"
+      - "web/components/**"
+      - "web/lib/**"
+      - "web/worker/**"
+      - "db/migrations/**"
+      - "test/browser/dashboard*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dashboard:
+    name: Dashboard in a browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Never a real database: this one lives and dies with the job.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+
+      - run: npm ci
+
+      - name: Build the site the tests open
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm run test:dashboard

@@ -6,7 +6,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { ApiError, api, type Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
 import { accessHref } from "@/lib/site";
-import { viewFrom } from "./nav";
+import { SITES_HREF, viewFrom } from "./nav";
 import { Card, FailedCard, leaveFor } from "./parts";
 import { Plain } from "./shell";
 import { SiteView } from "./site-view";
@@ -90,7 +90,17 @@ export function Dashboard() {
       </Plain>
     );
   }
-  return <SiteView key={current.id} me={me} row={current} view={viewFrom(view)} onDeleted={() => window.location.replace("/dashboard/")} />;
+  return (
+    <SiteView
+      key={current.id}
+      me={me}
+      row={current}
+      view={viewFrom(view)}
+      // The list of sites, not whichever site is left: a site was just deleted, and landing inside another one says nothing about that.
+      onDeleted={() => window.location.replace(SITES_HREF)}
+      onRenamed={() => void api<Me>("/me").then((next) => setState({ kind: "ready", me: next }), () => undefined)}
+    />
+  );
 }
 
 function NotApproved({ me }: { me: Me }) {

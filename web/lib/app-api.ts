@@ -123,7 +123,8 @@ export interface Site {
   origin: string;
   allowedOrigins: string[];
   scriptUrl: string;
-  appearance: { accent: string; position: "bottom-right" | "bottom-left"; launcherLabel: string };
+  /** `launcher` is the Ask button's own colour. Missing means Ink. */
+  appearance: { accent: string; position: "bottom-right" | "bottom-left"; launcherLabel: string; launcher?: string };
   notes: string;
   docs: {
     budget: number;

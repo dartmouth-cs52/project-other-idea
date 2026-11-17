@@ -20,7 +20,7 @@ import { Card, CardTitle, DashboardSurface, DoneMark, FailedCard, PageHeader, Se
 import { Questions } from "./questions";
 import { SetupGate } from "./setup/setup-gate";
 import { SiteShell } from "./shell";
-import { DeleteSite, HelpDocs, Notes, WidgetLook } from "./site-settings";
+import { DeleteSite, HelpDocs, Notes, SiteName, WidgetLook } from "./site-settings";
 import { TeachDrawer } from "./teach";
 import { FinishedGuides } from "./usage";
 
@@ -43,7 +43,7 @@ type SettingsTab = (typeof SETTINGS_TABS)[number]["value"];
  * three setup steps. After that it is the overview, and every page that shows
  * questions is kept current while it is open.
  */
-export function SiteView({ me, row, view, onDeleted }: { me: Me; row: SiteRow; view: View; onDeleted: () => void }) {
+export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row: SiteRow; view: View; onDeleted: () => void; onRenamed: () => void }) {
   const { params, set } = useAddress();
   const days = daysFrom(params.get("days"));
   const openGuide = params.get("guide");
@@ -106,6 +106,7 @@ export function SiteView({ me, row, view, onDeleted }: { me: Me; row: SiteRow; v
         <Segmented tabs label="Settings" value={tab} onChange={(next) => set({ tab: next === "general" ? undefined : next })} options={SETTINGS_TABS} />
         {tab === "general" && (
           <>
+            <SiteName site={site} onChange={setSite} onRenamed={onRenamed} />
             <WidgetLook site={site} onChange={setSite} />
             <DeleteSite site={site} onDeleted={onDeleted} />
           </>

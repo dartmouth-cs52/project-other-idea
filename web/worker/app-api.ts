@@ -385,6 +385,12 @@ function appearanceFrom(input: unknown, current: Appearance): Appearance {
     if (raw.position !== "bottom-right" && raw.position !== "bottom-left") throw new Refusal(400, "The corner must be bottom-right or bottom-left.", "position");
     next.position = raw.position;
   }
+  // The launcher's own colour. Null, or nothing, puts it back to Ink.
+  if (raw.launcher !== undefined) {
+    if (raw.launcher === null || raw.launcher === "") delete next.launcher;
+    else if (typeof raw.launcher !== "string" || !HEX.test(raw.launcher)) throw new Refusal(400, "The colour must be a hex value like #1E6EF4.", "launcher");
+    else next.launcher = raw.launcher.toUpperCase();
+  }
   if (raw.launcherLabel !== undefined) {
     const label = typeof raw.launcherLabel === "string" ? cleanText(raw.launcherLabel, 24) : "";
     if (!label) throw new Refusal(400, "Give the button a label, such as Ask.", "launcherLabel");
