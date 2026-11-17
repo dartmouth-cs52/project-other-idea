@@ -472,6 +472,8 @@ export interface HandoffRequest {
   transcript: TranscriptTurn[];
 }
 
+/** How much of a question the widget sends: what the ask box holds. */
+export const MAX_QUESTION = 300;
 /**
  * The longest question the server takes. The ask box holds 300 characters, and
  * the widget masks what it sends, which can make it longer: "12345" becomes

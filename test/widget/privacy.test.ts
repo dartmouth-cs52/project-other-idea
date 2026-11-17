@@ -140,6 +140,64 @@ test("a name typed in a search that the visitor did not write in their question 
   }
 });
 
+// From the review of that exception (D1): it is for words the question carries readable. An email address or a long
+// number is masked in the question unless the page shows it, so one the visitor both asked about and typed must not
+// come back readable from the page's repeat of their typing. It did, and the repeat then counted as the page showing
+// it, so the question went out with it readable too.
+const OWN_ECHO = `
+  <h1>Settings</h1>
+  <p><label for="value">New value</label> <input id="value" type="text"></p>
+  <h2 id="heading">-</h2>
+  <p id="line">-</p>
+  <ul role="listbox" aria-label="Suggestions"><li role="option" id="option">-</li></ul>
+  <button id="use" type="button">-</button>
+  <script>
+    document.getElementById("value").addEventListener("input", (e) => {
+      for (const id of ["heading", "line", "option", "use"]) document.getElementById(id).textContent = "Use " + e.target.value;
+    });
+  </script>`;
+
+const MASKED_IN_THE_QUESTION: [what: string, question: string, typed: string, sentAs: string][] = [
+  ["an email address", "change my email to dana.secret@example.com", "dana.secret@example.com", "change my email to [email]"],
+  ["an account number", "move money from account 9876543210 to savings", "9876543210", "move money from account [number] to savings"],
+  ["a card number", "pay with card 4111111111111111", "4111111111111111", "pay with card [number]"],
+  ["a card number written in groups", "pay with card 4111 1111 1111 1111", "4111 1111 1111 1111", "pay with card [number]"],
+  // Its first group alone is a short number, which no mask hides. In the question it is part of one that is masked.
+  ["the first digits of a card number written in groups", "pay with card 4111 1111 1111 1111", "4111", "pay with card [number]"],
+];
+
+for (const [what, question, typed, sentAs] of MASKED_IN_THE_QUESTION) {
+  test(`${what} the visitor asked about and then typed is not sent, in the page's repeat of it or in the question`, async () => {
+    const session = await start(OWN_ECHO, () => words("Done."));
+    try {
+      await session.page.locator("#value").fill(typed);
+      await session.ask(question);
+      const first = await session.untilAsked(1);
+      assert.ok(!JSON.stringify(session.requests).includes(typed), `"${typed}" was sent: ${JSON.stringify(first)}`);
+      assert.equal(first.goal, sentAs);
+      assert.ok(first.snapshot.headings.includes("Use [typed]"), JSON.stringify(first.snapshot.headings));
+      assert.ok(first.snapshot.elements.some((element) => element.role === "button" && element.label === "Use [typed]"), JSON.stringify(first.snapshot.elements));
+    } finally {
+      await session.close();
+    }
+  });
+}
+
+test("an amount and a plain word of the question stay readable where a field repeats them, as a name does", async () => {
+  for (const [question, typed] of [["raise the budget to $75,000", "75,000"], ["rename the card to Ads", "Ads"]] as const) {
+    const session = await start(OWN_ECHO, () => words("Done."));
+    try {
+      await session.page.locator("#value").fill(typed);
+      await session.ask(question);
+      const first = await session.untilAsked(1);
+      assert.equal(first.goal, question);
+      assert.ok(first.snapshot.elements.some((element) => element.role === "button" && element.label === `Use ${typed}`), JSON.stringify(first.snapshot.elements));
+    } finally {
+      await session.close();
+    }
+  }
+});
+
 // From the second review: a page that repeats what is typed in places other than its text. A heading greets the
 // name being typed, the button to save says it, the title says it, and the search box's list offers a search for
 // what is typed in it. Each reached the model.

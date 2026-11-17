@@ -503,8 +503,10 @@ is a menu of the company's sites, with All sites and Add a site under them. Who
 is signed in is on the right, in a menu that names their company and holds Sign
 out. Inside a site its pages run down a 224px column on the left. Each is a
 32px row with a 16px icon. The page you are on is Border grey with Ink text,
-and the others are Muted text. Below 1024px the column becomes a row under the
-bar that scrolls sideways. Content is up to 1152px wide (`max-w-6xl`).
+and the others are Muted text. The column is fixed to the window, so it and
+the line beside it stay where they are however far the page scrolls. Below
+1024px the column becomes a row under the bar that scrolls sideways. Content
+is up to 1152px wide (`max-w-6xl`).
 
 **Pages.** A site has five, in this order, and no more are added without a
 reason a customer gave.
@@ -522,18 +524,39 @@ reason a customer gave.
 - **Knowledge.** What Haptic reads and what the company has corrected. Notes,
   help docs, corrections, the routes taught by doing, the controls never to
   point at, and the pages read.
-- **Settings.** Three tabs. General holds how the widget looks and deleting
+- **Settings.** Three tabs. General holds the pointer's colour and deleting
   the site. Install holds the script and where it runs. Usage holds the
   finished guides, month by month, which are what billing counts.
 
-**Sites.** A company with one site lands inside it. With more than one, the
-first page is the list, one card a site. A card says whether the script is
-running, how many questions the last seven days had and how many finished, the
-last fortnight as fourteen small bars, and the newest question. The whole card
-is the way in. A card never holds a picture of the site. Add a site leads to
-the setup screens, which have a frame of their own.
+The pointer's colour is the one thing a company chooses about the widget. It
+can be typed, picked, or matched: a secondary button, "Match website", reads
+the site's own colour from its first page and saves it in one press. A grey, a near white or a near black is never taken, because the
+pointer has to be seen on any page. The launcher sits bottom right on every
+site, where support chat usually lives, and that is not a setting.
 
-**Type.** One 24px Medium title a page, the headline size. Card titles are
+**Sites.** A company with one site lands inside it. With more than one, the
+first page is the list, one card a site. Sites whose script is running come
+first, the one asked most recently at their head, and those still waiting for
+the script come last, so the first card is the one with something happening.
+A card says how many questions the last seven days had and how many finished,
+the last fortnight as fourteen small bars, and the newest question. A site
+still waiting for its script says so in place of the numbers. A running site
+carries no badge to say it is running: the numbers say that, and the green
+tick is kept for a guide that finished, so a card never has two ticks that
+mean different things. The whole card is the way in. Add a site leads to the
+setup screens, which have a frame of their own.
+
+A site is shown with its own icon, the one its browser tab has, 20px in a 36px
+white tile with a 1px border, on its card and in the menu of sites. The first
+letter of its name, on Border grey, stands in while the icon loads and for a
+site that has none. This is the one place a customer's own mark appears.
+
+A site goes by its name alone, in the bar, in the menu and on its card. Its
+address is added in Muted text only when two of a company's sites share a
+name, which is the one time it is needed to tell them apart.
+
+**Type.** One 24px Medium title a page, the headline size, with no line under
+it: the bar above already says which site this is. Card titles are
 16px Medium. Text, rows and tables are 14px. Notes under a number, table
 headings and the foot of a card are 12px Muted. A number in a tile is 36px
 Medium. Forms keep their 44px inputs, as everywhere.
@@ -546,10 +569,11 @@ run edge to edge inside the card with hairlines between them, and the row
 under the mouse is Muted. The pages around sign-in, and the install page a
 developer is sent, keep Muted cards.
 
-**Numbers.** The four are guides finished, finish rate, questions Haptic
-couldn't guide, and median time to finish. A tile is a 14px Medium label in
-Muted text, the number at 36px, the change, and one 12px line that says what
-the number counts. A change against the same number of days before is said in
+**Numbers.** The four are guides finished, finish rate, couldn't guide, and
+median time to finish. A tile is a 14px Medium label in Muted text, the number
+at 36px, and the change. What a number counts is not spelled out on the tile.
+It is one hover or press away, on a small mark beside the label, in an Ink
+bubble like the pointer's caption. A change against the same number of days before is said in
 words, such as "Up 12% on the previous 30 days", with a small arrow. The arrow
 and the words that say what moved, "Up 12%", are Done green when the number
 went the way it should and Error red when it did not. Which way is good

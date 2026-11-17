@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, ExternalLink, Minus } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ExternalLink, Info, Minus } from "lucide-react";
 import { cn } from "cn";
 import { buttonVariants } from "@/components/ui/button";
 import { api } from "@/lib/app-api";
 import { countChange, duration, durationChange, hostOf, rateChange, utcDayLabel, type Change } from "@/lib/setup";
 import type { Headline as HeadlineData } from "@/worker/insights";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Card, Panel } from "./parts";
 
 /**
@@ -59,32 +60,35 @@ export function HeadlineTiles({ data, days, error }: { data: HeadlineData | null
   const finishRate = rate(now);
 
   return (
-    <div className={cn("grid gap-4 transition-opacity duration-200 sm:grid-cols-2 xl:grid-cols-4", stale && "opacity-60")} aria-busy={stale}>
-      <Tile label="Guides finished" better="up" value={now.finished.toLocaleString()} note="The number billing counts. Free during early access." change={countChange(now.finished, before.finished, period)} />
-      <Tile
-        label="Finish rate"
-        better="up"
-        value={finishRate === null ? null : `${Math.round(finishRate * 100)}%`}
-        empty="No guides to count yet"
-        note="Of the questions Haptic could guide, the share that finished."
-        change={rateChange(finishRate, rate(before), period)}
-      />
-      <Tile
-        label="Questions Haptic couldn't guide"
-        better="down"
-        value={now.unguided.toLocaleString()}
-        note={now.started ? `${Math.round((now.unguided / now.started) * 100)}% of ${now.started.toLocaleString()} questions. Stuck, not in the help docs, given up on, or said it didn't help.` : "Stuck, not in the help docs, given up on, or said it didn't help."}
-        change={countChange(now.unguided, before.unguided, period)}
-      />
-      <Tile
-        label="Median time to finish"
-        better="down"
-        value={now.medianMsToFinish === null ? null : duration(now.medianMsToFinish)}
-        empty="No finished guides yet"
-        note="From the question to the last step."
-        change={durationChange(now.medianMsToFinish, before.medianMsToFinish, period)}
-      />
-    </div>
+    <TooltipProvider>
+      <div className={cn("grid gap-4 transition-opacity duration-200 sm:grid-cols-2 xl:grid-cols-4", stale && "opacity-60")} aria-busy={stale}>
+        <Tile label="Guides finished" better="up" value={now.finished.toLocaleString()} about="Guides where the person reached the end. The number billing counts, free during early access." change={countChange(now.finished, before.finished, period)} />
+        <Tile
+          label="Finish rate"
+          better="up"
+          value={finishRate === null ? null : `${Math.round(finishRate * 100)}%`}
+          empty="No guides to count yet"
+          about="Of the questions Haptic could guide, the share that finished."
+          change={rateChange(finishRate, rate(before), period)}
+        />
+        <Tile
+          label="Couldn't guide"
+          better="down"
+          value={now.unguided.toLocaleString()}
+          about="Questions Haptic couldn't guide: stuck, not in the help docs, given up on, or said it didn't help."
+          context={now.started ? `${Math.round((now.unguided / now.started) * 100)}% of ${now.started.toLocaleString()} questions` : undefined}
+          change={countChange(now.unguided, before.unguided, period)}
+        />
+        <Tile
+          label="Median time to finish"
+          better="down"
+          value={now.medianMsToFinish === null ? null : duration(now.medianMsToFinish)}
+          empty="No finished guides yet"
+          about="From the question to the last step."
+          change={durationChange(now.medianMsToFinish, before.medianMsToFinish, period)}
+        />
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -122,20 +126,47 @@ function partsOf(text: string): [string, string] {
 }
 
 /**
- * One number. Under it, which way it moved against the days before: green when
- * that is the way it should go, red when it is not, grey when it did not move.
- * `better` says which way is good, since more finished guides is good and more
- * questions Haptic couldn't guide is not. The arrow and the words say the
- * same as the colour, so nobody has to tell red from green to read it.
+ * One number, with its name above it. What the number counts is one press or
+ * hover away, on the small mark beside the name, and not spelled out on every
+ * tile. Under the number is which way it moved against the days before: green
+ * when that is the way it should go, red when it is not, grey when it did not
+ * move. `better` says which way is good, since more finished guides is good
+ * and more questions Haptic couldn't guide is not. The arrow and the words say
+ * the same as the colour, so nobody has to tell red from green to read it.
  */
-function Tile({ label, value, empty = "None yet", note, change, better }: { label: string; value: string | null; empty?: string; note: string; change: Change | null; better: "up" | "down" }) {
+function Tile({
+  label,
+  value,
+  empty = "None yet",
+  about,
+  context,
+  change,
+  better,
+}: {
+  label: string;
+  value: string | null;
+  empty?: string;
+  /** What the number counts, for the mark beside its name. */
+  about: string;
+  /** A few words of the number's own, such as what it is a share of. */
+  context?: string;
+  change: Change | null;
+  better: "up" | "down";
+}) {
   const Icon = change?.direction === "up" ? ArrowUpRight : change?.direction === "down" ? ArrowDownRight : Minus;
   const tone = !change || change.direction === "same" ? "text-muted-foreground" : change.direction === better ? "text-success" : "text-destructive";
   const [moved, against] = change ? partsOf(change.text) : ["", ""];
   return (
     <div className="flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-5" data-metric={label}>
-      {/* Two lines kept for the label, so the numbers line up across the row when one label wraps. */}
-      <span className="text-sm font-medium text-muted-foreground sm:min-h-10">{label}</span>
+      <span className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+        <span className="min-w-0 truncate">{label}</span>
+        <Tooltip>
+          <TooltipTrigger aria-label={`What ${label.toLowerCase()} counts`} className="shrink-0 rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+            <Info className="size-3.5" aria-hidden />
+          </TooltipTrigger>
+          <TooltipContent>{about}</TooltipContent>
+        </Tooltip>
+      </span>
       {value === null ? (
         <span className="text-2xl font-medium tracking-[-0.02em] text-muted-foreground">{empty}</span>
       ) : (
@@ -153,7 +184,7 @@ function Tile({ label, value, empty = "None yet", note, change, better }: { labe
           </span>
         </span>
       )}
-      <span className="text-xs leading-4 text-muted-foreground">{note}</span>
+      {context && <span className="text-xs leading-4 text-muted-foreground">{context}</span>}
     </div>
   );
 }
@@ -163,7 +194,7 @@ export function HeadlineWaiting({ origin }: { origin?: string }) {
   const items = [
     ["Guides finished", "Each guide where the person reached the end. The number billing counts, free during early access."],
     ["Finish rate", "Of the questions Haptic could guide, the share that finished."],
-    ["Questions Haptic couldn't guide", "Stuck, not in your help docs, given up on, or said it didn't help. What to fix first."],
+    ["Couldn't guide", "Questions Haptic couldn't guide: stuck, not in your help docs, given up on, or said it didn't help. What to fix first."],
     ["Median time to finish", "From the question to the last step."],
   ];
   return (
@@ -309,7 +340,8 @@ function DailyChart({ daily }: { daily: HeadlineData["daily"] }) {
           </span>
         </div>
       )}
-      <table className="sr-only">
+      <div className="sr-only">
+      <table>
         <caption>Guides started and finished each day</caption>
         <thead>
           <tr>
@@ -328,6 +360,7 @@ function DailyChart({ daily }: { daily: HeadlineData["daily"] }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

@@ -8,6 +8,7 @@
 //   GET    /api/app/sites                       every site the company has, as the list of sites shows them
 //   GET    /api/app/sites/:id/insights          the dashboard: questions, outcomes, what to fix
 //   GET    /api/app/sites/:id/live              the newest questions and the step each is on, asked for every second or two
+//   GET    /api/app/sites/:id/brand             the site's icon and its own colour, read from its first page
 //   GET    /api/app/sites/:id/guides/:guide     one guide, step by step
 //   GET    /api/app/sites/:id/groups?key=…      the guides for one question, grouped by meaning
 //   GET    /api/app/sites/:id/controls?route=…  the controls known on a page, for "Point here instead"
@@ -31,6 +32,7 @@ import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-
 import { pageControls } from "../lib/setup";
 import { currentUser, sendSignInLink, type AuthEnv, type SignedInUser } from "./auth";
 import { database, joinOrganization, organizationOf, type Organization, type Sql } from "./db";
+import { siteBrand } from "./brand";
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
 import { groupGuides } from "./health";
 import { finishedCsv, finishedGuides, guideSteps, insights, live, monthOf, sitesOverview } from "./insights";
@@ -107,7 +109,7 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
     const more = await setupRoutes({ request, env, sql, org, user, path, url });
     if (more) return reply(more.body, more.status);
 
-    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/live|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?|\/teach(?:\/[^/]+)?|\/taught\/[^/]+)?$/.exec(path);
+    const match = /^\/sites\/([^/]+)(\/read|\/insights|\/live|\/brand|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?|\/teach(?:\/[^/]+)?|\/taught\/[^/]+)?$/.exec(path);
     if (match) {
       const id = match[1] ?? "";
       if (!SITE_ID.test(id)) throw new Refusal(404, "No such site.");
@@ -126,6 +128,10 @@ export async function appApi(request: Request, env: AppEnv, url: URL): Promise<R
       if (sub === "/live" && request.method === "GET") {
         await ownedSite(sql, org, id);
         return reply(await live(sql, id));
+      }
+      if (sub === "/brand" && request.method === "GET") {
+        const site = await ownedSite(sql, org, id);
+        return reply(await siteBrand(site.origin));
       }
       if (sub === "/finished" && request.method === "GET") {
         const site = await ownedSite(sql, org, id);
