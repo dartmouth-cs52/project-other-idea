@@ -65,7 +65,9 @@ export function stepsToKeep(input: unknown): TaughtStep[] {
     const { commits: _fromPage, ...rest } = step;
     const pressed = rest.kind === "press" || rest.kind === "check" || rest.kind === "uncheck";
     const name = rest.label.replace(/^icon:/, "");
-    const verdict = pressed && name ? readName(name, { dialog: !!rest.dialog }) : undefined;
+    // By the control's own words only. "Continue" or "OK" in a dialog is held back from Do it with me by the live check
+    // (act-rules), which sees the dialog; marked here, the review would say a plain Continue saves or sends.
+    const verdict = pressed && name ? readName(name) : undefined;
     return verdict?.commit ? { ...rest, commits: true as const } : rest;
   });
 }

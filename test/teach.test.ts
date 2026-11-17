@@ -150,6 +150,7 @@ test("the steps are taken once, checked again, and teach calls never reach the m
       { kind: "press", path: "/budgets", role: "button", label: "New budget", commits: true },
       { kind: "type", path: "/budgets", role: "textbox", label: "Budget name", value: "Groceries", typed: "Groceries", note: "from the page", leave: true },
       { kind: "press", path: "/budgets", role: "button", label: "Create budget" },
+      { kind: "press", path: "/bills/:id", role: "button", label: "Continue", dialog: "Pay Brightdesk Coworking" },
     ],
   });
   assert.equal(done.status, 200);
@@ -158,6 +159,7 @@ test("the steps are taken once, checked again, and teach calls never reach the m
     { kind: "press", path: "/budgets", role: "button", label: "New budget" },
     { kind: "type", path: "/budgets", role: "textbox", label: "Budget name" },
     { kind: "press", path: "/budgets", role: "button", label: "Create budget", commits: true },
+    { kind: "press", path: "/bills/:id", role: "button", label: "Continue", dialog: "Pay Brightdesk Coworking" },
   ]);
   assert.equal((await post("/v1/teach/done", { site: site.id, token, claim, steps: [step({})] })).body.refused, "used", "sent once");
   assert.deepEqual(asked, []);
