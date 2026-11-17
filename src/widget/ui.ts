@@ -133,6 +133,13 @@ button { font: inherit; cursor: pointer; }
 .launch.mini .hide { display: none; }
 .panel { width: min(320px, calc(100vw - 40px)); background: #fff; border: 1px solid #e7e5e4; border-radius: 14px;
   padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.16); }
+/* The way to close the ask box, on the panel's top right, in the same place whatever the panel holds. It only puts the
+   panel away, like the launcher's second click or Escape: a guide that is running carries on, and its caption stops it. */
+.panel .bar { display: flex; justify-content: flex-end; margin: -2px -2px 2px; }
+.panel .dismiss { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0;
+  border-radius: 999px; background: transparent; color: #78716c; transition: background-color .15s, color .15s; }
+.panel .dismiss:hover { background: #f5f5f4; color: #1c1917; }
+.panel .dismiss svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
 [hidden] { display: none !important; }
 .ask { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 10px; background: #f5f5f4; }
 .ask:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
@@ -448,7 +455,7 @@ export class Ui {
   private captor?: Element;
   private frame = 0;
   /** What each of our buttons does, by its class. */
-  private buttons!: Record<"launcher" | "hide" | "send" | "stop" | "close" | "doit" | "go" | "resume", () => void>;
+  private buttons!: Record<"launcher" | "hide" | "dismiss" | "send" | "stop" | "close" | "doit" | "go" | "resume", () => void>;
   private readonly first: HTMLElement;
   private readonly note: HTMLElement;
   private readonly did: HTMLElement;
@@ -533,6 +540,7 @@ export class Ui {
         make(
           "div",
           { class: "panel", ...hidden },
+          make("div", { class: "bar" }, make("button", { class: "dismiss", type: "button", "aria-label": "Close" }, icon(CROSS_PATH, { "aria-hidden": "true" }))),
           make(
             "div",
             { class: "thread", ...hidden },
@@ -664,6 +672,13 @@ export class Ui {
         this.keepPlaced();
         if (launch.matches(":hover")) launch.classList.add("fresh");
         minimize(true);
+        if (fromKeyboard) launcherNow().focus({ preventScroll: true });
+      },
+      dismiss: () => {
+        // From the keyboard, the button that had it goes with the panel, so the keyboard goes back to the launcher that
+        // opened it. Not after a mouse press: a launcher focused by script would show its minimize button as if tabbed to.
+        const fromKeyboard = root.activeElement?.classList.contains("dismiss") === true;
+        this.closePanel();
         if (fromKeyboard) launcherNow().focus({ preventScroll: true });
       },
       send: () => this.form.requestSubmit(),
@@ -955,7 +970,7 @@ export class Ui {
       if (button.classList.contains("person-open")) return this.onHandoff?.open();
       if (button.classList.contains("person-cancel")) return this.onHandoff?.cancel();
       if (button.classList.contains("person-send")) return this.onHandoff?.send();
-      const name = (["launcher", "hide", "send", "stop", "close", "doit", "go", "resume"] as const).find((name) => button.classList.contains(name));
+      const name = (["launcher", "hide", "dismiss", "send", "stop", "close", "doit", "go", "resume"] as const).find((name) => button.classList.contains(name));
       if (name) this.buttons[name]();
     };
     let pressed: HTMLButtonElement | undefined;

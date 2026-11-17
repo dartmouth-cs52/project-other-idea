@@ -110,6 +110,47 @@ for (const name of BROWSERS) {
       assert.equal(await about.isVisible(), true, "it is still there while the pointer shows a step");
     });
 
+    test("closes from the × at its top right, without minimizing the launcher or stopping a guide", async () => {
+      await part(tab, ".launcher").click();
+      assert.equal(await part(tab, ".panel").isVisible(), true);
+      // In the panel's top right corner, above the ask box.
+      const [button, panel, box] = await Promise.all([part(tab, ".dismiss").boundingBox(), part(tab, ".panel").boundingBox(), part(tab, ".ask").boundingBox()]);
+      assert.ok(panel!.x + panel!.width - (button!.x + button!.width) <= 8 && button!.y - panel!.y <= 8, JSON.stringify({ button, panel }));
+      assert.ok(button!.y + button!.height <= box!.y, JSON.stringify({ button, box }));
+      assert.equal(await part(tab, ".dismiss").getAttribute("aria-label"), "Close");
+
+      await part(tab, ".dismiss").click();
+      assert.equal(await part(tab, ".panel").isHidden(), true);
+      assert.equal(await part(tab, ".launcher").evaluate((el) => el.classList.contains("mini")), false, "the launcher stays as it was");
+
+      // Mid-guide it only puts the chat away: the pointer stays on the step, and the launcher brings the chat back.
+      harness.script = (request) => point(idOf(request, "Invite teammate"), "Click Invite teammate.");
+      await ask(tab, "invite someone");
+      assert.ok(await ringAround(tab, "#invite"));
+      await untilState(tab, "pointing");
+      await part(tab, ".dismiss").click();
+      assert.equal(await part(tab, ".panel").isHidden(), true);
+      await sleep(200);
+      assert.equal(await guideState(tab), "pointing");
+      assert.equal(await part(tab, ".cursor").isVisible(), true);
+      await part(tab, ".launcher").click();
+      assert.equal(await part(tab, ".question").textContent(), "invite someone");
+    });
+
+    test("the × closes the chat from the keyboard, and the keyboard goes back to the launcher", async () => {
+      const focused = () => tab.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.activeElement?.className);
+      await part(tab, ".launcher").focus();
+      await tab.keyboard.press("Enter");
+      assert.equal(await part(tab, ".panel").isVisible(), true);
+      // The × comes just before the ask box. Safari leaves buttons out of the Tab order unless the visitor turns that on.
+      if (name === "webkit") await part(tab, ".dismiss").focus();
+      else await tab.keyboard.press("Shift+Tab");
+      assert.equal(await focused(), "dismiss");
+      await tab.keyboard.press("Enter");
+      assert.equal(await part(tab, ".panel").isHidden(), true);
+      assert.equal(await tab.evaluate(() => document.querySelector("haptic-root")!.shadowRoot!.activeElement?.className), "launcher");
+    });
+
     test("stays open through a guide, with the question at the top and stop in the ask box", async () => {
       harness.script = async (request) => {
         await sleep(500);

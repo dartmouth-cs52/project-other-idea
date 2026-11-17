@@ -480,7 +480,11 @@ Components are shadcn/ui, restyled only through tokens and variants.
   sidebar was tried and could hardly be found.
 - **Chat:** Haptic's home, in the bottom right corner where support chat
   usually lives. A Card panel holding the conversation and the ask box. It
-  stays open from the first question to the last step.
+  stays open from the first question to the last step. A 24px × in Muted
+  foreground sits in its top right corner, the same place whatever the chat
+  holds, with a Muted circle under the mouse. It closes the chat and nothing
+  else: a running guide carries on, and the launcher opens the chat again as
+  it was.
 - **Ask box:** shadcn's input group: a Muted field with the text on top and a
   round Ink send button on a row beneath. While Haptic is guiding, send becomes
   a stop button.
