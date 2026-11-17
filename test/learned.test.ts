@@ -145,20 +145,29 @@ test("the store counts an outline in one statement, with the visitor added only 
   ]);
 });
 
-test("a site with too many labels still counts the known ones and adds no more", async () => {
+test("a site at its limit still takes new labels, and makes room by dropping what the prompt doesn't read", async () => {
   const { sql, sent } = standIn((text) => (text.startsWith("select count") ? [{ count: 5000 }] : []));
-  await new Store(sql).recordOutline(site, "abc123", { path: "/", title: "", headings: [], links: [], buttons: ["Share"] });
-  assert.ok(sent.some((query) => query.text.startsWith("update outline_labels")));
-  assert.ok(!sent.some((query) => query.text.startsWith("insert")));
+  await new Store(sql).recordOutline(site, "abc123", { path: "/", title: "", headings: [], links: [], buttons: ["Share"] }, "0a1b");
+  const insert = sent.find((query) => query.text.startsWith("insert into outline_labels"));
+  assert.ok(insert, "a full site is not closed to new labels");
+  assert.ok(insert.values.includes("0a1b"), "the caller's network is counted with the label");
+  const prune = sent.find((query) => query.text.startsWith("delete from outline_labels"));
+  assert.ok(prune, "room is made after the insert");
+  assert.match(prune.text, /order by read desc, last_seen_at desc/);
+  assert.ok(prune.values.includes(5000) && prune.values.includes(1500));
+
+  const roomy = standIn((text) => (text.startsWith("select count") ? [{ count: 12 }] : []));
+  await new Store(roomy.sql).recordOutline(site, "abc123", { path: "/", title: "", headings: [], links: [], buttons: ["Share"] });
+  assert.ok(!roomy.sent.some((query) => query.text.startsWith("delete")), "nothing is dropped while there is room");
 });
 
 test("a site is read with its learned labels merged in, and still read when the table is missing", async () => {
   const row = { id: site.id, name: site.name, origin: site.origin, allowed_origins: site.allowedOrigins, context: site };
-  const learned = [{ route: "/billing", kind: "button", label: "Update card", href: "", visitors: 4, seen: 10 }];
+  const learned = [{ route: "/billing", kind: "button", label: "Update card", href: "", visitors: 4, networks: 3, seen: 10 }];
   const { sql, sent } = standIn((text) => (text.includes("from sites") ? [row] : text.includes("outline_openings") ? [] : learned));
   const loaded = await new Store(sql, 3).loadSite(site.id);
   assert.deepEqual(loaded?.pages.at(-1), { path: "/billing", title: "", headings: [], links: [], buttons: ["Update card"], fields: [] });
-  assert.ok(sent.some((query) => query.text.includes("visitor_count >= ?") && query.values.includes(3)));
+  assert.ok(sent.some((query) => query.text.includes("visitor_count >= ? and network_count >= ?") && query.values.filter((value) => value === 3).length === 2));
 
   const missing = ((strings: TemplateStringsArray) =>
     strings.join("").includes("outline_labels") ? Promise.reject(new Error('relation "outline_labels" does not exist')) : Promise.resolve([row])) as unknown as ConstructorParameters<typeof Store>[0];
