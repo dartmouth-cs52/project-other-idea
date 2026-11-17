@@ -368,7 +368,15 @@ function inertPage(page: PageNode): PageNode {
     fields: page.fields.map(inert),
   };
   if (page.description !== undefined) safe.description = inert(page.description);
-  if (page.opens) safe.opens = page.opens.map((opening) => ({ control: inert(opening.control), links: links(opening.links), buttons: opening.buttons.map(inert) }));
+  if (page.opens) {
+    safe.opens = page.opens.map((opening) => ({
+      control: inert(opening.control),
+      links: links(opening.links),
+      buttons: opening.buttons.map(inert),
+      // A dialog's fields, which the mapper notes (src/server/mapped.ts).
+      ...(opening.fields ? { fields: opening.fields.map(inert) } : {}),
+    }));
+  }
   return safe;
 }
 
