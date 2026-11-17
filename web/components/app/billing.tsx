@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FormAlert, failureFrom, type Failure } from "@/components/form";
 import { api, type Billing, type Me } from "@/lib/app-api";
 import { monthTotal, type PaidPlan } from "@/lib/billing-plans";
 import { pricing, site } from "@/lib/site";
@@ -65,21 +66,22 @@ export function BillingPage({ me }: { me: Me }) {
 
 function Loaded({ billing, onChange }: { billing: Billing; onChange: (next: Billing) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const current = billing.plans.find((plan) => plan.id === billing.plan.id);
   const subscription = billing.subscription;
 
   async function go(what: string, path: string, body?: unknown) {
     setBusy(what);
-    setError(null);
+    setFailure(null);
     try {
       const answer = await api<{ url?: string } & Partial<Billing>>(path, { method: "POST", body: body ?? {} });
       if (answer.url) return window.location.assign(answer.url);
       // The plan in the bar across the top and the notices ask again, and see the change.
       forgetBilling();
       onChange(answer as Billing);
-    } catch (failure) {
-      setError((failure as Error).message);
+    } catch (error) {
+      // Switching plan is done here; checkout and the portal are Stripe's own pages, opened from here.
+      setFailure(failureFrom(path === "/billing/plan" ? "The plan didn't change" : "Stripe didn't open", error));
     }
     setBusy(null);
   }
@@ -116,11 +118,7 @@ function Loaded({ billing, onChange }: { billing: Billing; onChange: (next: Bill
           </p>
         )}
         {billing.testMode && <p className="text-xs text-muted-foreground">Stripe test mode. Nothing is charged.</p>}
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+        <FormAlert failure={failure} />
       </Card>
 
       {/* During early access the plans come first: choosing one is what this page is for. On a paid plan, what has been used this period is. */}

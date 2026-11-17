@@ -70,6 +70,7 @@ export function DeveloperEmail({ siteId, installLink }: { siteId: string; instal
         <FieldWithButton
           id={id}
           label="Email it to my developer"
+          required
           error={fields.errors.to}
           hint={state.kind === "failed" ? undefined : "They get the install steps, the prompt for a coding agent and the tag, from Haptic, and their reply comes to you."}
           button={
@@ -81,6 +82,7 @@ export function DeveloperEmail({ siteId, installLink }: { siteId: string; instal
         >
           <Input
             {...fields.control("to", { hint: state.kind !== "failed" })}
+            required
             type="email"
             inputMode="email"
             autoComplete="off"
