@@ -62,7 +62,7 @@ The flask button at the bottom left, or Ctrl+Shift+L, opens the test panel. Ever
 
 ## Tasks
 
-`src/tasks/` holds 179 benchmark tasks, one file per area. Each is a question a user would type, the page to start on, and for each step the controls that are right and what a visitor does next. They use the same shape as `eval/guide.ts`, so `eval/record.ts` can walk them once it's pointed at this app.
+`src/tasks/` holds 180 benchmark tasks, one file per area. Each is a question a user would type, the page to start on, and for each step the controls that are right and what a visitor does next. They use the same shape as `eval/guide.ts`, so `eval/record.ts` can walk them once it's pointed at this app.
 
 - 36 tasks open the app with a role, plan or layout setting.
 - 27 tasks have "I can't do that here" as the right answer.

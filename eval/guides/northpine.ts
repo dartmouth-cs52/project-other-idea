@@ -3,7 +3,7 @@ import type { Kind } from "../cases.ts";
 import { DONE, type Guide, type GuideSet, type Reached, type Says, type Step } from "../guide.ts";
 
 // Northpine, the made-up spend management app in testbed/, served on this
-// machine by its own dev server (cd testbed && npm run dev). Its 179 tasks are
+// machine by its own dev server (cd testbed && npm run dev). Its 180 tasks are
 // written beside its pages, in testbed/src/tasks, in nearly the shape of a
 // guide. This file turns each one into a guide:
 //
@@ -172,6 +172,7 @@ const REACHED: Record<string, Reached> = {
   "budgets-archive-finance-events": { text: "Archived" },
   "budgets-this-quarter": { selector: 'role=radio[name="This quarter"][checked=true]' },
   "people-invite-new-hire": { text: "Invite sent" },
+  "people-invite-typo": { text: "Invite sent" },
   "people-make-roma-manager": { text: "access" },
   "people-who-is-in-platform": { url: "department=" },
   "people-offboard-jaren": { text: "offboarded" },

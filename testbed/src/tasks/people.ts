@@ -26,6 +26,22 @@ export const tasks: Task[] = [
     ],
   },
   {
+    id: "people-invite-typo",
+    start: "/people",
+    goal: "invite theo to the Platform team",
+    covers: ["overlay-modal", "form-validation", "form-combobox"],
+    note: "The visitor first types an address with no dot in its domain, which the browser takes and the form refuses. The guide has to point at the field again before going on. The first fill's selector matches only while the field is empty, so the guide's second pointer there types the whole address.",
+    steps: [
+      { expect: [button("Invite people")], act: { click: 'role=button[name="Invite people"]' } },
+      { expect: [any("Email address 1")], act: { fill: ['input[aria-label="Email address 1"]:placeholder-shown', "theochain@dad"] }, say: "Type their email address." },
+      { expect: [any("Email address 1")], act: { fill: ['role=textbox[name="Email address 1"]', "theochain@dad.example"] }, say: "Type the whole email address." },
+      { expect: [any("Department")], act: { click: 'role=dialog >> role=combobox[name="Department"]' } },
+      { expect: [any("Platform in Engineering"), any("Platform")], act: { click: "role=option[name=/^Platform/]" } },
+      { expect: [button("Send invite")], act: { click: 'role=button[name="Send invite"]' } },
+      DONE,
+    ],
+  },
+  {
     id: "people-invite-from-spreadsheet",
     start: "/people",
     goal: "I have a spreadsheet of 30 new hires, can I invite them all at once",
