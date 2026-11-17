@@ -1,4 +1,5 @@
 import type { Appearance, Source, TurnReply } from "../shared/types.ts";
+import { boxThatShows } from "./snapshot.ts";
 
 // Everything Haptic draws: the launcher, the ask box, the pointer, the
 // highlight ring and the caption. It all lives in one shadow root on one host
@@ -415,6 +416,12 @@ export class Ui {
   private captionAvoid: Box[] = [];
   /** Where the pointed control was last seen, to know it again when the page draws it anew. */
   private pointedBox?: Box;
+  /**
+   * The row or box the mouse has to be over for the pointed control to show, when the control was hidden until then
+   * as it was pointed at (`boxThatShows`). While the control is hidden the ring goes round this, where the visitor
+   * has to move, and not round an empty square. Nothing is hovered, clicked or focused to show it.
+   */
+  private revealer?: Element;
 
   constructor(appearance: Appearance, handlers: UiHandlers, acting?: UiActing, options: { present?: boolean } = {}) {
     this.present = options.present === true;
@@ -1116,6 +1123,7 @@ export class Ui {
   /** Between two of Haptic's steps: the caption and the ring go, and the pointer rests where it is, so the next glide starts there. */
   rest() {
     this.pointed = undefined;
+    this.revealer = undefined;
     this.pointedBox = undefined;
     this.captionAvoid = [];
     this.target = undefined;
@@ -1258,9 +1266,13 @@ export class Ui {
         this.captionAvoid = [];
       }
       this.aim(el);
+      this.revealer = boxThatShows(this.target ?? el);
       this.bringIntoView(this.target ?? el);
     }
-    this.captionText.textContent = text;
+    // A control hidden until the mouse is over its row, for the visitor to use: the sentence says so, in the widget's
+    // words if not in the guide's. Not while Haptic is the one using it.
+    const hint = text && this.revealer && this.state !== "acting" && !TELLS_TO_HOVER.test(text) ? ` ${isRow(this.revealer) ? HOVER_HINT.row : HOVER_HINT.box}` : "";
+    this.captionText.textContent = text + hint;
     this.caption.hidden = text === "";
     this.cursor.hidden = false;
     // Paint once at the old spot so the transition has somewhere to start from.
@@ -1372,6 +1384,7 @@ export class Ui {
     this.saying = false;
     this.lost = false;
     this.pointed = undefined;
+    this.revealer = undefined;
     this.pointedBox = undefined;
     this.captionAvoid = [];
     this.held = undefined;
@@ -1530,13 +1543,19 @@ export class Ui {
       rect = el.getBoundingClientRect();
     }
 
+    // A control that shows only while the mouse is over its row: until it shows, the ring is round the row, which is
+    // what the visitor has to move to, and the caption keeps clear of that row for as long as this control is pointed at.
+    const row = this.revealer?.isConnected ? this.revealer.getBoundingClientRect() : undefined;
+    const around = row && row.width && row.height ? row : rect;
+    const ringed = around !== rect && !seen(el) ? around : rect;
+
     // In presentation mode the ring is thicker, and stands further out so it does not cover the control's edge.
     const pad = this.present ? 10 : 4;
     this.pointedBox = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
-    this.ring.style.left = `${rect.left - pad}px`;
-    this.ring.style.top = `${rect.top - pad}px`;
-    this.ring.style.width = `${rect.width + pad * 2}px`;
-    this.ring.style.height = `${rect.height + pad * 2}px`;
+    this.ring.style.left = `${ringed.left - pad}px`;
+    this.ring.style.top = `${ringed.top - pad}px`;
+    this.ring.style.width = `${ringed.width + pad * 2}px`;
+    this.ring.style.height = `${ringed.height + pad * 2}px`;
 
     // The tip goes where the control is, or will show. On a first look the pointer is left where it was drawn, and glides from the next frame.
     const tip = this.held ?? this.tipOn(el, rect);
@@ -1547,7 +1566,7 @@ export class Ui {
 
     // The caption and the launcher with its panel are placed together: neither covers the control, the pointer or the other.
     const box = this.caption.getBoundingClientRect();
-    const { left, top, spot } = this.settle(rect, pad, box, this.pointerBox(tip));
+    const { left, top, spot } = this.settle(around, pad, box, this.pointerBox(tip));
     this.caption.style.left = `${left}px`;
     this.caption.style.top = `${top}px`;
     this.dockAt(spot);
@@ -1854,6 +1873,16 @@ interface Box {
   top: number;
   right: number;
   bottom: number;
+}
+
+/** A guide's sentence that already tells the visitor to bring the mouse to the control. */
+const TELLS_TO_HOVER = /\b(?:hover|mouse|move (?:over|onto|to|your|the)|point (?:at|to))\b/i;
+/** What the caption adds for a control that is hidden until the mouse is over the row or box round it, when the sentence does not say so. */
+const HOVER_HINT = { row: "Move the mouse over the outlined row to see it.", box: "Move the mouse over the outlined area to see it." } as const;
+
+/** Whether a box is a row of a table or a list, or wraps one. */
+function isRow(box: Element): boolean {
+  return box.matches('tr, li, [role="row"], [role="listitem"]') || !!box.querySelector(':scope > [role="row"], :scope > td, :scope > [role="cell"]');
 }
 
 /** The places the question is put, in presentation mode (`showAsked`). */

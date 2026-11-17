@@ -345,6 +345,11 @@ function revealsIn(root: Document | ShadowRoot): Reveal[] {
  * transparent, which the same rules then have to undo.
  */
 function shownWhenOver(el: Element, hiddenByVisibility: boolean, seeThrough: boolean): DOMRect | undefined {
+  return boxShownOver(el, hiddenByVisibility, seeThrough)?.getBoundingClientRect();
+}
+
+/** The same box as an element: what the mouse has to be over for `el` to show. */
+function boxShownOver(el: Element, hiddenByVisibility: boolean, seeThrough: boolean): Element | undefined {
   const root = el.getRootNode();
   if (!isDocument(root) && !isShadowRoot(root)) return undefined;
   let box: Element | undefined;
@@ -365,7 +370,32 @@ function shownWhenOver(el: Element, hiddenByVisibility: boolean, seeThrough: boo
     }
   }
   if (!box || (hiddenByVisibility && !visibility) || (seeThrough && !opacity)) return undefined;
-  return box.getBoundingClientRect();
+  return box;
+}
+
+/**
+ * The box a control has to have the mouse over to be seen, when it is hidden until then: the row whose actions fade
+ * in, the panel whose menu button comes up on hover. Undefined for a control that is on show now, and for one no
+ * stylesheet shows this way. It is read from the page's stylesheets as the listing reads it ("shows on hover"):
+ * nothing is hovered, clicked or focused to find it out.
+ */
+export function boxThatShows(el: Element): Element | undefined {
+  try {
+    if (seeThroughNow(el)) {
+      const clear = seeThroughBox(el);
+      return clear ? boxShownOver(clear, false, true) : undefined;
+    }
+    // Hidden outright: looked up from the outermost box around it that is hidden, as the listing comes to it on its way down.
+    let hidden: Element | undefined;
+    for (let node: Node | null = el, depth = 0; node && depth < 100; node = drawnParent(node), depth++) {
+      if (!isElement(node)) continue;
+      if (getComputedStyle(node).visibility !== "hidden") break;
+      hidden = node;
+    }
+    return hidden ? boxShownOver(hidden, true, getComputedStyle(hidden).opacity === "0") : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Whether one box lies inside another, give or take a pixel. */

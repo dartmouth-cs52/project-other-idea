@@ -26,6 +26,24 @@ async function shown(session: Session): Promise<{ pointer: boolean; caption: str
   });
 }
 
+type Rect = { x: number; y: number; width: number; height: number };
+
+/** Where the ring and the caption are drawn, and where the pointer's tip is. */
+const drawnRound = (session: Session): Promise<{ ring: Rect & { hidden: boolean }; caption: Rect; tip: { x: number; y: number } }> =>
+  session.page.evaluate(() => {
+    const root = document.querySelector("haptic-root")!.shadowRoot!;
+    // Written without a named function inside, which the test runner's build would wrap in a helper the page does not have.
+    const [ring, caption, cursor] = [".ring", ".caption", ".cursor svg"].map((selector) => {
+      const el = root.querySelector(selector) as HTMLElement;
+      const box = el.getBoundingClientRect();
+      return { x: box.left, y: box.top, width: box.width, height: box.height, hidden: el.hidden };
+    }) as [Rect & { hidden: boolean }, Rect, Rect];
+    // The tip is at 3.81, 3.14 of the pointer's 24 by 24.
+    return { ring, caption, tip: { x: cursor.x + (3.81 * cursor.width) / 24, y: cursor.y + (3.14 * cursor.height) / 24 } };
+  });
+const surrounds = (outer: Rect, inner: Rect) => outer.x <= inner.x && outer.y <= inner.y && outer.x + outer.width >= inner.x + inner.width && outer.y + outer.height >= inner.y + inner.height;
+const crosses = (a: Rect, b: Rect) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+
 /** Waits, a second at most, for nothing to be left pointing at the control the sentence was about. */
 async function letGo(session: Session, sentence: string, what: string): Promise<void> {
   await session.until(async () => {
@@ -435,20 +453,25 @@ for (const [what, extra] of [
       assert.equal(listed.length, 2);
       for (const pay of listed) assert.deepEqual(pay.state, ["shows on hover"]);
       assert.equal(await session.pointed(), "pay");
-      // The ring is on where Pay shows, though nothing shows there yet.
-      const ring = await session.page.evaluate(() => {
-        const box = (document.querySelector("haptic-root")!.shadowRoot!.querySelector(".ring") as HTMLElement).getBoundingClientRect();
-        return { x: box.left + box.width / 2, y: box.top + box.height / 2, hidden: (document.querySelector("haptic-root")!.shadowRoot!.querySelector(".ring") as HTMLElement).hidden };
-      });
+      // Nothing shows where Pay will yet: the ring is round the row the mouse has to be over, and the pointer's tip is
+      // where Pay will show.
+      await session.page.waitForTimeout(800);
       const pay = await session.page.locator("#pay").boundingBox();
-      assert.equal(ring.hidden, false);
-      assert.ok(Math.abs(ring.x - (pay.x + pay.width / 2)) < 2 && Math.abs(ring.y - (pay.y + pay.height / 2)) < 2, JSON.stringify({ ring, pay }));
+      const rowBox = await session.page.locator(".group\\/row").first().boundingBox();
+      const drawn = await drawnRound(session);
+      assert.equal(drawn.ring.hidden, false);
+      assert.ok(surrounds(drawn.ring, rowBox), `the ring ${JSON.stringify(drawn.ring)} is not round the row ${JSON.stringify(rowBox)}`);
+      assert.ok(drawn.tip.x >= pay.x && drawn.tip.x <= pay.x + pay.width && drawn.tip.y >= pay.y && drawn.tip.y <= pay.y + pay.height, JSON.stringify({ tip: drawn.tip, pay }));
+      assert.ok(!crosses(drawn.caption, rowBox), `the caption ${JSON.stringify(drawn.caption)} covers the row`);
       assert.equal(await session.page.evaluate(() => getComputedStyle(document.getElementById("pay")!.parentElement!).opacity), "0");
       // Nothing clicked it or put the keyboard on it.
       assert.deepEqual(await session.page.evaluate(() => [(window as unknown as { pays: number }).pays, document.activeElement?.id ?? ""]), [0, ""]);
       // The mouse passes over the row, which shows Pay, and goes away again, which hides it. That is not the step, nor its going.
       await session.page.mouse.move(pay.x + pay.width / 2, pay.y + pay.height / 2, { steps: 4 });
       assert.equal(await session.page.evaluate(() => getComputedStyle(document.getElementById("pay")!.parentElement!).opacity), "1");
+      // Once it shows, the ring is on Pay itself.
+      await session.page.waitForTimeout(100);
+      assert.ok(surrounds((await drawnRound(session)).ring, pay) && !surrounds((await drawnRound(session)).ring, rowBox), "the ring did not go to Pay once it showed");
       await session.page.mouse.move(pay.x - 400, pay.y + 300, { steps: 4 });
       await session.page.waitForTimeout(1200);
       assert.equal(session.requests.length, 1);
@@ -468,3 +491,75 @@ for (const [what, extra] of [
     }
   });
 }
+
+for (const present of [false, true]) {
+  test(`${present ? "in presentation mode, " : ""}a sentence that does not say to move over the row is told so by the caption, which keeps off the row, and nothing is clicked or focused`, async () => {
+    const page = `${ROW_STYLES}<main><h1>Cards</h1><div role="table" aria-label="Cards" style="margin-top:260px">
+      ${row("Travel", "Avery Stone", '<button type="button" aria-label="Freeze card">*</button>')}
+      ${row("Team offsite", "Avery Stone", '<button id="freeze" type="button" aria-label="Freeze card">*</button>')}
+      ${row("Malika's card", "Malika Cummerata", '<button type="button" aria-label="Freeze card">*</button>')}
+      </div></main>
+      <script>window.pressed = 0; document.querySelectorAll('button').forEach((button) => button.addEventListener('click', () => window.pressed++));</script>`;
+    // What the model said on Northpine, which names the row but not the mouse.
+    const say = "Click the Freeze card button (snowflake icon) on the Team offsite row, card ending 8774. New charges on it will be declined right away.";
+    const session = await start(
+      page,
+      (request, index) => {
+        if (index > 0) return words("Done.");
+        const freeze = request.snapshot.elements.filter((element) => element.label === "Freeze card");
+        return { target: freeze[1]!.id, status: "continue", say };
+      },
+      "/",
+      { present },
+    );
+    try {
+      await session.page.mouse.move(40, 40);
+      await session.ask("Someone has my Team offsite card number. Lock it now.");
+      await session.untilState("pointing");
+      assert.equal(await session.pointed(), "freeze");
+      await session.page.waitForTimeout(1000);
+      assert.equal(await session.caption(), `${say} Move the mouse over the outlined row to see it.`);
+      const rowBox = await session.page.locator(".group\\/row").nth(1).boundingBox();
+      const freeze = await session.page.locator("#freeze").boundingBox();
+      const drawn = await drawnRound(session);
+      assert.ok(surrounds(drawn.ring, rowBox), `the ring ${JSON.stringify(drawn.ring)} is not round the row ${JSON.stringify(rowBox)}`);
+      assert.ok(drawn.tip.x >= freeze.x && drawn.tip.x <= freeze.x + freeze.width && drawn.tip.y >= freeze.y && drawn.tip.y <= freeze.y + freeze.height, JSON.stringify({ tip: drawn.tip, freeze }));
+      assert.ok(!crosses(drawn.caption, rowBox), `the caption ${JSON.stringify(drawn.caption)} covers the row ${JSON.stringify(rowBox)}`);
+      assert.deepEqual(await session.page.evaluate(() => [(window as unknown as { pressed: number }).pressed, document.activeElement?.tagName ?? ""]), [0, "BODY"]);
+      assert.equal(await session.page.evaluate(() => getComputedStyle(document.getElementById("freeze")!.parentElement!).opacity), "0");
+    } finally {
+      await session.close();
+    }
+  });
+}
+
+test("a control that shows on hover is not hinted at while Haptic uses it itself", async () => {
+  const page = `${ROW_STYLES}<main><h1>Bills</h1><div role="table" aria-label="Bills">
+    ${row("INV-46951", "Linden Logistics", '<button id="view" type="button">View</button>')}
+    </div></main>`;
+  const seen: string[] = [];
+  const session: Session = await start(
+    page,
+    async (request, index) => {
+      if (index === 0) return { target: idOf(request, "View"), do: "click", enter: null, commits: false, status: "continue", say: "Opening the bill.", mode: "act" };
+      seen.push(await session.caption());
+      return words("Done.");
+    },
+    "/",
+    { acting: { maxActions: 25, confirmFirst: false } },
+  );
+  try {
+    await session.page.mouse.move(40, 40);
+    await session.ask("can you open bill INV-46951", { act: true });
+    await session.untilState("acting", 10_000);
+    for (const until = Date.now() + 3000; Date.now() < until && session.requests.length < 2; ) {
+      const caption = await session.caption();
+      if (caption) seen.push(caption);
+      await session.page.waitForTimeout(30);
+    }
+    assert.ok(seen.length > 0, "no caption was read");
+    for (const caption of seen) assert.doesNotMatch(caption, /Move the mouse/);
+  } finally {
+    await session.close();
+  }
+});
