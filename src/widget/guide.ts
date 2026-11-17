@@ -2643,8 +2643,8 @@ function outOfSight(el: Element): boolean {
   const view = inSight();
   const showing = rect.bottom > view.top && rect.top < view.bottom && rect.right > view.left && rect.left < view.right;
   if (!showing) {
-    const frame = wholeWindow(view);
-    return rect.bottom > frame.top && rect.top < frame.bottom && rect.right > frame.left && rect.left < frame.right;
+    const whole = wholeWindow(view);
+    return rect.bottom > whole.top && rect.top < whole.bottom && rect.right > whole.left && rect.left < whole.right;
   }
   if (rect.height > view.height - 40) return false;
   return rect.top < view.top - 1 || rect.bottom > view.bottom + 1;

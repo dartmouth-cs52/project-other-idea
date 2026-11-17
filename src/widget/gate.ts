@@ -1122,13 +1122,14 @@ export function reachable(el: Element, plan: ActPlan, session: GateSession, conf
     const own = (hit: Element | null): hit is Element =>
       !!hit && (within(el, hit) || (!!label && within(label, hit)) || (!!frame && frame !== el && within(frame, hit) && !isControlOtherThan(hit, el, frame)));
     const view = inSight();
-    const inWindow = (x: number, y: number) =>
+    /** In the window, where a press can be tested, and in sight, where the visitor sees it. */
+    const seenAt = (x: number, y: number) =>
       x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight && x >= view.left && y >= view.top && x < view.right && y < view.bottom;
     const spots: [number, number][] = [[0.5, 0.5], [0.15, 0.5], [0.85, 0.5], [0.5, 0.2], [0.5, 0.8], [0.15, 0.2], [0.85, 0.2], [0.15, 0.8], [0.85, 0.8]];
     for (const [fx, fy] of spots) {
       const x = box.left + box.width * fx;
       const y = box.top + box.height * fy;
-      if (!inWindow(x, y)) continue;
+      if (!seenAt(x, y)) continue;
       const hit = hitAt(x, y, session.host);
       if (!own(hit)) continue;
       const pressedNow = plan.control === "text" || plan.control === "select" || plan.control === "tick" || plan.act === "choose" ? undefined : judgePress(el, plan.control, plan.name, session, config).refused;
