@@ -92,6 +92,44 @@ const AMBIGUOUS = new Set(["set", "do", "get", "manage", "handle", "use", "work"
 /** Words that say the question is about not doing something. */
 const NEGATIONS = new Set(["not", "dont", "doesnt", "didnt", "cant", "cannot", "wont", "never", "without", "no", "nothing", "unable", "except", "instead", "nicht", "kein", "keine", "pas", "nunca", "jamais", "nao", "niet", "geen"]);
 
+/**
+ * Words that say the question asks around the task, not for it: how to avoid
+ * it or undo it, the permission it needs, or what doing it does. "What
+ * happens if I add a budget" names the task and asks something else. "Am I
+ * allowed to" is left as a way of saying "can I": a question that starts with
+ * "who" asks who may (`readTask`).
+ */
+const AROUND = new Set([
+  "avoid", "avoiding", "prevent", "preventing", "undo", "undoing", "revert", "reverting", "reverse", "reversing",
+  "permission", "permissions",
+  "happen", "happens", "happened", "happening",
+]);
+
+/** Politeness a way of asking can come after: "can you show me how to". */
+const POLITE = new Set(["hi", "hello", "hey", "please", "pls", "plz", "so", "ok", "okay", "can", "could", "would", "you"]);
+/**
+ * Ways of asking for a task that say nothing about it, taken off the front of
+ * a question before it is read, with the "to" after them: "show me how to add
+ * a budget" asks to add one, not to see something, and "I can't figure out
+ * how to add a budget" asks for it too, not what not to do.
+ */
+const LEAD_INS = [
+  "show me how", "tell me how", "teach me how", "walk me through how",
+  "i cant figure out how", "i cannot figure out how", "i cant work out how", "i cant find how", "i cant see how",
+  "i dont know how", "i do not know how", "i dont understand how", "i m not sure how", "i am not sure how",
+].map((lead) => lead.split(" "));
+
+/** A question's words without a way of asking at their front (`LEAD_INS`). Any other question's words are as they were. */
+function withoutLeadIn(words: string[]): string[] {
+  let at = 0;
+  while (at < words.length && POLITE.has(words[at]!)) at++;
+  const lead = LEAD_INS.find((parts) => parts.every((part, offset) => words[at + offset] === part));
+  if (!lead) return words;
+  at += lead.length;
+  if (words[at] === "to") at++;
+  return words.slice(at);
+}
+
 /** Words of a question that say nothing about the task. */
 const FILLER = new Set([
   "a", "an", "the", "and", "or", "i", "me", "my", "mine", "we", "our", "us", "you", "your", "it", "its", "this", "that", "these", "those", "there", "here",
@@ -123,20 +161,28 @@ export interface TaskReading {
   /** Every word that carries meaning and is neither an action nor the head, stemmed: "marketing" and "q1" there. */
   names: string[];
   negated: boolean;
+  /** It asks around the task, not for it: how to avoid or undo it, who may do it, what doing it does (`AROUND`). */
+  around: boolean;
 }
 
 const ACTION_OF = new Map<string, Action>();
 for (const [action, words] of Object.entries(VERBS) as [Action, string][]) for (const word of words.split(/\s+/)) ACTION_OF.set(word, action);
 
-/** A question's words, made comparable and with accents taken off: "Crée un budget" is "cree un budget". */
+/**
+ * A question's words, made comparable and with accents taken off: "Crée un
+ * budget" is "cree un budget". A way of asking at its front is taken off
+ * (`withoutLeadIn`).
+ */
 function wordsOf(question: string): string[] {
-  return questionKey(question)
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    // "don't" is "don t" once punctuation is gone: put it back together, so it reads as one word.
-    .replace(/\b(don|doesn|didn|can|won|isn|aren|shouldn|couldn|wouldn) t\b/g, "$1t")
-    .split(" ")
-    .filter(Boolean);
+  return withoutLeadIn(
+    questionKey(question)
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "")
+      // "don't" is "don t" once punctuation is gone: put it back together, so it reads as one word.
+      .replace(/\b(don|doesn|didn|can|won|isn|aren|shouldn|couldn|wouldn) t\b/g, "$1t")
+      .split(" ")
+      .filter(Boolean),
+  );
 }
 
 /** A word as it is compared: plurals made singular. "policies" is "policy", "budgets" is "budget". */
@@ -176,6 +222,8 @@ export function readTask(question: string): TaskReading {
     }
   }
   const negated = words.some((word) => NEGATIONS.has(word));
+  // "Who can add a budget" asks who, and "what if I add a budget" what happens: both are about the task, not for it.
+  const around = words.some((word) => AROUND.has(word)) || words[0] === "who" || words[0] === "whom" || (words[0] === "what" && words[1] === "if");
   if (!actions.size && asksToExplain(words)) actions.add("explain");
   // A question that only asks what something is, with an action word inside ("what does archive do"), is about the word.
   if (asksToExplain(words) && words[0] !== "why") {
@@ -193,7 +241,7 @@ export function readTask(question: string): TaskReading {
     const word = stemWord(words[at]!);
     if (carriesMeaning(words, marked, at) && !PREPOSITIONS.has(words[at]!) && word !== object) names.add(word);
   }
-  return { actions: [...actions].sort(), ...(object ? { object } : {}), which, names: [...names], negated };
+  return { actions: [...actions].sort(), ...(object ? { object } : {}), which, names: [...names], negated, around };
 }
 
 /** True for a word that says something about the task: not an action word, a filler, a negation, a vague verb, a number or a masked value. */
@@ -249,7 +297,7 @@ export function sameTask(taught: string, asked: string): boolean {
   if (!a.length || !b.length) return false;
   if (a.map(stemWord).join(" ") === b.map(stemWord).join(" ")) return true;
   const [x, y] = [readTask(taught), readTask(asked)];
-  if (x.negated || y.negated) return false;
+  if (x.negated || y.negated || x.around || y.around) return false;
   if (!x.actions.length || x.actions.length !== y.actions.length || x.actions.some((action, index) => action !== y.actions[index])) return false;
   if (x.actions.includes("explain")) return false;
   if (!x.object || x.object !== y.object) return false;

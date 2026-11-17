@@ -31,12 +31,16 @@ for (const pair of pairs) {
 }
 
 test("a question is read as its actions, the head of what is acted on, which one, and whether it is negated", () => {
-  assert.deepEqual(readTask("How do I add a marketing budget for Q1?"), { actions: ["create"], object: "budget", which: ["marketing"], names: ["marketing", "q1"], negated: false });
-  assert.deepEqual(readTask("get rid of old policies"), { actions: ["delete"], object: "policy", which: ["old"], names: ["old"], negated: false });
-  assert.deepEqual(readTask("what is a budget"), { actions: ["explain"], object: "budget", which: [], names: [], negated: false });
+  assert.deepEqual(readTask("How do I add a marketing budget for Q1?"), { actions: ["create"], object: "budget", which: ["marketing"], names: ["marketing", "q1"], negated: false, around: false });
+  assert.deepEqual(readTask("get rid of old policies"), { actions: ["delete"], object: "policy", which: ["old"], names: ["old"], negated: false, around: false });
+  assert.deepEqual(readTask("what is a budget"), { actions: ["explain"], object: "budget", which: [], names: [], negated: false, around: false });
   assert.deepEqual(readTask("pay a bill from Brightdesk").which, [], "what follows a preposition is a detail, not which one");
   assert.deepEqual(readTask("pay a bill from Brightdesk").names, ["brightdesk"]);
   assert.equal(readTask("I can't add a budget").negated, true);
+  assert.equal(readTask("how do I undo adding a budget").around, true, "around the task, not for it");
+  assert.equal(readTask("who can add a budget").around, true);
+  assert.deepEqual(readTask("Can you show me how to add a budget?").actions, ["create"], "a way of asking is not a second action");
+  assert.equal(readTask("I can't figure out how to add a budget").negated, false, "nor a negation");
   assert.deepEqual(readTask("set a budget").actions, [], "set alone could be add or change");
   assert.equal(stemWord("policies"), "policy");
   assert.equal(stemWord("address"), "address");

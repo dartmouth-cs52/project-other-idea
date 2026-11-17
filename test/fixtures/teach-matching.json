@@ -510,6 +510,150 @@
       "asked": "add a card called Budget",
       "match": false,
       "why": "a card, whatever it is called"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "how can I create a new budget?",
+      "match": true,
+      "why": "from the review: a rewording"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "Create budget",
+      "match": true,
+      "why": "from the review: a terse rewording"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "how to add budget for Q3 marketing",
+      "match": true,
+      "why": "from the review: a detail after a preposition"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "don't add a budget",
+      "match": false,
+      "why": "from the review: negated"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "how do I add a card",
+      "match": false,
+      "why": "from the review: another thing of the same kind"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "add a card to my budget",
+      "match": false,
+      "why": "from the review: the budget is a detail"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "add a budget line",
+      "match": false,
+      "why": "from the review: budget only says which line"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "budget",
+      "match": false,
+      "why": "from the review: no action"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "add",
+      "match": false,
+      "why": "from the review: no thing acted on"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "hi, I've been using this app for our finance team for months and it has been fine but today I need some help with my account setup because things look different from before and I need some help with my account setup because things look different from before and I need some help with my account setup because things look different from before and so how do I add a budget",
+      "match": false,
+      "why": "from the review: known limit: a question longer than 300 characters is read only that far, and this one's task is at its end"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "Wie erstelle ich ein Budget?",
+      "match": true,
+      "why": "from the review: German, with the same noun"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "¿Cómo creo un presupuesto?",
+      "match": false,
+      "why": "from the review: known limit: the thing is named in another language"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "how do I avoid adding a budget by mistake",
+      "match": false,
+      "why": "from the review: how not to do it"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "how do I undo adding a budget",
+      "match": false,
+      "why": "from the review: undoing it is another task"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "who is allowed to add a budget",
+      "match": false,
+      "why": "from the review: who may do it, not doing it"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "what happens if I add a budget",
+      "match": false,
+      "why": "from the review: what doing it does, not doing it"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "show me how to add a budget",
+      "match": true,
+      "why": "from the review: show me how to is a way of asking, not a second action"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "I can't figure out how to add a budget",
+      "match": true,
+      "why": "from the review: a stuck visitor asking for the task, not a negation"
+    },
+    {
+      "taught": "how do I change my password",
+      "asked": "how do I reset my password",
+      "match": false,
+      "why": "from the review: known limit: reset is read as another word; in many apps it is the signed-out flow, another route"
+    },
+    {
+      "taught": "pay the Brightdesk Coworking bill",
+      "asked": "pay the Fjord Freight bill",
+      "match": false,
+      "why": "from the review: another named bill"
+    },
+    {
+      "taught": "how do I add a budget called Marketing programs",
+      "asked": "add a budget called Sales",
+      "match": true,
+      "why": "from the review: the same task with other values"
+    },
+    {
+      "taught": "how do I add a teammate",
+      "asked": "how do I remove a teammate",
+      "match": false,
+      "why": "from the review: the opposite action"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "how do I add a budget and invite my manager to it",
+      "match": false,
+      "why": "from the review: two tasks"
+    },
+    {
+      "taught": "how do I add a budget",
+      "asked": "how do i ADD a BUDGET!!!",
+      "match": true,
+      "why": "from the review: case and punctuation"
     }
   ]
 }
