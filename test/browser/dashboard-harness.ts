@@ -190,6 +190,8 @@ export async function startDashboard(): Promise<Dashboard> {
       corrections: [],
       blocked: [],
       reading: null,
+      // Screens mapped from a signed-in browser at the company, counted as worker/app-api.ts counts them.
+      mapped: ((row.context.pages ?? []) as { mapped?: true }[]).filter((page) => page.mapped).length,
       // Where the setup screens are, kept in the context as worker/setup-api.ts keeps it. Most seeded sites were
       // set up before there were setup screens, so they have none, and the dashboard keeps them.
       setup: row.context.setup ?? null,

@@ -59,6 +59,12 @@ export interface SiteContext {
   taught?: TaughtRoute[];
   /** Verified routes: "shadow" when not set. See src/server/routes.ts. */
   routes?: RoutesMode;
+  /**
+   * Set while someone at the company may map the app from their own signed-in
+   * browser (src/widget/map.ts). Only a hash of the pass is kept, and it stops
+   * working at `expires`.
+   */
+  mapping?: { hash: string; expires: string };
   createdAt: string;
   updatedAt: string;
 }
@@ -161,9 +167,12 @@ export interface PageNode {
   /**
    * What each menu, tab or accordion showed when the reader opened it. These
    * are the edges that take two clicks: the control first, then what it shows.
-   * Only a reader that runs the page in a browser can fill this in.
+   * Only a reader that runs the page in a browser can fill this in: the one
+   * at signup, or the widget while the company maps its own app.
    */
   opens?: PageOpening[];
+  /** Set on a page mapped from a signed-in browser at the company, which a later reading of the public pages must not replace. */
+  mapped?: true;
 }
 
 export interface PageOpening {
@@ -173,6 +182,16 @@ export interface PageOpening {
   links: { label: string; to: string }[];
   /** Buttons, tabs and menu items that appeared. */
   buttons: string[];
+  /** Labels of the fields that appeared, when what opened was a dialog with a form in it. */
+  fields?: string[];
+}
+
+/** What the widget posts to /v1/map while someone at the company maps their app. Without a page it only asks whether the pass is good. */
+export interface MapReport {
+  site: string;
+  /** The pass from the dashboard's link. The server keeps only a hash of it. */
+  pass: string;
+  page?: PageNode;
 }
 
 /**

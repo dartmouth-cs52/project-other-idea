@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { chromium, firefox, webkit, type Browser, type BrowserType, type Locator, type Page } from "playwright";
-import { widgetBundles } from "../../src/widget/build.ts";
+import { bundleMapper, widgetBundles } from "../../src/widget/build.ts";
 import { DEFAULT_APPEARANCE, STREAM_TYPE, type PublicSiteConfig, type SnapElement, type TurnReply, type TurnRequest } from "../../src/shared/types.ts";
 
 // Runs the real widget in real browsers, against a small server that serves
@@ -27,6 +27,13 @@ let bundle: Promise<{ widget: string; acting: string; teach: string }> | undefin
 export function widgetBundle(): Promise<{ widget: string; acting: string; teach: string }> {
   bundle ??= widgetBundles({ minify: false });
   return bundle;
+}
+
+let mapper: Promise<string> | undefined;
+/** The mapper as the widget fetches it, at /map.js. Not minified, like the widget's files. */
+export function mapperBundle(): Promise<string> {
+  mapper ??= bundleMapper({ minify: false });
+  return mapper;
 }
 
 let snapshotCode: Promise<string> | undefined;
@@ -107,6 +114,7 @@ export async function startHarness(): Promise<Harness> {
       if (url.pathname === "/widget.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(widget);
       if (url.pathname === "/widget-act.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(acting);
       if (url.pathname === "/widget-teach.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(teach);
+      if (url.pathname === "/map.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(await mapperBundle());
       if (url.pathname.startsWith("/v1/sites/")) return res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(harness.config));
       if (req.method === "POST" && url.pathname === "/v1/turn") {
         const request = JSON.parse(await readBody(req)) as TurnRequest;

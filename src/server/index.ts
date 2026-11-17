@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { extname, normalize } from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { ACTING_FILE, buildWidget, TEACH_FILE, WIDGET_FILE } from "../widget/build.ts";
+import { ACTING_FILE, buildWidget, MAP_FILE, TEACH_FILE, WIDGET_FILE } from "../widget/build.ts";
 import { createApp } from "./app.ts";
 import { describeAlert, MemoryBudget } from "./budget.ts";
 import { Store } from "./db.ts";
@@ -12,7 +12,8 @@ import { SETTINGS } from "./model.ts";
 import { recordTurn } from "./record.ts";
 import type { RouteLookup } from "./routes.ts";
 import type { SiteContext } from "../shared/types.ts";
-import { loadSite } from "./sites.ts";
+import { loadSite, saveSite } from "./sites.ts";
+import { mergeMapped } from "./mapped.ts";
 import { newTeachToken } from "../shared/teach.ts";
 import { MemoryTeachStore, NeonTeachStore } from "./teach.ts";
 
@@ -78,6 +79,7 @@ const app = createApp({
   widget: () => readFile(WIDGET_FILE, "utf8"),
   widgetActing: () => readFile(ACTING_FILE, "utf8"),
   widgetTeaching: () => readFile(TEACH_FILE, "utf8"),
+  mapper: () => readFile(MAP_FILE, "utf8"),
   widgetMaxAge: process.env.NODE_ENV === "production" ? 300 : 0,
   overLimit,
   teach,
@@ -92,6 +94,19 @@ const app = createApp({
   ...(store ? { findRoute: (site: SiteContext, lookup: RouteLookup) => store.findRoute(site.id, lookup) } : {}),
   onCancel: (request) => void store?.cancelStep(request),
   onOutline: (site, visitor, outline, network) => (store ? void store.recordOutline(site, visitor, outline, network) : learn(site.id, visitor, outline, network)),
+  // With a database, a pass comes from the dashboard as it does online. Without one, a site
+  // in data/sites is mapped with the pass in HAPTIC_MAP_PASS, and the pages go into its file.
+  mapping: {
+    allowed: async (site, pass) => {
+      if (store && (await store.mappingAllowed(site.id, pass))) return true;
+      return Boolean(process.env.HAPTIC_MAP_PASS) && pass === process.env.HAPTIC_MAP_PASS;
+    },
+    save: async (site, page) => {
+      if (store && (await store.loadSite(site.id))) return store.saveMappedPage(site.id, page);
+      const onFile = await loadSite(site.id);
+      if (onFile) await saveSite({ ...onFile, pages: mergeMapped(onFile.pages, page), updatedAt: new Date().toISOString() });
+    },
+  },
   onSeen: (site, origin, allowed) => void store?.seenAt(site, origin, allowed),
   onAsk: (request, _site, origin) => void store?.startGuide(request, origin),
   onReport: (site, guide, report) => void store?.report(site, guide, report),
