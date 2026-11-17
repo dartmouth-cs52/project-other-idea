@@ -481,14 +481,31 @@ const JUDGE = String.raw`(?:check|make sure|verify|confirm|double[- ]check|revie
 const NOT_ONLY_THE_PRESS = /\b(?:if|unless|whether|or|either|instead|optional|optionally|then)\b|\b(?:when|once|after|before|until|as soon as)\s+you\b/i;
 
 /**
+ * What Haptic says it will do itself once the press is made: "Then we'll pick
+ * Malika Cummerata as the cardholder", "and then I'll fill in the rest". It
+ * is Haptic's next step, not one for the visitor. On Northpine's Cards page
+ * on 17 November 2026 the model pointed at the link Issue card, which leads
+ * to /cards/new, with "do" null and "Click Issue card at the top right to
+ * start a new card. Then we'll pick Malika Cummerata as the cardholder." The
+ * "Then" was read as something left for the visitor after the press, so the
+ * press stayed theirs, and they had asked Haptic to do it. Only "I" or "we"
+ * with "will" counts: "then you can choose", "then pick" and "we can" still
+ * leave it to them.
+ */
+const OURS_NEXT = /\b(?:(?:and\s+)?then\s+)?(?:I|we)(?:'ll|’ll|\s+will)\s+(?:(?:then|now|next|also)\s+)?[\p{L}'’-]+/giu;
+
+/**
  * Whether a sentence, once its instruction to press is written as Haptic's,
  * still leaves something to the visitor: a question, a value or a field, as
  * for namedButNotDone; a choice, a wish or a time ("or", "if you want",
  * "when you're ready"); something after it ("then"); or anything else to
  * use, fill in, pick or check, asked of them or said to be theirs ("where
- * you can choose Virtual").
+ * you can choose Virtual"). What Haptic says it will do next itself is read
+ * as its own (`OURS_NEXT`): only that verb and its "then" are set aside, and
+ * the rest of the sentence is judged as before.
  */
-function stillLeavesSomething(say: string, snapshot: Snapshot): boolean {
+function stillLeavesSomething(wrote: string, snapshot: Snapshot): boolean {
+  const say = wrote.replace(OURS_NEXT, "I'll go on");
   if (leavesItToTheVisitor(say, snapshot) || NOT_ONLY_THE_PRESS.test(say)) return true;
   const verbs = String.raw`(?:${USE}|${ASK_FOR}|${JUDGE})\b`;
   const asked = new RegExp(String.raw`${CLAUSE}(?:(?:please|just|now|also|first)\s+)*${verbs}`, "i");

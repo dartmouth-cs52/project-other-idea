@@ -971,4 +971,44 @@ test("when none of the model's sentence can be shown on a step Haptic does itsel
   assert.equal((await step({ target: "e36", status: "continue", say: "}" }, guideStep, site)).reply.say, "This is the one to use.");
 });
 
+test("in act mode, a press written as the visitor's is Haptic's when the rest of the sentence says what Haptic will do next", async () => {
+  // The first reply to "Do it" in one session: the link Issue card, which leads to the form at /cards/new, with "do" null. The visitor was given the step.
+  const leftToThem = act({ target: "e28", status: "continue", say: "Click Issue card at the top right to start a new card. Then we'll pick Malika Cummerata as the cardholder." });
+  const ours = "Clicking Issue card at the top right to start a new card. Then we'll pick Malika Cummerata as the cardholder.";
+  assert.equal(made(firstOnCards, leftToThem), ours);
+  for (const recheck of ["ask", "off"]) {
+    const { sent } = use([{ streams: '{"target":"e28"', reply: leftToThem }], recheck);
+    const { result: measure, lines } = await logging(() => measureTurn(actingSite, firstOnCards));
+    assert.equal(sent.length, 1, recheck);
+    assert.deepEqual(measure.reply, { target: "e28", do: "click", enter: null, commits: false, status: "continue", say: ours, mode: "act" });
+    assert.deepEqual(measure.acting, { modelDo: null, converted: true });
+    assert.deepEqual(lines, ['press site_acting step 0: an act reply of "continue" left a click on e28 to the visitor, which Haptic could press, so Haptic clicks it']);
+  }
+  // Other ways the model says what it will do next.
+  for (const [wrote, said] of [
+    ["Click Issue card, then I'll pick Malika Cummerata as the cardholder.", "Clicking Issue card, then I'll pick Malika Cummerata as the cardholder."],
+    ["Click Issue card to open the form, and then we will fill in the card's name.", "Clicking Issue card to open the form, and then we will fill in the card's name."],
+    ["Click Issue card. I'll then choose Virtual on the next page.", "Clicking Issue card. I'll then choose Virtual on the next page."],
+  ] as const) {
+    assert.equal(made(firstOnCards, sayingAt("e28", wrote)), said);
+  }
+  // What comes next is still the visitor's when the sentence gives it to them, whatever Haptic says of itself beside it.
+  for (const theirs of [
+    "Click Issue card at the top right to start a new card. Then pick Malika Cummerata as the cardholder.",
+    "Click Issue card, then you can choose the cardholder.",
+    "Click Issue card. Then we'll pick the cardholder, or you can search for someone else.",
+    "Click Issue card when you're ready, then I'll fill in the rest.",
+    "Click Issue card. Then we'll pick Malika, and then choose the card type yourself.",
+    "Click Issue card. Then we can choose the cardholder.",
+    "Click Issue card. Then I'll wait: check the list first.",
+    "Click Issue card. Which cardholder should we'll pick?",
+  ]) {
+    assert.equal(made(firstOnCards, sayingAt("e28", theirs)), undefined, theirs);
+  }
+  // And a control that commits is never pressed for them, whatever follows.
+  assert.equal(made(onReview, sayingAt("e33", "Click Issue card to create it. Then we'll look at the card's page.")), undefined);
+  // On a page where the field is listed, what Haptic will type there is its own too.
+  assert.equal(made(onLimits, sayingAt("e36", "Click Next. Then I'll type the limit in Spending limit on the way back.")), "Clicking Next. Then I'll type the limit in Spending limit on the way back.");
+});
+
 test.after(() => configure({ HAPTIC_MODEL: "mock" }));
