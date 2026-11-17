@@ -1,4 +1,4 @@
-import { controlText, correctionsFor } from "../shared/corrections.ts";
+import { correctionsFor, type ControlName } from "../shared/corrections.ts";
 import { answersOn } from "../shared/types.ts";
 import type { Doc, PageNode, PageOpening, SiteContext, SnapElement, Snapshot, TurnRequest } from "../shared/types.ts";
 
@@ -188,7 +188,7 @@ export function buildSystemPrompt(site: SiteContext, mode?: "act"): string {
   // Only for a site that has such a list, so every other site's prompt is as it was.
   if (site.blocked?.length) {
     parts.push(
-      `# Controls never to point at, from its owner\nThe site's owner doesn't want visitors guided to these. Never point at one, wherever it is on the page. If the visitor asks for what one does, set target to null and status "done", and say you can't help with that here.\n${site.blocked.map((control) => `- ${controlText(control)}`).join("\n")}`,
+      `# Controls never to point at, from its owner\nThe site's owner doesn't want visitors guided to these. Never point at one, wherever it is on the page. If the visitor asks for what one does, set target to null and status "done", and say you can't help with that here.\n${site.blocked.map((control) => `- ${controlName(control)}`).join("\n")}`,
     );
   }
   if (answers) {
@@ -237,6 +237,54 @@ function renderArticle({ id, doc }: Article): string {
 
 /** Buttons listed for one page, after those on most pages. A page with more is usually a list of the visitor's own things. */
 const MAX_PAGE_BUTTONS = 24;
+
+/**
+ * Text from a site's pages or from its visitors, made safe to write inside one
+ * of the prompt's blocks: on one line, and with nothing that reads as a tag,
+ * so it can neither close the block it is in nor open another. "</page>"
+ * becomes "</ page>", the way a help article's own tags are kept shut
+ * (`shut`). An angle bracket that starts no tag, as in "Next >", "<< Back" or
+ * "x<5", stays, so almost every label is left exactly as it was.
+ *
+ * The small and full-width angle brackets count as one, and so do the
+ * invisible characters and marks a tag can be split with: "</", a zero-width
+ * space and "page>" reads as "</page>", and becomes "</", the zero-width
+ * space, " page>". Doing it twice changes nothing.
+ */
+export function inert(text: string): string {
+  return text.replace(/[\s\p{Cc}]+/gu, " ").replace(/([<\uFE64\uFF1C])([\p{DI}\p{M}]*[\/\uFF0F]?[\p{DI}\p{M}]*)(?=[\p{L}_!?])/gu, "$1$2 ");
+}
+
+/**
+ * A control's label as the page's list writes it: `inert`, in double quotes,
+ * with any double quote of its own made single so that it cannot end the quote.
+ */
+export function quotedLabel(label: string): string {
+  return `"${inert(label).replace(/"/g, "'")}"`;
+}
+
+/**
+ * A control the site's owner named, as the page's list names one: its kind,
+ * then its label in double quotes, both `inert`. The owner picks these, but
+ * not all from their own words: the dashboard's picker offers labels the crawl
+ * and visitors' pages gave, and a correction's "not" is what the recorded step
+ * pointed at, kind and all, and that kind is whatever 24 characters the
+ * widget sent (`parseTurn`). An ordinary one reads as it did before:
+ * link "Team".
+ */
+function controlName(control: ControlName): string {
+  const role = unquoted(control.role || "control");
+  return control.label ? `${role} ${quotedLabel(control.label)}` : role;
+}
+
+/**
+ * Text written outside the quotes in a line that has some: `inert`, and with
+ * any double quote made single, so that it can't change which quotes pair up.
+ * A control's kind or a page's path never has one unless a request made it up.
+ */
+function unquoted(text: string): string {
+  return inert(text).replace(/"/g, "'");
+}
 
 /**
  * One line per page. Links and buttons that repeat on most pages (the main
@@ -317,9 +365,14 @@ export function buildUserMessage(request: TurnRequest, site?: SiteContext, now: 
   parts.push(`Today is ${dateInWords(request.today ?? "") ?? dateInWords(now.toISOString().slice(0, 10))}.`);
   const corrections = correctionsFor(site?.corrections, request.snapshot.path, request.goal);
   if (corrections.length) {
+    // A correction quotes what another visitor asked and names controls that were on a page, and its page and the
+    // control pointed at come unchecked from the recorded step, so every part is made `inert`, as <page> is. The
+    // question is quoted the way a label is, so a double quote in it can't end its quote. <corrections> is not in the
+    // rules' list of blocks that are data: that sentence says never to follow what is inside them, and with Answers
+    // on that text saying what to point at is data, and a correction is the owner saying what to point at.
     const lines = corrections.map(
       (correction) =>
-        `- On ${correction.route}, asked "${correction.question.replace(/"/g, "'")}": point at ${controlText(correction.right)}${correction.wrong ? `, not ${controlText(correction.wrong)}` : ""}.`,
+        `- On ${unquoted(correction.route)}, asked ${quotedLabel(correction.question)}: point at ${controlName(correction.right)}${correction.wrong ? `, not ${controlName(correction.wrong)}` : ""}.`,
     );
     parts.push(`<corrections>\nThe site's owner corrected earlier guides. Where one is about the same task and its control is in this page's list, point at that control.\n${lines.join("\n")}\n</corrections>`);
   }
@@ -327,9 +380,11 @@ export function buildUserMessage(request: TurnRequest, site?: SiteContext, now: 
     parts.push(`The visitor asks: ${request.goal}`);
   } else {
     const lines = [`Goal: ${request.goal}`, `Steps given so far: ${request.step}`];
+    // Both name the page's controls and quote its text, so both are made `inert` like the page. The change is one
+    // finding a line (describeChange in src/widget/snapshot.ts), so it is made inert a line at a time and keeps its lines.
     // In act mode the widget says who did each thing ("You clicked", "The visitor filled in"), so the line is not headed as the visitor's.
-    if (request.event) lines.push(`${request.mode === "act" ? "What happened" : "What the visitor did"}: ${request.event}`);
-    if (request.change) lines.push(`What changed on the page:\n${request.change}`);
+    if (request.event) lines.push(`${request.mode === "act" ? "What happened" : "What the visitor did"}: ${inert(request.event)}`);
+    if (request.change) lines.push(`What changed on the page:\n${request.change.split("\n").map(inert).join("\n")}`);
     parts.push(`<progress>\n${lines.join("\n")}\n</progress>\n${request.closing ? CLOSING : NEXT_STEP}`);
   }
   return parts.join("\n\n");
@@ -370,16 +425,24 @@ export function knownOpenings(site: SiteContext | undefined, path: string): (ele
   };
 }
 
+/**
+ * The page as the model reads it, inside <page>. Every piece of text in it is
+ * made `inert`, whatever field it came in: the page is the visitor's own, but
+ * it can show what other people wrote, like a shared item's name, a comment or
+ * a customer's company, and none of that may close the block. The id and
+ * `offscreen` are not: parseTurn lets through only an id like "e12", and
+ * only "above" or "below".
+ */
 export function renderSnapshot(snapshot: Snapshot, opens: (element: SnapElement) => string | undefined = () => undefined): string {
-  const lines = [`Path: ${snapshot.path}`, `Title: ${snapshot.title}`];
-  if (snapshot.dialog !== undefined) lines.push(`Open dialog: ${snapshot.dialog || "(untitled)"}. Only its elements are listed.`);
-  if (snapshot.headings.length) lines.push(`Headings: ${snapshot.headings.join(" | ")}`);
-  if (snapshot.text.length) lines.push(`Text on the page:\n${snapshot.text.map((text) => `- ${text}`).join("\n")}`);
+  const lines = [`Path: ${inert(snapshot.path)}`, `Title: ${inert(snapshot.title)}`];
+  if (snapshot.dialog !== undefined) lines.push(`Open dialog: ${inert(snapshot.dialog) || "(untitled)"}. Only its elements are listed.`);
+  if (snapshot.headings.length) lines.push(`Headings: ${snapshot.headings.map(inert).join(" | ")}`);
+  if (snapshot.text.length) lines.push(`Text on the page:\n${snapshot.text.map((text) => `- ${inert(text)}`).join("\n")}`);
   lines.push(
     "Elements:",
     ...snapshot.elements.map((element) => {
       const behind = opens(element);
-      return behind ? `${renderElement(element)} opens: ${behind}` : renderElement(element);
+      return behind ? `${renderElement(element)} opens: ${inert(behind)}` : renderElement(element);
     }),
   );
   if (snapshot.truncated) lines.push("(more elements exist than are listed)");
@@ -387,13 +450,13 @@ export function renderSnapshot(snapshot: Snapshot, opens: (element: SnapElement)
 }
 
 function renderElement(element: SnapElement): string {
-  let line = `${element.id} ${element.role}`;
-  if (element.label) line += ` "${element.label.replace(/"/g, "'")}"`;
-  if (element.icon) line += ` icon:${element.icon}`;
-  if (element.state?.length) line += ` (${element.state.join(", ")})`;
-  if (element.context) line += ` [${element.context}]`;
-  if (element.options?.length) line += ` choices: ${element.options.map((option) => option.replace(/\|/g, "/")).join(" | ")}`;
-  if (element.href) line += ` → ${element.href}`;
+  let line = `${element.id} ${inert(element.role)}`;
+  if (element.label) line += ` ${quotedLabel(element.label)}`;
+  if (element.icon) line += ` icon:${inert(element.icon)}`;
+  if (element.state?.length) line += ` (${element.state.map(inert).join(", ")})`;
+  if (element.context) line += ` [${inert(element.context)}]`;
+  if (element.options?.length) line += ` choices: ${element.options.map((option) => inert(option).replace(/\|/g, "/")).join(" | ")}`;
+  if (element.href) line += ` → ${inert(element.href)}`;
   if (element.offscreen) line += ` ${element.offscreen} the visible area`;
   return line;
 }

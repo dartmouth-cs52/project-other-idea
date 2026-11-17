@@ -588,10 +588,11 @@ changes it. When it is anything else, "Use Haptic blue" puts it back. The
 launcher sits bottom right on every site, where support chat usually lives,
 and that is not a setting. Deleting a site leads back to the list of sites.
 
-**Sites.** A company with one site lands inside it. With more than one, the
-first page is the list, one card a site. Sites whose script is running come
-first, the one asked most recently at their head, and those still waiting for
-the script come last, so the first card is the one with something happening.
+**Sites.** The first page after sign-in is the list, one card a site, for a
+company with one site as for one with several. A site opens when its card is
+pressed or a link names it. Sites whose script is running come first, the one
+asked most recently at their head, and those still waiting for the script
+come last, so the first card is the one with something happening.
 A card says how many questions the last seven days had and how many finished,
 the last fortnight as fourteen small bars, and the newest question. A site
 still waiting for its script says so in place of the numbers. A running site
