@@ -10,7 +10,7 @@ import { ApiError, api, type Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
 import { nextStep, previousStep, SETUP_STEPS, stepFor, stepIndex, type SetupStepId } from "@/lib/setup";
 import { site as brand } from "@/lib/site";
-import { leaveFor } from "../parts";
+import { useSignOut } from "../shell";
 import { AddressStep } from "./address-step";
 import { ConnectStep } from "./connect-step";
 import { useEnterToContinue } from "./frame";
@@ -47,6 +47,7 @@ export function SetupFlow() {
   // Where the setup is, when saving it failed: shown on every screen with Retry, until a save goes through.
   const [unsaved, setUnsaved] = useState<{ id: string; body: Record<string, unknown> } | null>(null);
   const pages = useSetupReading(site);
+  const { signOut, signingOut, failure: signOutFailure } = useSignOut();
   useEnterToContinue();
 
   // Who is signed in. Sign-in links land on the dashboard, so this only sends people back where they belong.
@@ -184,21 +185,19 @@ export function SetupFlow() {
             Back to the dashboard
           </Button>
         ) : me ? (
-          <Button
-            variant="ghost"
-            size="lg"
-            onClick={async () => {
-              await auth().signOut();
-              leaveFor("/sign-in/");
-            }}
-          >
-            Sign out
+          <Button variant="ghost" size="lg" onClick={signOut} disabled={signingOut}>
+            {signingOut ? "Signing out" : "Sign out"}
           </Button>
         ) : null}
       </header>
       <div className="h-0.5 w-full bg-border" role="progressbar" aria-label="Setup" aria-valuemin={1} aria-valuemax={SETUP_STEPS.length} aria-valuenow={index + 1}>
         <div className="h-full bg-primary transition-[width] duration-250 ease-out motion-reduce:transition-none" style={{ width: `${((index + 1) / SETUP_STEPS.length) * 100}%` }} />
       </div>
+      {signOutFailure && (
+        <div className="mx-auto w-full max-w-2xl px-6 pt-6">
+          <FormAlert failure={signOutFailure} retry={signOut} />
+        </div>
+      )}
       {unsaved && (
         <div className="mx-auto w-full max-w-2xl px-6 pt-6">
           <FormAlert

@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { FormAlert } from "@/components/form";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ApiError, api, type Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
 import { siteAt } from "@/lib/dashboard";
 import { accessHref } from "@/lib/site";
 import { SITES_HREF, viewFrom } from "./nav";
-import { Card, FailedCard, leaveFor } from "./parts";
-import { Plain } from "./shell";
+import { Card, FailedCard } from "./parts";
+import { Plain, useSignOut } from "./shell";
 import { BillingPage } from "./billing";
 import { TeamPage } from "./team";
 import { SiteView } from "./site-view";
@@ -124,10 +125,7 @@ export function Dashboard() {
 }
 
 function NotApproved({ me }: { me: Me }) {
-  async function signOut() {
-    await auth().signOut();
-    leaveFor("/sign-in/");
-  }
+  const { signOut, signingOut, failure } = useSignOut();
   return (
     <Card className="max-w-2xl">
       <h1 className="text-2xl font-medium tracking-[-0.02em]">{me.reason === "unverified" ? "Confirm your email first" : "You are signed in, but not approved yet"}</h1>
@@ -141,10 +139,11 @@ function NotApproved({ me }: { me: Me }) {
         <a href={accessHref} className={buttonVariants({ size: "xl" })}>
           Request access
         </a>
-        <Button variant="secondary" size="xl" onClick={signOut}>
-          Use a different account
+        <Button variant="secondary" size="xl" onClick={signOut} disabled={signingOut}>
+          {signingOut ? "Signing out" : "Use a different account"}
         </Button>
       </div>
+      <FormAlert failure={failure} retry={signOut} />
     </Card>
   );
 }

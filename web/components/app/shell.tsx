@@ -3,11 +3,12 @@
 // The frame around every signed-in page: a bar across the top that says where
 // you are, and, inside a site, a list of its pages down the left.
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, CreditCard, LayoutGrid, LogOut, Plus, Users } from "lucide-react";
 import { cn } from "cn";
+import { FormAlert, type Failure } from "@/components/form";
 import { Pointer } from "@/components/pointer";
 import {
   DropdownMenu,
@@ -34,6 +35,40 @@ function firstName(name: string | undefined): string | undefined {
   return name?.trim().split(/\s+/)[0] || undefined;
 }
 
+/**
+ * Signing out. The session is a cookie the page can't clear by itself, so until the call has gone through the person
+ * is still signed in. When it fails, the page stays and `failure` says so, for the page to show with Try again: the
+ * sign-in page would tell them they had left. Once it has gone through, the page leaves for the sign-in page with a
+ * full page load, for the reason given at leaveFor.
+ */
+export function useSignOut() {
+  const [signingOut, setSigningOut] = useState(false);
+  const [failure, setFailure] = useState<Failure | null>(null);
+
+  async function signOut() {
+    setSigningOut(true);
+    setFailure(null);
+    try {
+      const { error } = await auth().signOut();
+      if (!error) return leaveFor("/sign-in/");
+    } catch {
+      // The auth client throws when the call is turned down or can't reach the server, as well as returning an error.
+    }
+    setSigningOut(false);
+    setFailure({ title: "Couldn't sign you out", detail: "You are still signed in. Try again in a moment." });
+  }
+
+  return { signOut, signingOut, failure };
+}
+
+/** What Sign out in the bar says when it didn't go through. It sits at the top of the page, which is brought into view. */
+function SignOutFailed({ failure, retry }: { failure: Failure | null; retry: () => void }) {
+  useEffect(() => {
+    if (failure) window.scrollTo({ top: 0 });
+  }, [failure]);
+  return <FormAlert failure={failure} retry={retry} />;
+}
+
 const CRUMB = "inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50";
 
 function Slash() {
@@ -49,20 +84,16 @@ function Slash() {
  * leads to the list of sites, then the site, which is a menu of the company's
  * sites. Who is signed in is on the right, with their company in the menu.
  * It sticks to the top of the window. `className` can hold it there another
- * way, as SiteShell does.
+ * way, as SiteShell does. `onSignOut` is what Sign out in the menu does: the
+ * frames below pass the one from useSignOut, and show what it says.
  */
-export function TopBar({ me, current, className }: { me?: Me; current?: SiteRow; className?: string }) {
+export function TopBar({ me, current, className, onSignOut }: { me?: Me; current?: SiteRow; className?: string; onSignOut?: () => void }) {
   const router = useRouter();
   // The sites whose script is running come first, here and on the list of sites, since those are the ones with something to see.
   const sites = [...(me?.sites ?? [])].sort((a, b) => Number(b.connected) - Number(a.connected));
   const inside = Boolean(me?.approved && sites.length);
   // A new site is named after its company, so two of a company's sites can share a name. Only then is the address needed to tell them apart.
   const shared = (site: SiteRow) => sites.filter((other) => other.name === site.name).length > 1;
-
-  async function signOut() {
-    await auth().signOut();
-    leaveFor("/sign-in/");
-  }
 
   return (
     <header className={cn("sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-4 border-b bg-background px-4 sm:px-6", className)}>
@@ -143,7 +174,7 @@ export function TopBar({ me, current, className }: { me?: Me; current?: SiteRow;
                 Billing
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={signOut} className="gap-2 py-1.5">
+            <DropdownMenuItem onClick={onSignOut} className="gap-2 py-1.5">
               <LogOut className="text-muted-foreground" />
               Sign out
             </DropdownMenuItem>
@@ -157,10 +188,14 @@ export function TopBar({ me, current, className }: { me?: Me; current?: SiteRow;
 
 /** A page with the bar across the top and nothing down the side: the list of sites, adding one, and the pages before a company is approved. */
 export function Plain({ me, children, wide = false }: { me?: Me; children: ReactNode; wide?: boolean }) {
+  const { signOut, failure } = useSignOut();
   return (
     <>
-      <TopBar me={me} />
-      <main className={cn("mx-auto flex w-full flex-col gap-6 px-4 py-10 sm:px-6", wide ? "max-w-6xl" : "max-w-5xl")}>{children}</main>
+      <TopBar me={me} onSignOut={signOut} />
+      <main className={cn("mx-auto flex w-full flex-col gap-6 px-4 py-10 sm:px-6", wide ? "max-w-6xl" : "max-w-5xl")}>
+        <SignOutFailed failure={failure} retry={signOut} />
+        {children}
+      </main>
     </>
   );
 }
@@ -176,9 +211,10 @@ export function Plain({ me, children, wide = false }: { me?: Me; children: React
  * the bar and the row both stick, so they move together.
  */
 export function SiteShell({ me, current, view, children }: { me: Me; current: SiteRow; view: View; children: ReactNode }) {
+  const { signOut, failure } = useSignOut();
   return (
     <>
-      <TopBar me={me} current={current} className="lg:fixed lg:inset-x-0" />
+      <TopBar me={me} current={current} className="lg:fixed lg:inset-x-0" onSignOut={signOut} />
       <nav aria-label={`${current.name} pages`} className="sticky top-14 z-30 flex gap-1 overflow-x-auto border-b bg-background px-4 py-2 sm:px-6 lg:hidden">
         {VIEWS.map((item) => (
           <PageLink key={item.id} site={current.id} item={item} on={item.id === view} />
@@ -193,7 +229,10 @@ export function SiteShell({ me, current, view, children }: { me: Me; current: Si
       </aside>
       {/* The bar takes no room of its own from 1024px, so the page leaves room for it. */}
       <main className="min-w-0 flex-1 lg:pt-14 lg:pl-56">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">{children}</div>
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
+          <SignOutFailed failure={failure} retry={signOut} />
+          {children}
+        </div>
       </main>
     </>
   );

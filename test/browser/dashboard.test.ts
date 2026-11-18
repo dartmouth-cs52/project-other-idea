@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import type { Locator, Page } from "playwright";
 import { launcherColour } from "../../src/shared/colour.ts";
-import { BRAND, NO_SITE_COMPANY, ONE_SITE, ONE_SITE_COMPANY, SETTING_UP, SETTING_UP_COMPANY, SITE, SKIP, WAITING, startDashboard, type Dashboard } from "./dashboard-harness.ts";
+import { BRAND, COMPANY, NO_SITE_COMPANY, ONE_SITE, ONE_SITE_COMPANY, SETTING_UP, SETTING_UP_COMPANY, SITE, SKIP, WAITING, startDashboard, type Dashboard } from "./dashboard-harness.ts";
 
 // The dashboard keeping itself current, and the things about it that only show
 // in a real browser. Each test opens the built page, changes the database the
@@ -301,6 +301,52 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         await tab.getByRole("button", { name: "Use a different email" }).click();
         await eventually(() => tab.getByLabel("Work email").evaluate((el) => el === document.activeElement), "the focus should be back in the email field");
       });
+    });
+
+    test("a sign-out that fails says the person is still signed in, in view, and Try again signs them out", async () => {
+      // Sign out is in the bar's menu, which is there however far down a page the person is, and on two buttons of
+      // pages that have no menu yet. The auth client throws when the call fails, and each of them once did nothing.
+      const places = [
+        { from: "the bar's menu, far down a site's page", path: `/dashboard/?site=${SITE}`, company: COMPANY, fail: "server", button: "Sign out" },
+        { from: "the setup screens, before the company has a site", path: "/dashboard/setup/", company: NO_SITE_COMPANY, fail: "network", button: "Sign out" },
+        { from: "the card for an account that isn't approved", path: "/dashboard/", company: COMPANY, fail: "server", button: "Use a different account" },
+      ] as const;
+      for (const place of places) {
+        const tab = await dash.open(place.path, undefined, place.company);
+        await closing(tab, async () => {
+          if (place.button === "Use a different account") {
+            await tab.route("**/api/app/me", (route) => route.fulfill({ json: { user: { email: "eve@elsewhere.example", name: "Eve" }, approved: false, reason: "not_approved" } }));
+            await tab.reload();
+          }
+          await tab.route("**/api/auth/sign-out", (route) => (place.fail === "network" ? route.abort("failed") : route.fulfill({ status: 500, json: { message: "Server error" } })));
+          const before = tab.url();
+          if (place.path.includes("site=")) {
+            await tab.locator('[data-metric="Guides finished"]').waitFor({ timeout: 15_000 });
+            await eventually(() => tab.evaluate(() => document.scrollingElement!.scrollHeight > window.innerHeight + 200), "the overview should be long enough to scroll");
+            await tab.evaluate(() => window.scrollTo({ top: document.scrollingElement!.scrollHeight, behavior: "instant" }));
+            await tab.getByRole("button", { name: "Account" }).click();
+            await tab.getByRole("menuitem", { name: "Sign out" }).click();
+          } else {
+            await tab.getByRole("button", { name: place.button }).click();
+          }
+          const alert = tab.getByRole("alert").filter({ hasText: "Couldn't sign you out" });
+          await alert.waitFor({ timeout: 5_000 });
+          assert.equal(tab.url(), before, `from ${place.from}, the page should stay`);
+          assert.match(await alert.innerText(), /You are still signed in/);
+          // The page scrolls smoothly, so this can take a moment.
+          await eventually(
+            () =>
+              alert.evaluate((el) => {
+                const box = el.getBoundingClientRect();
+                return box.top >= 0 && box.bottom <= window.innerHeight;
+              }),
+            `from ${place.from}, what it says should come into view`,
+          );
+          await tab.unroute("**/api/auth/sign-out");
+          await alert.getByRole("button", { name: "Try again" }).click();
+          await tab.waitForURL("**/sign-in/", { timeout: 10_000 });
+        });
+      }
     });
   });
 
