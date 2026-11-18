@@ -60,8 +60,36 @@ export async function daily(env: Env): Promise<void> {
   await forgetOldTeaching(database(env.DATABASE_URL)).catch((error: Error) => console.error("Could not delete old teach sessions:", error.message));
 }
 
+/**
+ * Sent with every answer, the static pages and /api/ alike: HTTPS only, no guessing at a file's type, no more
+ * than our origin in the Referer other sites see, no camera, microphone or location, and no page of ours in
+ * another site's frame, where a signed-in dashboard could be clicked on unseen. Nothing frames joinhaptic.com.
+ * A Content-Security-Policy that limits scripts as well would need a hash for each script Next writes into a
+ * page, and would have to let widget.joinhaptic.com in, so for now it says only who may frame a page.
+ */
+export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
+  "strict-transport-security": "max-age=31536000; includeSubDomains",
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "x-frame-options": "DENY",
+  "content-security-policy": "frame-ancestors 'none'",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+};
+
+/** The answer with SECURITY_HEADERS added. A header the answer already has is its own choice, and is kept. */
+export function secured(response: Response): Response {
+  // Copied first: the headers of a redirect, or of a file Cloudflare serves, can't be changed in place.
+  const out = new Response(response.body, response);
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) if (!out.headers.has(name)) out.headers.set(name, value);
+  return out;
+}
+
 /** `later` finishes work after the answer has gone: the request's waitUntil on Cloudflare. */
 export async function handle(request: Request, env: Env, assets: Assets, later?: Later): Promise<Response> {
+  return secured(await route(request, env, assets, later));
+}
+
+async function route(request: Request, env: Env, assets: Assets, later?: Later): Promise<Response> {
   const url = new URL(request.url);
 
   // One address for the site: www goes to the bare domain, and plain http goes to https.

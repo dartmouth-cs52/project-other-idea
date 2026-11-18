@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { appApi, approveLink } from "../worker/app-api";
 import { handle } from "../worker/handler";
+import worker from "../worker/index";
 
 // The site's Worker as a whole, which needs web/'s own packages (Neon Auth,
 // Browser Rendering), so these run with the site: `npm test` in web/, as the
@@ -87,6 +88,55 @@ test("a failure anywhere under /api answers JSON, and an address under /api noth
     assert.equal(response.status, 404, path);
     assert.deepEqual(await response.json(), { error: "Not found." });
   }
+});
+
+test("every answer carries the security headers: a static page, a redirect, a preview, the install steps and /api", async () => {
+  const expected = {
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "x-frame-options": "DENY",
+    "content-security-policy": "frame-ancestors 'none'",
+    "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  };
+  const answers = {
+    page: await handle(new Request("https://joinhaptic.com/pricing/"), env, assets),
+    redirect: await handle(new Request("https://www.joinhaptic.com/sign-in/"), env, assets),
+    preview: await handle(new Request("https://haptic-web.joinhaptic.workers.dev/"), env, assets),
+    steps: await handle(new Request(`https://joinhaptic.com/install/${SITE}.md`), env, assets),
+    signedOut: await handle(new Request("https://joinhaptic.com/api/app/me"), env, assets),
+    form: await handle(new Request("https://joinhaptic.com/api/request-access", { method: "POST", headers: { origin: "null" }, body: "{}" }), env, assets),
+    notFound: await handle(new Request("https://joinhaptic.com/api/nothing-here"), env, assets),
+  };
+  for (const [name, response] of Object.entries(answers)) {
+    for (const [header, value] of Object.entries(expected)) assert.equal(response.headers.get(header), value, `${name}: ${header}`);
+  }
+  // What each answer said for itself is still there.
+  assert.equal(answers.page.status, 200);
+  assert.equal(await answers.page.text(), "static page");
+  assert.equal(answers.redirect.status, 301);
+  assert.equal(answers.redirect.headers.get("location"), "https://joinhaptic.com/sign-in/");
+  assert.equal(answers.preview.headers.get("x-robots-tag"), "noindex");
+  assert.equal(answers.steps.headers.get("access-control-allow-origin"), "*");
+  assert.equal(answers.signedOut.status, 401);
+  assert.equal(answers.signedOut.headers.get("cache-control"), "no-store");
+  assert.equal(answers.form.status, 403);
+});
+
+test("the standard entry adds them too, even when the site's files are missing", async () => {
+  const served = await worker.fetch(new Request("https://joinhaptic.com/"), { ...env, ASSETS: assets });
+  assert.equal(served.headers.get("x-frame-options"), "DENY");
+  const missing = await worker.fetch(new Request("https://joinhaptic.com/"), env);
+  assert.equal(missing.status, 500);
+  assert.equal(missing.headers.get("strict-transport-security"), "max-age=31536000; includeSubDomains");
+});
+
+test("a header an answer sets for itself is kept, not replaced", async () => {
+  const own = { fetch: () => new Response("framed on purpose", { headers: { "content-security-policy": "frame-ancestors https://partner.example", "x-frame-options": "SAMEORIGIN" } }) };
+  const response = await handle(new Request("https://joinhaptic.com/embed/"), env, own);
+  assert.equal(response.headers.get("content-security-policy"), "frame-ancestors https://partner.example");
+  assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff", "the rest are still added");
 });
 
 test("approving a request emails a sign-in link that comes back to the list of sites", async () => {
