@@ -4,6 +4,7 @@ import { loadActing, type GateConfig } from "./acting-code.ts";
 import { Guide, type HandoffWay, type Reporter, type Watch } from "./guide.ts";
 import { startLearning, visitorId } from "./learn.ts";
 import { loadMapper, mappingAsked } from "./map-pass.ts";
+import { OWN_SCRIPT, OWN_SCRIPT_MISSING } from "./own-script.ts";
 import { loadTeaching, takeTeachToken, teachingHeld } from "./teach-code.ts";
 import { showNotice } from "./teach-notice.ts";
 import { currentPath } from "./snapshot.ts";
@@ -25,15 +26,19 @@ import { Ui } from "./ui.ts";
 // mode with data-present="1" on the script tag: a larger pointer, caption and
 // ring, and the question kept on show. It is never on otherwise.
 
-const script = document.currentScript as HTMLScriptElement | null;
+// The tag this file came from, read once as it first runs (own-script.ts). Nothing later reads document.currentScript.
+const script = OWN_SCRIPT;
 // True in a tab where someone at the company is mapping their app (map.ts).
 const mapping = mappingAsked();
 
 async function boot() {
-  const site = script?.dataset.site;
+  // Something on the page named currentScript, like an image a visitor's comment added, is not taken for the tag:
+  // it would choose the server the widget asks and the code it loads. The widget does not start.
+  if (OWN_SCRIPT_MISSING === "named") return console.warn("[Haptic] Something on this page is named currentScript, so Haptic can't tell which script tag is its own, and doesn't start.");
+  const site = script?.tag.dataset.site;
   if (!script || !site) return console.warn("[Haptic] The script tag needs a data-site attribute.");
   if (document.querySelector("haptic-root, haptic-teach")) return;
-  const api = new URL(script.src).origin;
+  const api = script.origin;
   // A link from the dashboard's "Teach Haptic" carries a token in the fragment. It leaves the address bar at once (teach.ts).
   const teachToken = takeTeachToken();
 
@@ -156,7 +161,7 @@ async function boot() {
   };
 
   // Acting is on only where the site turned it on, and the page did not turn it off.
-  const pageOff = (script.dataset.acting ?? "").trim().toLowerCase() === "off";
+  const pageOff = (script.tag.dataset.acting ?? "").trim().toLowerCase() === "off";
   const acting = config.acting && typeof config.acting === "object" && !pageOff ? config.acting : undefined;
   // What the guide and its gate are told of acting. The setting is set aside if the code that acts cannot be loaded.
   const gateConfig: GateConfig = { ...(acting ? { acting } : {}), ...(pageOff ? { pageOff } : {}) };
@@ -168,7 +173,7 @@ async function boot() {
         return ok;
       })
     : undefined;
-  const present = /^(?:1|true|on|yes)$/i.test((script.dataset.present ?? "").trim());
+  const present = /^(?:1|true|on|yes)$/i.test((script.tag.dataset.present ?? "").trim());
   const ui: Ui = new Ui(
     config.appearance,
     {

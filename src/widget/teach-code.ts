@@ -1,5 +1,6 @@
 import * as types from "../shared/types.ts";
 import { TEACH_FRAGMENT, TEACH_KEY } from "../shared/teach-link.ts";
+import type { OwnScript } from "./own-script.ts";
 import * as snapshot from "./snapshot.ts";
 import { TEACH_BUILD, TEACH_FILE, TEACH_HAND, TEACH_SHARED, type TeachCode } from "./teach-handshake.ts";
 import * as teachNotice from "./teach-notice.ts";
@@ -54,12 +55,13 @@ let code: TeachCode | undefined;
 let loading: Promise<TeachCode | undefined> | undefined;
 
 /**
- * Loads teach mode, once, from beside `script` (the widget's own script tag),
- * with its nonce when it has one. Its code once it is in; undefined when it
- * could not be loaded, ran without handing anything back, came from another
- * build, or took longer than `LOAD_MS`.
+ * Loads teach mode, once, from beside the widget's own script tag, as its
+ * address and its nonce were read when the widget first ran (own-script.ts),
+ * not as anything on the page says now. Its code once it is in; undefined
+ * when it could not be loaded, ran without handing anything back, came from
+ * another build, or took longer than `LOAD_MS`.
  */
-export function loadTeaching(script: HTMLScriptElement): Promise<TeachCode | undefined> {
+export function loadTeaching(script: Pick<OwnScript, "src" | "nonce">): Promise<TeachCode | undefined> {
   loading ??= new Promise<TeachCode | undefined>((resolve) => {
     const slots = globalThis as unknown as Record<symbol, unknown>;
     let tag: HTMLScriptElement | undefined;

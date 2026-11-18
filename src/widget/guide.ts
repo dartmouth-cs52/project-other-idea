@@ -24,6 +24,7 @@ import type { DidLine, Heard as HeardStep, Listening } from "./act.ts";
 import { confirmationAction, perform, planFor, SAYS, type ActPlan, type GateConfig, type GateSession, type Plan, type StopPlan, type VisitorPlan } from "./acting-code.ts";
 import { hear, isOwn, keyName, keysAsked, nothingHeard, OUTCOME_WINDOW_MS, OWN_TYPING_PAUSE_MS, waiting, type Fate, type Heard, type Pointed, type Seen, type Verdict, type Where } from "./observe.ts";
 import { onAddressChange } from "./navigation.ts";
+import { OWN_SCRIPT } from "./own-script.ts";
 import { isDrawn, POPUP_ROLES, watchPopups } from "./popups.ts";
 import { currentPath, describeChange, elementKey, findOpenModal, isField, nameOfPicked, NOTHING_CHANGED, sameView, statesOf, takeSnapshot, wholePage, type PageSnapshot } from "./snapshot.ts";
 import { ACTING_WORDS, bringIn, type DidShown, type Ui, SHOWING } from "./ui.ts";
@@ -2527,15 +2528,8 @@ function sameControl(asked: Snapshot, listed: SnapElement, fresh: PageSnapshot):
   return el?.isConnected ? el : undefined;
 }
 
-/** Where this script came from, which is where our own requests go. Read once, while the script is first running. */
-const OWN_ORIGIN = (() => {
-  try {
-    const src = (document.currentScript as HTMLScriptElement | null)?.src;
-    return src ? new URL(src).origin : "";
-  } catch {
-    return "";
-  }
-})();
+/** Where this script came from, which is where our own requests go. Read once, while the script is first running, and only from a script tag (own-script.ts). */
+const OWN_ORIGIN = OWN_SCRIPT?.origin ?? "";
 
 /**
  * The page's own data requests, for as long as a guide runs: when each
