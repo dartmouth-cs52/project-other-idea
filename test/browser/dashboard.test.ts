@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import type { Locator, Page } from "playwright";
+import type { BrowserContext, Locator, Page } from "playwright";
 import { launcherColour } from "../../src/shared/colour.ts";
-import { BRAND, COMPANY, NO_SITE_COMPANY, ONE_SITE, ONE_SITE_COMPANY, SETTING_UP, SETTING_UP_COMPANY, SITE, SKIP, WAITING, startDashboard, type Dashboard } from "./dashboard-harness.ts";
+import { BRAND, COMPANY, NO_SITE_COMPANY, ONE_SITE, ONE_SITE_COMPANY, SETTING_UP, SETTING_UP_COMPANY, SITE, SKIP, WAITING, startDashboard, stayLocal, type Dashboard } from "./dashboard-harness.ts";
 
 // The dashboard keeping itself current, and the things about it that only show
 // in a real browser. Each test opens the built page, changes the database the
@@ -678,6 +678,55 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
           await tab.getByLabel("Your app's address").waitFor({ timeout: 10_000 });
         });
       }
+    });
+  });
+
+  describe("on a phone, and with long names", () => {
+    const PHONE = { width: 375, height: 667 };
+
+    /**
+     * A new tab on a page, as `dash.open` opens one, at `size`: a touch screen when `touch` is set, and with `prepare`
+     * run on its context before the page loads, such as to answer a call the harness doesn't serve.
+     */
+    async function openOn(path: string, size: { width: number; height: number }, options: { company?: string; touch?: boolean; prepare?: (context: BrowserContext) => Promise<unknown> } = {}): Promise<Page> {
+      const context = await dash.browser.newContext({ viewport: size, isMobile: options.touch ?? false, hasTouch: options.touch ?? false });
+      await stayLocal(context);
+      await context.addCookies([{ name: "company", value: options.company ?? COMPANY, url: dash.url }]);
+      await options.prepare?.(context);
+      const tab = await context.newPage();
+      await tab.goto(`${dash.url}${path}`);
+      await tab.locator("header").first().waitFor({ timeout: 10_000 });
+      return tab;
+    }
+
+    /** How far the page reaches past the right edge of what can be seen. On a phone that zooms a page out to fit it, the window grows with it, so this measures against the page's own width. */
+    const sideways = (tab: Page) => tab.evaluate(() => document.scrollingElement!.scrollWidth - document.documentElement.clientWidth);
+
+    test("the Questions page can be read on a phone: a question wraps, with how it ended and when under it", async () => {
+      const question = "How do I change the billing address on an invoice I already sent to a customer last month?";
+      dash.end(dash.ask(question));
+      const tab = await openOn(`/dashboard/?site=${SITE}&view=questions`, PHONE);
+      await closing(tab, async () => {
+        const row = tab.locator("main tbody tr", { hasText: question });
+        await row.waitFor({ timeout: 10_000 });
+        const shown = await row.evaluate((tr) => {
+          const words = tr.querySelector("button")!;
+          const table = tr.closest('[data-slot="table-container"]')!;
+          return {
+            cut: words.scrollWidth > words.clientWidth + 1,
+            lines: Math.round(words.getBoundingClientRect().height / parseFloat(getComputedStyle(words).lineHeight)),
+            share: words.getBoundingClientRect().width / table.clientWidth,
+            wider: table.scrollWidth - table.clientWidth,
+          };
+        });
+        // The question once had 50px of a 375px phone, and showed "How d…".
+        assert.equal(shown.cut, false, "the question is cut off");
+        assert.ok(shown.lines >= 2, "a long question goes on to a second line");
+        assert.ok(shown.share > 0.75, `the question has ${Math.round(shown.share * 100)}% of the table's width`);
+        assert.ok(shown.wider <= 1, `the table is ${shown.wider}px wider than its card, which pushed When out of it`);
+        assert.match(await row.innerText(), /Finished\s+just now/, "how it ended and when are under the question");
+        assert.ok((await sideways(tab)) <= 0, "the page scrolls sideways");
+      });
     });
   });
 });

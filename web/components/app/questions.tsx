@@ -75,28 +75,34 @@ export function Questions({ data, live, onOpen }: { data: Insights | null; live:
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="h-10 px-5 text-xs font-medium text-muted-foreground">Question</TableHead>
-                <TableHead className="h-10 px-3 text-xs font-medium text-muted-foreground">How it ended</TableHead>
+                <TableHead className="hidden h-10 px-3 text-xs font-medium text-muted-foreground sm:table-cell">How it ended</TableHead>
                 <TableHead className="hidden h-10 px-3 text-right text-xs font-medium text-muted-foreground md:table-cell">Steps</TableHead>
                 <TableHead className="hidden h-10 px-3 text-xs font-medium text-muted-foreground lg:table-cell">Asked on</TableHead>
-                <TableHead className="h-10 px-5 text-right text-xs font-medium text-muted-foreground">When</TableHead>
+                <TableHead className="hidden h-10 px-5 text-right text-xs font-medium text-muted-foreground sm:table-cell">When</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {shown.map((row) => (
                 <TableRow key={row.id} onClick={() => onOpen(row.id)} className="cursor-pointer hover:bg-muted/60 motion-safe:animate-in motion-safe:duration-200 motion-safe:fade-in-0">
-                  <TableCell className="max-w-0 px-5 py-2.5 sm:w-1/2">
+                  {/* On a phone there is no room for the columns side by side, so the question wraps and how it ended and when sit under it. */}
+                  <TableCell className="px-5 py-2.5 whitespace-normal sm:w-1/2 sm:max-w-0">
                     {/* The button is what the keyboard reaches. A click anywhere on the row does the same. */}
-                    <button type="button" className="block w-full truncate rounded-sm text-left font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+                    <button type="button" className="block w-full rounded-sm text-left font-medium outline-none [overflow-wrap:anywhere] focus-visible:ring-3 focus-visible:ring-ring/50 sm:truncate">
                       {row.question}
                     </button>
+                    <span className="mt-1 flex flex-wrap items-center justify-between gap-x-3 sm:hidden">
+                      <span>
+                        <Ending row={row} />
+                      </span>
+                      <span className="text-muted-foreground tabular-nums">{when(row.started_at)}</span>
+                    </span>
                   </TableCell>
-                  <TableCell className="px-3 py-2.5">
-                    <GuideStatus outcome={row.outcome} helped={row.helped} paused={row.paused} step={row.step_count ? row.step_count - 1 : null} />
-                    {row.helped !== null && <span className="text-muted-foreground">, {row.helped ? "helped" : "did not help"}</span>}
+                  <TableCell className="hidden px-3 py-2.5 sm:table-cell">
+                    <Ending row={row} />
                   </TableCell>
                   <TableCell className="hidden px-3 py-2.5 text-right text-muted-foreground tabular-nums md:table-cell">{row.step_count}</TableCell>
                   <TableCell className="hidden max-w-40 truncate px-3 py-2.5 text-muted-foreground lg:table-cell">{row.started_path}</TableCell>
-                  <TableCell className="px-5 py-2.5 text-right text-muted-foreground tabular-nums">{when(row.started_at)}</TableCell>
+                  <TableCell className="hidden px-5 py-2.5 text-right text-muted-foreground tabular-nums sm:table-cell">{when(row.started_at)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -109,5 +115,15 @@ export function Questions({ data, live, onOpen }: { data: Insights | null; live:
       </section>
       {data && data.recent.length >= MOST && <p className="text-xs text-muted-foreground">The {MOST} most recent questions of the last {data.days} days are shown.</p>}
     </div>
+  );
+}
+
+/** How a question's guide ended, and what the person said about it when they said anything. */
+function Ending({ row }: { row: Insights["recent"][number] }) {
+  return (
+    <>
+      <GuideStatus outcome={row.outcome} helped={row.helped} paused={row.paused} step={row.step_count ? row.step_count - 1 : null} />
+      {row.helped !== null && <span className="text-muted-foreground">, {row.helped ? "helped" : "did not help"}</span>}
+    </>
   );
 }
