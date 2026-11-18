@@ -44,6 +44,8 @@ function endless(piece: Uint8Array) {
 }
 
 const bytes = (text: string) => new TextEncoder().encode(text);
+/** Lets every stream that would read on its own do so, before anything is checked. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
 /** Splits bytes at the given offsets. */
 function split(data: Uint8Array, at: number[]): Uint8Array[] {
   const edges = [0, ...at, data.length];
@@ -123,6 +125,7 @@ test("a bounded request reads nothing until its body is asked for, then gives th
   const data = new Uint8Array([...bytes('{"a":"é"}'), 0xff, 0xc3, ...bytes(" end")]);
   const { request, seen } = streamed(split(data, [2, 7, 11]), { "content-type": "application/json" });
   const held = boundedRequest(request, 1_000)!;
+  await settle();
   assert.equal(seen.pulled, 0, "nothing is read before a route asks");
   assert.equal(held.request.url, URL);
   assert.equal(held.request.method, "POST");
@@ -131,6 +134,18 @@ test("a bounded request reads nothing until its body is asked for, then gives th
   assert.equal(held.cut(), false);
   const get = new Request(URL);
   assert.equal(boundedRequest(get, 1_000)!.request, get, "a request with no body is handed on as it is");
+});
+
+test("a bounded request whose first piece is past the limit is not read, nor found too long, while no route reads it", async () => {
+  // A route can fail before it reads the body, and the Worker then says why, not that the body was too long.
+  const piece = new Uint8Array(64 * 1024).fill(0x78);
+  const { request, seen } = endless(piece);
+  const held = boundedRequest(request, 16 * 1024)!;
+  await settle();
+  assert.equal(seen.pulled, 0);
+  assert.equal(held.cut(), false);
+  await assert.rejects(held.request.text());
+  assert.equal(held.cut(), true, "and once one does, it is");
 });
 
 test("a bounded request that says its body is too long is turned away unread, and one that runs on fails once past the limit", async () => {
@@ -159,6 +174,15 @@ test("a response within the limit comes back as Response.text() reads it, and sa
   assert.equal(kept.headers.get("content-length"), null);
   assert.equal(await kept.text(), text);
   assert.equal(await cappedText(new Response("short"), 1_000), "short");
+});
+
+test("nothing is read from a site's response until it is asked for", async () => {
+  const piece = new Uint8Array(64 * 1024).fill(0x78);
+  const { request, seen } = endless(piece);
+  const kept = capped(response(request.body!), 200_000);
+  await settle();
+  assert.equal(seen.pulled, 0);
+  assert.equal((await kept.text()).length, 200_000);
 });
 
 test("a response that never ends is cut off at the limit, and the rest is never read", async () => {

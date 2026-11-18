@@ -210,6 +210,27 @@ test("no route under /api reads a body past its limit: not Neon's sign-in proxy,
   }
 });
 
+test("a route that fails before it reads a long body says why, and isn't taken for a body too long", async () => {
+  // The rate limit for sign-in is checked before Neon's proxy reads anything, and here it fails.
+  const broken = { limit: async (): Promise<{ success: boolean }> => { throw new Error("The rate limit binding is down."); } };
+  const errors: unknown[][] = [];
+  const real = console.error;
+  console.error = (...args: unknown[]) => void errors.push(args);
+  try {
+    // One piece of 64 KB, past the 16 KB sign-in may send, with no length given.
+    const sent = long(new Uint8Array(64 * 1024).fill(0x20), 1);
+    const init = { method: "POST", headers: { origin: "https://joinhaptic.com", "content-type": "application/json" }, body: sent.body, duplex: "half" };
+    const response = await handle(new Request("https://joinhaptic.com/api/auth/sign-in/magic-link", init as RequestInit), { ...env, AUTH_LIMIT: broken }, assets);
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), { error: "Something went wrong on our side." });
+    assert.equal(sent.seen.bytes, 0, "nothing was read");
+  } finally {
+    console.error = real;
+  }
+  assert.equal(errors.length, 1, "and the failure is logged");
+  assert.match(String((errors[0]![1] as Error).message), /rate limit binding is down/);
+});
+
 test("a body within the limit reaches its route byte for byte, so Stripe's signature over it still holds", async () => {
   const secret = "whsec_test_secret";
   // A live event to a test key is checked and then set aside, which needs no database: the signature is what is tested.

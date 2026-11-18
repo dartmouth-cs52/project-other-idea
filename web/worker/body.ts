@@ -39,9 +39,10 @@ export async function boundedText(request: Request, maxChars: number): Promise<s
 /**
  * The same request, with a body that can't be read past `maxBytes`: reading on fails, and the rest is never
  * read. For code that reads a body whole and can't be changed to use the above, such as Neon's sign-in proxy.
- * Nothing is read here, so a route that turns the caller away first reads none of it, and the bytes it does
- * read are the ones sent, so a signature over them still holds. `cut` says whether reading went past the
- * limit, however the error that came of it was passed on. Null when the request says its body is longer.
+ * Nothing is read until a route reads it, so a route that turns the caller away first reads none of it, and
+ * the bytes it does read are the ones sent, so a signature over them still holds. `cut` says whether reading
+ * went past the limit, however the error that came of it was passed on. Null when the request says its body
+ * is longer.
  */
 export function boundedRequest(request: Request, maxBytes: number): { request: Request; cut: () => boolean } | null {
   if (!request.body || request.method === "GET" || request.method === "HEAD") return { request, cut: () => false };
@@ -49,6 +50,9 @@ export function boundedRequest(request: Request, maxBytes: number): { request: R
   const reader = request.body.getReader();
   let bytes = 0;
   let cut = false;
+  // It keeps no piece in hand (highWaterMark 0). A stream otherwise asks for its first piece as soon as it is
+  // made, before any route has asked, and a first piece past the limit would then turn a failure that has
+  // nothing to do with the body into a 413.
   const body = new ReadableStream<Uint8Array>({
     async pull(controller) {
       const { done, value } = await reader.read();
@@ -62,7 +66,7 @@ export function boundedRequest(request: Request, maxBytes: number): { request: R
     cancel(reason) {
       return reader.cancel(reason);
     },
-  });
+  }, { highWaterMark: 0 });
   return { request: new Request(request, { body, duplex: "half" } as RequestInit), cut: () => cut };
 }
 
@@ -81,6 +85,7 @@ export function capped(response: Response, maxBytes: number, tooLong?: () => Err
   if (!response.body) return response;
   const reader = response.body.getReader();
   let bytes = 0;
+  // Nothing is read from the site until the reader asks, as above.
   const body = new ReadableStream<Uint8Array>({
     async pull(controller) {
       const { done, value } = await reader.read();
@@ -96,7 +101,7 @@ export function capped(response: Response, maxBytes: number, tooLong?: () => Err
     cancel(reason) {
       return reader.cancel(reason);
     },
-  });
+  }, { highWaterMark: 0 });
   // What is read here is already decoded, and may be shorter than the length the site gave.
   const headers = new Headers(response.headers);
   headers.delete("content-length");
