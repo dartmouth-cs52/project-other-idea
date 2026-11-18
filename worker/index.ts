@@ -254,7 +254,9 @@ export default {
         // And the step on the guide's record, as the dashboard shows it (src/server/db.ts).
         later(db?.recordStep(turn, measure, origin, route));
       },
-      ...(db ? { findRoute: (site: SiteContext, lookup: RouteLookup) => db.findRoute(site.id, lookup) } : {}),
+      ...(db
+        ? { findRoute: (site: SiteContext, lookup: RouteLookup) => db.findRoute(site.id, lookup), serveRoute: (site: SiteContext, network: string) => db.serveRoute(site.id, network) }
+        : {}),
       onReport: (site, guide, report, network) => later(db?.report(site, guide, report, network)),
       onCancel: (turn) => later(db?.cancelStep(turn)),
       onOutline: (site, visitor, outline, network) => later(db?.recordOutline(site, visitor, outline, network)),

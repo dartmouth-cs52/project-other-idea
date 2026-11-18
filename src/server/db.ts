@@ -89,6 +89,16 @@ const LABELS_READ = 1500;
  */
 const NETWORK_ROWS_A_DAY = 500;
 
+/**
+ * How many steps verified routes may answer for one network on one site in a
+ * day (db/migrations/0020). A step a route answers costs nothing and no budget
+ * holds it, yet a guide that finishes on one is billed, so without this one
+ * network could have as many billed guides answered for nothing as it could
+ * ask for. Past it, the network's steps go to the model, inside the budget, as
+ * they would without routes: the people behind a busy address lose only the speed.
+ */
+const ROUTE_STEPS_A_DAY = 100;
+
 /** How long a report waits before each look for its guide's row. A Worker may keep working this long after it has answered. */
 const REPORT_RETRIES_MS = [0, 1000, 3000, 6000];
 
@@ -178,6 +188,10 @@ export class Store {
   private readonly networkRowsADay: number;
   /** The day this process last cleared the days before from outline_network_days. */
   private clearedDay = "";
+  /** How many steps verified routes may answer for one network on one site in a day. */
+  private readonly routeStepsADay: number;
+  /** The day this process last cleared the days before from route_network_days. */
+  private clearedRouteDay = "";
   /** Stripe's secret key. With it, a guide kept as finished is sent to Stripe as usage straight away. */
   private readonly stripeKey: string | undefined;
 
@@ -189,8 +203,8 @@ export class Store {
    * the same number unless given. `routeNetworks` is how many networks
    * finished guides must have come from to trust a verified route, as many as
    * a label needs unless given. A test makes `reportWaitsMs`, `maxLabels`,
-   * `labelsRead` and `networkRowsADay` small. `stripeKey` turns on sending
-   * finished guides to Stripe.
+   * `labelsRead`, `networkRowsADay` and `routeStepsADay` small. `stripeKey`
+   * turns on sending finished guides to Stripe.
    */
   constructor(
     connection: string | NeonQueryFunction<false, false>,
@@ -202,6 +216,7 @@ export class Store {
       maxLabels?: number;
       labelsRead?: number;
       networkRowsADay?: number;
+      routeStepsADay?: number;
       stripeKey?: string;
     } = {},
   ) {
@@ -212,6 +227,7 @@ export class Store {
     this.maxLabels = options.maxLabels ?? MAX_LABELS;
     this.labelsRead = options.labelsRead ?? LABELS_READ;
     this.networkRowsADay = options.networkRowsADay ?? NETWORK_ROWS_A_DAY;
+    this.routeStepsADay = options.routeStepsADay ?? ROUTE_STEPS_A_DAY;
     this.stripeKey = options.stripeKey || undefined;
   }
 
@@ -760,6 +776,34 @@ export class Store {
     }
     const row = rows[0];
     return row ? { targetKey: row.target_key, targetContext: row.target_context, say: row.say, status: row.status, confirmed: row.confirmed } : undefined;
+  }
+
+  /**
+   * Counts a step about to be answered from a verified route for `network`,
+   * the network the caller is in, hashed with the site's id (`networkHash` in
+   * learned.ts), and says whether that network is still within its day's share
+   * of such steps on this site (`routeStepsADay`). False when it cannot be
+   * counted, such as on a database without db/migrations/0020: the model
+   * answers then. Once a day this process also deletes the counts of earlier
+   * days, which nothing reads.
+   */
+  async serveRoute(siteId: string, network: string): Promise<boolean> {
+    let within = false;
+    await this.quietly("count a step answered from a route (has db/migrations/0020 been applied?)", async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      if (this.clearedRouteDay !== today) {
+        this.clearedRouteDay = today;
+        await this.sql`delete from route_network_days where day < current_date`;
+      }
+      const [day] = (await this.sql`
+        insert into route_network_days (site_id, network, day, served) values (${siteId}, ${network}, current_date, 1)
+        on conflict (site_id, network, day) do update set served = route_network_days.served + 1
+        returning served`) as { served: number }[];
+      within = day !== undefined && day.served <= this.routeStepsADay;
+      if (day?.served === this.routeStepsADay + 1)
+        console.warn(`A network has had ${this.routeStepsADay} steps on ${siteId} answered from routes today, so the model answers the rest until tomorrow.`);
+    });
+    return within;
   }
 
   /**

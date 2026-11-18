@@ -77,6 +77,14 @@ export interface AppParts {
   /** The verified route stored for a question on a screen. Without it, every step goes to the model. See routes.ts. */
   findRoute?(site: SiteContext, lookup: RouteLookup): Promise<StoredRoute | undefined>;
   /**
+   * Counts a step about to be answered from a verified route for the network the caller is in, hashed as for an
+   * outline, and says whether that network still has such steps left today on this site (`Store.serveRoute`). When it
+   * has none, the model answers, inside the budget. A step a route answers costs nothing and no budget holds it, yet a
+   * guide that finishes on one is billed, so this is what bounds how many guides one network can have answered for
+   * nothing. Without it, only the caller's limit on steps a minute does. Must not throw.
+   */
+  serveRoute?(site: SiteContext, network: string): Promise<boolean>;
+  /**
    * Told when the widget hung up before a step was ready, because the page
    * changed while the model was answering. The widget asks for the step again
    * from the new page, so the dropped one is only counted. Must not throw.
@@ -225,11 +233,12 @@ export function createApp(parts: AppParts) {
 
       // The step's verified route (routes.ts) is looked up from here on, beside the budget and the model call. On a
       // site that serves routes, a trusted one that matches this page answers the step without the model. That step
-      // makes no model call, so nothing is set aside from the budget for it and nothing is charged. It is answered
-      // only after the caller's limit above, which it counts toward like any other step: with no budget to stop it,
-      // that limit is what bounds how many guides one caller can have answered for nothing.
+      // makes no model call, so nothing is set aside from the budget for it and nothing is charged. With no budget to
+      // stop it, two things bound how many guides can be answered for nothing: the caller's limit above, which it
+      // counts toward like any other step, and its network's share of such steps for the day (`serveRoute`). The
+      // limit counts an IPv6 caller by its /64, and one /48 holds 65,536 of them. The share counts the network.
       const routing = startRouting(parts, site, turn);
-      const served = await servedStep(routing, site, turn);
+      const served = await servedStep(routing, site, turn, shareFor(parts, site, address));
       if (served) {
         if (turn.step === 0 && turn.guide) parts.onAsk?.(turn, site, origin);
         parts.onTurn?.(turn, served.measure, site, origin, served.route);
@@ -467,18 +476,36 @@ export function startRouting(parts: Pick<AppParts, "findRoute">, site: SiteConte
 /**
  * The step answered from its route, on a site that serves them, when a trusted
  * route matches exactly one control on this page that the site's owner has
- * not ruled out, and nothing the owner said since applies to this step
- * (`ownerSteers`). Undefined otherwise, and the model answers.
+ * not ruled out, nothing the owner said since applies to this step
+ * (`ownerSteers`), and `share`, when the host keeps one, says the caller's
+ * network has such a step left today. Undefined otherwise, and the model answers.
  */
-export async function servedStep(routing: Routing | undefined, site: SiteContext, turn: TurnRequest): Promise<{ measure: TurnMeasure; route: RouteResult } | undefined> {
+export async function servedStep(
+  routing: Routing | undefined,
+  site: SiteContext,
+  turn: TurnRequest,
+  share?: () => Promise<boolean>,
+): Promise<{ measure: TurnMeasure; route: RouteResult } | undefined> {
   if (!routing?.serve || ownerSteers(site, turn)) return undefined;
   const route = await routing.found;
   const reply = route === TIMED_OUT ? undefined : servedReply(route, turn.snapshot, routing.lookup, site.blocked);
   if (!reply) return undefined;
+  // Asked only for a step the route would answer, so that is all the share counts. One not counted in time is spent.
+  if (share && (await within(share(), ROUTE_WAIT_MS.serve)) !== true) return undefined;
   const ms = Date.now() - routing.started;
   // A stored sentence was tidied when the model first wrote it, so it is its own original.
   const measure: TurnMeasure = { reply, model: ROUTE_MODEL, ms, msToTarget: ms, cited: [], wrote: reply.say, broke: [], usd: 0 };
   return { measure, route: { lookup: routing.lookup, outcome: "served" } };
+}
+
+/** The caller's network's share of steps answered from routes, when the host keeps one. A caller whose network can't be told has none. */
+function shareFor(parts: Pick<AppParts, "serveRoute">, site: SiteContext, address: string): (() => Promise<boolean>) | undefined {
+  const serveRoute = parts.serveRoute;
+  if (!serveRoute) return undefined;
+  return async () => {
+    const network = await networkHash(site.id, address);
+    return network ? serveRoute(site, network) : false;
+  };
 }
 
 /** What the lookup found, given the model's answer. Undefined when no lookup was made, or it did not answer in time, which says nothing about the route. */

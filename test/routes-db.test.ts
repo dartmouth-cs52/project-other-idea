@@ -41,11 +41,14 @@ const BILLING: Snapshot = { path: "/billing", title: "Billing", headings: ["Bill
 let made = 0;
 const newGuide = () => `00000000-0000-4000-8000-${String(++made).padStart(12, "0")}`;
 
-/** The server and the store, as worker/index.ts wires them. Each call says the address it came from, as a Worker is told it. */
-function server() {
+/**
+ * The server and the store, as worker/index.ts wires them. Each call says the address it came from, as a Worker is
+ * told it. `routeStepsADay` is each network's share of steps answered from routes, small for a test.
+ */
+function server(routeStepsADay?: number) {
   const sql = psqlSql(DB) as unknown as ConstructorParameters<typeof Store>[0];
   // Three visitors and three networks, as online.
-  const store = new Store(sql, 3, { reportWaitsMs: [0, 250, 400] });
+  const store = new Store(sql, 3, { reportWaitsMs: [0, 250, 400], routeStepsADay });
   const work: Promise<unknown>[] = [];
   const later = (write: Promise<unknown> | undefined) => void (write && work.push(write));
   const budget = { admitted: 0, settled: 0 };
@@ -63,6 +66,7 @@ function server() {
     onAsk: (turn, _site, origin) => later(store.startGuide(turn, origin)),
     onTurn: (turn, measure, _site, origin, route) => later(store.recordStep(turn, measure, origin, route)),
     findRoute: (site, lookup) => store.findRoute(site.id, lookup),
+    serveRoute: (site, network) => store.serveRoute(site.id, network),
     onReport: (site, guide, report, network) => later(store.report(site, guide, report, network)),
   });
   const post = (path: string, body: unknown, from: string) =>
@@ -208,6 +212,45 @@ describe("verified routes in the database", { skip: TEST_DATABASE_URL ? false : 
     const models = (await psqlSql(DB)`select s.model from steps s join guides g on g.id = s.guide_id where g.site_id = ${SITE} and g.question_key = 'change password'`) as { model: string }[];
     assert.deepEqual(models.map((row) => row.model), Array(6).fill("mock"));
     assert.equal(on.budget.admitted, 6);
+    exec(DB, `update sites set routes_mode = 'shadow' where id = '${SITE}'`);
+  });
+
+  test("one network has only so many steps a day answered from routes on a site, and past them the model answers inside the budget", async () => {
+    // The review's proof: on a site whose route visitors on three networks trusted, eight /64s of one /48, each a caller
+    // of its own to the limit on steps a minute, had 120 guides answered from the route in a minute, all billed, with
+    // no model call and no budget. One /48 holds 65,536 of them.
+    exec(DB, `update sites set routes_mode = 'serve' where id = '${SITE}'`);
+    const on = server(2);
+    const ask = { goal: "download receipt" };
+    const page: Snapshot = { path: "/receipts", title: "Receipts", headings: [], text: [], truncated: false, elements: [{ id: "e1", role: "button", label: "Download receipt", context: "main" }] };
+    for (const address of ["198.51.100.1", "203.0.113.7", "192.0.2.33"]) {
+      const guide = newGuide();
+      await on.step(guide, 0, page, ask, address);
+      await on.report(guide, { outcome: "finished", step: 0 }, address);
+    }
+    assert.equal(on.budget.admitted, 3);
+    const answered: (string | null)[][] = [];
+    for (const address of ["2001:db8:77:1::1", "2001:db8:77:2::1", "2001:db8:77:3::1", "2001:db8:77:4::1", "198.51.100.77"]) {
+      const guide = newGuide();
+      assert.equal((await on.step(guide, 0, page, ask, address)).target, "e1");
+      answered.push(...(await steps(guide)).map((row) => [row.model, row.route]));
+    }
+    // The /48 has its two, then the model answers it inside the budget. Another network has a share of its own.
+    assert.deepEqual(answered, [
+      ["route", "served"],
+      ["route", "served"],
+      ["mock", "agreed"],
+      ["mock", "agreed"],
+      ["route", "served"],
+    ]);
+    assert.equal(on.budget.admitted, 5);
+
+    // The next day the network has its share again, and the days before are forgotten.
+    exec(DB, `update route_network_days set day = current_date - 1`);
+    const tomorrow = newGuide();
+    await server(2).step(tomorrow, 0, page, ask, "2001:db8:77:5::1");
+    assert.deepEqual((await steps(tomorrow)).map((row) => row.model), ["route"]);
+    assert.deepEqual(await psqlSql(DB)`select served, day = current_date as today from route_network_days`, [{ served: 1, today: true }]);
     exec(DB, `update sites set routes_mode = 'shadow' where id = '${SITE}'`);
   });
 

@@ -158,7 +158,8 @@ export default function Privacy() {
         said, so that if the company turns this on it can point the same way next time without asking the AI. That way
         is used only once guides that followed it have finished on several different networks, so no one person can
         choose it for everyone. For that we keep with it at most ten of the same very short scrambled forms of the
-        network each of those guides was reported from, until the company asks us to delete them.
+        network each of those guides was reported from, until the company asks us to delete them. So that no one
+        network can have too many steps answered that way, we also keep how many it had that day, until the day ends.
       </p>
       <p>
         A company can teach Haptic a task by doing it in its own product. Someone at the company starts it from the
