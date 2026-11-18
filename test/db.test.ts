@@ -179,9 +179,13 @@ test("a guide is finished only on a step the model answered that said done, or p
 function onRecord(...looks: (Record<string, unknown> | undefined)[]) {
   const sent: Sent[] = [];
   let look = 0;
+  /** Whether another report of the same guide ends it between this one's look and its write. */
+  let raced = false;
   const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query: Sent = { text: strings.join("?").replace(/\s+/g, " ").trim(), values };
     sent.push(query);
+    // Writing the ending changes the guide's row, unless another report has just ended it.
+    if (query.text.startsWith("update guides set outcome")) return Promise.resolve(raced ? [] : [{ id: GUIDE }]);
     if (!query.text.startsWith("select")) return Promise.resolve([]);
     const found = looks[Math.min(look++, looks.length - 1)];
     return Promise.resolve(found ? [found] : []);
@@ -191,7 +195,7 @@ function onRecord(...looks: (Record<string, unknown> | undefined)[]) {
   const written = () => sent.filter((query) => !query.text.startsWith("select") && !query.text.startsWith("update routes"));
   /** The writes that count a finished guide for the verified routes behind its steps (src/server/routes.ts). */
   const trusted = () => sent.filter((query) => query.text.startsWith("update routes r set (networks, confirmed"));
-  return { store, sent, written, trusted, looks: () => look };
+  return { store, sent, written, trusted, looks: () => look, race: () => void (raced = true) };
 }
 
 /** The guide as a look finds it: still open, with its newest step. */
@@ -239,9 +243,19 @@ test("finished is stored when the guide's steps on record bear it out", async ()
     assert.equal(written().length, 1);
     // A finished guide trusts the routes behind its steps.
     assert.equal(trusted().length, 1);
-    assert.match(written()[0]!.text, /^update guides set outcome = \?, ended_at = now\(\) where id = \? and site_id = \? and outcome is null$/);
+    assert.match(written()[0]!.text, /^update guides set outcome = \?, ended_at = now\(\) where id = \? and site_id = \? and outcome is null returning id$/);
     assert.deepEqual(written()[0]!.values, ["finished", GUIDE, SITE.id]);
   }
+});
+
+test("a report that finds the guide open but is not the one that ends it does nothing more with it", async () => {
+  // Reports of one guide sent together, from as many networks, each find it open. Only the one whose write ends it
+  // counts its network for the guide's routes: before, each did, and one guide trusted a route from three networks.
+  const { store, written, trusted, race } = onRecord(guideWith({ n: 0, status: "done", pointed: true }));
+  race();
+  await store.report(SITE, GUIDE, { site: SITE.id, outcome: "finished" }, "0a1b");
+  assert.deepEqual(written().map((query) => query.values), [["finished", GUIDE, SITE.id]]);
+  assert.deepEqual(trusted(), []);
 });
 
 test("a report that arrives before its step's row is written waits for it", async () => {

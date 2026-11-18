@@ -711,12 +711,16 @@ export class Store {
           }
         }
         if (outcome && found.open) {
-          await this.sql`update guides set outcome = ${outcome}, ended_at = now() where id = ${guide} and site_id = ${site.id} and outcome is null`;
+          // Only the report whose write ends the guide goes on. Reports of one guide sent together, from as many
+          // networks, all find it open, and each would count its own network for the routes of one guide.
+          const ended = (await this.sql`
+            update guides set outcome = ${outcome}, ended_at = now() where id = ${guide} and site_id = ${site.id} and outcome is null returning id`) as unknown[];
           // Only an ending the record bears out confirms the routes behind its steps.
-          if (outcome === "finished") await this.quietly("trust a finished guide's routes (has db/migrations/0018 been applied?)", () => this.trustRoutes(site.id, guide, network));
+          if (ended.length && outcome === "finished")
+            await this.quietly("trust a finished guide's routes (has db/migrations/0018 been applied?)", () => this.trustRoutes(site.id, guide, network));
           // A finished guide is billed. It goes to Stripe now if its company pays by usage, and only if the database kept it as finished.
           // The site's hourly sweep catches any that don't get through.
-          if (outcome === "finished" && this.stripeKey) await reportUsage(this.sql, this.stripeKey, { guide });
+          if (ended.length && outcome === "finished" && this.stripeKey) await reportUsage(this.sql, this.stripeKey, { guide });
         }
         if (report.helped !== undefined) {
           await this.sql`update guides set helped = ${report.helped} where id = ${guide} and site_id = ${site.id}`;

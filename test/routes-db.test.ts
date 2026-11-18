@@ -211,6 +211,18 @@ describe("verified routes in the database", { skip: TEST_DATABASE_URL ? false : 
     exec(DB, `update sites set routes_mode = 'shadow' where id = '${SITE}'`);
   });
 
+  test("reports of one guide sent together from three networks count one of them", async () => {
+    // The review's proof: one guide and one model call, then three reports of finished sent at once from three
+    // networks. Each found the guide open and counted its own network, so one guide trusted the route.
+    const on = server();
+    const ask = { goal: "rename project" };
+    const page: Snapshot = { path: "/projects", title: "Projects", headings: [], text: [], truncated: false, elements: [{ id: "e1", role: "button", label: "Rename project", context: "main" }] };
+    const guide = newGuide();
+    assert.equal((await on.step(guide, 0, page, ask)).target, "e1");
+    await Promise.all(["198.51.100.1", "203.0.113.7", "192.0.2.33"].map((address) => on.report(guide, { outcome: "finished", step: 0 }, address)));
+    assert.deepEqual((await routes("rename project")).map((row) => [row.confirmed, row.uses, row.networks]), [[false, 1, 1]]);
+  });
+
   test("a different answer never points a trusted route elsewhere until three networks confirm the change too", async () => {
     exec(DB, `update sites set routes_mode = 'serve' where id = '${SITE}'`);
     const on = server();
