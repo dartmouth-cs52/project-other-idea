@@ -170,6 +170,32 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     });
   });
 
+  test("the list of sites says when it can't load, with Try again, and says Reconnecting once its cards are in", async () => {
+    const tab = await dash.open("/sign-in/");
+    await closing(tab, async () => {
+      const list = /\/api\/app\/sites\?/;
+      const cards = tab.locator("main ul > li");
+      // It once kept its placeholders for good.
+      await tab.route(list, (route) => route.fulfill({ status: 500, json: { error: "Something went wrong on our side. Try again in a moment." } }));
+      await tab.goto(`${dash.url}/dashboard/?view=sites`);
+      const failed = tab.getByRole("heading", { name: "Your sites didn't load" });
+      await failed.waitFor({ timeout: 15_000 });
+      assert.equal(await tab.locator('[data-slot="skeleton"]').count(), 0, "no placeholders once it has said it couldn't load");
+
+      await tab.unroute(list);
+      await tab.getByRole("button", { name: "Try again" }).click();
+      await cards.first().getByText("questions in the last 7 days").waitFor({ timeout: 15_000 });
+      assert.equal(await failed.count(), 0);
+
+      // The cards stay while the list can't reach the server, and the page says it is reconnecting until it can.
+      await tab.route(list, (route) => route.abort("failed"));
+      await tab.getByText("Reconnecting").waitFor({ timeout: 15_000 });
+      assert.equal(await cards.count(), 2);
+      await tab.unroute(list);
+      await tab.getByText("Reconnecting").waitFor({ state: "detached", timeout: 15_000 });
+    });
+  });
+
   test("a site's Ask button takes its website's colour on its own, and the pointer stays blue and is not a setting", async () => {
     // As a site added a moment ago: nothing read from it yet.
     dash.forgetLauncher();

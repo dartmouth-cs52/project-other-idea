@@ -208,7 +208,7 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
  * arrive. It speaks up only when it has stopped hearing from the server, so
  * nobody takes what is on screen for the latest.
  */
-function Reconnecting({ failing }: { failing: boolean }) {
+export function Reconnecting({ failing }: { failing: boolean }) {
   if (!failing) return null;
   return (
     <span className="text-sm text-muted-foreground" role="status">
