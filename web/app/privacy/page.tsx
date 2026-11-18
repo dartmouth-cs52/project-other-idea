@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Privacy", alternates: { canonical: "
 
 export default function Privacy() {
   return (
-    <LegalPage title="Privacy" updated="November 17, 2026">
+    <LegalPage title="Privacy" updated="November 18, 2026">
       <p>
         {site.company} makes Haptic. This page says what we collect on this website, and what Haptic reads when it runs
         inside a product.
@@ -23,8 +23,9 @@ export default function Privacy() {
         If you sign in, we keep your email address, your name if you give one, and the company you belong to, so you
         can reach your dashboard. Signing in sets cookies that keep you signed in, and they are used for nothing else.
         Sign in is run for us by Neon. The sign in email is sent for us by Resend, which gets your email address
-        and the link, and nothing else. If you choose to sign in with Google, Google tells us your name and email
-        address.
+        and the link, and nothing else. So that no address gets more than a few of these emails, we keep a
+        scrambled form of it with the time each one was sent, and delete that record once it is a day old, always
+        within two days. If you choose to sign in with Google, Google tells us your name and email address.
       </p>
       <p>
         When you add a site, we read its public pages the way a visitor would, to learn what your product calls

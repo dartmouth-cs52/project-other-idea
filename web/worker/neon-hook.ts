@@ -10,16 +10,30 @@
 // timestamp. Only the body and the timestamp are signed, so the event's type and
 // id are read from the body, never from the other headers.
 // See https://neon.com/docs/auth/guides/webhooks
+//
+// Anyone can ask for a sign-in link for any address, on the sign-in page or
+// straight from Neon, past any limit this Worker keeps on its own pages. So each
+// email is counted here before it goes, in sign_in_emails (db/migrations/0017),
+// and one mailbox gets at most 5 an hour, and the site sends at most 300.
 
+import { mailboxOf } from "../lib/setup";
 import { boundedText } from "./body";
+import { database, notMigrated, type Sql } from "./db";
 import { sendEmail, signInEmail, type LinkType, type SendEnv } from "./sign-in-email";
 
 export interface HookEnv extends SendEnv {
   /** Neon Auth's address for the branch, ending in /neondb/auth. Its signing keys are published under it. */
   NEON_AUTH_URL?: string;
+  /** Where the emails sent are counted. */
+  DATABASE_URL?: string;
 }
 
 export const HOOK_PATH = "/api/neon-auth-hook";
+
+/** The most sign-in emails one mailbox gets in any hour, however its address is written. */
+export const EMAILS_PER_MAILBOX = 5;
+/** The most the site sends in any hour, to everyone together. */
+export const EMAILS_PER_HOUR = 300;
 
 /** Older than this, a request could be a replay, so it is turned away. */
 const MAX_AGE_MS = 5 * 60 * 1000;
@@ -30,6 +44,8 @@ type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 export interface HookDeps {
   fetch: Fetch;
   now: () => number;
+  /** Where the emails are counted. Without it, DATABASE_URL's database is, and with neither nothing is. */
+  sql?: Sql;
 }
 
 interface MagicLinkEvent {
@@ -73,6 +89,13 @@ export async function neonHook(request: Request, env: HookEnv, deps: HookDeps = 
   const link = event.event_data?.link_url;
   if (!to || !link || !isHttps(link) || typeof event.event_id !== "string") return reply(400, "The event is missing its address or link.");
 
+  // Past a limit, the event is answered as handled, so Neon doesn't try it again, and nothing is sent.
+  const sql = deps.sql ?? (env.DATABASE_URL ? database(env.DATABASE_URL) : undefined);
+  if (sql && (await counted(sql, event.event_id, to)) === "over") {
+    console.warn(`Did not send the sign-in email for event ${event.event_id}: its mailbox, or the site, has had as many as it may this hour.`);
+    return reply(200, "Not sent: over the limit for sign-in emails.");
+  }
+
   const email = signInEmail({ to, link, type: (event.event_data?.link_type ?? "sign-in") as LinkType, id: event.event_id });
   // Neon resends the same event id when a try fails or times out. Resend keeps the key for 24 hours and sends once.
   const sent = await sendEmail(env, email, `neon-auth/${event.event_id}`, deps.fetch);
@@ -87,6 +110,54 @@ export async function neonHook(request: Request, env: HookEnv, deps: HookDeps = 
 
 function reply(status: number, message: string): Response {
   return Response.json({ message }, { status, headers: { "cache-control": "no-store" } });
+}
+
+// ---------------------------------------------------------------------------
+// Limits
+
+/**
+ * Counts a sign-in email before it is sent. "send" when it was counted now; "again" for an event already
+ * counted, which Neon sends again when a try failed, and which Resend's idempotency key keeps to one email;
+ * "over" when the mailbox or the site has had all it may this hour. The limits are checked as the row is
+ * written, under one lock for every sign-in email, so emails at the same moment take turns.
+ *
+ * Sign-in matters more than the count, so when the count can't be kept, because the database is down or
+ * its migration isn't applied yet, the email is sent, and the log says so.
+ */
+async function counted(sql: Sql, eventId: string, to: string): Promise<"send" | "again" | "over"> {
+  try {
+    const recipient = await mailboxHash(to);
+    const [, , kept] = await sql.transaction([
+      sql.query(`select pg_advisory_xact_lock(hashtext('sign-in-email'))`),
+      sql.query(`delete from sign_in_emails where sent_at < now() - interval '1 day'`),
+      sql.query(
+        `insert into sign_in_emails (event_id, recipient)
+        select $1, $2
+        where (select count(*) from sign_in_emails where recipient = $2 and sent_at > now() - interval '1 hour') < $3
+          and (select count(*) from sign_in_emails where sent_at > now() - interval '1 hour') < $4
+        on conflict (event_id) do nothing
+        returning event_id`,
+        [eventId, recipient, EMAILS_PER_MAILBOX, EMAILS_PER_HOUR],
+      ),
+    ]);
+    if ((kept as unknown[]).length) return "send";
+    return (await sql.query(`select 1 from sign_in_emails where event_id = $1`, [eventId])).length ? "again" : "over";
+  } catch (error) {
+    if (notMigrated(error)) console.error("Sign-in emails are counted once db/migrations/0017 is applied. Until then they are sent uncounted.");
+    else console.error("Could not count a sign-in email, so it was sent uncounted:", (error as Error).message);
+    return "send";
+  }
+}
+
+/** A mailbox, written one way however its address is, as a hash: the address itself is never kept. */
+async function mailboxHash(email: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(`sign-in mailbox ${mailboxOf(email)}`));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("").slice(0, 32);
+}
+
+/** Deletes the records of sign-in emails sent more than a day ago. Each email does it, and so does the Worker's daily schedule. */
+export async function forgetOldSignInEmails(sql: Sql): Promise<void> {
+  await sql.query(`delete from sign_in_emails where sent_at < now() - interval '1 day'`);
 }
 
 function isHttps(value: string): boolean {

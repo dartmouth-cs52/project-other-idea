@@ -139,6 +139,29 @@ test("a header an answer sets for itself is kept, not replaced", async () => {
   assert.equal(response.headers.get("x-content-type-options"), "nosniff", "the rest are still added");
 });
 
+test("the form's and sign-in's limits count an IPv6 caller by its /64, and an IPv4 caller by its address", async () => {
+  const keys: string[] = [];
+  const counting = { limit: async ({ key }: { key: string }) => (keys.push(key), { success: false }) };
+  const limited = { ...env, FORM_LIMIT: counting, AUTH_LIMIT: counting };
+  const from = async (ip: string) => {
+    keys.length = 0;
+    const headers = { origin: "https://joinhaptic.com", "cf-connecting-ip": ip };
+    const form = await handle(new Request("https://joinhaptic.com/api/request-access", { method: "POST", headers, body: "{}" }), limited, assets);
+    const signIn = await handle(new Request("https://joinhaptic.com/api/auth/sign-in/magic-link", { method: "POST", headers, body: "{}" }), limited, assets);
+    assert.equal(form.status, 429);
+    assert.equal(signIn.status, 429);
+    assert.equal(keys[0], keys[1], "both count the caller the same way");
+    return keys[0];
+  };
+  const network = "2001:db8:1:2::/64";
+  for (const ip of ["2001:db8:1:2:3:4:5:6", "2001:db8:1:2:ffff::1", "2001:0DB8:0001:0002::9", "2001:db8:1:2::", "2001:db8:1:2:0:0:0:1"]) assert.equal(await from(ip), network, ip);
+  assert.equal(await from("2001:db8:1:3::1"), "2001:db8:1:3::/64", "the next /64 is another caller");
+  assert.equal(await from("::1"), "0:0:0:0::/64");
+  assert.equal(await from("203.0.113.7"), "203.0.113.7");
+  assert.equal(await from("::ffff:203.0.113.7"), "203.0.113.7", "IPv4 written as IPv6 is that IPv4 address");
+  assert.equal(await from("2001:db8::1::2"), "2001:db8::1::2", "anything that isn't an address is counted as it is");
+});
+
 test("approving a request emails a sign-in link that comes back to the list of sites", async () => {
   const entry = { email: "dana@example.com", company: "Example Co", firstName: "Dana", lastName: "Reyes", details: "" };
   const approving = {
