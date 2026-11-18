@@ -728,5 +728,30 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         assert.ok((await sideways(tab)) <= 0, "the page scrolls sideways");
       });
     });
+
+    test("the month on the Usage tab, and the prompt to copy by hand, are 16px on a phone, so iOS doesn't zoom in on them", async () => {
+      for (const [size, font] of [[PHONE, "16px"], [{ width: 1280, height: 800 }, "14px"]] as const) {
+        const tab = await openOn(`/dashboard/?site=${SITE}&view=settings&tab=usage`, size);
+        await closing(tab, async () => {
+          const month = tab.getByLabel("Month");
+          await month.waitFor({ timeout: 10_000 });
+          assert.equal(await month.evaluate((element) => getComputedStyle(element).fontSize), font, `at ${size.width}px wide`);
+        });
+      }
+      // The box shows when the browser won't copy, here with no clipboard and no older copy command either.
+      const tab = await openOn(`/install/?site=${SITE}`, PHONE, {
+        prepare: (context) =>
+          context.addInitScript({
+            content: `Object.defineProperty(navigator, "clipboard", { value: { writeText: function () { return Promise.reject(new DOMException("Denied", "NotAllowedError")); } } });
+              document.execCommand = function () { return false; };`,
+          }),
+      });
+      await closing(tab, async () => {
+        await tab.getByRole("button", { name: /Onboard your agent/ }).click();
+        const box = tab.getByRole("textbox", { name: "The prompt" });
+        await box.waitFor({ timeout: 10_000 });
+        assert.equal(await box.evaluate((element) => getComputedStyle(element).fontSize), "16px");
+      });
+    });
   });
 });

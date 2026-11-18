@@ -198,7 +198,8 @@ function PromptBox({ prompt }: { prompt: string }) {
         rows={2}
         aria-label="The prompt"
         onFocus={(event) => event.currentTarget.select()}
-        className="min-h-16 w-full resize-none rounded-lg border bg-card px-3.5 py-2.5 text-sm leading-6 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        // 16px on a phone, as every field is (components/ui/textarea.tsx), since iOS zooms the page into a smaller one when it takes the focus.
+        className="min-h-16 w-full resize-none rounded-lg border bg-card px-3.5 py-2.5 text-base leading-6 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm"
       />
       <Button
         variant="secondary"
