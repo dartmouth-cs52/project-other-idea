@@ -70,16 +70,18 @@ export function SignInForm({ linkError }: { linkError?: string | null }) {
     setFailure(null);
     fields.show({});
     setStatus("google");
-    // On success the auth client takes the page to Google, so there is nothing more to do here.
+    // On success the auth client takes the page to Google, by the address in the answer, so there is nothing more to
+    // do here. An answer with no address goes nowhere, and counts as a failure.
     let failed: unknown;
+    let answer: { url?: string } | null = null;
     try {
-      ({ error: failed } = await auth().signIn.social({ provider: "google", callbackURL: dashboardUrl() }));
+      ({ data: answer, error: failed } = await auth().signIn.social({ provider: "google", callbackURL: dashboardUrl() }));
     } catch (error) {
       // The client throws, more often than it returns an error: when the server turns the call down, and when it
       // can't be reached at all. Either way the buttons come back, or the page would say "Opening Google" for good.
       failed = error ?? new Error("Google sign-in failed");
     }
-    if (!failed) return;
+    if (!failed && answer?.url) return;
     setStatus("idle");
     setFailure(
       statusOf(failed) === 429
