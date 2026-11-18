@@ -721,13 +721,21 @@ describe("sending and counting, against Postgres", { skip: TEST_DATABASE_URL ? f
     assert.equal((row!.context.source as { url: string }).url, "https://www.example.com/start");
   });
 
-  test("once the script has called from anywhere, the address can't change here, and nothing is touched", async () => {
+  test("once the script has called from an address the site allows, the address can't change here, and nothing is touched", async () => {
     reset();
-    exec(DB, `insert into site_origins (site_id, origin, allowed) values ('${SITE}', 'http://localhost:3000', false)`);
+    exec(DB, `insert into site_origins (site_id, origin, allowed) values ('${SITE}', 'https://app.example.com', true)`);
     const answer = await call(sql(), { url: "www.example.com" }, { method: "PUT", what: "address" });
     assert.equal(answer?.status, 409);
     assert.match((answer?.body as { error: string }).error, /already run/);
     assert.equal((await sql().query(`select origin from sites where id = $1`, [SITE]))[0]!.origin, "https://app.example.com");
+  });
+
+  test("a call from an address the site doesn't allow, which anyone can send with a made-up Origin, doesn't stop the address changing", async () => {
+    reset();
+    exec(DB, `insert into site_origins (site_id, origin, allowed) values ('${SITE}', 'https://evil.example', false), ('${SITE}', 'http://localhost:3000', false)`);
+    const answer = await call(sql(), { url: "www.example.com" }, { method: "PUT", what: "address" });
+    assert.deepEqual(answer, { status: 200, body: { id: SITE, origin: "https://www.example.com" } });
+    assert.equal((await sql().query(`select origin from sites where id = $1`, [SITE]))[0]!.origin, "https://www.example.com");
   });
 
   test("the setup's step is kept in the site, beside what the reader wrote", async () => {

@@ -158,9 +158,12 @@ async function saveSetup(call: SetupRequest, id: string, input: Record<string, u
  * still works. The old address is replaced in the allowed list, the pages read
  * from it are dropped, and reading starts again from the new one.
  *
- * Only while the script has never called from anywhere. After that the address
- * may be in someone's live tag, so it changes on the dashboard instead, by
- * allowing the new one.
+ * Only while the script has never called from an address the site allows. After
+ * that the address may be in someone's live tag, so it changes on the dashboard
+ * instead, by allowing the new one. A call from an address the site doesn't
+ * allow is not counted: nothing is live there to break, and anyone who knows
+ * the site's id can send one with a made-up Origin, which would otherwise stop
+ * the company changing its address here.
  */
 async function changeAddress(call: SetupRequest, id: string, input: Record<string, unknown>): Promise<Answer> {
   const checked = checkAddress(typeof input.url === "string" ? input.url : "");
@@ -177,7 +180,7 @@ async function changeAddress(call: SetupRequest, id: string, input: Record<strin
         coalesce(context->'source', '{}'::jsonb) || jsonb_build_object('url', $4::text)),
       reading = $5::jsonb,
       updated_at = now()
-    where id = $1 and company_id = $2 and not exists (select 1 from site_origins o where o.site_id = $1)
+    where id = $1 and company_id = $2 and not exists (select 1 from site_origins o where o.site_id = $1 and o.allowed)
     returning id, origin`,
     [id, call.org.id, checked.origin, checked.url, JSON.stringify(reading)],
   );
