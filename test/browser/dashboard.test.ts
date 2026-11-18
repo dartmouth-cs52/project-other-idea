@@ -788,6 +788,11 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         const about = tab.getByText("Guides where the person reached the end.");
         await mark.tap();
         await about.waitFor({ timeout: 5_000 });
+        // The tap moves the focus into the bubble, so a screen reader says what it is and reads out its words.
+        const bubble = tab.getByRole("dialog", { name: "What guides finished counts" });
+        assert.equal(await bubble.count(), 1, "the bubble has no name of its own");
+        const described = await bubble.evaluate((element) => document.getElementById(element.getAttribute("aria-describedby") ?? "")?.textContent ?? "");
+        assert.match(described, /^Guides where the person reached the end\./, "the bubble's words don't describe it");
         await mark.tap();
         await about.waitFor({ state: "hidden", timeout: 5_000 });
       });
@@ -795,6 +800,27 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
       await closing(laptop, async () => {
         await laptop.getByRole("button", { name: "What guides finished counts" }).hover();
         await laptop.getByText("Guides where the person reached the end.").waitFor({ timeout: 5_000 });
+      });
+    });
+
+    test("on the smallest phone what a number counts stays inside the window, so the page doesn't move sideways while it is open", async () => {
+      const tab = await openOn(`/dashboard/?site=${SITE}`, SMALLEST, { touch: true });
+      await closing(tab, async () => {
+        // The three whose words fill a bubble 20rem wide, which with the space kept at the window's edges ran 5px past a 320px one.
+        for (const name of ["What guides finished counts", "What finish rate counts", "What couldn't guide counts"]) {
+          const mark = tab.getByRole("button", { name });
+          await mark.waitFor({ timeout: 10_000 });
+          await mark.tap();
+          const bubble = tab.getByRole("dialog");
+          await bubble.waitFor({ timeout: 5_000 });
+          // Measured once it has grown to its full size.
+          await bubble.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+          const edges = await bubble.evaluate((element) => ({ left: element.getBoundingClientRect().left, right: element.getBoundingClientRect().right }));
+          assert.ok(edges.left >= 0 && edges.right <= SMALLEST.width, `"${name}" spans ${Math.round(edges.left)} to ${Math.round(edges.right)}px of a ${SMALLEST.width}px window`);
+          assert.ok((await sideways(tab)) <= 0, `with "${name}" open the page scrolls sideways`);
+          await mark.tap();
+          await bubble.waitFor({ state: "hidden", timeout: 5_000 });
+        }
       });
     });
 

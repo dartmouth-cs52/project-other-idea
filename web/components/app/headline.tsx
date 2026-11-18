@@ -193,22 +193,30 @@ function Tile({
  * press away on a touch screen or from the keyboard, where a second press or a press elsewhere puts it away. It is a
  * popover and not a tooltip, since a tooltip never opens on a touch screen. The mark is 14px, and what answers a
  * press is 24px across around it, held to the label's line so the tile doesn't grow.
+ *
+ * A press moves the focus into the bubble, so the bubble is named as its mark is and its words describe it, which a
+ * screen reader then reads out. It is at most 20rem wide, and narrower on a phone with less room than that beside
+ * the window's edges.
  */
 function About({ label, children }: { label: string; children: ReactNode }) {
+  const name = `What ${label.toLowerCase()} counts`;
   return (
     <Popover.Root>
       <Popover.Trigger
         openOnHover
         delay={0}
-        aria-label={`What ${label.toLowerCase()} counts`}
+        aria-label={name}
         className="-mx-1 -my-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         <Info className="size-3.5" aria-hidden />
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="top" sideOffset={4} className="isolate z-50">
-          <Popover.Popup className="z-50 w-fit max-w-xs origin-(--transform-origin) rounded-md bg-foreground px-3 py-1.5 text-xs text-background outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
-            {children}
+          <Popover.Popup
+            aria-label={name}
+            className="z-50 w-fit max-w-[min(20rem,var(--available-width))] origin-(--transform-origin) rounded-md bg-foreground px-3 py-1.5 text-xs text-background outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+          >
+            <Popover.Description>{children}</Popover.Description>
             <Popover.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=top]:-bottom-2.5" />
           </Popover.Popup>
         </Popover.Positioner>
