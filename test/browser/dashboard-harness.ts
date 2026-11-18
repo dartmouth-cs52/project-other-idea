@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium, type Browser, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { INK, launcherColour, POINTER_BLUE } from "../../src/shared/colour.ts";
 import { launcherState, matchLauncher, siteBrand } from "../../web/worker/brand.ts";
 import { groupGuides } from "../../web/worker/health.ts";
@@ -22,6 +22,7 @@ import { exec, freshDatabase, psqlSql, TEST_DATABASE_URL, testDatabase } from ".
 // page sends is kept, so nothing is emailed and nobody is sent to Google), and
 // the site's own record, which is kept here in a few lines and not by
 // worker/app-api.ts, since that needs Neon's HTTP driver and Neon Auth.
+// Nothing a tab asks for leaves this machine (`stayLocal`).
 //
 //   cd web && npm run build && cd ..
 //   TEST_DATABASE_URL=postgres://postgres@127.0.0.1:55432/haptic_test npm run test:browser
@@ -85,6 +86,16 @@ export interface Dashboard {
 
 const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".woff2": "font/woff2", ".txt": "text/plain" };
 const quoted = (text: string) => `'${text.replace(/'/g, "''")}'`;
+
+/**
+ * Turns away every request a tab makes beyond this machine's own servers. The public pages load Haptic's own
+ * widget from widget.joinhaptic.com, which would ask the live widget server for the site's settings from a test,
+ * and no test may reach the live site or wait on it. A test that needs the widget answers for it itself, with a
+ * route of its own, which Playwright tries before this one.
+ */
+export async function stayLocal(context: BrowserContext): Promise<void> {
+  await context.route((address) => /^https?:$/.test(address.protocol) && !["127.0.0.1", "localhost"].includes(address.hostname), (route) => route.abort());
+}
 
 function listen(server: Server): Promise<string> {
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`)));
