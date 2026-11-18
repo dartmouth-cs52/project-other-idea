@@ -47,35 +47,38 @@ export function tidy(text: string): string {
  * Reads a help page by its address. Navigation, headers, footers, scripts and
  * forms are left out, each block of text ends a line, and when the page has a
  * main or article element only that is kept, as `npm run tag` does with --docs.
+ *
+ * No more than MAX_PAGE_BYTES of it is read, whatever length it gives, since a
+ * site that streams a page for ever would otherwise use up the Worker's memory.
+ * A text file is all doc, so one longer than that is refused. A web page is
+ * mostly scripts, styles and navigation, sometimes with images written into it,
+ * so one longer than that is read that far, and kept if its article had ended
+ * by then. One whose article runs on past it, or that has none, is refused,
+ * rather than kept cut short.
  */
 export async function docFromUrl(url: URL): Promise<Doc> {
   const response = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "text/html, text/plain, text/markdown" }, redirect: "follow", signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!response.ok) throw new Error(`The page answered ${response.status}.`);
   const type = response.headers.get("content-type") ?? "";
-  const size = Number(response.headers.get("content-length") ?? 0);
-  if (size > MAX_PAGE_BYTES) throw new Error(TOO_LARGE);
   const source = response.url || url.href;
-  // A page that says nothing of its length, or less than it sends, is held to the same limit as it arrives.
-  let tooLarge = false;
-  const page = capped(response, MAX_PAGE_BYTES, () => ((tooLarge = true), new Error(TOO_LARGE)));
-  const read = async <T>(reading: Promise<T>): Promise<T> => {
-    try {
-      return await reading;
-    } catch (error) {
-      // Whatever the runtime makes of the error on its way out of the stream, it was this one.
-      throw tooLarge ? new Error(TOO_LARGE) : error;
-    }
-  };
+  // Reading stops at the limit whether the page said how long it is or not, and `cut` says it did.
+  let cut = false;
+  const page = capped(response, MAX_PAGE_BYTES, () => void (cut = true));
 
   if (!type.includes("html")) {
     if (!/text\/(plain|markdown)/.test(type)) throw new Error("That address is not a web page or a text file.");
-    const text = tidy(await read(page.text()));
+    if (Number(response.headers.get("content-length") ?? 0) > MAX_PAGE_BYTES) throw new Error(TOO_LARGE);
+    const raw = await page.text();
+    if (cut) throw new Error(TOO_LARGE);
+    const text = tidy(raw);
     const heading = /^#\s+(.+)$/m.exec(text)?.[1]?.trim();
     return { title: heading || new URL(source).pathname, source, text };
   }
 
   let skipping = 0;
   let inMain = 0;
+  /** A main or article element has ended, so `main` holds all of it. */
+  let mainEnded = false;
   let title = "";
   let heading = "";
   let readingHeading = false;
@@ -97,7 +100,10 @@ export async function docFromUrl(url: URL): Promise<Doc> {
     .on("main, article, [role='main']", {
       element(el) {
         inMain++;
-        el.onEndTag(() => void inMain--);
+        el.onEndTag(() => {
+          inMain--;
+          if (!inMain) mainEnded = true;
+        });
       },
     })
     .on("h1", {
@@ -118,7 +124,9 @@ export async function docFromUrl(url: URL): Promise<Doc> {
       },
     })
     .onDocument({ text: (chunk) => add(chunk.text) });
-  await read(rewriter.transform(page).arrayBuffer());
+  await rewriter.transform(page).arrayBuffer();
+  // A page cut short was read up to the limit, all of it, so an article that had ended by then is whole.
+  if (cut && (inMain || !mainEnded || !main.join("").trim())) throw new Error(TOO_LARGE);
   const text = tidy((main.join("").trim() ? main : all).join(""));
   return { title: tidy(heading) || tidy(title) || new URL(source).pathname, source, text };
 }

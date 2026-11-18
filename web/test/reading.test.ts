@@ -7,10 +7,10 @@ import { TestRewriter } from "./rewriter";
 
 // What Haptic fetches from a site a company chose, its first page, stylesheets,
 // sitemap and help docs, is read a piece at a time and only so far, whether or
-// not the site says how long it is. Each site here sends ten megabytes with no
-// length given, far past every limit, and the network is stood in for, so
-// nothing leaves the machine. The last test is of what a page's outline keeps,
-// however long the page.
+// not the site says how long it is. Each site here sends ten megabytes, mostly
+// with no length given, far past every limit, and the network is stood in for,
+// so nothing leaves the machine. The last test is of what a page's outline
+// keeps, however long the page.
 
 const PIECE = 64 * 1024;
 const PIECES = 160;
@@ -41,15 +41,15 @@ function long(start: string, filler: (n: number) => string) {
 /** Text of about one piece. */
 const fill = (unit: string) => unit.repeat(Math.ceil(PIECE / unit.length));
 
-/** Runs `work` with the network stood in for by `site`, which answers the addresses it knows, and 404 for the rest. */
-async function offline(site: Record<string, () => Response>, work: () => Promise<void>) {
+/** Runs `work`, and gives back what it gives, with the network stood in for by `site`, which answers the addresses it knows, and 404 for the rest. */
+async function offline<T>(site: Record<string, () => Response>, work: () => Promise<T>): Promise<T> {
   const real = globalThis.fetch;
   globalThis.fetch = async (input) => {
     const answer = site[input instanceof Request ? input.url : String(input)];
     return answer ? answer() : new Response("Not found", { status: 404 });
   };
   try {
-    await work();
+    return await work();
   } finally {
     globalThis.fetch = real;
   }
@@ -88,6 +88,8 @@ async function parsed<T>(work: () => Promise<T>): Promise<T> {
   }
 }
 
+const TOO_LARGE = { message: "That page is too large to use as a help doc." };
+
 test("a site whose first page and stylesheet never stop is read only so far, and its colour is still found", async () => {
   const page = long(`<html><head><link rel="stylesheet" href="/site.css"></head><body>`, () => fill("<p>Welcome</p>"));
   const css = long(":root{--brand:#17633a}", () => fill(".a{color:#111}"));
@@ -104,13 +106,42 @@ test("a site whose first page and stylesheet never stop is read only so far, and
   readOnlySoFar(css.seen, 800_000, "the stylesheet");
 });
 
-test("a help doc that runs past 2 MB with no length given is refused as too large, as one that says so is, and the rest is never read", async () => {
-  for (const type of ["text/plain", "text/html"]) {
-    const doc = long(type === "text/html" ? "<main><h1>Billing</h1>" : "# Billing\n", () => fill("Invoices are under Billing. "));
-    await offline({ "https://help.example/billing": () => new Response(doc.body, { headers: { "content-type": type } }) }, async () => {
-      await assert.rejects(docFromUrl(new URL("https://help.example/billing")), { message: "That page is too large to use as a help doc." }, type);
-    });
-    readOnlySoFar(doc.seen, 2_000_000, type);
+test("a help doc whose text runs past 2 MB, a text file or a page's article, is refused as too large, and the rest is never read", async () => {
+  const docs: Record<string, [type: string, start: string, filler: string]> = {
+    "a text file": ["text/plain", "# Billing\n", "Invoices are under Billing. "],
+    "an article": ["text/html", "<html><body><main><h1>Billing</h1>", "<p>Invoices are under Billing.</p>"],
+    "a page with no article": ["text/html", "<html><body><h1>Billing</h1>", "<p>Invoices are under Billing.</p>"],
+  };
+  for (const [what, [type, start, filler]] of Object.entries(docs)) {
+    const doc = long(start, () => fill(filler));
+    await parsed(() =>
+      offline({ "https://help.example/billing": () => new Response(doc.body, { headers: { "content-type": type } }) }, async () => {
+        await assert.rejects(docFromUrl(new URL("https://help.example/billing")), TOO_LARGE, what);
+      }),
+    );
+    readOnlySoFar(doc.seen, 2_000_000, what);
+  }
+  // A text file that says it is longer is refused unread.
+  const told = long("# Billing\n", () => fill("Invoices are under Billing. "));
+  await offline({ "https://help.example/billing.md": () => new Response(told.body, { headers: { "content-type": "text/markdown", "content-length": "10485760" } }) }, async () => {
+    await assert.rejects(docFromUrl(new URL("https://help.example/billing.md")), TOO_LARGE);
+  });
+  assert.equal(told.seen.bytes, 0);
+});
+
+test("a help page past 2 MB is read that far, and its article kept when it had ended by then, whatever length the page gave", async () => {
+  // Most of a page can be what isn't its article: here, images written into it, before the article and after.
+  const image = `<img src="data:image/png;base64,${"A".repeat(PIECE - 64)}">`;
+  const article = "<main><h1>Billing</h1><p>Invoices are under Billing.</p><p>Each one can be downloaded as a PDF.</p></main>";
+  // What the server says of the page's length: its length compressed, its whole length, or nothing at all.
+  for (const length of ["2732", "10485760", null]) {
+    const page = long(`<html><head><title>Help</title></head><body><nav><a href="/">Home</a></nav>`, (piece) => (piece === 15 ? article : image));
+    const headers = { "content-type": "text/html; charset=utf-8", ...(length ? { "content-length": length } : {}) };
+    const doc = await parsed(() =>
+      offline({ "https://help.example/billing": () => new Response(page.body, { headers }) }, () => docFromUrl(new URL("https://help.example/billing"))),
+    );
+    assert.deepEqual(doc, { title: "Billing", source: "https://help.example/billing", text: "Billing\nInvoices are under Billing.\nEach one can be downloaded as a PDF." }, String(length));
+    readOnlySoFar(page.seen, 2_000_000, `length ${length}`);
   }
 });
 

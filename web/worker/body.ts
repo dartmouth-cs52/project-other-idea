@@ -77,11 +77,12 @@ export function boundedRequest(request: Request, maxBytes: number): { request: R
 // share, other companies' among them.
 
 /**
- * The same response with no more than `maxBytes` of its body. A longer body is cut off there and the rest is
- * never read, or, given `tooLong`, reading it fails with that error. For readers that take a Response whole,
- * such as HTMLRewriter. Read the address first, from the response fetched: this one has none.
+ * The same response with no more than `maxBytes` of its body. A longer body is cut off there, `cut` is called,
+ * and the rest is never read. Reading ends there as if the body had, so a reader that takes a Response whole,
+ * such as HTMLRewriter, finishes with what it was given. Read the address first, from the response fetched:
+ * this one has none.
  */
-export function capped(response: Response, maxBytes: number, tooLong?: () => Error): Response {
+export function capped(response: Response, maxBytes: number, cut?: () => void): Response {
   if (!response.body) return response;
   const reader = response.body.getReader();
   let bytes = 0;
@@ -94,7 +95,7 @@ export function capped(response: Response, maxBytes: number, tooLong?: () => Err
       bytes += value.byteLength;
       if (value.byteLength <= room) return controller.enqueue(value);
       await reader.cancel().catch(() => {});
-      if (tooLong) return controller.error(tooLong());
+      cut?.();
       if (room > 0) controller.enqueue(value.subarray(0, room));
       controller.close();
     },

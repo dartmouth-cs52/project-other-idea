@@ -194,11 +194,15 @@ test("a response that never ends is cut off at the limit, and the rest is never 
   assert.ok(seen.cancelled, "the rest is cancelled, not left waiting");
 });
 
-test("a response that runs past the limit can fail instead, with the caller's own error", async () => {
+test("a response cut off at the limit says so, and one that fits doesn't", async () => {
   const piece = new Uint8Array(64 * 1024).fill(0x78);
   const { request, seen } = endless(piece);
-  const tooLong = new Error("That page is too large.");
-  await assert.rejects(capped(response(request.body!), 100_000, () => tooLong).arrayBuffer(), (error) => error === tooLong);
+  let cut = 0;
+  assert.equal((await capped(response(request.body!), 100_000, () => void cut++).arrayBuffer()).byteLength, 100_000);
+  assert.equal(cut, 1);
   assert.ok(seen.cancelled);
   assert.ok(seen.bytes <= 100_000 + piece.byteLength * 2);
+  const fits = streamed([piece, piece]);
+  assert.equal((await capped(response(fits.request.body!), 2 * piece.byteLength, () => void cut++).arrayBuffer()).byteLength, 2 * piece.byteLength);
+  assert.equal(cut, 1, "a body exactly as long as the limit is whole");
 });
