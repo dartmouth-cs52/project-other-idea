@@ -181,7 +181,7 @@ npm run preview   # builds, then serves the site and the Worker at http://localh
 npm run deploy    # builds, then publishes to Cloudflare
 ```
 
-`npm run deploy` uploads the pages in `out/` separately from the Worker, which is the standard way. There is a second way, `npm run deploy:embedded`, which packs the pages inside the Worker. Use it from machines where the separate upload fails with a 401, such as a Claude cloud session whose network layer rewrites the Authorization header. It works while the site stays under 3 MB compressed. The site that is live now was published this way.
+`npm run deploy` uploads the pages in `out/` separately from the Worker, which is the standard way. There is a second way, `npm run deploy:embedded`, which packs the pages inside the Worker (`worker/embedded.ts`), and serves them as Cloudflare would (`worker/packed.ts`). Use it from machines where the separate upload fails with a 401, such as a Claude cloud session whose network layer rewrites the Authorization header. It works while the site stays under 3 MB compressed. The site that is live now was published this way.
 
 Deploying needs a Cloudflare API token in `CLOUDFLARE_API_TOKEN`. Every deploy goes straight to the live site at joinhaptic.com, because the domain is attached in the `routes` setting. The Worker sends www and plain http to https://joinhaptic.com. The same deploy is also reachable at haptic-web.joinhaptic.workers.dev, which is marked so search engines skip it.
 
