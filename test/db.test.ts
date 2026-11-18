@@ -56,8 +56,8 @@ test("a step's tokens and cost are added to its row, after the step itself is wr
   assert.equal(sent.length, 3);
   assert.match(sent[0]!.text, /^insert into guides/);
   assert.match(sent[1]!.text, /^insert into steps/);
-  assert.match(sent[2]!.text, /^update steps set input_tokens = \?, cache_read_tokens = \?, cache_write_tokens = \?, output_tokens = \?, usd = \?, broke = \? where guide_id = \? and n = \?$/);
-  assert.deepEqual(sent[2]!.values, [600, 24_000, 0, 150, 0.0051, [], GUIDE, 2]);
+  assert.match(sent[2]!.text, /^update steps set input_tokens = \?, cache_read_tokens = \?, cache_write_tokens = \?, output_tokens = \?, usd = \?, broke = \? where guide_id = \? and n = \? and exists \(select 1 from guides where id = \? and site_id = \?\)$/);
+  assert.deepEqual(sent[2]!.values, [600, 24_000, 0, 150, 0.0051, [], GUIDE, 2, GUIDE, "site_test"]);
 });
 
 test("a database without the cost columns still gets the step", async () => {
@@ -82,7 +82,7 @@ test("the stand-in model has no cost to record, and a broken rule is recorded ev
 
   const broke = standIn();
   await new Store(broke.sql).recordStep(request, { ...measure, model: "mock", tokens: undefined, usd: 0, broke: ["link"] }, undefined);
-  assert.deepEqual(broke.sent[2]!.values, [null, null, null, null, null, ["link"], GUIDE, 2]);
+  assert.deepEqual(broke.sent[2]!.values, [null, null, null, null, null, ["link"], GUIDE, 2, GUIDE, "site_test"]);
 });
 
 test("on a site with Answers, the kind of reply and the docs it rested on are added too", async () => {
@@ -94,14 +94,14 @@ test("on a site with Answers, the kind of reply and the docs it rested on are ad
   };
   await new Store(sql).recordStep(request, answer, undefined);
   assert.equal(sent.length, 5);
-  assert.match(sent[3]!.text, /^update steps set mode = \?, reason = \?, sources = \?, overruled = \? where guide_id = \? and n = \?$/);
-  assert.deepEqual(sent[3]!.values, ["answer", null, ["help/inviting.md"], null, GUIDE, 2]);
+  assert.match(sent[3]!.text, /^update steps set mode = \?, reason = \?, sources = \?, overruled = \? where guide_id = \? and n = \? and exists \(select 1 from guides where id = \? and site_id = \?\)$/);
+  assert.deepEqual(sent[3]!.values, ["answer", null, ["help/inviting.md"], null, GUIDE, 2, GUIDE, "site_test"]);
   // No control it named was missing, which is said too.
-  assert.deepEqual(sent[4]!.values, [null, GUIDE, 2]);
+  assert.deepEqual(sent[4]!.values, [null, GUIDE, 2, GUIDE, "site_test"]);
 
   const declined = standIn();
   await new Store(declined.sql).recordStep(request, { ...measure, reply: { target: null, status: "done", say: "The help docs don't cover that.", mode: "cannot_help", reason: "not_covered" }, overruled: "no_source" }, undefined);
-  assert.deepEqual(declined.sent[3]!.values, ["cannot_help", "not_covered", [], "no_source", GUIDE, 2]);
+  assert.deepEqual(declined.sent[3]!.values, ["cannot_help", "not_covered", [], "no_source", GUIDE, 2, GUIDE, "site_test"]);
 });
 
 test("a control an answer named that is nowhere in the product is recorded with the step", async () => {
@@ -114,15 +114,15 @@ test("a control an answer named that is nowhere in the product is recorded with 
   };
   await new Store(sql).recordStep(request, stale, undefined);
   assert.equal(sent.length, 5);
-  assert.match(sent[4]!.text, /^update steps set unseen = \? where guide_id = \? and n = \?$/);
-  assert.deepEqual(sent[4]!.values, [["Archive project"], GUIDE, 2]);
+  assert.match(sent[4]!.text, /^update steps set unseen = \? where guide_id = \? and n = \? and exists \(select 1 from guides where id = \? and site_id = \?\)$/);
+  assert.deepEqual(sent[4]!.values, [["Archive project"], GUIDE, 2, GUIDE, "site_test"]);
 
   // The same step written again, when the widget asks for it a second time, with an answer that named
   // nothing missing: the first answer's list goes.
   const again = standIn();
   await new Store(again.sql).recordStep(request, { ...stale, reply: { ...stale.reply, missing: undefined }, unseen: undefined }, undefined);
-  assert.match(again.sent[4]!.text, /^update steps set unseen = \? where guide_id = \? and n = \?$/);
-  assert.deepEqual(again.sent[4]!.values, [null, GUIDE, 2]);
+  assert.match(again.sent[4]!.text, /^update steps set unseen = \? where guide_id = \? and n = \? and exists \(select 1 from guides where id = \? and site_id = \?\)$/);
+  assert.deepEqual(again.sent[4]!.values, [null, GUIDE, 2, GUIDE, "site_test"]);
 
   // A site without Answers never has any, and sends nothing for them.
   const guideOnly = standIn();

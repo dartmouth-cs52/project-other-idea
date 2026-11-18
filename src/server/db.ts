@@ -452,9 +452,9 @@ export class Store {
     this.track(guide, write);
     return write
       .then(() => (request.step === 0 ? undefined : this.recordVisitor(request)))
-      .then(() => this.recordCost(guide, request.step, measure))
-      .then(() => this.recordKind(guide, request.step, measure))
-      .then(() => this.recordUnseen(guide, request.step, measure));
+      .then(() => this.recordCost(request.site, guide, request.step, measure))
+      .then(() => this.recordKind(request.site, guide, request.step, measure))
+      .then(() => this.recordUnseen(request.site, guide, request.step, measure));
   }
 
   /**
@@ -481,12 +481,18 @@ export class Store {
    * On one with, every step sends it, as nothing when there are none: a step
    * written again, when the widget asks for it a second time, must not keep
    * the list from the first answer.
+   *
+   * Like the other additions below, it is written only to a guide of the
+   * step's own site. The widget chooses the guide's id, so a step for one site
+   * can name a guide of another, and must not rewrite that guide's steps.
    */
-  private recordUnseen(guide: string, step: number, measure: TurnMeasure): Promise<void> {
+  private recordUnseen(site: string, guide: string, step: number, measure: TurnMeasure): Promise<void> {
     const unseen = measure.unseen?.length ? measure.unseen : null;
     if (!unseen && (!measure.reply.mode || measure.reply.mode === "act")) return Promise.resolve();
     return this.quietly("record controls an answer named that aren't in the product (has db/migrations/0007 been applied?)", async () => {
-      await this.sql`update steps set unseen = ${unseen} where guide_id = ${guide} and n = ${step}`;
+      await this.sql`
+        update steps set unseen = ${unseen}
+        where guide_id = ${guide} and n = ${step} and exists (select 1 from guides where id = ${guide} and site_id = ${site})`;
     });
   }
 
@@ -496,7 +502,7 @@ export class Store {
    * columns that came later (db/migrations/0005). A site without Answers
    * sends nothing here.
    */
-  private recordKind(guide: string, step: number, measure: TurnMeasure): Promise<void> {
+  private recordKind(site: string, guide: string, step: number, measure: TurnMeasure): Promise<void> {
     const { mode, reason } = measure.reply;
     // An act step's mode is "act", which the column does not take: it says what kind of reply a guide's step was, on a
     // site with Answers on. How acting went is in the server's log of counts (turnCounts in app.ts).
@@ -504,7 +510,7 @@ export class Store {
     return this.quietly("record what kind of reply a step was (has db/migrations/0005 been applied?)", async () => {
       await this.sql`
         update steps set mode = ${mode}, reason = ${reason ?? null}, sources = ${measure.cited}, overruled = ${measure.overruled ?? null}
-        where guide_id = ${guide} and n = ${step}`;
+        where guide_id = ${guide} and n = ${step} and exists (select 1 from guides where id = ${guide} and site_id = ${site})`;
     });
   }
 
@@ -514,7 +520,7 @@ export class Store {
    * (db/migrations/0004): on a database that does not have them yet this
    * fails, says so, and the step itself is still there.
    */
-  private recordCost(guide: string, step: number, measure: TurnMeasure): Promise<void> {
+  private recordCost(site: string, guide: string, step: number, measure: TurnMeasure): Promise<void> {
     const { tokens } = measure;
     if (!tokens && !measure.broke.length) return Promise.resolve();
     return this.quietly("record what a step cost (has db/migrations/0004 been applied?)", async () => {
@@ -522,7 +528,7 @@ export class Store {
         update steps set input_tokens = ${tokens?.input ?? null}, cache_read_tokens = ${tokens?.cacheRead ?? null},
           cache_write_tokens = ${tokens?.cacheWrite ?? null}, output_tokens = ${tokens?.output ?? null},
           usd = ${tokens ? measure.usd : null}, broke = ${measure.broke}
-        where guide_id = ${guide} and n = ${step}`;
+        where guide_id = ${guide} and n = ${step} and exists (select 1 from guides where id = ${guide} and site_id = ${site})`;
     });
   }
 
