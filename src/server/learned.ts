@@ -194,17 +194,11 @@ export async function visitorHash(site: string, visitor: string): Promise<string
 
 const hex = (bytes: ArrayBuffer, count: number): string => Array.from(new Uint8Array(bytes).slice(0, count), (byte) => byte.toString(16).padStart(2, "0")).join("");
 
-/**
- * The network a caller's address belongs to, which is what is counted: an
- * IPv4 address whole, and the first three groups (the /48) of an IPv6 one.
- * One subscriber can be handed a whole /48 to use as they like, so anything
- * smaller would let one home count as thousands of networks. Nothing for what
- * is not an address.
- */
-export function networkOf(address: string): string | undefined {
+/** An IPv4 address as its four numbers, or an IPv6 one as its eight groups written short. Nothing for what is not an address. */
+function parseAddress(address: string): { four: string } | { six: string[] } | undefined {
   const bare = address.trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/%.*$/, "");
   const four = /^(?:::ffff:)?(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(bare);
-  if (four) return four.slice(1).every((part) => Number(part) <= 255) ? four.slice(1).map(Number).join(".") : undefined;
+  if (four) return four.slice(1).every((part) => Number(part) <= 255) ? { four: four.slice(1).map(Number).join(".") } : undefined;
   if (!/^[0-9a-f:]{2,39}$/.test(bare) || !bare.includes(":")) return undefined;
   const halves = bare.split("::");
   if (halves.length > 2) return undefined;
@@ -215,7 +209,36 @@ export function networkOf(address: string): string | undefined {
   if (halves.length === 1 ? missing !== 0 : missing < 1) return undefined;
   const all = [...head, ...Array<string>(halves.length === 1 ? 0 : missing).fill("0"), ...tail];
   if (!all.every((group) => /^[0-9a-f]{1,4}$/.test(group))) return undefined;
-  return all.slice(0, 3).map((group) => parseInt(group, 16).toString(16)).join(":") + "::/48";
+  return { six: all.map((group) => parseInt(group, 16).toString(16)) };
+}
+
+/**
+ * The network a caller's address belongs to, which is what is counted: an
+ * IPv4 address whole, and the first three groups (the /48) of an IPv6 one.
+ * One subscriber can be handed a whole /48 to use as they like, so anything
+ * smaller would let one home count as thousands of networks. Nothing for what
+ * is not an address.
+ */
+export function networkOf(address: string): string | undefined {
+  const parsed = parseAddress(address);
+  if (!parsed) return undefined;
+  return "four" in parsed ? parsed.four : parsed.six.slice(0, 3).join(":") + "::/48";
+}
+
+/**
+ * Who a caller is to every limit on how often they may ask, and how much in a
+ * day: an IPv4 address whole, and the first four groups (the /64) of an IPv6
+ * one. A /64 is the least a home, an office or a phone is given, and every
+ * address in it is the holder's to use, so a limit on whole IPv6 addresses
+ * would give one caller billions of allowances. It is finer than the /48 that
+ * learning counts (`networkOf`): a limit has to tell apart the people an
+ * internet provider puts side by side, and learning only has to know that one
+ * caller is not several. Anything that is not an address is counted as itself.
+ */
+export function callerKey(address: string): string {
+  const parsed = parseAddress(address);
+  if (!parsed) return address.trim();
+  return "four" in parsed ? parsed.four : parsed.six.slice(0, 4).join(":") + "::/64";
 }
 
 /**

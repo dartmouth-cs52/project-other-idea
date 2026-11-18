@@ -113,6 +113,45 @@ test("a caller over the limit is told to wait", async () => {
   assert.equal((await makeApp(true).app(turn(), "1.1.1.1"))?.status, 429);
 });
 
+test("every limit, and the budget, counts an IPv6 caller by the /64 it is in, so one home is not millions of callers", async () => {
+  const keys: string[] = [];
+  const callers: string[] = [];
+  const { app } = makeApp(false, {
+    overLimit: (key) => (keys.push(key), false),
+    overTeachLimit: (key) => (keys.push(key), false),
+    budget: {
+      admit: async (_site, caller) => (callers.push(caller), { gate: { open: true }, hold: 1 }),
+      settle: async () => ({ gate: { open: true }, alerts: [] }),
+    },
+  });
+  const post = (path: string, body: unknown, from: string) =>
+    app(new Request(`https://widget.test${path}`, { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://app.test" }, body: JSON.stringify(body) }), from);
+  const guide = "0b6f2c1e-6a1d-4c3e-9f2a-3d4c5b6a7e8f";
+  /** One of each call the widget makes that has a limit, from this address, and the keys they were limited by. */
+  const everyCall = async (from: string) => {
+    keys.length = 0;
+    callers.length = 0;
+    await post("/v1/turn", JSON.parse(turnBody), from);
+    await post(`/v1/guides/${guide}/report`, { site: site.id, outcome: "stopped" }, from);
+    await post("/v1/outline", { site: site.id, visitor: guide, outline: { path: "/", title: "Home", headings: [], links: [], buttons: ["Save"] } }, from);
+    await post("/v1/map", { site: site.id, pass: "a".repeat(48) }, from);
+    await post("/v1/handoff", { site: site.id, email: "sam@acme.test" }, from);
+    await post("/v1/teach/check", { site: site.id, token: "a".repeat(43), claim: "b".repeat(43) }, from);
+    return { keys: [...keys], callers: [...callers] };
+  };
+  const home = await everyCall("2001:db8:7:1::5");
+  assert.deepEqual(home, {
+    keys: ["site_test 2001:db8:7:1::/64", "site_test 2001:db8:7:1::/64", "site_test outline 2001:db8:7:1::/64", "site_test map 2001:db8:7:1::/64", "site_test handoff 2001:db8:7:1::/64", "teach 2001:db8:7:1::/64"],
+    callers: ["2001:db8:7:1::/64"],
+  });
+  // Another address in the same /64, written out in full, is the same caller. The next /64 is another.
+  assert.deepEqual(await everyCall("2001:0db8:0007:0001:ffff:ffff:ffff:0009"), home);
+  assert.deepEqual((await everyCall("2001:db8:7:2::5")).callers, ["2001:db8:7:2::/64"]);
+  // An IPv4 address is counted whole, however a server writes it.
+  assert.deepEqual(await everyCall("::ffff:203.0.113.9"), await everyCall("203.0.113.9"));
+  assert.deepEqual((await everyCall("203.0.113.9")).callers, ["203.0.113.9"]);
+});
+
 test("a body that is not a step is turned away, and other addresses are left to the host", async () => {
   const { app } = makeApp();
   const junk = new Request("https://widget.test/v1/turn", { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"goal":"x"}' });

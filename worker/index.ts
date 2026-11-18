@@ -166,8 +166,9 @@ function budgetFor(env: Env): AppParts["budget"] {
   if (!store) return undefined;
   const reach = async (site: SiteContext, caller: string) => {
     const { name, limits } = meterFor(site, { HAPTIC_BUDGET_HOUR: env.HAPTIC_BUDGET_HOUR, HAPTIC_BUDGET_DAY: env.HAPTIC_BUDGET_DAY, HAPTIC_BUDGET_SHARED: env.HAPTIC_BUDGET_SHARED });
-    // Callers are only told apart when the site limits each one. The site's own object scrambles the
-    // address before it keeps it. This copy of the Worker holds the address only in memory, for a few seconds.
+    // Callers are only told apart when the site limits each one. A caller is an IPv4 address, or the /64 an IPv6 one is
+    // in (`callerKey` in src/server/learned.ts, applied by app.ts), so one home has one allowance. The site's own object
+    // scrambles it before it keeps it. This copy of the Worker holds it only in memory, for a few seconds.
     const who = limits.perCaller ? caller : "";
     return { limits, who, key: `${name} ${who}`, meter: store.get(store.idFromName(name)) };
   };

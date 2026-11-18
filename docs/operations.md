@@ -60,7 +60,7 @@ The widget's report is only its word, and anything that can send a request can s
 
 A report of "finished" that the record contradicts is kept as the ending the record shows, which is not billed, and the server's log says so. One for a guide with no step on record keeps no ending, so it stays a guide that never reported one. The report names the step its ending rests on, the last one the widget had an answer to, and that step is the one judged. So the look the widget asks for straight after the visitor uses the last control cannot change it, even when a report held up on its way arrives after that look is on record. A report from a widget too old to name its step is judged by the newest step on record. The widget reports the ending as soon as it is known, often before the step's own row is written, and from a page that may be on its way out: the server waits for that row, up to about ten seconds, and if it never comes, judges the newest step on record instead. Every other outcome is free, and is kept as reported, and the first outcome kept is the one that stays.
 
-What this does not check: that the visitor really used the control. The server sees no clicks, so that is the widget's word. Someone willing to pay for the model's answers out of a site's budget, at most 30 steps a minute from one address, can still make guides that look finished. What it rules out is making them for nothing: every finished guide is a step the model answered, on a site that was on and within its budget. The exception is a site set to answer from verified routes. There a guide can finish on a step a route answered, which cost nothing and is not held to the budget, though only for a question, a screen and a control that guides the model answered had confirmed, and still at most 30 steps a minute from one address.
+What this does not check: that the visitor really used the control. The server sees no clicks, so that is the widget's word. Someone willing to pay for the model's answers out of a site's budget, at most 30 steps a minute from one address (for IPv6, from the /64 the address is in), can still make guides that look finished. What it rules out is making them for nothing: every finished guide is a step the model answered, on a site that was on and within its budget. The exception is a site set to answer from verified routes. There a guide can finish on a step a route answered, which cost nothing and is not held to the budget, though only for a question, a screen and a control that guides the model answered had confirmed, and still at most 30 steps a minute from one address.
 
 ### Sending finished guides to Stripe
 
@@ -84,7 +84,7 @@ The switch is kept in the Worker's KV store, apart from Neon, so it still works 
 
 ## What a site can spend
 
-The limit of 30 steps a minute slows one caller down. It does not bound the bill, because every new address gets its own allowance. Two limits do:
+The limit of 30 steps a minute slows one caller down. A caller is an IPv4 address, or the /64 an IPv6 address is in: a home, an office or a phone is handed a whole /64 and may use any address in it, so counting IPv6 addresses one by one would give it billions of allowances (`callerKey` in `src/server/learned.ts`). Every limit on how often a caller may ask is counted this way, for steps, reports, outlines, mapping, the handoff form and teach mode. It does not bound the bill, because every new address gets its own allowance. Two limits do:
 
 1. **At the model provider.** Give the server its own workspace and API key, and set a monthly spend limit on that workspace in the provider's console. This is the one limit that holds even if the server has a bug, and it has to be set by hand.
 2. **In the server.** Each site may spend $2 an hour and $10 a day on the model (`HAPTIC_BUDGET_HOUR` and `HAPTIC_BUDGET_DAY` in `wrangler.jsonc`). Past either, its visitors read "The guide is resting for now" and the model is not called until the hour or the day turns. The cost of a step is worked out from its tokens and the prices in `src/server/prices.ts`, which need updating when the provider's prices change.
@@ -99,7 +99,7 @@ A site can have its own limits, and a public demo can also limit each visitor:
 npm run tag -- --id site_ab12cd34ef --budget-hour 5 --budget-day 40 --visitor-steps 60
 ```
 
-To limit each visitor the server has to tell them apart, which it does by network address. It keeps a count of the day's steps against a scrambled form of the address, hashed with a random value made for each site each day so it means nothing anywhere else, and clears the list and the random value when the day ends.
+To limit each visitor the server has to tell them apart, which it does by network address, counted the same way: an IPv4 address, or the /64 of an IPv6 one. It keeps a count of the day's steps against a scrambled form of the address, hashed with a random value made for each site each day so it means nothing anywhere else, and clears the list and the random value when the day ends.
 
 When a site passes 50%, 80% and 100% of a limit, a line goes to the server's log. To have it sent to a chat channel as well, give the server a webhook address (Slack's and Discord's incoming webhooks both work):
 

@@ -19,7 +19,7 @@ import { publicActing } from "./acting.ts";
 import { INK, launcherColour, POINTER_BLUE } from "../shared/colour.ts";
 import type { Alert, Budget, Gate } from "./budget.ts";
 import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
-import { networkHash, parseOutlineReport, visitorHash } from "./learned.ts";
+import { callerKey, networkHash, parseOutlineReport, visitorHash } from "./learned.ts";
 import { parseMapReport } from "./mapped.ts";
 import { ceilingFor, measureTurn, TurnCancelled, TurnError } from "./model.ts";
 import type { TurnMeasure } from "./model.ts";
@@ -49,7 +49,10 @@ export interface AppParts {
   widgetTeaching?(): Promise<string>;
   /** How long browsers may keep the widget before asking again, in seconds. 0 for never. */
   widgetMaxAge: number;
-  /** True when this caller has asked for too many steps lately. */
+  /**
+   * True when this caller has asked for too many steps lately. `key` names the site, the kind of call and the caller:
+   * an IPv4 address, or the /64 an IPv6 one is in (`callerKey` in learned.ts).
+   */
   overLimit(key: string): boolean | Promise<boolean>;
   /**
    * Told when a guide's first question is about to be put to the model, or
@@ -149,11 +152,17 @@ export function publicAppearance(saved: SiteContext["appearance"]): SiteContext[
   return { ...rest, accent: POINTER_BLUE, ...(launcher === INK ? {} : { launcher }) };
 }
 
-/** Returns the handler. It answers `undefined` for addresses that are not its own, so a host can serve other things. */
+/**
+ * Returns the handler. It answers `undefined` for addresses that are not its own, so a host can serve other things.
+ * `address` is the network address the request came from.
+ */
 export function createApp(parts: AppParts) {
-  return async function handle(request: Request, caller: string): Promise<Response | undefined> {
+  return async function handle(request: Request, address: string): Promise<Response | undefined> {
     const url = new URL(request.url);
     const origin = request.headers.get("Origin") ?? undefined;
+    // Who the caller is to every limit and to the budget: its IPv4 address, or the /64 its IPv6 address is in, so one
+    // home cannot be millions of callers. Learning counts the address's network itself (`networkHash`).
+    const caller = callerKey(address);
     // Which origins may read a response is decided per site below. This only says the API speaks CORS.
     const cors: Record<string, string> = origin ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {};
     const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
@@ -288,7 +297,7 @@ export function createApp(parts: AppParts) {
       if (await parts.overLimit(`${site.id} outline ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
       // Without the widget's random id there is no way to count this visitor once, so the outline isn't used.
       if (site.learn === false || !report.visitor) return json(200, { ok: false });
-      parts.onOutline?.(site, await visitorHash(site.id, report.visitor), report.outline, await networkHash(site.id, caller));
+      parts.onOutline?.(site, await visitorHash(site.id, report.visitor), report.outline, await networkHash(site.id, address));
       return json(200, { ok: true });
     }
 
