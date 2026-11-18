@@ -708,6 +708,24 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     /** The innermost part of the page with this heading. */
     const part = (tab: Page, heading: string | RegExp) => tab.locator("section", { has: tab.getByRole("heading", { name: heading, exact: typeof heading === "string" }) }).last();
 
+    /** Answers the page's asking for a site's record with the record as `change` makes it, such as with a long address. */
+    const siteAs = (id: string, change: (site: Record<string, any>) => Record<string, unknown>) => (context: BrowserContext) =>
+      context.route(`${dash.url}/api/app/sites/${id}`, async (route) => {
+        if (route.request().method() !== "GET") return route.fallback();
+        try {
+          const site = await (await route.fetch()).json();
+          await route.fulfill({ json: { ...site, ...change(site) } });
+        } catch {
+          // The tab closed while the page was still asking.
+        }
+      });
+
+    /** A site's record once its script has called from `origin`, which it allows, a moment ago. */
+    const liveOn = (origin: string) => {
+      const now = new Date().toISOString();
+      return { origin, allowedOrigins: [origin], connected: true, origins: [{ origin, allowed: true, first_seen_at: now, last_seen_at: now, requests: 3 }] };
+    };
+
     test("the Questions page can be read on a phone: a question wraps, with how it ended and when under it", async () => {
       const question = "How do I change the billing address on an invoice I already sent to a customer last month?";
       dash.end(dash.ask(question));
@@ -809,18 +827,8 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
       const long = "https://app.northpine-enterprise-solutions.example";
       const tab = await openOn(`/dashboard/setup/?site=${SETTING_UP}`, SMALLEST, {
         company: SETTING_UP_COMPANY,
-        prepare: (context) =>
-          // The site as it is once the script has called from its long address: the screen that says Haptic is live there.
-          context.route(`${dash.url}/api/app/sites/${SETTING_UP}`, async (route) => {
-            if (route.request().method() !== "GET") return route.fallback();
-            try {
-              const site = await (await route.fetch()).json();
-              const now = new Date().toISOString();
-              await route.fulfill({ json: { ...site, origin: long, allowedOrigins: [long], connected: true, setup: { step: "connect" }, origins: [{ origin: long, allowed: true, first_seen_at: now, last_seen_at: now, requests: 3 }] } });
-            } catch {
-              // The tab closed while the screen was still checking for the script.
-            }
-          }),
+        // The site as it is once the script has called from its long address: the screen that says Haptic is live there.
+        prepare: siteAs(SETTING_UP, () => ({ ...liveOn(long), setup: { step: "connect" } })),
       });
       await closing(tab, async () => {
         const heading = tab.getByRole("heading", { name: /^Haptic is live on/ });
@@ -830,6 +838,23 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         const open = (await tab.getByRole("link", { name: /^Open app\.northpine/ }).boundingBox())!;
         assert.ok(open.x + open.width <= SMALLEST.width - 24 + 1, `the link to the site ends at ${Math.round(open.x + open.width)}px`);
       });
+    });
+
+    test("the Overview of a site nobody has asked yet fits a phone, with its button to go and ask there on more lines when it must", async () => {
+      // Where "Go to your dashboard" on the last setup screen leads: the site, once its script has called, still with no
+      // questions. The button names the site's address, and with one as ordinary as app.northpine.example it ran past its
+      // card on every phone.
+      for (const size of [SMALLEST, PHONE, { width: 390, height: 844 }]) {
+        const tab = await openOn(`/dashboard/?site=${SETTING_UP}`, size, { company: SETTING_UP_COMPANY, touch: size.width === 390, prepare: siteAs(SETTING_UP, (site) => liveOn(site.origin)) });
+        await closing(tab, async () => {
+          const ask = part(tab, "Your numbers start with the first question").getByRole("link", { name: /^Ask Haptic something on app\.northpine\.example/ });
+          await ask.waitFor({ timeout: 10_000 });
+          assert.ok((await sideways(tab)) <= 0, `at ${size.width}px wide the page scrolls sideways`);
+          const shown = await ask.evaluate((link) => ({ inside: link.getBoundingClientRect().right <= link.closest("section")!.getBoundingClientRect().right, whole: link.scrollWidth <= link.clientWidth }));
+          assert.equal(shown.inside, true, `at ${size.width}px wide the button runs past its card`);
+          assert.equal(shown.whole, true, `at ${size.width}px wide the button's words are cut off`);
+        });
+      }
     });
 
     test("the Approve page fits a phone when a name and an email are long, and its buttons still say whom they approve in full", async () => {

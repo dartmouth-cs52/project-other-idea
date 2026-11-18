@@ -9,7 +9,7 @@ import { api } from "@/lib/app-api";
 import { countChange, duration, durationChange, hostOf, rateChange, utcDayLabel, type Change } from "@/lib/setup";
 import type { Headline as HeadlineData } from "@/worker/insights";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, Panel, PanelEmpty } from "./parts";
+import { Card, Panel, PanelEmpty, WRAPS } from "./parts";
 
 /**
  * The numbers at the top of a site's dashboard, for the chosen range: four of
@@ -230,7 +230,8 @@ export function HeadlineWaiting({ origin }: { origin?: string }) {
       <Card>
         <div className="flex flex-col gap-2">
           <h2 className="text-base font-medium">Your numbers start with the first question</h2>
-          <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
+          {/* The site's address is one long word to the browser, so it may break anywhere rather than run off a phone's screen. */}
+          <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground [overflow-wrap:anywhere]">
             A minute after someone asks Haptic something{origin ? ` on ${hostOf(origin)}` : ""}, these show here, each against the days before, with a chart
             of every day. Try it yourself to see the first one.
           </p>
@@ -244,7 +245,8 @@ export function HeadlineWaiting({ origin }: { origin?: string }) {
           ))}
         </dl>
         {origin && (
-          <a href={origin} target="_blank" rel="noopener noreferrer" className={buttonVariants({ size: "xl", className: "self-start" })}>
+          // It names the site, so on a phone its words go on to a second line rather than past the card's edge.
+          <a href={origin} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ size: "xl" }), "self-start", WRAPS)}>
             Ask Haptic something on {hostOf(origin)}
             <ExternalLink />
           </a>

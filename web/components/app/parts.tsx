@@ -27,6 +27,14 @@ export function leaveFor(path: string) {
   window.location.assign(path);
 }
 
+/**
+ * For an xl button or link whose words can be wider than a phone, such as one that names a site's address or a
+ * person's email. A button's words never wrap, so it would run off the screen. With this they go on to more lines
+ * inside it, which keeps its 44px height for one, and an address or an email, one long word to the browser, may
+ * break anywhere.
+ */
+export const WRAPS = "h-auto min-h-11 max-w-full py-2 whitespace-normal [overflow-wrap:anywhere]";
+
 /** The small round tick that says a task is finished. Done green is for this and nothing else. */
 export function DoneMark({ className }: { className?: string }) {
   return (

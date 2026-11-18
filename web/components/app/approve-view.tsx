@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { FormAlert, failureFrom, type Failure } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/app-api";
-import { Card, FailedCard } from "./parts";
+import { Card, FailedCard, WRAPS } from "./parts";
 
 interface Request {
   name: string;
@@ -16,9 +16,6 @@ interface Request {
   domainAllowed: boolean;
   approved: { email: boolean; domain: boolean };
 }
-
-/** A button whose words may run on to more lines, keeping its 44px height for one. */
-const WRAPS = "h-auto min-h-11 max-w-full py-2 whitespace-normal";
 
 /**
  * The team's page for one access request, reached from the link in its email.

@@ -7,7 +7,7 @@ import { FormAlert, failureFrom, type Failure } from "@/components/form";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { api } from "@/lib/app-api";
 import { hostOf, installStatus } from "@/lib/setup";
-import { DoneMark, when } from "../parts";
+import { DoneMark, when, WRAPS } from "../parts";
 import { Back, Primary, StepFrame } from "./frame";
 import type { SetupSite } from "./types";
 
@@ -75,12 +75,7 @@ export function ConnectStep({
           <>
             <Back onClick={onBack} />
             <Primary onClick={onFinish}>Go to your dashboard</Primary>
-            <a
-              href={status.origin}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(buttonVariants({ variant: "ghost", size: "xl" }), "h-auto min-h-11 max-w-full py-2 text-left whitespace-normal [overflow-wrap:anywhere]")}
-            >
+            <a href={status.origin} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ variant: "ghost", size: "xl" }), WRAPS)}>
               Open {hostOf(status.origin)}
               <ExternalLink />
             </a>
