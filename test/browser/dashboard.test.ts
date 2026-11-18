@@ -967,5 +967,20 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         assert.match(second!, /Northpine\s+staging\.northpine\.example/);
       });
     });
+
+    test("the links in the site's bar and footer are at least 24px each way, on a phone and a laptop", async () => {
+      for (const size of [SMALLEST, { width: 1280, height: 800 }]) {
+        const tab = await openOn("/", size);
+        await closing(tab, async () => {
+          const small = await tab.evaluate(() =>
+            Array.from(document.querySelectorAll("header a, footer a"))
+              .map((link) => ({ text: (link as HTMLElement).innerText.trim() || link.getAttribute("href"), box: link.getBoundingClientRect() }))
+              .filter(({ box }) => box.width > 0 && (box.width < 24 || box.height < 24))
+              .map(({ text, box }) => `${text} ${Math.round(box.width)}x${Math.round(box.height)}`),
+          );
+          assert.deepEqual(small, [], `at ${size.width}px wide these links are too small to press`);
+        });
+      }
+    });
   });
 });

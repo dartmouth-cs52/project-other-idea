@@ -17,14 +17,15 @@ export function SiteFooter() {
             © {new Date().getFullYear()} {site.company}
           </span>
         </div>
+        {/* Each link is padded to a 24px target, as the bar's are. */}
         <nav className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          <Link href="/privacy/" className="transition-colors hover:text-foreground">
+          <Link href="/privacy/" className="py-0.5 transition-colors hover:text-foreground">
             Privacy
           </Link>
-          <Link href="/terms/" className="transition-colors hover:text-foreground">
+          <Link href="/terms/" className="py-0.5 transition-colors hover:text-foreground">
             Terms
           </Link>
-          <a href={`mailto:${site.email}`} className="transition-colors hover:text-foreground">
+          <a href={`mailto:${site.email}`} className="py-0.5 transition-colors hover:text-foreground">
             {site.email}
           </a>
         </nav>

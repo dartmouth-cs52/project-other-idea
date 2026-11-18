@@ -14,14 +14,15 @@ export function SiteNav() {
             is only read out, rather than Sign in breaking over two lines. */}
         <span className="sr-only @xs:not-sr-only">{site.name}</span>
       </Link>
+      {/* Each text link is padded to a 24px target, so it is not too small to press on a phone. */}
       <nav className="flex items-center gap-6 text-sm font-medium">
-        <Link href="/#pricing" className="hidden text-muted-foreground transition-colors hover:text-foreground sm:block">
+        <Link href="/#pricing" className="hidden py-0.5 text-muted-foreground transition-colors hover:text-foreground sm:block">
           Pricing
         </Link>
-        <Link href="/#faq" className="hidden text-muted-foreground transition-colors hover:text-foreground sm:block">
+        <Link href="/#faq" className="hidden py-0.5 text-muted-foreground transition-colors hover:text-foreground sm:block">
           FAQ
         </Link>
-        <Link href={signInHref} className="text-muted-foreground transition-colors hover:text-foreground">
+        <Link href={signInHref} className="py-0.5 text-muted-foreground transition-colors hover:text-foreground">
           Sign in
         </Link>
         <Link href={accessHref} className={buttonVariants({ size: "lg" })}>
