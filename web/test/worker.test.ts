@@ -223,6 +223,40 @@ test("a body within the limit reaches its route byte for byte, so Stripe's signa
   assert.deepEqual(await response.json(), { received: true, ignored: "other mode" });
 });
 
+test("a site's name is saved on one line, since it goes into the subject of the emails about the site", async () => {
+  const SIGNED_IN = { ...env, NEON_AUTH_URL: "https://auth.example/neondb/auth", NEON_AUTH_COOKIE_SECRET: "c".repeat(32) };
+  const ORG = "00000000-0000-4000-8000-000000000001";
+  let saved = "Acme";
+  // Neon Auth says who is signed in, and Neon's database answers over HTTP, as its driver asks, with the fields named and typed.
+  const answer = (query: string, params: unknown[]): { fields: [string, number][]; rows: (string | null)[][] } => {
+    if (query.includes("from neon_auth.member m join neon_auth.organization")) return { fields: [["id", 25], ["name", 25], ["role", 25]], rows: [[ORG, "Acme", "owner"]] };
+    if (query.startsWith("update sites set name")) return (saved = String(params[0])), { fields: [], rows: [] };
+    if (query.includes("from sites where id")) {
+      const fields: [string, number][] = [["id", 25], ["name", 25], ["origin", 25], ["allowed_origins", 1009], ["context", 3802], ["reading", 3802], ["routes_mode", 25], ["created_at", 25]];
+      return { fields, rows: [[SITE, saved, "https://app.example.com", "{https://app.example.com}", JSON.stringify({ pages: [] }), null, "shadow", "2026-11-18T00:00:00Z"]] };
+    }
+    return { fields: [], rows: [] };
+  };
+  const real = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const address = input instanceof Request ? input.url : String(input);
+    if (address.startsWith("https://auth.example/")) return Response.json({ session: { id: "s1", userId: "u1" }, user: { id: "u1", email: "dana@example.com", name: "Dana", emailVerified: true } });
+    const { query, params } = JSON.parse(String(init?.body)) as { query: string; params: unknown[] };
+    const { fields, rows } = answer(query.trim(), params);
+    return Response.json({ fields: fields.map(([name, dataTypeID]) => ({ name, dataTypeID })), rows, command: "SELECT", rowCount: rows.length });
+  };
+  try {
+    const name = `  Acme\r\nBcc: everyone@example.com${String.fromCodePoint(0x2028, 0x202e)}Evil  `;
+    const request = new Request(`https://joinhaptic.com/api/app/sites/${SITE}`, { method: "PATCH", headers: { origin: "https://joinhaptic.com", "content-type": "application/json" }, body: JSON.stringify({ name }) });
+    const response = await appApi(request, SIGNED_IN, new URL(request.url));
+    assert.equal(response.status, 200);
+    assert.equal(saved, "Acme Bcc: everyone@example.com Evil");
+    assert.equal(((await response.json()) as { name: string }).name, saved);
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
 test("approving a request emails a sign-in link that comes back to the list of sites", async () => {
   const entry = { email: "dana@example.com", company: "Example Co", firstName: "Dana", lastName: "Reyes", details: "" };
   const approving = {
