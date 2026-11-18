@@ -3,6 +3,8 @@
 // The signed-in pages' calls to the site's Worker (worker/app-api.ts), and the
 // shapes it answers with.
 
+import { useEffect, useSyncExternalStore } from "react";
+
 /**
  * A call the Worker turned down, or that never reached it. The message is
  * always one to show the person. `field` names the one input at fault, when
@@ -18,6 +20,73 @@ export class ApiError extends Error {
   }
 }
 
+/** What a call that went wrong on the server's side says. */
+const OUR_SIDE = "Something went wrong on our side. Try again in a moment.";
+
+/** What a call says once the session has ended on a page that stayed for typing not saved yet. */
+const SIGNED_OUT = "You were signed out. Sign in again in a new tab, then try again.";
+
+/**
+ * Typing on the page that hasn't been saved yet, one mark for each form that holds some (useUnsaved). While there is
+ * any, a page whose session has ended stays where it is, so what was typed doesn't go with it.
+ */
+const unsaved = new Set<object>();
+
+/**
+ * Marks the typing a form holds as not saved yet, for as long as `dirty` is true. The notes, a help doc and a teach
+ * review use it, since they take more than a moment to type again. Anything shorter is simply typed again after
+ * signing in, so it doesn't keep a page whose session has ended from going to sign in.
+ */
+export function useUnsaved(dirty: boolean) {
+  useEffect(() => {
+    if (!dirty) return;
+    const mark = {};
+    unsaved.add(mark);
+    return () => {
+      unsaved.delete(mark);
+    };
+  }, [dirty]);
+}
+
+/** Whether the session has ended on a page that stayed for typing not saved yet, which the page then says. */
+let signedOut = false;
+/** How many times the page has found its session ended, so an answer to a call made before then isn't taken for signing in again. */
+let endings = 0;
+const watchers = new Set<() => void>();
+function setSignedOut(next: boolean) {
+  if (signedOut === next) return;
+  signedOut = next;
+  if (next) endings++;
+  for (const watcher of watchers) watcher();
+}
+function watch(watcher: () => void) {
+  watchers.add(watcher);
+  return () => {
+    watchers.delete(watcher);
+  };
+}
+export const useSignedOut = () => useSyncExternalStore(watch, () => signedOut, () => false);
+
+/**
+ * Whether no one is signed in, asked of the session itself. The Worker answers 401 when Neon Auth says there is no
+ * session, and also when it couldn't get an answer from Neon Auth at all (currentUser in worker/auth.ts), so a 401
+ * alone would send people who are still signed in to sign in whenever Neon Auth stumbled. Only an answer that names no
+ * one counts. The auth client keeps the last session it saw, so this asks the server directly. Calls turned away
+ * together share one check.
+ */
+let checking: Promise<boolean> | null = null;
+function sessionEnded(): Promise<boolean> {
+  checking ??= (async () => {
+    const response = await fetch("/api/auth/get-session", { credentials: "same-origin", cache: "no-store" }).catch(() => null);
+    if (!response?.ok) return false;
+    const answer = (await response.json().catch(() => undefined)) as { user?: unknown } | null | undefined;
+    return answer !== undefined && !answer?.user;
+  })().finally(() => {
+    checking = null;
+  });
+  return checking;
+}
+
 /**
  * Leaves for the sign-in page. A sign-in link that was already used or has expired comes back to the dashboard with an
  * error in the address, and that goes along, so the sign-in page can say what happened. It replaces this page rather
@@ -29,6 +98,7 @@ function toSignIn() {
 }
 
 export async function api<T>(path: string, init?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<T> {
+  const asked = endings;
   const response = await fetch(`/api/app${path}`, {
     method: init?.method ?? "GET",
     headers: init?.body === undefined ? undefined : { "content-type": "application/json" },
@@ -38,15 +108,25 @@ export async function api<T>(path: string, init?: { method?: string; body?: unkn
   }).catch(() => null);
   // The browser's own words for this differ in each browser, and none of them say what to do.
   if (!response) throw new ApiError(0, "Haptic couldn't be reached. Check your connection and try again.");
-  // No one is signed in: the session ended while the page was open, from signing out in another tab or being away too
-  // long, or there never was one. Every call after this one would be turned away too, so the page goes to sign in. The
-  // call never settles, so nothing on the page has time to say "Sign in first." with a Try again that can't work.
   if (response.status === 401) {
-    toSignIn();
-    return new Promise<never>(() => {});
+    // No one is signed in: the session ended while the page was open, from signing out in another tab or being away
+    // too long, or there never was one. Or the Worker couldn't check, and then the call failed like any other.
+    if (!signedOut && !(await sessionEnded())) throw new ApiError(401, OUR_SIDE);
+    // Every call after this one would be turned away too, so the page goes to sign in. The call never settles, so
+    // nothing on the page has time to say it failed, with a Try again that can't work.
+    if (!unsaved.size) {
+      toSignIn();
+      return new Promise<never>(() => {});
+    }
+    // Unless that would throw away typing not saved yet. Then the page stays and says so, and the call fails saying
+    // what to do, so the form keeps what was typed. Signing in again in another tab signs this page in too.
+    setSignedOut(true);
+    throw new ApiError(401, SIGNED_OUT);
   }
+  // Signed in again, once a call made since the session ended gets through.
+  if (response.ok && asked === endings) setSignedOut(false);
   const data = (await response.json().catch(() => ({}))) as { error?: string; field?: string };
-  if (!response.ok) throw new ApiError(response.status, data.error ?? "Something went wrong on our side. Try again in a moment.", data.field);
+  if (!response.ok) throw new ApiError(response.status, data.error ?? OUR_SIDE, data.field);
   return data as T;
 }
 

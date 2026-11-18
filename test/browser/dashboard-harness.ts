@@ -224,6 +224,8 @@ export async function startDashboard(): Promise<Dashboard> {
     if (!sub && method === "PATCH") {
       const input = await bodyOf(request);
       if (typeof input.name === "string" && input.name.trim()) await sql`update sites set name = ${input.name.trim()} where id = ${id}`;
+      // Kept trimmed in the site's context, as worker/app-api.ts keeps them.
+      if (typeof input.notes === "string") await sql`update sites set context = jsonb_set(context, '{notes}', to_jsonb(${input.notes.trim()}::text)) where id = ${id}`;
       if (["off", "shadow", "serve"].includes(input.routesMode)) await sql`update sites set routes_mode = ${input.routesMode} where id = ${id}`;
       if (input.appearance) {
         // As worker/app-api.ts keeps it: the pointer is always blue, and a launcher colour is kept as it is drawn,

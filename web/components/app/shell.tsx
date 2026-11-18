@@ -6,10 +6,12 @@
 import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronsUpDown, CreditCard, LayoutGrid, LogOut, Plus, Users } from "lucide-react";
+import { AlertCircleIcon, Check, ChevronsUpDown, CreditCard, LayoutGrid, LogOut, Plus, Users } from "lucide-react";
 import { cn } from "cn";
 import { FormAlert, type Failure } from "@/components/form";
 import { Pointer } from "@/components/pointer";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,9 +21,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Me } from "@/lib/app-api";
+import { useSignedOut, type Me } from "@/lib/app-api";
 import { hostOf } from "@/lib/setup";
-import { site as haptic } from "@/lib/site";
+import { site as haptic, signInHref } from "@/lib/site";
 import { BILLING_HREF, NEW_SITE_HREF, SITES_HREF, TEAM_HREF, VIEWS, siteHref, type View } from "./nav";
 import { SiteIcon } from "./parts";
 import { useSignOut } from "./sign-out";
@@ -41,6 +43,27 @@ function SignOutFailed({ failure, retry }: { failure: Failure | null; retry: () 
     if (failure) window.scrollTo({ top: 0 });
   }, [failure]);
   return <FormAlert failure={failure} retry={retry} />;
+}
+
+/**
+ * Says the session has ended, on a page that stayed so as not to throw away typing not saved yet (api in
+ * lib/app-api.ts). Signing in again in a new tab signs this page in too, and it goes with the next call that gets
+ * through. Its way on is a link, where a failure's is Try again, and it sits under the words, since the description
+ * underlines any link in it.
+ */
+function SignedOut() {
+  const signedOut = useSignedOut();
+  if (!signedOut) return null;
+  return (
+    <Alert variant="destructive" className="px-3.5 py-3">
+      <AlertCircleIcon />
+      <AlertTitle>You were signed out</AlertTitle>
+      <AlertDescription>What you typed is still here. Sign in again in a new tab, then save it.</AlertDescription>
+      <a href={signInHref} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ variant: "secondary" }), "col-start-2 mt-1.5 justify-self-start")}>
+        Sign in again
+      </a>
+    </Alert>
+  );
 }
 
 const CRUMB = "inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50";
@@ -204,6 +227,8 @@ export function SiteShell({ me, current, view, children }: { me: Me; current: Si
       {/* The bar takes no room of its own from 1024px, so the page leaves room for it. */}
       <main className="min-w-0 flex-1 lg:pt-14 lg:pl-56">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
+          {/* The forms that keep a page whose session has ended are all on a site's pages, so only they say so. */}
+          <SignedOut />
           <SignOutFailed failure={failure} retry={signOut} />
           {children}
         </div>

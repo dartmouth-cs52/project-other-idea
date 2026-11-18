@@ -7,7 +7,7 @@ import { Field, FieldError, FieldWithButton, FormAlert, failureFrom, useFieldErr
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { api, type Brand, type Site } from "@/lib/app-api";
+import { api, useUnsaved, type Brand, type Site } from "@/lib/app-api";
 import { INK, inkOn, launcherColour, POINTER_BLUE } from "@/lib/colour";
 import { Card, CardTitle } from "./parts";
 
@@ -230,6 +230,8 @@ export function Notes({ site, onChange }: { site: Site; onChange: (site: Site) =
   const [failure, setFailure] = useState<Failure | null>(null);
   const fields = useFieldErrors({ notes: "notes" });
   const changed = notes.trim() !== site.notes;
+  // Notes run long, so a page whose session ends keeps them for saving once signed in again.
+  useUnsaved(changed);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -312,6 +314,8 @@ export function HelpDocs({ site, onChange }: { site: Site; onChange: (site: Site
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const fields = useFieldErrors({ url: "doc-url", title: "doc-title", text: "doc-text" });
+  // So does a doc being added, which may be a whole article pasted in.
+  useUnsaved(Boolean(url.trim() || title.trim() || text.trim()));
   const { docs } = site;
   const share = Math.min(100, (docs.used / docs.budget) * 100);
 

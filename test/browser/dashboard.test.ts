@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import type { Locator, Page, Route } from "playwright";
+import type { Locator, Page } from "playwright";
 import { launcherColour } from "../../src/shared/colour.ts";
 import { BRAND, COMPANY, NO_SITE_COMPANY, ONE_SITE, ONE_SITE_COMPANY, SETTING_UP, SETTING_UP_COMPANY, SITE, SKIP, WAITING, startDashboard, type Dashboard } from "./dashboard-harness.ts";
 
@@ -424,23 +424,32 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
   });
 
   describe("when the session ends", () => {
-    const signedOut = (route: Route) => route.fulfill({ status: 401, json: { error: "Sign in first." } });
+    /**
+     * The session ends, from signing out in another tab or being away too long: the Worker turns every call away, and
+     * the session itself says no one is signed in. The Worker turns calls away when it can't reach Neon Auth too, and
+     * the page tells the two apart by asking the session.
+     */
+    const endSession = async (tab: Page) => {
+      await tab.route("**/api/app/**", (route) => route.fulfill({ status: 401, json: { error: "Sign in first." } }));
+      await tab.route("**/api/auth/get-session**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));
+    };
+    /** Signed in again in another tab, which signs in every tab, since they share the cookie. */
+    const signInAgain = async (tab: Page) => {
+      await tab.unroute("**/api/app/**");
+      await tab.unroute("**/api/auth/get-session**");
+    };
 
-    test("a page open when the session ends goes to sign in, from a page that keeps itself current and from a save", async () => {
-      // Questions asks what is new every second and a half. Knowledge asks for nothing until Save notes is pressed. Both
+    test("a page open when the session ends goes to sign in, from a page that keeps itself current and from a press", async () => {
+      // Questions asks what is new every second and a half. Settings asks for nothing until a button is pressed. Both
       // once said "Sign in first." with a Try again that was turned away the same way, again and again.
-      for (const view of ["questions", "knowledge"] as const) {
+      for (const view of ["questions", "settings"] as const) {
         const tab = await dash.open(`/dashboard/?site=${SITE}&view=${view}`);
         await closing(tab, async () => {
           if (view === "questions") await tab.getByRole("table").getByText("How do I issue a new card?").first().waitFor({ timeout: 15_000 });
-          else await tab.getByRole("button", { name: "Save notes" }).waitFor({ timeout: 15_000 });
+          else await tab.getByRole("button", { name: "Match website" }).waitFor({ timeout: 15_000 });
           const steps = await tab.evaluate(() => history.length);
-          // From now on the Worker turns every call away, as it does once no one is signed in.
-          await tab.route("**/api/app/**", signedOut);
-          if (view === "knowledge") {
-            await tab.getByLabel("Notes").fill("Cards are under Spend.");
-            await tab.getByRole("button", { name: "Save notes" }).click();
-          }
+          await endSession(tab);
+          if (view === "settings") await tab.getByRole("button", { name: "Match website" }).click();
           await tab.waitForURL("**/sign-in/", { timeout: 10_000 });
           await tab.getByRole("heading", { name: "Sign in to Haptic." }).waitFor();
           assert.equal(await tab.evaluate(() => history.length), steps, "the sign-in page should take the dashboard's place, so Back doesn't return to it");
@@ -448,10 +457,74 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
       }
     });
 
+    test("notes and a help doc being written when the session ends stay, the page says so, and notes save once signed in again", async () => {
+      // Notes run to 20,000 characters, and a help doc can be a whole article pasted in. They once went with the page
+      // the first time anything on it was turned away, by a save or by Knowledge's own asking every fifteen seconds,
+      // and Back couldn't bring them back.
+      const tab = await dash.open(`/dashboard/?site=${SITE}&view=knowledge`);
+      await closing(tab, async () => {
+        const notes = tab.getByLabel("Notes");
+        const save = tab.getByRole("button", { name: "Save notes" });
+        await save.waitFor({ timeout: 15_000 });
+        const draft = "Invoices are under Billing, not Settings. A workspace is what other tools call a team.";
+        await notes.fill(draft);
+        const at = tab.url();
+        await endSession(tab);
+
+        // Nothing pressed: the page's own asking finds the session gone.
+        const notice = tab.getByRole("alert").filter({ has: tab.getByRole("link", { name: "Sign in again" }) });
+        await notice.waitFor({ timeout: 20_000 });
+        assert.match(await notice.innerText(), /You were signed out/);
+        assert.equal(tab.url(), at, "the page should stay");
+        assert.equal(await notes.inputValue(), draft, "what was typed should still be there");
+        assert.equal(await notice.getByRole("link").getAttribute("target"), "_blank", "signing in again should leave this page as it is");
+
+        // Save says the same, and keeps what was typed.
+        await save.click();
+        const failed = tab.getByRole("alert").filter({ hasText: "Couldn't save your notes" });
+        await failed.waitFor({ timeout: 5_000 });
+        assert.match(await failed.innerText(), /You were signed out/);
+        assert.equal(tab.url(), at);
+        assert.equal(await notes.inputValue(), draft);
+
+        // Signed in again, the same press saves them, and the page stops saying it was signed out.
+        await signInAgain(tab);
+        await save.click();
+        await tab.getByText("Saved. Haptic reads them within a minute.").waitFor({ timeout: 10_000 });
+        await notice.waitFor({ state: "detached" });
+        assert.equal((await dash.site()).notes, draft);
+
+        // A help doc being added is kept the same way, when the session ends again.
+        await endSession(tab);
+        const doc = tab.getByLabel("Address of a help article");
+        await doc.fill("https://help.northpine.example/billing");
+        await tab.locator("form", { has: doc }).getByRole("button", { name: "Add", exact: true }).click();
+        const notAdded = tab.getByRole("alert").filter({ hasText: "Couldn't add the doc" });
+        await notAdded.waitFor({ timeout: 5_000 });
+        assert.match(await notAdded.innerText(), /You were signed out/);
+        assert.equal(tab.url(), at);
+        assert.equal(await doc.inputValue(), "https://help.northpine.example/billing");
+      });
+    });
+
+    test("a call turned away while the session is still there doesn't send anyone to sign in", async () => {
+      // The Worker answers 401 when it can't hear from Neon Auth as well as when no one is signed in. One such answer to
+      // the page's asking once sent a person who was still signed in to sign in again.
+      const tab = await dash.open();
+      await closing(tab, async () => {
+        await tab.locator('[data-metric="Guides finished"]').waitFor({ timeout: 15_000 });
+        const at = tab.url();
+        let asked = 0;
+        await tab.route("**/api/app/sites/*/live", (route) => (asked++ === 0 ? route.fulfill({ status: 401, json: { error: "Sign in first." } }) : route.fallback()));
+        await eventually(async () => asked > 2, "the page should go on asking what is new");
+        assert.equal(tab.url(), at, "the page should stay where it is");
+      });
+    });
+
     test("a sign-in link that didn't work lands on the sign-in page, which says why", async () => {
       const tab = await dash.open("/sign-in/");
       await closing(tab, async () => {
-        await tab.route("**/api/app/**", signedOut);
+        await endSession(tab);
         await tab.goto(`${dash.url}/dashboard/?view=sites&error=INVALID_TOKEN`);
         await tab.waitForURL("**/sign-in/?error=INVALID_TOKEN", { timeout: 10_000 });
         await tab.getByText("That sign-in link no longer works").waitFor();
