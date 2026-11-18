@@ -163,7 +163,10 @@ async function saveSetup(call: SetupRequest, id: string, input: Record<string, u
  * instead, by allowing the new one. A call from an address the site doesn't
  * allow is not counted: nothing is live there to break, and anyone who knows
  * the site's id can send one with a made-up Origin, which would otherwise stop
- * the company changing its address here.
+ * the company changing its address here. A made-up call that names the address
+ * the site allows still counts, since nothing tells it from the script's own,
+ * and no later sign is harder to make up: whoever knows the site's id and
+ * guesses its address can end the change here, and the dashboard's way is left.
  */
 async function changeAddress(call: SetupRequest, id: string, input: Record<string, unknown>): Promise<Answer> {
   const checked = checkAddress(typeof input.url === "string" ? input.url : "");
