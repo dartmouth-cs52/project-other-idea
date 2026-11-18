@@ -15,6 +15,7 @@
 
 import { cleanText } from "../../src/shared/types";
 import type { Sql } from "./db";
+import { emailButton, emailPage, escape, sendEmail, type, type SendEnv } from "./sign-in-email";
 
 /** A guide with no ending reported, and nothing new for this long, was abandoned. Matches insights.ts. */
 const ABANDONED_AFTER = "30 minutes";
@@ -310,20 +311,62 @@ export function oneLine(text: string, max = 80): string {
   return Array.from(text.replace(BREAKS, " ").replace(/\s+/g, " ").trim()).slice(0, max).join("").trim();
 }
 
-/** The email to a company's people about one flagged group on one of its sites. */
-export function alertEmail(site: { name: string }, group: Health, dashboard: string): { subject: string; text: string } {
-  return {
-    subject: `Guides for a common question on ${oneLine(site.name)} stopped finishing`,
-    text: [...describeBreak(group), "", `This often follows a change to the product. Open the guides on your dashboard to see where they stop, and correct a step if Haptic now points at the wrong thing.`, dashboard].join("\n"),
-  };
+/** What the email suggests, after the news. */
+const ADVICE = "This often follows a change to the product. Open the guides on your dashboard to see where they stop, and correct a step if Haptic now points at the wrong thing.";
+
+/** Who the alert comes from. Any address at joinhaptic.com sends through Resend once the domain is verified there. */
+export const ALERTS_FROM = "Haptic <alerts@joinhaptic.com>";
+
+/**
+ * The email to a company's people about one flagged group on one of its sites, on the page every Haptic email
+ * sits on (sign-in-email.ts). Everything a visitor sent is already quoted short by describeBreak, and escaped here.
+ */
+export function alertEmail(site: { name: string }, group: Health, dashboard: string): { subject: string; text: string; html: string } {
+  const subject = `Guides for a common question on ${oneLine(site.name)} stopped finishing`;
+  const lines = describeBreak(group);
+  const paragraph = (text: string, last = false) => `<p class="muted" style="margin:0 0 ${last ? 24 : 16}px;${type(16, 24, 400)}color:#78716C;">${escape(text)}</p>`;
+  const html = emailPage({
+    title: subject,
+    preview: lines[0] ?? subject,
+    card: `<h1 class="ink" style="margin:0 0 8px;${type(24, 32, 500)}letter-spacing:-0.02em;color:#1C1917;">A common question stopped finishing</h1>
+${lines.map((line) => paragraph(line)).join("\n")}
+${paragraph(ADVICE, true)}
+${emailButton("Open the dashboard", dashboard)}`,
+  });
+  return { subject, text: [...lines, "", ADVICE, dashboard].join("\n"), html };
 }
 
-export interface MailEnv {
-  EMAIL?: { send(message: { to: string; from: { email: string; name: string }; subject: string; text: string }): Promise<unknown> };
+/** Resend's key, which every Haptic email is sent with. */
+export type MailEnv = SendEnv;
+
+type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
+
+/** One key for one alert to one person on one day, so Resend sends a retried call once. Short, whatever the group's key holds. */
+async function alertKey(site: string, group: string, to: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${group}\n${to}`)));
+  const hash = Array.from(digest.slice(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `health-alert/${site}/${new Date().toISOString().slice(0, 10)}/${hash}`;
 }
 
 /** Days before the same group on the same site is emailed about again. */
 const ALERT_AGAIN_DAYS = 14;
+
+/**
+ * Emails one flagged group to a company's people, through Resend, as every other Haptic email is. Cloudflare's
+ * own email binding only delivers to inboxes verified under Email Routing, which a customer's are not. `tried`
+ * is false with no key or no one to send to; `emailed` is true once anyone was sent it.
+ */
+export async function alertPeople(env: MailEnv, site: { id: string; name: string }, group: Health, people: string[], dashboard: string, fetcher: Fetch): Promise<{ tried: boolean; emailed: boolean }> {
+  if (!env.RESEND_API_KEY || !people.length) return { tried: false, emailed: false };
+  const { subject, text, html } = alertEmail(site, group, dashboard);
+  let emailed = false;
+  for (const to of people) {
+    const sent = await sendEmail(env, { to, subject, text, html, from: ALERTS_FROM }, await alertKey(site.id, group.key, to), fetcher);
+    if (sent.ok) emailed = true;
+    else console.error(`Couldn't email ${site.id} about ${group.key}: Resend answered ${sent.status} ${sent.detail}`);
+  }
+  return { tried: true, emailed };
+}
 
 /**
  * Run once a day by the Worker's schedule. For every company's site, finds the
@@ -331,7 +374,7 @@ const ALERT_AGAIN_DAYS = 14;
  * people about each one not already sent in the last fortnight. It runs apart
  * from any visitor's step.
  */
-export async function sendHealthAlerts(sql: Sql, env: MailEnv, dashboard = "https://joinhaptic.com/dashboard/"): Promise<number> {
+export async function sendHealthAlerts(sql: Sql, env: MailEnv, dashboard = "https://joinhaptic.com/dashboard/", fetcher: Fetch = (input, init) => fetch(input, init)): Promise<number> {
   const sites = (await sql`select id, name, company_id from sites where company_id is not null`) as { id: string; name: string; company_id: string }[];
   let sent = 0;
   for (const site of sites) {
@@ -343,18 +386,10 @@ export async function sendHealthAlerts(sql: Sql, env: MailEnv, dashboard = "http
       const people = (await sql`
         select u.email from neon_auth.member m join neon_auth."user" u on u.id = m."userId"
         where m."organizationId" = ${site.company_id}::uuid and u."emailVerified" = true`) as { email: string }[];
-      let emailed = false;
-      if (env.EMAIL && people.length) {
-        const { subject, text } = alertEmail(site, group, dashboard);
-        try {
-          for (const person of people) {
-            await env.EMAIL.send({ to: person.email, from: { email: "alerts@joinhaptic.com", name: "Haptic" }, subject, text });
-          }
-          emailed = true;
-        } catch (error) {
-          console.error(`Couldn't email ${site.id} about ${group.key}:`, (error as Error).message);
-        }
-      }
+      const { tried, emailed } = await alertPeople(env, site, group, people.map((person) => person.email), dashboard, fetcher);
+      // Sent to nobody it was tried for: nothing is kept, so tomorrow's run tries again instead of waiting a
+      // fortnight. With no key or no one to send to, the alert is kept for the dashboard only, as before.
+      if (tried && !emailed) continue;
       await sql`
         insert into health_alerts (site_id, question_group, finished_before, finished_now, emailed)
         values (${site.id}, ${group.key}, ${group.flag!.before}, ${group.flag!.now}, ${emailed})`;
