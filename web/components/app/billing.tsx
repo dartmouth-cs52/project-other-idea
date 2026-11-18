@@ -11,8 +11,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FormAlert, failureFrom, type Failure } from "@/components/form";
-import { api, ApiError, type Billing } from "@/lib/app-api";
+import { api, ApiError, type Billing, type Me } from "@/lib/app-api";
 import { monthTotal, type PaidPlan } from "@/lib/billing-plans";
+import { hostOf } from "@/lib/setup";
 import { pricing, site } from "@/lib/site";
 import { siteHref } from "./nav";
 import { forgetBilling, Reasons } from "./upgrade";
@@ -141,8 +142,32 @@ function Loaded({ billing, onChange }: { billing: Billing; onChange: (next: Bill
   );
 }
 
+/**
+ * Each of the company's sites' addresses, by the site's id, once asked for. The billing answer names the sites and
+ * not their addresses, so they are asked for, the way the bar across the top has them, and only when `wanted`.
+ */
+function useAddresses(wanted: boolean): Map<string, string> {
+  const [addresses, setAddresses] = useState<Map<string, string>>(() => new Map());
+  useEffect(() => {
+    if (!wanted) return;
+    let live = true;
+    api<Me>("/me").then(
+      (me) => live && setAddresses(new Map((me.sites ?? []).map((site) => [site.id, hostOf(site.origin)]))),
+      // Without them each site is listed by its name alone, as before.
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [wanted]);
+  return addresses;
+}
+
 /** Finished guides so far this period, against what the plan includes, and what that comes to. */
 function Usage({ billing, plan }: { billing: Billing; plan: PaidPlan | undefined }) {
+  // A new site is named after its company, so two of a company's sites can share a name. Only then is the address needed to tell them apart.
+  const shared = (site: Billing["sites"][number]) => billing.sites.filter((other) => other.name === site.name).length > 1;
+  const addresses = useAddresses(billing.sites.some(shared));
   const included = plan?.includedGuides ?? pricing.plans.find((item) => item.id === billing.plan.id)?.includedGuides ?? null;
   const share = included ? Math.min(1, billing.finished / included) : 0;
   const total = plan ? monthTotal(plan, billing.finished) : null;
@@ -180,7 +205,10 @@ function Usage({ billing, plan }: { billing: Billing; plan: PaidPlan | undefined
           {billing.sites.map((item) => (
             <li key={item.id}>
               <Link href={siteHref(item.id, "settings", { tab: "usage" })} className="flex items-center justify-between gap-4 px-5 py-3 text-sm hover:bg-muted/60">
-                <span className="min-w-0 truncate">{item.name}</span>
+                <span className="min-w-0 truncate">
+                  {item.name}
+                  {shared(item) && addresses.has(item.id) && <span className="text-muted-foreground"> {addresses.get(item.id)}</span>}
+                </span>
                 <span className="shrink-0 tabular-nums text-muted-foreground">{item.finished.toLocaleString()}</span>
               </Link>
             </li>
