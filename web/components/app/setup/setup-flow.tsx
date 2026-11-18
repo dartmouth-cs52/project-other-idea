@@ -10,7 +10,7 @@ import { ApiError, api, type Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
 import { nextStep, previousStep, SETUP_STEPS, stepFor, stepIndex, type SetupStepId } from "@/lib/setup";
 import { site as brand } from "@/lib/site";
-import { useSignOut } from "../shell";
+import { useSignOut } from "../sign-out";
 import { AddressStep } from "./address-step";
 import { ConnectStep } from "./connect-step";
 import { useEnterToContinue } from "./frame";

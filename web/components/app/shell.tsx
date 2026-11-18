@@ -3,7 +3,7 @@
 // The frame around every signed-in page: a bar across the top that says where
 // you are, and, inside a site, a list of its pages down the left.
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, CreditCard, LayoutGrid, LogOut, Plus, Users } from "lucide-react";
@@ -20,11 +20,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Me } from "@/lib/app-api";
-import { auth } from "@/lib/auth-client";
 import { hostOf } from "@/lib/setup";
 import { site as haptic } from "@/lib/site";
 import { BILLING_HREF, NEW_SITE_HREF, SITES_HREF, TEAM_HREF, VIEWS, siteHref, type View } from "./nav";
-import { SiteIcon, leaveFor } from "./parts";
+import { SiteIcon } from "./parts";
+import { useSignOut } from "./sign-out";
 import { PlanLink } from "./upgrade";
 
 type SiteRow = NonNullable<Me["sites"]>[number];
@@ -33,32 +33,6 @@ type SiteRow = NonNullable<Me["sites"]>[number];
 /** The first word of the person's name, from Google. Someone who signed in by an emailed link has none. */
 function firstName(name: string | undefined): string | undefined {
   return name?.trim().split(/\s+/)[0] || undefined;
-}
-
-/**
- * Signing out. The session is a cookie the page can't clear by itself, so until the call has gone through the person
- * is still signed in. When it fails, the page stays and `failure` says so, for the page to show with Try again: the
- * sign-in page would tell them they had left. Once it has gone through, the page leaves for the sign-in page with a
- * full page load, for the reason given at leaveFor.
- */
-export function useSignOut() {
-  const [signingOut, setSigningOut] = useState(false);
-  const [failure, setFailure] = useState<Failure | null>(null);
-
-  async function signOut() {
-    setSigningOut(true);
-    setFailure(null);
-    try {
-      const { error } = await auth().signOut();
-      if (!error) return leaveFor("/sign-in/");
-    } catch {
-      // The auth client throws when the call is turned down or can't reach the server, as well as returning an error.
-    }
-    setSigningOut(false);
-    setFailure({ title: "Couldn't sign you out", detail: "You are still signed in. Try again in a moment." });
-  }
-
-  return { signOut, signingOut, failure };
 }
 
 /** What Sign out in the bar says when it didn't go through. It sits at the top of the page, which is brought into view. */
