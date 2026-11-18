@@ -1061,10 +1061,11 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         plans: [],
       };
       const me = { user: { email: "ada@northpine.example", name: "Ada Lovelace" }, approved: true, organization: { id: COMPANY, name: "Northpine", role: "owner" }, sites };
+      let asked = 0;
       const tab = await openOn("/dashboard/?view=billing", PHONE, {
         prepare: async (context) => {
           await context.route(/\/api\/app\/billing$/, (route) => route.fulfill({ json: billing }));
-          await context.route(/\/api\/app\/me$/, (route) => route.fulfill({ json: me }));
+          await context.route(/\/api\/app\/me$/, (route) => (asked++, route.fulfill({ json: me })));
         },
       });
       await closing(tab, async () => {
@@ -1073,6 +1074,8 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         const [first, second] = await rows.allInnerTexts();
         assert.match(first!, /Northpine\s+app\.northpine\.example/);
         assert.match(second!, /Northpine\s+staging\.northpine\.example/);
+        // The addresses are the ones the dashboard already had, not asked for again.
+        assert.equal(asked, 1, `the page asked who is signed in ${asked} times`);
       });
     });
 

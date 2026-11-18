@@ -82,7 +82,7 @@ export function Dashboard() {
   if (view === "billing") {
     return (
       <Plain me={me}>
-        <BillingPage />
+        <BillingPage sites={sites} />
       </Plain>
     );
   }

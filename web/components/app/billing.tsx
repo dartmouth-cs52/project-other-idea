@@ -28,7 +28,10 @@ const lastDay = (end: string) => day(new Date(new Date(end).getTime() - 1).toISO
 /** A billing action that didn't go through: which one ("portal", or the plan whose button was pressed), and what to say. */
 type Failed = { at: string; failure: Failure; retry?: () => void };
 
-export function BillingPage() {
+/** The company's sites with their addresses, as the dashboard already has them from /api/app/me. */
+type Sites = NonNullable<Me["sites"]>;
+
+export function BillingPage({ sites }: { sites: Sites }) {
   const params = useSearchParams();
   const router = useRouter();
   const [billing, setBilling] = useState<Billing | null>(null);
@@ -64,12 +67,12 @@ export function BillingPage() {
           <Skeleton className="h-72 rounded-xl" />
         </div>
       )}
-      {billing && <Loaded billing={billing} onChange={setBilling} />}
+      {billing && <Loaded billing={billing} sites={sites} onChange={setBilling} />}
     </DashboardSurface>
   );
 }
 
-function Loaded({ billing, onChange }: { billing: Billing; onChange: (next: Billing) => void }) {
+function Loaded({ billing, sites, onChange }: { billing: Billing; sites: Sites; onChange: (next: Billing) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   // What didn't go through, said under the button that was pressed: the portal's in the plan's card, a plan's in its own
   // tile. Try again where trying again could help: Haptic couldn't be reached, or Stripe or Haptic failed on their side.
@@ -136,38 +139,18 @@ function Loaded({ billing, onChange }: { billing: Billing; onChange: (next: Bill
 
       {/* During early access the plans come first: choosing one is what this page is for. On a paid plan, what has been used this period is. */}
       {!subscription && plans}
-      <Usage billing={billing} plan={current} />
+      <Usage billing={billing} plan={current} sites={sites} />
       {subscription && plans}
     </>
   );
 }
 
-/**
- * Each of the company's sites' addresses, by the site's id, once asked for. The billing answer names the sites and
- * not their addresses, so they are asked for, the way the bar across the top has them, and only when `wanted`.
- */
-function useAddresses(wanted: boolean): Map<string, string> {
-  const [addresses, setAddresses] = useState<Map<string, string>>(() => new Map());
-  useEffect(() => {
-    if (!wanted) return;
-    let live = true;
-    api<Me>("/me").then(
-      (me) => live && setAddresses(new Map((me.sites ?? []).map((site) => [site.id, hostOf(site.origin)]))),
-      // Without them each site is listed by its name alone, as before.
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, [wanted]);
-  return addresses;
-}
-
 /** Finished guides so far this period, against what the plan includes, and what that comes to. */
-function Usage({ billing, plan }: { billing: Billing; plan: PaidPlan | undefined }) {
-  // A new site is named after its company, so two of a company's sites can share a name. Only then is the address needed to tell them apart.
+function Usage({ billing, plan, sites }: { billing: Billing; plan: PaidPlan | undefined; sites: Sites }) {
+  // A new site is named after its company, so two of a company's sites can share a name. Only then is the address needed
+  // to tell them apart. The billing answer names the sites and not their addresses, which the dashboard already has.
   const shared = (site: Billing["sites"][number]) => billing.sites.filter((other) => other.name === site.name).length > 1;
-  const addresses = useAddresses(billing.sites.some(shared));
+  const addresses = new Map(sites.map((site) => [site.id, hostOf(site.origin)]));
   const included = plan?.includedGuides ?? pricing.plans.find((item) => item.id === billing.plan.id)?.includedGuides ?? null;
   const share = included ? Math.min(1, billing.finished / included) : 0;
   const total = plan ? monthTotal(plan, billing.finished) : null;
