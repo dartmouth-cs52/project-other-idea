@@ -151,10 +151,11 @@ test("the store counts an outline in one statement, with the visitor added only 
   assert.match(insert.text, /on conflict \(site_id, route, kind, label, href\) do update/);
   assert.match(insert.text, /= any\(outline_labels.visitors\) or cardinality\(outline_labels.visitors\) >= \?/);
   const rows = JSON.parse(insert.values.find((value) => typeof value === "string" && value.startsWith("[")) as string);
+  // Each with its place in the outline, so a network past its day's share keeps the first.
   assert.deepEqual(rows, [
-    { route: "/", kind: "title", label: "Home", href: "" },
-    { route: "/", kind: "link", label: "Reports", href: "/reports" },
-    { route: "/", kind: "button", label: "Share", href: "" },
+    { route: "/", kind: "title", label: "Home", href: "", place: 0 },
+    { route: "/", kind: "link", label: "Reports", href: "/reports", place: 1 },
+    { route: "/", kind: "button", label: "Share", href: "", place: 2 },
   ]);
 });
 

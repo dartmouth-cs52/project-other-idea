@@ -83,11 +83,15 @@ const LABELS_READ = 1500;
 /**
  * How many rows of each kind one network may be counted on for the first time
  * on one site in a day (db/migrations/0019). A row it is already counted on
- * costs nothing, so the people behind one address using a product all day stay
- * well under it, while callers on a few networks can no longer put themselves
- * on thousands of rows at once.
+ * costs nothing, and an outline that goes past the share loses only its rows
+ * past it: the rest still count the visitor and when they were seen. On a new
+ * site every row is new, and one visitor's first pages send hundreds: 761
+ * over ten pages of Wikipedia, the most of the products recorded in
+ * eval/cases. So the share is a few times that, and the people behind one
+ * address using a new product all day stay under it, while each network a
+ * caller has can still put it on only so many rows a day.
  */
-const NETWORK_ROWS_A_DAY = 500;
+const NETWORK_ROWS_A_DAY = 2000;
 
 /**
  * How many steps verified routes may answer for one network on one site in a
@@ -155,6 +159,12 @@ export function endingFor(last: LastStep | undefined): GuideOutcome | undefined 
   // A first answer that only needed words was shown, and is free.
   if (last.n === 0 && !last.pointed) return "shown";
   return "finished";
+}
+
+/** What a network has been counted on today, an outline's new rows included, and how many of those are the outline's. */
+interface Today {
+  total: number;
+  fresh: number;
 }
 
 /** A trusted route whose change a finished guide has just used, by its key, and whether the change now has networks enough. */
@@ -294,7 +304,10 @@ export class Store {
    * to make room.
    *
    * A network that has already been counted on its day's share of new rows
-   * on this site (`networkRowsADay`) teaches it nothing more that day.
+   * on this site (`networkRowsADay`) is counted on no new ones that day. The
+   * rows of an outline past the share are left out, and the rest of it still
+   * counts: the rows the network is already on, and its first new rows, in
+   * the outline's order, up to the share.
    */
   recordOutline(site: SiteContext, visitor: string, outline: PageOutline, network = ""): Promise<void> {
     const rows = outlineRows(outline);
@@ -302,24 +315,38 @@ export class Store {
     const opened = this.recordOpenings(site, visitor, openingRows(outline), network);
     if (!rows.length) return opened;
     return this.quietly("learn from a page (have db/migrations/0009, 0014 and 0019 been applied?)", async () => {
+      const placed = JSON.stringify(rows.map((row, place) => ({ ...row, place })));
+      let room = rows.length;
       if (network) {
         // The rows this outline would count the network on for the first time, added to what it has been counted on today.
         const [day] = (await this.sql`
+          with fresh as (
+            select count(*)::int as count
+            from jsonb_to_recordset(${placed}::jsonb) as r(route text, kind text, label text, href text)
+            left join outline_labels o on o.site_id = ${site.id} and o.route = r.route and o.kind = r.kind and o.label = r.label and o.href = r.href
+            where o.site_id is null or (not (${network} = any(o.networks)) and cardinality(o.networks) < ${MAX_VISITORS})
+          )
           insert into outline_network_days (site_id, network, day, labels)
-          select ${site.id}, ${network}, current_date, count(*)::int
-          from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as r(route text, kind text, label text, href text)
-          left join outline_labels o on o.site_id = ${site.id} and o.route = r.route and o.kind = r.kind and o.label = r.label and o.href = r.href
-          where o.site_id is null or (not (${network} = any(o.networks)) and cardinality(o.networks) < ${MAX_VISITORS})
+          select ${site.id}, ${network}, current_date, count from fresh
           on conflict (site_id, network, day) do update set labels = outline_network_days.labels + excluded.labels
-          returning labels`) as { labels: number }[];
-        if (!(await this.withinDay(site, day?.labels ?? 0, rows.length, "labels"))) return;
+          returning labels as total, (select count from fresh) as fresh`) as Today[];
+        room = await this.roomToday(site, day, "labels");
       }
       const [counted] = (await this.sql`select count(*)::int as count from outline_labels where site_id = ${site.id}`) as { count: number }[];
       await this.sql`
         insert into outline_labels (site_id, route, kind, label, href, visitors, networks)
         select ${site.id}, r.route, r.kind, r.label, r.href, array[${visitor}::text],
           case when ${network} = '' then '{}'::text[] else array[${network}::text] end
-        from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as r(route text, kind text, label text, href text)
+        from (
+          select r.route, r.kind, r.label, r.href, r.fresh, row_number() over (partition by r.fresh order by r.place) as nth
+          from (
+            select r.route, r.kind, r.label, r.href, r.place,
+              o.site_id is null or (not (${network} = any(o.networks)) and cardinality(o.networks) < ${MAX_VISITORS}) as fresh
+            from jsonb_to_recordset(${placed}::jsonb) as r(route text, kind text, label text, href text, place int)
+            left join outline_labels o on o.site_id = ${site.id} and o.route = r.route and o.kind = r.kind and o.label = r.label and o.href = r.href
+          ) r
+        ) r
+        where not r.fresh or r.nth <= ${room}
         on conflict (site_id, route, kind, label, href) do update set
           seen_count = outline_labels.seen_count + 1, last_seen_at = now(),
           visitors = case when ${visitor} = any(outline_labels.visitors) or cardinality(outline_labels.visitors) >= ${MAX_VISITORS}
@@ -350,23 +377,37 @@ export class Store {
   private recordOpenings(site: SiteContext, visitor: string, rows: ReturnType<typeof openingRows>, network: string): Promise<void> {
     if (!rows.length) return Promise.resolve();
     return this.quietly("learn what a menu shows (have db/migrations/0012, 0014 and 0019 been applied?)", async () => {
+      const placed = JSON.stringify(rows.map((row, place) => ({ ...row, place })));
+      let room = rows.length;
       if (network) {
         const [day] = (await this.sql`
+          with fresh as (
+            select count(*)::int as count
+            from jsonb_to_recordset(${placed}::jsonb) as r(route text, control text, label text, href text)
+            left join outline_openings o on o.site_id = ${site.id} and o.route = r.route and o.control = r.control and o.label = r.label and o.href = r.href
+            where o.site_id is null or (not (${network} = any(o.networks)) and cardinality(o.networks) < ${MAX_VISITORS})
+          )
           insert into outline_network_days (site_id, network, day, openings)
-          select ${site.id}, ${network}, current_date, count(*)::int
-          from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as r(route text, control text, label text, href text)
-          left join outline_openings o on o.site_id = ${site.id} and o.route = r.route and o.control = r.control and o.label = r.label and o.href = r.href
-          where o.site_id is null or (not (${network} = any(o.networks)) and cardinality(o.networks) < ${MAX_VISITORS})
+          select ${site.id}, ${network}, current_date, count from fresh
           on conflict (site_id, network, day) do update set openings = outline_network_days.openings + excluded.openings
-          returning openings`) as { openings: number }[];
-        if (!(await this.withinDay(site, day?.openings ?? 0, rows.length, "items behind controls"))) return;
+          returning openings as total, (select count from fresh) as fresh`) as Today[];
+        room = await this.roomToday(site, day, "items behind controls");
       }
       const [counted] = (await this.sql`select count(*)::int as count from outline_openings where site_id = ${site.id}`) as { count: number }[];
       await this.sql`
         insert into outline_openings (site_id, route, control, label, href, visitors, networks)
         select ${site.id}, r.route, r.control, r.label, r.href, array[${visitor}::text],
           case when ${network} = '' then '{}'::text[] else array[${network}::text] end
-        from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as r(route text, control text, label text, href text)
+        from (
+          select r.route, r.control, r.label, r.href, r.fresh, row_number() over (partition by r.fresh order by r.place) as nth
+          from (
+            select r.route, r.control, r.label, r.href, r.place,
+              o.site_id is null or (not (${network} = any(o.networks)) and cardinality(o.networks) < ${MAX_VISITORS}) as fresh
+            from jsonb_to_recordset(${placed}::jsonb) as r(route text, control text, label text, href text, place int)
+            left join outline_openings o on o.site_id = ${site.id} and o.route = r.route and o.control = r.control and o.label = r.label and o.href = r.href
+          ) r
+        ) r
+        where not r.fresh or r.nth <= ${room}
         on conflict (site_id, route, control, label, href) do update set
           seen_count = outline_openings.seen_count + 1, last_seen_at = now(),
           visitors = case when ${visitor} = any(outline_openings.visitors) or cardinality(outline_openings.visitors) >= ${MAX_VISITORS}
@@ -890,21 +931,25 @@ export class Store {
   }
 
   /**
-   * Whether a network is still within its day's share of new rows on a site,
-   * now that `total` is how many it has been counted on today, this outline's
-   * `rows` included. The first outline past the share says so in the log.
-   * Once a day this process also deletes the counts of earlier days, which
-   * nothing reads.
+   * How many of an outline's rows that are new to a network it may still be
+   * counted on today, within its day's share on a site. `day.total` is how
+   * many it has been counted on today with this outline's new rows, and
+   * `day.fresh` how many of those are this outline's. The first outline past
+   * the share says so in the log. Once a day this process also deletes the
+   * counts of earlier days, which nothing reads.
    */
-  private async withinDay(site: SiteContext, total: number, rows: number, what: string): Promise<boolean> {
+  private async roomToday(site: SiteContext, day: Today | undefined, what: string): Promise<number> {
     const today = new Date().toISOString().slice(0, 10);
     if (this.clearedDay !== today) {
       this.clearedDay = today;
       await this.sql`delete from outline_network_days where day < current_date`;
     }
-    if (total <= this.networkRowsADay) return true;
-    if (total - rows <= this.networkRowsADay) console.warn(`A network has taught ${site.id} ${this.networkRowsADay} new ${what} today, so it teaches it nothing more until tomorrow.`);
-    return false;
+    if (!day) return 0;
+    const before = day.total - day.fresh;
+    const room = Math.max(0, Math.min(day.fresh, this.networkRowsADay - before));
+    if (room < day.fresh && before <= this.networkRowsADay)
+      console.warn(`A network has taught ${site.id} ${this.networkRowsADay} new ${what} today, so it teaches it no new ones until tomorrow.`);
+    return room;
   }
 
   private async quietly(what: string, work: () => Promise<void>): Promise<void> {

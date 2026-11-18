@@ -124,12 +124,16 @@ describe("learning from visits, against Postgres", { skip: TEST_DATABASE_URL ? f
     try {
       await store.recordOutline(site, "v1", buttons("/reports", "Export", "Share", "Star"), "aaaa");
       await store.recordOutline(site, "v2", buttons("/reports", "Export", "Share", "Star"), "aaaa");
-      await store.recordOutline(site, "v3", buttons("/reports", "Print", "Copy"), "aaaa");
+      assert.deepEqual((await rows("outline_labels")).map((row) => [row.label, row.visitor_count]), [["Export", 2], ["Share", 2], ["Star", 2]]);
+      // An outline that goes past the share keeps its first new labels, in its own order, up to the share.
+      await store.recordOutline(site, "v3", buttons("/reports", "Print", "Copy", "Paste"), "aaaa");
       assert.deepEqual((await rows("outline_labels")).map((row) => [row.label, row.visitor_count]), [["Copy", 1], ["Export", 2], ["Print", 1], ["Share", 2], ["Star", 2]]);
-      // A sixth new label is past its share for the day: nothing in that outline is learned, not even another visitor.
+      assert.match(said.join("\n"), /A network has taught site_learned01 5 new labels today, so it teaches it no new ones until tomorrow/);
+      // Past it, a new label is left out, and the rest of the outline still counts: one more visitor on what the
+      // network is already counted on. Before, the whole outline was dropped, and so was every outline after it that day.
       await store.recordOutline(site, "v4", buttons("/reports", "Archive", "Export"), "aaaa");
-      assert.deepEqual((await rows("outline_labels")).map((row) => [row.label, row.visitor_count]), [["Copy", 1], ["Export", 2], ["Print", 1], ["Share", 2], ["Star", 2]]);
-      assert.match(said.join("\n"), /A network has taught site_learned01 5 new labels today, so it teaches it nothing more until tomorrow/);
+      assert.deepEqual((await rows("outline_labels")).map((row) => [row.label, row.visitor_count]), [["Copy", 1], ["Export", 3], ["Print", 1], ["Share", 2], ["Star", 2]]);
+      assert.equal(said.length, 1, "the log says so once");
       // Another network has a share of its own.
       await store.recordOutline(site, "v5", buttons("/reports", "Archive"), "bbbb");
       assert.ok((await rows("outline_labels")).some((row) => row.label === "Archive"));
@@ -153,7 +157,7 @@ describe("learning from visits, against Postgres", { skip: TEST_DATABASE_URL ? f
     } finally {
       console.warn = warned;
     }
-    assert.deepEqual(await rows("outline_openings"), []);
+    assert.deepEqual((await rows("outline_openings")).map((row) => row.label), ["m1", "m2", "m3", "m4", "m5"]);
     assert.deepEqual((await rows("outline_labels")).map((row) => row.label), ["Search"]);
     assert.match(said.join("\n"), /5 new items behind controls today/);
   });

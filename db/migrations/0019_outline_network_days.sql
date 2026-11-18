@@ -6,9 +6,10 @@
 -- each row counts up to ten. Callers on ten networks could put themselves on
 -- as many rows as they liked, as fast as they could post, and fill every
 -- visitor's prompt with labels of their own. Now each network is counted on at
--- most so many rows a day for the first time (src/server/db.ts says how many).
--- A row it is already counted on is not counted again, so the people behind
--- one office's address using the product all day are far from it.
+-- most so many rows a day for the first time (src/server/db.ts says how many,
+-- a few times what one visitor's first pages on a new site send). A row it is
+-- already counted on is not counted again, and an outline past the share loses
+-- only its new rows past it.
 --
 -- A network is the two-byte hash of 0014, which tens of thousands of addresses
 -- share. Only today's rows are kept: the widget server deletes earlier days.
