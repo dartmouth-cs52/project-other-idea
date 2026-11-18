@@ -108,6 +108,19 @@ test("the merged map stays the same when only the counts change, so the cached p
   assert.match(before, /^\/set\/:id: buttons: Archive, Duplicate, Share, Zoom$/m);
 });
 
+test("a page only traffic knows earns its place by how widely it was seen, never by how often it was sent", () => {
+  // In the order the database sends them: the most widely seen first, and of those that tie, the ones known longest.
+  const known = Array.from({ length: 40 }, (_, i) => ({ route: `/known/${i}`, kind: "title" as const, label: `Known ${i}`, href: "", visitors: 3, networks: 3, seen: 5 }));
+  // Made up today and sent a million times each, from as many networks. They used to take a place each from a known page.
+  const sent = Array.from({ length: 10 }, (_, i) => ({ route: `/sent/${i}`, kind: "title" as const, label: `Sent ${i}`, href: "", visitors: 3, networks: 3, seen: 1_000_000 }));
+  const learned = mergeLearned(crawled, [...known, ...sent], { visitors: 3, networks: 3 }).slice(crawled.length).map((page) => page.path);
+  assert.equal(learned.length, 40);
+  assert.ok(learned.every((path) => path.startsWith("/known/")), learned.join(" "));
+  // Seen from more networks still comes first.
+  const wider = [...known, { ...sent[0]!, networks: 4 }];
+  assert.ok(mergeLearned(crawled, wider, { visitors: 3, networks: 3 }).some((page) => page.path === "/sent/0"));
+});
+
 test("a page lists at most 24 buttons, and navigation on most pages is listed once", () => {
   const nav = [{ label: "Home", to: "/" }, { label: "Reports", to: "/reports" }];
   const pages: PageNode[] = ["/a", "/b", "/c", "/d"].map((path) => ({ path, title: path, headings: [], links: nav, buttons: path === "/a" ? Array.from({ length: 30 }, (_, i) => `Row ${i}`) : [], fields: [] }));

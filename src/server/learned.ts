@@ -44,7 +44,7 @@ export interface LearnedLabel {
   visitors: number;
   /** Distinct networks they called from, up to ten. Absent on a row counted before networks were. */
   networks?: number;
-  /** Every time it was sent. Used to rank, never to decide. */
+  /** Every time it was sent. Kept, but never used to rank or to decide: anyone can send a label as often as it likes. */
   seen: number;
 }
 
@@ -269,9 +269,13 @@ const sound = (row: { route: string; label: string; href: string; control?: stri
 const asNeeds = (needs: number | LabelNeeds): LabelNeeds => (typeof needs === "number" ? { visitors: needs, networks: 0 } : needs);
 /** Enough visitors, from enough networks. */
 const enough = (row: { visitors: number; networks?: number }, needs: LabelNeeds): boolean => row.visitors >= needs.visitors && (row.networks ?? 0) >= needs.networks;
-/** The most widely seen first: by networks, which are the hardest to make up, then visitors, then sightings. */
-const widest = (a: { visitors: number; networks?: number; seen: number }, b: { visitors: number; networks?: number; seen: number }): number =>
-  (b.networks ?? 0) - (a.networks ?? 0) || b.visitors - a.visitors || b.seen - a.seen;
+/**
+ * The most widely seen first: by networks, which are the hardest to make up, then visitors. Never by how often a
+ * label was sent, which anyone can raise as fast as they can post. Rows that tie keep the order they came in: the
+ * database sends those seen lately and known longest first (`learnedLabels` in db.ts), and memory keeps them in
+ * the order they were first seen.
+ */
+const widest = (a: { visitors: number; networks?: number }, b: { visitors: number; networks?: number }): number => (b.networks ?? 0) - (a.networks ?? 0) || b.visitors - a.visitors;
 
 /**
  * The site's pages with what traffic has taught Haptic merged in, for the
@@ -279,7 +283,7 @@ const widest = (a: { visitors: number; networks?: number; seen: number }, b: { v
  * from fewer networks, are left out, and so is any row that could not be
  * learned today. The crawl's pages keep their order and their own labels come first.
  *
- * How often a label was seen decides only whether it makes the cut. What is
+ * How widely a label was seen decides only whether it makes the cut. What is
  * kept is then listed in a fixed order, by page and label, because the site
  * map is part of the prompt the model provider keeps cached: if it reshuffled
  * every time a count went up, every step would pay to cache it again.

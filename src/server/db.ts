@@ -67,8 +67,27 @@ const MAX_REFUSED_ORIGINS = 20;
  * a flood of made-up ones is pushed out by the labels real visitors keep seeing.
  */
 const MAX_LABELS = 5000;
-/** The most learned labels read with a site, the most seen first. */
+/**
+ * The most learned labels read with a site, and as many items behind
+ * controls, the most widely seen first. Each query that ranks them writes the
+ * same order out: by how many networks and then how many visitors have seen
+ * them, the counts that are hard to make up, each up to ten. Then whether they
+ * were seen in the last 30 days, then the longest known first, then the row's
+ * own key, so the order is the same every time. Never by how many times a
+ * label was sent, which anyone can raise as fast as they can post: ranked by
+ * that, labels sent from ten networks over and over took every place in every
+ * visitor's prompt, and the ones real visitors saw were dropped. Now a label
+ * first sent today cannot outrank one real visitors keep seeing with the same counts.
+ */
 const LABELS_READ = 1500;
+/**
+ * How many rows of each kind one network may be counted on for the first time
+ * on one site in a day (db/migrations/0019). A row it is already counted on
+ * costs nothing, so the people behind one address using a product all day stay
+ * well under it, while callers on a few networks can no longer put themselves
+ * on thousands of rows at once.
+ */
+const NETWORK_ROWS_A_DAY = 500;
 
 /** How long a report waits before each look for its guide's row. A Worker may keep working this long after it has answered. */
 const REPORT_RETRIES_MS = [0, 1000, 3000, 6000];
@@ -153,6 +172,12 @@ export class Store {
   private readonly reportWaitsMs: readonly number[];
   /** How many learned labels a site keeps, and as many items behind controls. */
   private readonly maxLabels: number;
+  /** How many learned labels are read with a site, and as many items behind controls. */
+  private readonly labelsRead: number;
+  /** How many rows of each kind one network may be counted on for the first time on one site in a day. */
+  private readonly networkRowsADay: number;
+  /** The day this process last cleared the days before from outline_network_days. */
+  private clearedDay = "";
   /** Stripe's secret key. With it, a guide kept as finished is sent to Stripe as usage straight away. */
   private readonly stripeKey: string | undefined;
 
@@ -163,19 +188,30 @@ export class Store {
    * `labelNetworks` how many different networks they must have called from,
    * the same number unless given. `routeNetworks` is how many networks
    * finished guides must have come from to trust a verified route, as many as
-   * a label needs unless given. A test makes `reportWaitsMs` and `maxLabels`
-   * small. `stripeKey` turns on sending finished guides to Stripe.
+   * a label needs unless given. A test makes `reportWaitsMs`, `maxLabels`,
+   * `labelsRead` and `networkRowsADay` small. `stripeKey` turns on sending
+   * finished guides to Stripe.
    */
   constructor(
     connection: string | NeonQueryFunction<false, false>,
     private readonly labelThreshold = 3,
-    options: { labelNetworks?: number; routeNetworks?: number; reportWaitsMs?: readonly number[]; maxLabels?: number; stripeKey?: string } = {},
+    options: {
+      labelNetworks?: number;
+      routeNetworks?: number;
+      reportWaitsMs?: readonly number[];
+      maxLabels?: number;
+      labelsRead?: number;
+      networkRowsADay?: number;
+      stripeKey?: string;
+    } = {},
   ) {
     this.sql = typeof connection === "string" ? neon(connection) : connection;
     this.labelNetworks = options.labelNetworks ?? labelThreshold;
     this.routeNetworks = options.routeNetworks ?? this.labelNetworks;
     this.reportWaitsMs = options.reportWaitsMs ?? REPORT_RETRIES_MS;
     this.maxLabels = options.maxLabels ?? MAX_LABELS;
+    this.labelsRead = options.labelsRead ?? LABELS_READ;
+    this.networkRowsADay = options.networkRowsADay ?? NETWORK_ROWS_A_DAY;
     this.stripeKey = options.stripeKey || undefined;
   }
 
@@ -203,7 +239,8 @@ export class Store {
       const rows = await this.sql`
         select route, control, label, href, visitor_count as visitors, network_count as networks, seen_count::int as seen from outline_openings
         where site_id = ${id} and visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}
-        order by network_count desc, visitor_count desc, seen_count desc limit ${LABELS_READ}`;
+        order by network_count desc, visitor_count desc, last_seen_at > now() - interval '30 days' desc, first_seen_at, route, control, label, href
+        limit ${this.labelsRead}`;
       return rows as LearnedOpening[];
     } catch (error) {
       console.error("Couldn't read what menus show (have db/migrations/0012 and 0014 been applied?):", error instanceof Error ? error.message : error);
@@ -221,7 +258,8 @@ export class Store {
       const rows = await this.sql`
         select route, kind, label, href, visitor_count as visitors, network_count as networks, seen_count::int as seen from outline_labels
         where site_id = ${id} and visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}
-        order by network_count desc, visitor_count desc, seen_count desc limit ${LABELS_READ}`;
+        order by network_count desc, visitor_count desc, last_seen_at > now() - interval '30 days' desc, first_seen_at, route, kind, label, href
+        limit ${this.labelsRead}`;
       return rows as LearnedLabel[];
     } catch (error) {
       console.error("Couldn't read what was learned (have db/migrations/0009 and 0014 been applied?):", error instanceof Error ? error.message : error);
@@ -238,13 +276,28 @@ export class Store {
    * A site at its limit still learns: the new labels go in, and then the
    * labels the prompt does not read that were seen longest ago are dropped
    * to make room.
+   *
+   * A network that has already been counted on its day's share of new rows
+   * on this site (`networkRowsADay`) teaches it nothing more that day.
    */
   recordOutline(site: SiteContext, visitor: string, outline: PageOutline, network = ""): Promise<void> {
     const rows = outlineRows(outline);
     // In a statement of their own, so a database without 0012 still learns the page's labels.
     const opened = this.recordOpenings(site, visitor, openingRows(outline), network);
     if (!rows.length) return opened;
-    return this.quietly("learn from a page (have db/migrations/0009 and 0014 been applied?)", async () => {
+    return this.quietly("learn from a page (have db/migrations/0009, 0014 and 0019 been applied?)", async () => {
+      if (network) {
+        // The rows this outline would count the network on for the first time, added to what it has been counted on today.
+        const [day] = (await this.sql`
+          insert into outline_network_days (site_id, network, day, labels)
+          select ${site.id}, ${network}, current_date, count(*)::int
+          from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as r(route text, kind text, label text, href text)
+          left join outline_labels o on o.site_id = ${site.id} and o.route = r.route and o.kind = r.kind and o.label = r.label and o.href = r.href
+          where o.site_id is null or (not (${network} = any(o.networks)) and cardinality(o.networks) < ${MAX_VISITORS})
+          on conflict (site_id, network, day) do update set labels = outline_network_days.labels + excluded.labels
+          returning labels`) as { labels: number }[];
+        if (!(await this.withinDay(site, day?.labels ?? 0, rows.length, "labels"))) return;
+      }
       const [counted] = (await this.sql`select count(*)::int as count from outline_labels where site_id = ${site.id}`) as { count: number }[];
       await this.sql`
         insert into outline_labels (site_id, route, kind, label, href, visitors, networks)
@@ -265,8 +318,9 @@ export class Store {
           select route, kind, label, href from (
             select route, kind, label, href, last_seen_at, seen_count,
               (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) and row_number() over (
-                order by (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) desc, network_count desc, visitor_count desc, seen_count desc
-              ) <= ${LABELS_READ} as read
+                order by (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) desc, network_count desc, visitor_count desc,
+                  last_seen_at > now() - interval '30 days' desc, first_seen_at, route, kind, label, href
+              ) <= ${this.labelsRead} as read
             from outline_labels where site_id = ${site.id}
           ) ranked
           order by read desc, last_seen_at desc, seen_count desc, route, kind, label, href
@@ -276,10 +330,21 @@ export class Store {
     });
   }
 
-  /** Counts what a visitor saw behind each control, the same way as a page's labels, and makes room the same way. */
+  /** Counts what a visitor saw behind each control, the same way as a page's labels, and makes room and keeps each network to its day's share the same way. */
   private recordOpenings(site: SiteContext, visitor: string, rows: ReturnType<typeof openingRows>, network: string): Promise<void> {
     if (!rows.length) return Promise.resolve();
-    return this.quietly("learn what a menu shows (have db/migrations/0012 and 0014 been applied?)", async () => {
+    return this.quietly("learn what a menu shows (have db/migrations/0012, 0014 and 0019 been applied?)", async () => {
+      if (network) {
+        const [day] = (await this.sql`
+          insert into outline_network_days (site_id, network, day, openings)
+          select ${site.id}, ${network}, current_date, count(*)::int
+          from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as r(route text, control text, label text, href text)
+          left join outline_openings o on o.site_id = ${site.id} and o.route = r.route and o.control = r.control and o.label = r.label and o.href = r.href
+          where o.site_id is null or (not (${network} = any(o.networks)) and cardinality(o.networks) < ${MAX_VISITORS})
+          on conflict (site_id, network, day) do update set openings = outline_network_days.openings + excluded.openings
+          returning openings`) as { openings: number }[];
+        if (!(await this.withinDay(site, day?.openings ?? 0, rows.length, "items behind controls"))) return;
+      }
       const [counted] = (await this.sql`select count(*)::int as count from outline_openings where site_id = ${site.id}`) as { count: number }[];
       await this.sql`
         insert into outline_openings (site_id, route, control, label, href, visitors, networks)
@@ -298,8 +363,9 @@ export class Store {
           select route, control, label, href from (
             select route, control, label, href, last_seen_at, seen_count,
               (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) and row_number() over (
-                order by (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) desc, network_count desc, visitor_count desc, seen_count desc
-              ) <= ${LABELS_READ} as read
+                order by (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) desc, network_count desc, visitor_count desc,
+                  last_seen_at > now() - interval '30 days' desc, first_seen_at, route, control, label, href
+              ) <= ${this.labelsRead} as read
             from outline_openings where site_id = ${site.id}
           ) ranked
           order by read desc, last_seen_at desc, seen_count desc, route, control, label, href
@@ -751,6 +817,24 @@ export class Store {
       where g.id = ${guide} and g.site_id = ${siteId} and s.route is not null and s.target_key is not null
         and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
         and r.after_key = coalesce(s.after_key, '') and r.next_target_key = s.target_key`;
+  }
+
+  /**
+   * Whether a network is still within its day's share of new rows on a site,
+   * now that `total` is how many it has been counted on today, this outline's
+   * `rows` included. The first outline past the share says so in the log.
+   * Once a day this process also deletes the counts of earlier days, which
+   * nothing reads.
+   */
+  private async withinDay(site: SiteContext, total: number, rows: number, what: string): Promise<boolean> {
+    const today = new Date().toISOString().slice(0, 10);
+    if (this.clearedDay !== today) {
+      this.clearedDay = today;
+      await this.sql`delete from outline_network_days where day < current_date`;
+    }
+    if (total <= this.networkRowsADay) return true;
+    if (total - rows <= this.networkRowsADay) console.warn(`A network has taught ${site.id} ${this.networkRowsADay} new ${what} today, so it teaches it nothing more until tomorrow.`);
+    return false;
   }
 
   private async quietly(what: string, work: () => Promise<void>): Promise<void> {

@@ -146,9 +146,11 @@ export default function Privacy() {
         product, and at most ten of those for each name. Because any program could make up such ids, a name is also
         counted by the network it was sent from: for each name we keep at most ten very short scrambled forms of the
         sender&apos;s network address, made differently for each product. Each of these is shared by tens of thousands
-        of addresses, so it cannot be turned back into an address. A name is used to guide anyone only once several
-        different people on different networks have seen it, so a name that only one person sees, like the title of
-        their own document, is never used. The names, with when each was first and last seen and how often, are kept
+        of addresses, so it cannot be turned back into an address. So that no one network can teach Haptic too many
+        names at once, we also keep how many new names each of these sent that day, until the day ends. A name is used
+        to guide anyone only once several different people on different networks have seen it, so a name that only one
+        person sees, like the title of their own document, is never used. The names, with when each was first and last
+        seen and how often, are kept
         until the company asks us to delete them. The company can switch this off.
       </p>
       <p>
