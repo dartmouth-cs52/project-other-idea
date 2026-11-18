@@ -112,7 +112,8 @@ export function AnyQuestionDemo() {
         <Stage pointing={scene} status={scene.status} layoutKey="team" className="h-[464px]">
           <AppHeader compact active="Team" />
           <div className="flex flex-col gap-2 p-4">
-            <div className="mb-1 flex h-8 items-center justify-between gap-2">
+            {/* The buttons go under the title when the window is too narrow for both, as on the narrowest phones, so neither is cut off. */}
+            <div className="mb-1 flex min-h-8 flex-wrap items-center justify-between gap-2">
               <h4 className="text-base font-medium tracking-tight">Team</h4>
               <div className="flex gap-2">
                 <MockButton target="export" caption="above">

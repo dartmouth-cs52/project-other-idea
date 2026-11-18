@@ -855,5 +855,25 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         });
       }
     });
+
+    test("on the smallest phone the site's bar keeps Sign in on one line, and the first feature demo keeps its buttons in its window", async () => {
+      const tab = await openOn("/", SMALLEST);
+      await closing(tab, async () => {
+        const bar = tab.locator("header").first();
+        const signIn = (await bar.getByRole("link", { name: "Sign in" }).boundingBox())!;
+        assert.ok(signIn.height <= 24, `Sign in is ${signIn.height}px tall, on two lines`);
+        assert.equal(await bar.getByRole("link", { name: "Haptic" }).count(), 1, "the pointer still says it is Haptic, to a screen reader");
+        assert.ok((await sideways(tab)) <= 0, "the page scrolls sideways");
+        const invite = tab.locator("[data-target=invite]").first();
+        const inside = await invite.evaluate((button) => button.getBoundingClientRect().right <= button.closest('[role="img"]')!.getBoundingClientRect().right);
+        assert.equal(inside, true, "Invite teammate is cut off by the demo's window");
+      });
+      // Where there is room, the name is beside the pointer.
+      const wider = await openOn("/", PHONE);
+      await closing(wider, async () => {
+        const name = await wider.locator("header").first().getByText("Haptic", { exact: true }).boundingBox();
+        assert.ok(name && name.width > 20, "the name is beside the pointer on a 375px phone");
+      });
+    });
   });
 });
