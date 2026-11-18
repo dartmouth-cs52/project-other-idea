@@ -289,6 +289,19 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         }
       });
     });
+
+    test("once a sign-in link is sent the focus moves to Check your email, and back to the field to use a different one", async () => {
+      const tab = await dash.open("/sign-in/");
+      await closing(tab, async () => {
+        await tab.getByLabel("Work email").fill("ada@northpine.example");
+        await tab.getByRole("button", { name: "Email me a sign-in link" }).click();
+        const sent = tab.getByRole("heading", { name: "Check your email" });
+        await sent.waitFor();
+        await eventually(() => sent.evaluate((el) => el === document.activeElement), "the focus should be on Check your email, so a screen reader reads it");
+        await tab.getByRole("button", { name: "Use a different email" }).click();
+        await eventually(() => tab.getByLabel("Work email").evaluate((el) => el === document.activeElement), "the focus should be back in the email field");
+      });
+    });
   });
 
   describe("where signing in lands", () => {
