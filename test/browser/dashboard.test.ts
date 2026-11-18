@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import type { BrowserContext, Locator, Page } from "playwright";
 import { launcherColour } from "../../src/shared/colour.ts";
+import { DEFAULT_APPEARANCE } from "../../src/shared/types.ts";
 import { BRAND, COMPANY, NO_SITE_COMPANY, ONE_SITE, ONE_SITE_COMPANY, SETTING_UP, SETTING_UP_COMPANY, SITE, SKIP, WAITING, startDashboard, stayLocal, type Dashboard } from "./dashboard-harness.ts";
+import { widgetBundle } from "./harness.ts";
 
 // The dashboard keeping itself current, and the things about it that only show
 // in a real browser. Each test opens the built page, changes the database the
@@ -874,6 +876,43 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         const name = await wider.locator("header").first().getByText("Haptic", { exact: true }).boundingBox();
         assert.ok(name && name.width > 20, "the name is beside the pointer on a 375px phone");
       });
+    });
+
+    test("on a phone Haptic's own launcher keeps its corner of the public pages, with room under the footer's links", async () => {
+      const { widget } = await widgetBundle();
+      for (const path of ["/request-access/", "/sign-in/"]) {
+        const tab = await openOn(path, { width: 390, height: 844 }, {
+          touch: true,
+          prepare: (context) =>
+            // Haptic's widget, as widget.joinhaptic.com serves it to this site, answered here.
+            context.route("https://widget.joinhaptic.com/**", (route) => {
+              const { pathname } = new URL(route.request().url());
+              if (pathname === "/widget.js") return route.fulfill({ contentType: "text/javascript", body: widget });
+              if (pathname.startsWith("/v1/sites/")) return route.fulfill({ json: { name: "Haptic", appearance: DEFAULT_APPEARANCE } });
+              return route.fulfill({ json: {} });
+            }),
+        });
+        await closing(tab, async () => {
+          const launcher = tab.locator("haptic-root .launcher");
+          await launcher.waitFor({ timeout: 10_000 });
+          // A footer link in the corner at the foot of the page sent it 44px up the side, over the request form's Company field.
+          await eventually(async () => {
+            const box = await launcher.boundingBox();
+            return !!box && Math.abs(844 - (box.y + box.height) - 20) <= 1;
+          }, `on ${path} the launcher should sit in its corner, 20px from the foot of the window`);
+          await tab.evaluate(() => window.scrollTo(0, document.scrollingElement!.scrollHeight));
+          const under = await tab.evaluate(() => {
+            const corner = document.querySelector("haptic-root")!.shadowRoot!.querySelector(".launcher")!.getBoundingClientRect();
+            return Array.from(document.querySelectorAll("a[href], button, input, select, textarea"))
+              .filter((element) => {
+                const box = element.getBoundingClientRect();
+                return box.width > 0 && box.right > corner.left && box.left < corner.right && box.bottom > corner.top && box.top < corner.bottom;
+              })
+              .map((element) => (element as HTMLElement).innerText || element.tagName);
+          });
+          assert.deepEqual(under, [], `at the foot of ${path} the launcher covers part of the page`);
+        });
+      }
     });
   });
 });
