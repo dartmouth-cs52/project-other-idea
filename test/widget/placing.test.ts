@@ -316,3 +316,113 @@ test("the launcher is on the right on every site, even one stored with it on the
     await session.close();
   }
 });
+
+// The ring, the pointer and the caption are drawn over the page, where nothing
+// of the page clips them. A choice scrolled out of its list is still laid out,
+// above or below the list, over whatever the page has there. On Northpine's
+// new budget page, scrolling the Owner list after Haptic pointed at Avery
+// Stone left the ring and its sentence floating over the form above the list,
+// and moving with the scroll. Where the sentence waits once the choice is out
+// of the list, at the list's edge, is test/widget/scrolling.test.ts's.
+
+const PEOPLE = ["Avery Stone", ...Array.from({ length: 30 }, (_, n) => `Person ${n + 1}`)];
+const PICKER = `<h1>New budget</h1>
+  <p>Owner</p>
+  <div id="list" role="listbox" aria-label="People" style="width:320px;height:200px;overflow-y:auto;border:1px solid #999">
+    ${PEOPLE.map((name, n) => `<div id="p${n}" role="option" style="padding:8px;cursor:pointer">${name}</div>`).join("")}
+  </div>
+  <button type="button">Save budget</button>`;
+
+// Where the ring is placed, not where it is drawn at this moment: it lands with a small scale-in, which a drawn box would include.
+const PLACED = `function placed(ring) {
+  const left = parseFloat(ring.style.left), top = parseFloat(ring.style.top);
+  return { left, top, right: left + parseFloat(ring.style.width), bottom: top + parseFloat(ring.style.height) };
+}`;
+/** Notes, every frame from now on, the box the ring is placed in, whenever it is drawn. */
+const recordRing = (session: Session): Promise<void> =>
+  session.page.evaluate(`(() => {
+    ${PLACED}
+    window.rings = [];
+    const ring = document.querySelector("haptic-root").shadowRoot.querySelector(".ring");
+    (function look() {
+      if (!ring.hidden) window.rings.push(placed(ring));
+      requestAnimationFrame(look);
+    })();
+  })()`);
+/** The box the ring is placed in now. */
+const ringBox = (session: Session): Promise<Box> => session.page.evaluate(`(() => { ${PLACED} return placed(document.querySelector("haptic-root").shadowRoot.querySelector(".ring")); })()`);
+const ringsSeen = (session: Session): Promise<Box[]> => session.page.evaluate(`window.rings`);
+
+/** Whether the pointer and the caption are drawn, and what the caption says. */
+const drawn = (session: Session): Promise<{ pointer: boolean; caption: string }> =>
+  session.page.evaluate(() => {
+    const root = document.querySelector("haptic-root")!.shadowRoot!;
+    const cursor = root.querySelector(".cursor") as HTMLElement;
+    const caption = root.querySelector(".caption") as HTMLElement;
+    return { pointer: !cursor.hidden, caption: caption.hidden ? "" : (caption.querySelector("span")?.textContent ?? "") };
+  });
+
+/** Every ring that was drawn lies within the list, give or take the few pixels it stands off its control. */
+function ringsWithin(rings: Box[], list: Box): void {
+  const outside = rings.filter((ring) => ring.top < list.top - 6 || ring.bottom > list.bottom + 6 || ring.left < list.left - 6 || ring.right > list.right + 6);
+  assert.deepEqual(outside.slice(0, 3), [], `the ring was drawn outside the list (${JSON.stringify(list)}) on ${outside.length} of ${rings.length} frames`);
+}
+
+const scrollList = async (session: Session, top: number) => {
+  await session.page.evaluate((to: number) => (document.getElementById("list")!.scrollTop = to), top);
+  await session.page.waitForTimeout(150);
+};
+
+test("a choice the visitor scrolls out of its list takes the ring and the pointer with it, never draws the ring outside the list, and they come back with it (Northpine: they floated over the form above the Owner list)", async () => {
+  const sentence = "Avery Stone is already the owner, so click Avery Stone.";
+  const session = await start(PICKER, (request) => point(request, "Avery Stone", sentence));
+  try {
+    await session.ask("make a budget");
+    await session.untilState("pointing");
+    await session.page.waitForTimeout(700);
+    const list = await boxOf(session, "#list");
+    const option = await boxOf(session, "#p0");
+    const before = await ringBox(session);
+    assert.ok(before.top <= option.top && before.bottom >= option.bottom, `the ring is not round Avery Stone: ${JSON.stringify(before)}`);
+    assert.deepEqual(await drawn(session), { pointer: true, caption: sentence });
+
+    await recordRing(session);
+    // Half under the list's top edge: the ring is round the half that shows.
+    await scrollList(session, (option.bottom - option.top) / 2);
+    const half = await ringBox(session);
+    assert.ok(half.top >= list.top - 6, `the ring stands above the list round the half of Avery Stone that is scrolled away: ${JSON.stringify(half)}`);
+    // Wholly out of the list, and then far down it.
+    for (const top of [option.bottom - option.top + 20, 200, 600]) {
+      await scrollList(session, top);
+      assert.equal((await drawn(session)).pointer, false, `with the list scrolled to ${top}, the pointer is still drawn for a choice out of view`);
+    }
+    ringsWithin(await ringsSeen(session), list);
+
+    await scrollList(session, 0);
+    assert.deepEqual(await drawn(session), { pointer: true, caption: sentence }, "the pointer and the caption did not come back with Avery Stone");
+    assert.deepEqual(await ringBox(session), before, "the ring did not come back round Avery Stone");
+    assert.equal(session.requests.length, 1, "scrolling the list was taken for a step");
+  } finally {
+    await session.close();
+  }
+});
+
+test("a choice out of its list's view when it is pointed at is scrolled to, and its ring is never drawn outside the list on the way", async () => {
+  const session = await start(PICKER, (request) => point(request, "Person 25", "Click Person 25."));
+  try {
+    await recordRing(session);
+    await session.ask("make Person 25 the owner");
+    await session.untilState("pointing");
+    await session.until(async () => (await session.page.evaluate(() => document.getElementById("list")!.scrollTop)) > 0, "the list to be scrolled to Person 25");
+    await session.page.waitForTimeout(1200);
+    const list = await boxOf(session, "#list");
+    ringsWithin(await ringsSeen(session), list);
+    const option = await boxOf(session, "#p25");
+    const ring = await ringBox(session);
+    assert.ok(option.top >= list.top && option.bottom <= list.bottom, `Person 25 was not scrolled into the list's view: ${JSON.stringify(option)}`);
+    assert.ok(ring.top <= option.top && ring.bottom >= option.bottom, `the ring is not round Person 25: ${JSON.stringify(ring)}`);
+    assert.deepEqual(await drawn(session), { pointer: true, caption: "Click Person 25." });
+  } finally {
+    await session.close();
+  }
+});
