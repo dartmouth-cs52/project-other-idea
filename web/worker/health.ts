@@ -260,11 +260,24 @@ export function describeBreak(group: Health): string[] {
 const LINK_LIKE = /:\/\/|^\W*www[.。]|[\p{L}\p{N}][.。]\p{L}{2,}(?![\p{L}\p{N}])|\d{1,3}(?:[.。]\d{1,3}){3}/iu;
 
 /**
+ * Whether a word is LINK_LIKE, read without the marks that sit on a letter, such as an accent or an underline,
+ * so none can split a name the check would otherwise see. The word itself keeps them.
+ */
+function linkLike(word: string): boolean {
+  return LINK_LIKE.test(word.replace(/\p{M}/gu, ""));
+}
+
+/**
  * Text as it shows: full-width letters and dots written plainly, characters that draw nothing dropped, so none
- * can split a link the check above would see, and line breaks as spaces.
+ * can split a link the check above would see, and line breaks as spaces. What draws nothing is every format
+ * character and every one Unicode says to ignore by default, among them the combining grapheme joiner, the
+ * variation selectors and the Hangul fillers.
  */
 function shown(text: string): string {
-  return text.normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, " ");
+  return text
+    .normalize("NFKC")
+    .replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu, "")
+    .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, " ");
 }
 
 /**
@@ -276,13 +289,13 @@ function shown(text: string): string {
  */
 export function quoted(text: string, max: number): string {
   // Masked first, so an email address reads as [email] and not as a link, then cut once the links are out.
-  const words = cleanText(shown(text), Number.MAX_SAFE_INTEGER).split(" ").map((word) => (LINK_LIKE.test(word) ? "[link]" : word));
+  const words = cleanText(shown(text), Number.MAX_SAFE_INTEGER).split(" ").map((word) => (linkLike(word) ? "[link]" : word));
   return cleanText(words.join(" ").replace(/["“”„‟«»]/g, "'"), max);
 }
 
 /** A page's path, quoted the same way a segment at a time, so a page named like a file keeps the rest of its path. */
 function quotedPath(path: string): string {
-  const segments = shown(path).replace(/\s+/g, "").split("/").map((segment) => (LINK_LIKE.test(segment) ? "[link]" : segment));
+  const segments = shown(path).replace(/\s+/g, "").split("/").map((segment) => (linkLike(segment) ? "[link]" : segment));
   return cleanText(segments.join("/"), 80);
 }
 

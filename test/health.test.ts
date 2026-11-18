@@ -86,8 +86,17 @@ test("what a visitor could have written reaches the email short, with nothing in
   for (const sly of [`evil${fullStop}example`, `ｅｖｉｌ.ｅｘａｍｐｌｅ`, `evil${zeroWidth}.example`, "www.evil", "go to 192.168.4.20", "evil。example"]) {
     assert.doesNotMatch(flag(sly, "x", "/").join("\n"), /evil|192/, sly);
   }
-  // Everyday questions keep their words, abbreviations included.
+  // More that draws nothing, or only a mark on a letter, so the name still reads as evil.example: the combining
+  // grapheme joiner, variation selectors, a Mongolian one, a Hangul filler, and an underline under a letter.
+  const inside = (code: number) => `evil.e${String.fromCodePoint(code)}xample`;
+  for (const sly of [inside(0x034f), inside(0xfe0f), `evil${String.fromCodePoint(0xfe00)}.example`, inside(0xe0100), inside(0x180b), inside(0x3164), inside(0xffa0), inside(0x0332), "10.0.0͏.1"]) {
+    const all = flag(`Your account is locked, verify at ${sly}`, `Go to ${sly}`, `/${sly}/login`).join("\n");
+    assert.doesNotMatch(all, /evil|10\.0/, JSON.stringify(sly));
+    assert.doesNotMatch(all, /\p{Default_Ignorable_Code_Point}/u, `${JSON.stringify(sly)}: none of it is left in`);
+  }
+  // Everyday questions keep their words, abbreviations included, and the marks of their own script.
   assert.match(flag("How do I export v2.0 invoices for the U.S. office, e.g. last month's?", "Export", "/billing")[0]!, /"How do I export v2\.0 invoices for the U\.S\. office, e\.g\. last month's\?"/);
+  assert.match(flag("मैं चालान कैसे डाउनलोड करूं?", "x", "/")[0]!, /"मैं चालान कैसे डाउनलोड करूं\?"/);
   // A page named like a file keeps the rest of its path.
   assert.match(flag("x", "Download", "/docs/guide.pdf")[1]!, /on \/docs\/\[link\], at "Download"/);
   // Emails and long numbers are masked as everywhere else.
