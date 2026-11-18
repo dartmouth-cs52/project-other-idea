@@ -823,12 +823,14 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
       });
     });
 
+    /** A long address with no hyphen, the one place the browser would break it, so nothing but the page can let it wrap. */
+    const LONG = "https://app.northpineenterprisesolutions.example";
+
     test("the last setup screen fits the smallest phone when the site's address is long", async () => {
-      const long = "https://app.northpine-enterprise-solutions.example";
       const tab = await openOn(`/dashboard/setup/?site=${SETTING_UP}`, SMALLEST, {
         company: SETTING_UP_COMPANY,
         // The site as it is once the script has called from its long address: the screen that says Haptic is live there.
-        prepare: siteAs(SETTING_UP, () => ({ ...liveOn(long), setup: { step: "connect" } })),
+        prepare: siteAs(SETTING_UP, () => ({ ...liveOn(LONG), setup: { step: "connect" } })),
       });
       await closing(tab, async () => {
         const heading = tab.getByRole("heading", { name: /^Haptic is live on/ });
@@ -855,6 +857,54 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
           assert.equal(shown.whole, true, `at ${size.width}px wide the button's words are cut off`);
         });
       }
+    });
+
+    test("every other screen that names a site's long address fits the smallest phone too", async () => {
+      const now = new Date().toISOString();
+      // The script, seen on an address of the company's that the site doesn't allow.
+      const refused = { origin: LONG.replace("app.", "staging."), allowed: false, first_seen_at: now, last_seen_at: now, requests: 1 };
+      const screens: { name: string; path: string; site: (site: Record<string, any>) => Record<string, unknown>; ready: (tab: Page) => Locator }[] = [
+        {
+          // A site's own page before its script is seen where it should be, once its owner pressed Finish later:
+          // "Finish adding Haptic to <host>", and the steps to add it, with the address to allow.
+          name: "the card to finish setting it up",
+          path: `/dashboard/?site=${SETTING_UP}`,
+          site: () => ({ origin: LONG, allowedOrigins: [LONG], setup: { step: "install", later: true }, origins: [refused] }),
+          ready: (tab) => tab.getByRole("heading", { name: /^Finish adding Haptic to/ }),
+        },
+        {
+          name: "Reading your site",
+          path: `/dashboard/setup/?site=${SETTING_UP}`,
+          site: () => ({ origin: LONG, allowedOrigins: [LONG], setup: { step: "reading" } }),
+          ready: (tab) => tab.getByRole("heading", { name: "Reading your site" }),
+        },
+        {
+          name: "Here's what Haptic learned",
+          path: `/dashboard/setup/?site=${SETTING_UP}`,
+          site: () => ({ origin: LONG, allowedOrigins: [LONG], setup: { step: "learned" } }),
+          ready: (tab) => tab.getByRole("heading", { name: "Here's what Haptic learned" }),
+        },
+        {
+          // Where a running site's script has been seen, one of them an address it doesn't allow, and where it may run.
+          name: "Settings, Install",
+          path: `/dashboard/?site=${SETTING_UP}&view=settings&tab=install`,
+          site: () => {
+            const site = liveOn(LONG);
+            return { ...site, origins: [...site.origins, refused] };
+          },
+          ready: (tab) => tab.getByRole("heading", { name: "Where Haptic may run" }),
+        },
+      ];
+      const wide: string[] = [];
+      for (const screen of screens) {
+        const tab = await openOn(screen.path, SMALLEST, { company: SETTING_UP_COMPANY, prepare: siteAs(SETTING_UP, screen.site) });
+        await closing(tab, async () => {
+          await screen.ready(tab).waitFor({ timeout: 10_000 });
+          const past = await sideways(tab);
+          if (past > 0) wide.push(`${screen.name}, ${past}px`);
+        });
+      }
+      assert.deepEqual(wide, [], "these screens scroll sideways");
     });
 
     test("the Approve page fits a phone when a name and an email are long, and its buttons still say whom they approve in full", async () => {

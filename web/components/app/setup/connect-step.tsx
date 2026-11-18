@@ -64,12 +64,7 @@ export function ConnectStep({
       <StepFrame
         step="connect"
         mark={<DoneMark className="size-7 [&_svg]:size-4" />}
-        // An address is one long word to the browser, so it may break anywhere rather than run off a phone's screen.
-        title={
-          <>
-            Haptic is live on <span className="[overflow-wrap:anywhere]">{hostOf(status.origin)}</span>
-          </>
-        }
+        title={`Haptic is live on ${hostOf(status.origin)}`}
         lead="The script called Haptic from an address this site allows. Open a page there and ask Haptic how to do something. Each question shows on your dashboard as it comes in."
         actions={
           <>
@@ -101,11 +96,7 @@ export function ConnectStep({
     <StepFrame
       step="connect"
       title="See it connect"
-      lead={
-        <>
-          Open any page of <span className="[overflow-wrap:anywhere]">{host}</span> that has the tag. This screen changes a few seconds after the page loads.
-        </>
-      }
+      lead={`Open any page of ${host} that has the tag. This screen changes a few seconds after the page loads.`}
       actions={
         <>
           <Back onClick={onBack} />

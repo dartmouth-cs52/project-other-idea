@@ -533,7 +533,7 @@ function RefusedOrigin({
   }
   return (
     <li className="flex items-center justify-between gap-4 px-4 py-3">
-      <span className="min-w-0 text-sm">
+      <span className="min-w-0 text-sm [overflow-wrap:anywhere]">
         <span className="font-medium">{origin}</span>
         <span className="text-muted-foreground">, seen {when(lastSeen)}</span>
       </span>
@@ -578,7 +578,7 @@ function AllowedOrigins({ site, onChange }: { site: Site; onChange: (site: Site)
       <ul className="flex flex-col divide-y rounded-lg border bg-card">
         {site.allowedOrigins.map((origin) => (
           <li key={origin} className="flex items-center justify-between gap-4 px-4 py-2 text-sm">
-            <span>{origin}</span>
+            <span className="min-w-0 [overflow-wrap:anywhere]">{origin}</span>
             {site.allowedOrigins.length > 1 && (
               <Button variant="ghost" size="sm" onClick={() => remove(origin)}>
                 Remove
@@ -627,12 +627,13 @@ function InstallHealth({ site, reading, onChange }: { site: Site; reading: Readi
           {reading.read} public {reading.read === 1 ? "page" : "pages"} read{reading.done ? "." : ", and still reading."}
         </p>
       )}
+      {/* An address is one long word to the browser, so it may break anywhere rather than run off a phone's screen, here as in AllowedOrigins and RefusedOrigin. */}
       <ul className="flex flex-col divide-y rounded-lg border bg-card">
         {site.origins.map((row) => (
           <li key={row.origin} className="flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <span className="flex items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2">
               {row.allowed && <DoneMark className="size-4" />}
-              <span className="font-medium">{row.origin}</span>
+              <span className="min-w-0 font-medium [overflow-wrap:anywhere]">{row.origin}</span>
             </span>
             <span className="text-muted-foreground">
               {row.allowed ? "Running" : "Not allowed, so Haptic stays hidden"}, last seen {when(row.last_seen_at)}
