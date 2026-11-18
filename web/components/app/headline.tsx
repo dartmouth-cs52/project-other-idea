@@ -9,7 +9,7 @@ import { api } from "@/lib/app-api";
 import { countChange, duration, durationChange, hostOf, rateChange, utcDayLabel, type Change } from "@/lib/setup";
 import type { Headline as HeadlineData } from "@/worker/insights";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, Panel } from "./parts";
+import { Card, Panel, PanelEmpty } from "./parts";
 
 /**
  * The numbers at the top of a site's dashboard, for the chosen range: four of
@@ -90,8 +90,12 @@ export function HeadlineTiles({ data, days, error }: { data: HeadlineData | null
   );
 }
 
-/** Guides started and finished, a bar for each day of the range. */
-export function HeadlineChart({ data }: { data: HeadlineData | null }) {
+/**
+ * Guides started and finished, a bar for each day of the range. When the numbers couldn't be had, the panel says
+ * why in place of the chart, as the tiles above it do, instead of holding a chart's place for good.
+ */
+export function HeadlineChart({ data, error }: { data: HeadlineData | null; error?: string | null }) {
+  const failed = !data && error;
   return (
     <Panel
       title={
@@ -100,19 +104,21 @@ export function HeadlineChart({ data }: { data: HeadlineData | null }) {
         </>
       }
       aside={
-        <ul className="flex items-center gap-4 text-xs text-muted-foreground" aria-label="Legend">
-          <li className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-muted-foreground" aria-hidden />
-            Started
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-foreground" aria-hidden />
-            Finished
-          </li>
-        </ul>
+        !failed && (
+          <ul className="flex items-center gap-4 text-xs text-muted-foreground" aria-label="Legend">
+            <li className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-muted-foreground" aria-hidden />
+              Started
+            </li>
+            <li className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-foreground" aria-hidden />
+              Finished
+            </li>
+          </ul>
+        )
       }
     >
-      <div className="px-5 pb-4">{data ? <DailyChart daily={data.daily} /> : <Skeleton className="h-[168px]" />}</div>
+      {failed ? <PanelEmpty>{error}</PanelEmpty> : <div className="px-5 pb-4">{data ? <DailyChart daily={data.daily} /> : <Skeleton className="h-[168px]" />}</div>}
     </Panel>
   );
 }

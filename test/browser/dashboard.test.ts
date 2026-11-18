@@ -790,5 +790,16 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         });
       }
     });
+
+    test("when the numbers don't load, the chart of guides each day says so, instead of holding its place for good", async () => {
+      const tab = await openOn(`/dashboard/?site=${SITE}`, { width: 1280, height: 800 }, {
+        prepare: (context) => context.route(/\/api\/app\/sites\/[^/]+\/metrics/, (route) => route.fulfill({ status: 500, json: { error: "Something went wrong on our side. Try again in a moment." } })),
+      });
+      await closing(tab, async () => {
+        const chart = part(tab, /^Guides each day/);
+        await chart.getByText("Something went wrong on our side.").waitFor({ timeout: 10_000 });
+        assert.equal(await chart.locator('[data-slot="skeleton"]').count(), 0, "a block still holds the chart's place");
+      });
+    });
   });
 });

@@ -54,7 +54,7 @@ export function Overview({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <Latest siteId={siteId} live={live} onOpen={onOpen} className="lg:col-span-3" />
         <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
-          <HeadlineChart data={headline.data} />
+          <HeadlineChart data={headline.data} error={headline.error} />
           <Endings data={data} />
         </div>
       </div>
