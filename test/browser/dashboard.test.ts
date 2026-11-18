@@ -412,6 +412,29 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     });
   });
 
+  describe("when a call fails", () => {
+    test("the setup screens say when who is signed in can't be found out, and Try again carries on", async () => {
+      // A company with no site yet, on the first screen, and one part way through, with its site loaded. Both once
+      // said "Loading" for good.
+      for (const [company, path] of [
+        [NO_SITE_COMPANY, "/dashboard/setup/"],
+        [SETTING_UP_COMPANY, `/dashboard/setup/?site=${SETTING_UP}`],
+      ] as const) {
+        const tab = await dash.open("/sign-in/", undefined, company);
+        await closing(tab, async () => {
+          await tab.route("**/api/app/me", (route) => route.fulfill({ status: 500, json: { error: "Something went wrong on our side. Try again in a moment." } }));
+          await tab.goto(`${dash.url}${path}`);
+          await tab.getByRole("heading", { name: "Something went wrong" }).waitFor({ timeout: 10_000 });
+          assert.match(await tab.locator("main").innerText(), /Something went wrong on our side/, `${path} should say why`);
+          await tab.unroute("**/api/app/me");
+          await tab.getByRole("button", { name: "Try again" }).click();
+          if (company === NO_SITE_COMPANY) await tab.getByLabel("Your app's address").waitFor({ timeout: 10_000 });
+          else await tab.getByRole("heading", { name: "Add the script" }).waitFor({ timeout: 10_000 });
+        });
+      }
+    });
+  });
+
   describe("where signing in lands", () => {
     const SITES = "/dashboard/?view=sites";
     const where = (tab: Page) => new URL(tab.url()).pathname + new URL(tab.url()).search;

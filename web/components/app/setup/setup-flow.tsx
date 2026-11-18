@@ -39,6 +39,10 @@ export function SetupFlow() {
   const router = useRouter();
   const siteId = params.get("site");
   const [me, setMe] = useState<Me | null>(null);
+  // Why who is signed in couldn't be found out, kept apart from the site's own failure, which a good answer for the
+  // site would clear. Try again counts up `meAsked` to ask again.
+  const [meFailure, setMeFailure] = useState<string | null>(null);
+  const [meAsked, setMeAsked] = useState(0);
   const [site, setSite] = useState<SetupSite | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   // Null until someone moves, so the first screen comes from the site as it loads.
@@ -61,13 +65,13 @@ export function SetupFlow() {
         if (!answer.approved) return window.location.replace("/dashboard/");
         setMe(answer);
       } catch (error) {
-        if (live) setFailure((error as Error).message);
+        if (live) setMeFailure((error as Error).message);
       }
     })();
     return () => {
       live = false;
     };
-  }, []);
+  }, [meAsked]);
 
   const load = useCallback(async () => {
     if (!siteId) return;
@@ -96,6 +100,17 @@ export function SetupFlow() {
 
   const current = site && site.id === siteId ? site : null;
   const step: SetupStepId | null = chosen && chosen.for === siteId ? chosen.step : !siteId ? "address" : current ? stepFor(current) : null;
+  // What keeps every screen from showing: who is signed in, or the site in the address, couldn't be loaded.
+  const stuck = !me && meFailure ? meFailure : failure && !current && siteId ? failure : null;
+
+  /** Asks again for whichever of the two couldn't be loaded. */
+  function retry() {
+    if (!me) {
+      setMeFailure(null);
+      setMeAsked((count) => count + 1);
+    }
+    if (siteId && !current) void load();
+  }
 
   /** Saves where the setup is on the site. True when it went. When it didn't, every screen says so, with Retry. */
   async function save(body: Record<string, unknown>, id = siteId): Promise<boolean> {
@@ -206,11 +221,11 @@ export function SetupFlow() {
       )}
       <main className="flex flex-1 flex-col px-6 py-10 sm:py-16">
         <div className={cn("mx-auto my-auto w-full", step === "install" ? "max-w-3xl" : "max-w-2xl")}>
-          {failure && !current && siteId ? (
+          {stuck ? (
             <div className="flex flex-col gap-4">
               <h1 className="text-2xl font-medium tracking-[-0.02em]">Something went wrong</h1>
-              <p className="text-base text-muted-foreground">{failure}</p>
-              <Button variant="secondary" className="self-start" onClick={() => void load()}>
+              <p className="text-base text-muted-foreground">{stuck}</p>
+              <Button variant="secondary" className="self-start" onClick={retry}>
                 Try again
               </Button>
             </div>
