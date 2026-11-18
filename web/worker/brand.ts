@@ -19,6 +19,7 @@
 
 import { INK, launcherColour } from "../../src/shared/colour";
 import type { SiteContext } from "../../src/shared/types";
+import { cappedText } from "./body";
 
 const USER_AGENT = "HapticReader/1.0 (+https://joinhaptic.com)";
 const TIMEOUT_MS = 8_000;
@@ -221,12 +222,12 @@ export function colourFromSvg(svg: string): string | null {
 
 // Fetching ---------------------------------------------------------------------
 
-/** A public file as text, or null when it can't be had. Never more than `most` characters of it. */
+/** A public file as text, or null when it can't be had. Never more than `most` bytes of it is read. */
 async function textOf(url: string, most: number, accept: string): Promise<{ text: string; url: string } | null> {
   try {
     const response = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: accept }, redirect: "follow", signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (!response.ok) return null;
-    return { text: (await response.text()).slice(0, most), url: response.url || url };
+    return { text: await cappedText(response, most), url: response.url || url };
   } catch {
     return null;
   }

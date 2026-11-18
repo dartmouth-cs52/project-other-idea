@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { boundedText } from "../worker/body";
+import { boundedText, capped, cappedText } from "../worker/body";
 
 // The body is read a piece at a time and given up on once it is bound to be too
 // long, so a large request is refused without being held in memory. These check
@@ -114,4 +114,36 @@ test("a body that lies about its length is still cut off", async () => {
   request.headers.set("content-length", "10");
   assert.equal(await boundedText(request, 1_000), null);
   assert.ok(seen.bytes <= 1_000 * 3 + piece.byteLength * 2);
+});
+
+// A response from a site a company chose is held to a limit the same way, since the site decides what it sends.
+
+const response = (body: ReadableStream<Uint8Array>, headers: Record<string, string> = {}) => new Response(body, { headers });
+
+test("a response within the limit comes back as Response.text() reads it, and says nothing of a length it no longer has", async () => {
+  const text = "Help: invoices are under Billing. Café ☕ 請求書";
+  const { request } = streamed(split(bytes(text), [3, 20, 41]));
+  const kept = capped(response(request.body!, { "content-type": "text/html", "content-length": "999" }), 1_000);
+  assert.equal(kept.headers.get("content-type"), "text/html");
+  assert.equal(kept.headers.get("content-length"), null);
+  assert.equal(await kept.text(), text);
+  assert.equal(await cappedText(new Response("short"), 1_000), "short");
+});
+
+test("a response that never ends is cut off at the limit, and the rest is never read", async () => {
+  const piece = new Uint8Array(64 * 1024).fill(0x78);
+  const { request, seen } = endless(piece);
+  const text = await cappedText(response(request.body!), 200_000);
+  assert.equal(text.length, 200_000, "exactly the bytes allowed, the last piece cut where the limit falls");
+  assert.ok(seen.bytes <= 200_000 + piece.byteLength * 2, `read ${seen.bytes} bytes for a limit of 200,000`);
+  assert.ok(seen.cancelled, "the rest is cancelled, not left waiting");
+});
+
+test("a response that runs past the limit can fail instead, with the caller's own error", async () => {
+  const piece = new Uint8Array(64 * 1024).fill(0x78);
+  const { request, seen } = endless(piece);
+  const tooLong = new Error("That page is too large.");
+  await assert.rejects(capped(response(request.body!), 100_000, () => tooLong).arrayBuffer(), (error) => error === tooLong);
+  assert.ok(seen.cancelled);
+  assert.ok(seen.bytes <= 100_000 + piece.byteLength * 2);
 });

@@ -17,6 +17,7 @@
 
 import puppeteer from "@cloudflare/puppeteer";
 import { normalizePath, type PageNode } from "../../src/shared/types";
+import { capped, cappedText } from "./body";
 import { openDisclosures, outlinePage, type RawOutline } from "./outline";
 import { toPageNode } from "./page-node";
 
@@ -50,6 +51,10 @@ const USER_AGENT = "HapticReader/1.0 (+https://joinhaptic.com)";
 const NOT_PAGES = /\.(png|jpe?g|gif|svg|webp|ico|pdf|zip|css|js|json|xml|txt|mp4|woff2?)$/i;
 /** Most page addresses taken from a sitemap. The reading stops at `max` pages anyway. */
 const MAX_FROM_SITEMAP = 200;
+/** Most of a page, or of a sitemap, that is read as plain HTML. */
+const MAX_BYTES = 2_000_000;
+/** Most links kept from one page read as plain HTML, as in a real browser (outlinePage in outline.ts). */
+const MAX_LINKS = 300;
 
 export function startReading(url: string): Reading {
   return { queue: [url], seen: [], failed: [], thin: [], max: MAX_PAGES, startedAt: new Date().toISOString() };
@@ -131,14 +136,18 @@ export async function readMore(reading: Reading, browser?: BrowserBinding): Prom
   // A site built with JavaScript may have no links in its HTML at all, and this is then the only way to its pages.
   if (first && pages.length) next.queue.push(...(await sitemapUrls(next.origin)).filter((url) => !next.seen.includes(normalizePath(new URL(url).pathname))));
 
-  // Keep the queue short: one waiting URL per path is enough.
+  // Keep the queue short: one waiting URL per path is enough, and no more of them than can still be read,
+  // since every page taken from the queue counts toward max, read or not. A page with a million links of its
+  // own would otherwise put them all in sites.reading.
   const queued = new Set<string>();
-  next.queue = next.queue.filter((url) => {
-    const key = normalizePath(new URL(url).pathname);
-    if (queued.has(key)) return false;
-    queued.add(key);
-    return true;
-  });
+  next.queue = next.queue
+    .filter((url) => {
+      const key = normalizePath(new URL(url).pathname);
+      if (queued.has(key)) return false;
+      queued.add(key);
+      return true;
+    })
+    .slice(0, Math.max(0, next.max - next.seen.length));
   if (!next.queue.length || next.seen.length >= next.max) {
     next.queue = [];
     next.finishedAt = new Date().toISOString();
@@ -151,7 +160,7 @@ async function sitemapUrls(origin: string): Promise<string[]> {
   try {
     const response = await fetch(`${origin}/sitemap.xml`, { headers: { "User-Agent": USER_AGENT }, redirect: "follow", signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (!response.ok) return [];
-    const text = (await response.text()).slice(0, 2_000_000);
+    const text = await cappedText(response, MAX_BYTES);
     return [...text.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)]
       .map((match) => (match[1] ?? "").replace(/&amp;/g, "&"))
       .filter((loc) => URL.canParse(loc) && new URL(loc).origin === origin && !NOT_PAGES.test(new URL(loc).pathname))
@@ -200,7 +209,8 @@ async function readWithFetch(urls: string[], fail: (url: string, reason: string)
         const response = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "text/html" }, redirect: "follow", signal: AbortSignal.timeout(TIMEOUT_MS) });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         if (!(response.headers.get("content-type") ?? "").includes("html")) return;
-        out.push({ url: response.url || url, outline: await outlineHtml(response, response.url || url) });
+        // The start of a page longer than that is read, which holds its navigation.
+        out.push({ url: response.url || url, outline: await outlineHtml(capped(response, MAX_BYTES), response.url || url) });
       } catch (error) {
         fail(url, error instanceof Error ? error.message : String(error));
       }
@@ -209,9 +219,15 @@ async function readWithFetch(urls: string[], fail: (url: string, reason: string)
   return out;
 }
 
-/** The same outline from plain HTML, with the runtime's streaming parser. Text inside scripts and styles is skipped. */
+/**
+ * The same outline from plain HTML, with the runtime's streaming parser. Text inside scripts and styles is
+ * skipped. Each list stops growing at what is kept of it, as outlinePage's do in a browser, so a page with a
+ * million links or buttons holds no more of them here than one with a few hundred.
+ */
 export async function outlineHtml(response: Response, base: string): Promise<RawOutline> {
   const outline: RawOutline = { title: "", description: "", headings: [], links: [], buttons: [], fields: [], opened: 0, reveals: [] };
+  /** Adds text not already in the list, while the list has room: the same as keeping the first `max` different ones. */
+  const keep = (list: string[], text: string, max: number) => void (text && list.length < max && !list.includes(text) && list.push(text));
   // Each open element that collects text gets a buffer, closed by its end tag.
   const collect = (onDone: (text: string) => void) => {
     let buffer = "";
@@ -230,7 +246,7 @@ export async function outlineHtml(response: Response, base: string): Promise<Raw
   const rewriter = new HTMLRewriter()
     .on("title", collect((text) => (outline.title ||= text)))
     .on('meta[name="description"]', { element: (el) => void (outline.description = el.getAttribute("content") ?? "") })
-    .on("h1, h2, h3", collect((text) => text && outline.headings.push(text)))
+    .on("h1, h2, h3", collect((text) => keep(outline.headings, text, 12)))
     .on("a[href]", {
       element(el) {
         pendingHref = el.getAttribute("href") ?? "";
@@ -240,21 +256,18 @@ export async function outlineHtml(response: Response, base: string): Promise<Raw
     .on(
       "a[href]",
       collect((text) => {
-        if (!pendingHref || /^(#|javascript:|mailto:|tel:)/i.test(pendingHref) || !URL.canParse(pendingHref, base)) return;
+        if (outline.links.length >= MAX_LINKS || !pendingHref || /^(#|javascript:|mailto:|tel:)/i.test(pendingHref) || !URL.canParse(pendingHref, base)) return;
         outline.links.push({ label: pendingAria || text, href: new URL(pendingHref, base).href });
       }),
     )
-    .on("button, summary, [role='button'], [role='tab']", collect((text) => text && outline.buttons.push(text)))
+    .on("button, summary, [role='button'], [role='tab']", collect((text) => keep(outline.buttons, text, 40)))
     .on("input, select, textarea", {
       element(el) {
         const type = (el.getAttribute("type") ?? "").toLowerCase();
         if (["hidden", "submit", "button", "reset", "image", "password"].includes(type)) return;
-        outline.fields.push(el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.getAttribute("name") || "");
+        keep(outline.fields, el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.getAttribute("name") || "", 30);
       },
     });
   await rewriter.transform(response).arrayBuffer();
-  outline.headings = [...new Set(outline.headings)].slice(0, 12);
-  outline.buttons = [...new Set(outline.buttons)].slice(0, 40);
-  outline.fields = [...new Set(outline.fields.filter(Boolean))].slice(0, 30);
   return outline;
 }

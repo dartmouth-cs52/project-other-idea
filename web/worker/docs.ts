@@ -4,6 +4,7 @@
 // they were added; the rest are kept but left out (src/server/prompt.ts).
 
 import type { Doc } from "../../src/shared/types";
+import { capped } from "./body";
 
 /** The prompt's room for help docs, in characters. The same figures as src/server/prompt.ts. */
 export const DOCS_BUDGET = 60_000;
@@ -13,6 +14,7 @@ export const ANSWERS_DOCS_BUDGET = 250_000;
 export const MAX_DOC_CHARS = DOCS_BUDGET;
 export const MAX_DOCS = 30;
 const MAX_PAGE_BYTES = 2_000_000;
+const TOO_LARGE = "That page is too large to use as a help doc.";
 const TIMEOUT_MS = 15_000;
 const USER_AGENT = "HapticReader/1.0 (+https://joinhaptic.com)";
 
@@ -51,12 +53,23 @@ export async function docFromUrl(url: URL): Promise<Doc> {
   if (!response.ok) throw new Error(`The page answered ${response.status}.`);
   const type = response.headers.get("content-type") ?? "";
   const size = Number(response.headers.get("content-length") ?? 0);
-  if (size > MAX_PAGE_BYTES) throw new Error("That page is too large to use as a help doc.");
+  if (size > MAX_PAGE_BYTES) throw new Error(TOO_LARGE);
   const source = response.url || url.href;
+  // A page that says nothing of its length, or less than it sends, is held to the same limit as it arrives.
+  let tooLarge = false;
+  const page = capped(response, MAX_PAGE_BYTES, () => ((tooLarge = true), new Error(TOO_LARGE)));
+  const read = async <T>(reading: Promise<T>): Promise<T> => {
+    try {
+      return await reading;
+    } catch (error) {
+      // Whatever the runtime makes of the error on its way out of the stream, it was this one.
+      throw tooLarge ? new Error(TOO_LARGE) : error;
+    }
+  };
 
   if (!type.includes("html")) {
     if (!/text\/(plain|markdown)/.test(type)) throw new Error("That address is not a web page or a text file.");
-    const text = tidy((await response.text()).slice(0, MAX_PAGE_BYTES));
+    const text = tidy(await read(page.text()));
     const heading = /^#\s+(.+)$/m.exec(text)?.[1]?.trim();
     return { title: heading || new URL(source).pathname, source, text };
   }
@@ -105,7 +118,7 @@ export async function docFromUrl(url: URL): Promise<Doc> {
       },
     })
     .onDocument({ text: (chunk) => add(chunk.text) });
-  await rewriter.transform(response).arrayBuffer();
+  await read(rewriter.transform(page).arrayBuffer());
   const text = tidy((main.join("").trim() ? main : all).join(""));
   return { title: tidy(heading) || tidy(title) || new URL(source).pathname, source, text };
 }

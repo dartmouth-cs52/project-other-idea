@@ -1,4 +1,5 @@
-// Reading a request's body without holding more of it than the caller allows.
+// Reading a body without holding more of it than the caller allows: a request's,
+// and below, a response from a site a company chose.
 //
 // Request.text() reads the whole body before its length can be checked. Cloudflare
 // lets a request carry up to 100 MB, and a Worker has 128 MB of memory, so a limit
@@ -33,4 +34,47 @@ export async function boundedText(request: Request, maxChars: number): Promise<s
   }
   text += decoder.decode();
   return text.length > maxChars ? null : text;
+}
+
+// What Haptic fetches from a company's own site, its pages, stylesheets, sitemap
+// and help docs, is held to a limit in the same way. The site chooses what it
+// sends, and one that streams a page for ever, with no length given, would
+// otherwise be read until the Worker ran out of memory, which many requests
+// share, other companies' among them.
+
+/**
+ * The same response with no more than `maxBytes` of its body. A longer body is cut off there and the rest is
+ * never read, or, given `tooLong`, reading it fails with that error. For readers that take a Response whole,
+ * such as HTMLRewriter. Read the address first, from the response fetched: this one has none.
+ */
+export function capped(response: Response, maxBytes: number, tooLong?: () => Error): Response {
+  if (!response.body) return response;
+  const reader = response.body.getReader();
+  let bytes = 0;
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) return controller.close();
+      const room = maxBytes - bytes;
+      bytes += value.byteLength;
+      if (value.byteLength <= room) return controller.enqueue(value);
+      await reader.cancel().catch(() => {});
+      if (tooLong) return controller.error(tooLong());
+      if (room > 0) controller.enqueue(value.subarray(0, room));
+      controller.close();
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
+  // What is read here is already decoded, and may be shorter than the length the site gave.
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  headers.delete("content-encoding");
+  return new Response(body, { status: response.status, statusText: response.statusText, headers });
+}
+
+/** A response's body as text, no more than `maxBytes` of it. A longer one is cut off there, and the rest is never read. */
+export function cappedText(response: Response, maxBytes: number): Promise<string> {
+  return capped(response, maxBytes).text();
 }
