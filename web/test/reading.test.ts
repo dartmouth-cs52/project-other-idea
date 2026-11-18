@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { siteBrand } from "../worker/brand";
 import { docFromUrl } from "../worker/docs";
-import { readMore, startReading } from "../worker/reader";
+import { outlineHtml, readMore, startReading } from "../worker/reader";
+import { TestRewriter } from "./rewriter";
 
 // What Haptic fetches from a site a company chose, its first page, stylesheets,
 // sitemap and help docs, is read a piece at a time and only so far, whether or
 // not the site says how long it is. Each site here sends ten megabytes with no
 // length given, far past every limit, and the network is stood in for, so
-// nothing leaves the machine.
+// nothing leaves the machine. The last test is of what a page's outline keeps,
+// however long the page.
 
 const PIECE = 64 * 1024;
 const PIECES = 160;
@@ -60,7 +62,8 @@ function readOnlySoFar(seen: { bytes: number; cancelled: boolean }, limit: numbe
 }
 
 // Node has no HTMLRewriter, so the pages a real one would parse are read through by this one, which finds nothing
-// in them. What is tested is how much of a page reaches the parser.
+// in them, where what is tested is how much of a page reaches the parser. Where what is kept from the page is
+// tested, `parsed` stands in one that reads the tags these tests write (./rewriter.ts).
 class ReadThrough {
   on() {
     return this;
@@ -75,6 +78,15 @@ class ReadThrough {
 const runtime = globalThis as unknown as { HTMLRewriter?: unknown };
 before(() => void (runtime.HTMLRewriter = ReadThrough));
 after(() => void delete runtime.HTMLRewriter);
+
+async function parsed<T>(work: () => Promise<T>): Promise<T> {
+  runtime.HTMLRewriter = TestRewriter;
+  try {
+    return await work();
+  } finally {
+    runtime.HTMLRewriter = ReadThrough;
+  }
+}
 
 test("a site whose first page and stylesheet never stop is read only so far, and its colour is still found", async () => {
   const page = long(`<html><head><link rel="stylesheet" href="/site.css"></head><body>`, () => fill("<p>Welcome</p>"));
@@ -123,4 +135,31 @@ test("reading a site as plain HTML takes only so much of a page and of its sitem
   );
   readOnlySoFar(page.seen, 2_000_000, "the page");
   readOnlySoFar(sitemap.seen, 2_000_000, "the sitemap");
+});
+
+test("a page read as plain HTML keeps its first 300 links, 12 headings, 40 buttons and 30 fields, as a browser's outline does", async () => {
+  const page = [
+    `<html><head><title>Acme</title><meta name="description" content="Billing for teams"></head><body>`,
+    ...Array.from({ length: 20 }, (_, i) => `<h2>Section ${i}</h2><h3>Section ${i}</h3>`),
+    `<a href="#top">Top</a><a href="mailto:help@acme.example">Email us</a><a href="javascript:void(0)">Nothing</a>`,
+    `<a href="/account" aria-label="Your account"><span>A</span></a>`,
+    ...Array.from({ length: 5_000 }, (_, i) => `<a href="/p/${i}">Page ${i}</a>`),
+    `<div role="tab">Usage</div><summary>More</summary>`,
+    ...Array.from({ length: 100 }, (_, i) => `<button>Button ${i % 50}</button>`),
+    `<input type="hidden" name="token"><input type="password" name="secret"><input type="submit" value="Go"><input placeholder="Search">`,
+    ...Array.from({ length: 50 }, (_, i) => `<input name="field${i}">`),
+    `</body></html>`,
+  ].join("");
+  const outline = await parsed(() => outlineHtml(new Response(page), "https://acme.example/"));
+  assert.equal(outline.title, "Acme");
+  assert.equal(outline.description, "Billing for teams");
+  assert.deepEqual(outline.headings, Array.from({ length: 12 }, (_, i) => `Section ${i}`), "each once, and no more than 12");
+  assert.equal(outline.links.length, 300);
+  assert.deepEqual(outline.links.slice(0, 2), [
+    { label: "Your account", href: "https://acme.example/account" },
+    { label: "Page 0", href: "https://acme.example/p/0" },
+  ]);
+  assert.equal(outline.links.at(-1)!.href, "https://acme.example/p/298");
+  assert.deepEqual(outline.buttons, ["Usage", "More", ...Array.from({ length: 38 }, (_, i) => `Button ${i}`)]);
+  assert.deepEqual(outline.fields, ["Search", ...Array.from({ length: 29 }, (_, i) => `field${i}`)]);
 });
