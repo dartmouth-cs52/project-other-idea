@@ -1037,46 +1037,62 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     });
 
     test("Billing tells two sites with one name apart by their addresses, as the bar across the top does", async () => {
-      // A new site is named after its company, so two can share a name.
-      const sites = [
-        { id: "site_dash_bill1", name: "Northpine", origin: "https://app.northpine.example", connected: true },
-        { id: "site_dash_bill2", name: "Northpine", origin: "https://staging.northpine.example", connected: false },
-      ];
-      const start = new Date();
-      start.setUTCDate(1);
-      const billing = {
-        ready: true,
-        testMode: true,
-        canManage: true,
-        plan: { id: "early-access", name: "Early access" },
-        subscription: null,
-        hasCustomer: false,
-        period: { start: start.toISOString(), end: new Date(start.getTime() + 30 * 86_400_000).toISOString(), kind: "month" },
-        finished: 42,
-        sent: 0,
-        sites: [
-          { id: sites[0]!.id, name: "Northpine", finished: 40 },
-          { id: sites[1]!.id, name: "Northpine", finished: 2 },
-        ],
-        plans: [],
-      };
-      const me = { user: { email: "ada@northpine.example", name: "Ada Lovelace" }, approved: true, organization: { id: COMPANY, name: "Northpine", role: "owner" }, sites };
-      let asked = 0;
-      const tab = await openOn("/dashboard/?view=billing", PHONE, {
-        prepare: async (context) => {
-          await context.route(/\/api\/app\/billing$/, (route) => route.fulfill({ json: billing }));
-          await context.route(/\/api\/app\/me$/, (route) => (asked++, route.fulfill({ json: me })));
-        },
-      });
-      await closing(tab, async () => {
-        const rows = part(tab, "Finished guides").locator("li");
-        await eventually(async () => (await rows.allInnerTexts()).join(" ").includes("staging.northpine.example"), "each site's row should say its address");
-        const [first, second] = await rows.allInnerTexts();
-        assert.match(first!, /Northpine\s+app\.northpine\.example/);
-        assert.match(second!, /Northpine\s+staging\.northpine\.example/);
-        // The addresses are the ones the dashboard already had, not asked for again.
-        assert.equal(asked, 1, `the page asked who is signed in ${asked} times`);
-      });
+      // A new site is named after its company, so two can share a name, and a company's name can be long. With a long
+      // one on the smallest phone, the address was once pushed out of sight after it, leaving two rows alike.
+      for (const [name, size] of [["Northpine", PHONE], ["Northwind Traders International", SMALLEST]] as const) {
+        const sites = [
+          { id: "site_dash_bill1", name, origin: "https://app.northpine.example", connected: true },
+          { id: "site_dash_bill2", name, origin: "https://staging.northpine.example", connected: false },
+        ];
+        const start = new Date();
+        start.setUTCDate(1);
+        const billing = {
+          ready: true,
+          testMode: true,
+          canManage: true,
+          plan: { id: "early-access", name: "Early access" },
+          subscription: null,
+          hasCustomer: false,
+          period: { start: start.toISOString(), end: new Date(start.getTime() + 30 * 86_400_000).toISOString(), kind: "month" },
+          finished: 1242,
+          sent: 0,
+          sites: [
+            { id: sites[0]!.id, name, finished: 1240 },
+            { id: sites[1]!.id, name, finished: 2 },
+          ],
+          plans: [],
+        };
+        const me = { user: { email: "ada@northpine.example", name: "Ada Lovelace" }, approved: true, organization: { id: COMPANY, name, role: "owner" }, sites };
+        let asked = 0;
+        const tab = await openOn("/dashboard/?view=billing", size, {
+          prepare: async (context) => {
+            await context.route(/\/api\/app\/billing$/, (route) => route.fulfill({ json: billing }));
+            await context.route(/\/api\/app\/me$/, (route) => (asked++, route.fulfill({ json: me })));
+          },
+        });
+        await closing(tab, async () => {
+          const rows = part(tab, "Finished guides").locator("li");
+          await eventually(async () => (await rows.allInnerTexts()).join(" ").includes("staging.northpine.example"), "each site's row should say its address");
+          const [first, second] = await rows.allInnerTexts();
+          assert.match(first!, /app\.northpine\.example/);
+          assert.match(second!, /staging\.northpine\.example/);
+          // Each address can be seen whole: nothing it sits in cuts any of it off.
+          const whole = await rows.evaluateAll((items) =>
+            items.map((item) => {
+              const address = Array.from(item.querySelectorAll("span")).find((span) => !span.children.length && /northpine\.example$/.test(span.textContent ?? ""))!;
+              const box = address.getBoundingClientRect();
+              for (let parent = address.parentElement; parent && parent !== item; parent = parent.parentElement) {
+                const edge = parent.getBoundingClientRect();
+                if (getComputedStyle(parent).overflowX !== "visible" && (box.left < edge.left - 0.5 || box.right > edge.right + 0.5)) return false;
+              }
+              return true;
+            }),
+          );
+          assert.deepEqual(whole, [true, true], `with the name ${name} at ${size.width}px wide an address is cut off`);
+          // The addresses are the ones the dashboard already had, not asked for again.
+          assert.equal(asked, 1, `the page asked who is signed in ${asked} times`);
+        });
+      }
     });
 
     test("the links in the site's bar and footer are at least 24px each way, on a phone and a laptop", async () => {

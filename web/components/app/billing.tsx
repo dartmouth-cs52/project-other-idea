@@ -188,9 +188,11 @@ function Usage({ billing, plan, sites }: { billing: Billing; plan: PaidPlan | un
           {billing.sites.map((item) => (
             <li key={item.id}>
               <Link href={siteHref(item.id, "settings", { tab: "usage" })} className="flex items-center justify-between gap-4 px-5 py-3 text-sm hover:bg-muted/60">
-                <span className="min-w-0 truncate">
-                  {item.name}
-                  {shared(item) && addresses.has(item.id) && <span className="text-muted-foreground"> {addresses.get(item.id)}</span>}
+                {/* The address goes under the name, as in the menu of sites, where a long name can't push it out of
+                    sight. It is what tells the two apart, so it is shown whole, on more lines when it must be. */}
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate">{item.name}</span>
+                  {shared(item) && addresses.has(item.id) && <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{addresses.get(item.id)}</span>}
                 </span>
                 <span className="shrink-0 tabular-nums text-muted-foreground">{item.finished.toLocaleString()}</span>
               </Link>
