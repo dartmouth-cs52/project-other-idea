@@ -77,6 +77,53 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     });
   });
 
+  test("a guide opened and closed leaves no step for Back to land on, and Back still closes one", async () => {
+    const tab = await dash.open("/dashboard/?view=sites");
+    await closing(tab, async () => {
+      const where = () => new URL(tab.url()).search;
+      const card = tab.locator("main ul > li").first();
+      await card.getByText("questions in the last 7 days").waitFor({ timeout: 15_000 });
+      await card.getByRole("link").click();
+      const rows = tab.locator("section", { hasText: "Latest questions" }).locator("li button");
+      await rows.first().waitFor({ timeout: 15_000 });
+      const site = where();
+      const panel = tab.getByRole("dialog");
+      // Each guide closed with Escape or the panel's close button once left a step that Back landed on, on this same page.
+      for (const close of ["Escape", "Close"] as const) {
+        await rows.first().click();
+        await panel.waitFor();
+        assert.match(where(), /[?&]guide=/);
+        if (close === "Escape") await tab.keyboard.press("Escape");
+        else await panel.getByRole("button", { name: "Close" }).click();
+        await panel.waitFor({ state: "detached" });
+        assert.equal(where(), site, `closing with ${close} should leave the site's page as it was`);
+      }
+      // Back while a guide is open closes it, and stays on the site's page.
+      await rows.first().click();
+      await panel.waitFor();
+      await tab.goBack();
+      await panel.waitFor({ state: "detached" });
+      assert.equal(where(), site);
+      // The next Back goes back to the list the site was opened from.
+      await tab.goBack();
+      await tab.waitForURL(/[?&]view=sites/, { timeout: 10_000 });
+    });
+  });
+
+  test("a guide that came in the address closes in place, adding nothing to Back", async () => {
+    const tab = await dash.open(`/dashboard/?site=${SITE}&guide=00000000-0000-4000-8000-000000000040`);
+    await closing(tab, async () => {
+      const panel = tab.getByRole("dialog");
+      await panel.waitFor({ timeout: 15_000 });
+      const steps = await tab.evaluate(() => history.length);
+      await tab.keyboard.press("Escape");
+      await panel.waitFor({ state: "detached" });
+      // Nothing to take back here: going back would leave the dashboard.
+      assert.equal(new URL(tab.url()).search, `?site=${SITE}`);
+      assert.equal(await tab.evaluate(() => history.length), steps);
+    });
+  });
+
   test("a guide left alone reads Paused, and a new step brings it back", async () => {
     const tab = await dash.open();
     await closing(tab, async () => {

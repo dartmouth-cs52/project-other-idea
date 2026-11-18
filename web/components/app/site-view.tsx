@@ -99,7 +99,23 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
   // The numbers wait for the first live answer, so they are asked for once and not twice. If live can't be reached they go ahead without it.
   const stamp = live?.stamp ?? (failing ? "unreachable" : undefined);
   const numbers = useInsights(connected && counted && stamp ? siteId : null, days, stamp);
-  const openIt = useCallback((guide: string) => set({ guide }, "push"), [set]);
+  // Opening a guide adds a step to Back, so Back closes it. Closing it another way takes that step back too, or Back
+  // would land on this same page once for every guide opened. A guide that came in the address, from a link or a
+  // reload, added no step here, so closing it only takes it out of the address.
+  const pushed = useRef<string | null>(null);
+  const openIt = useCallback(
+    (guide: string) => {
+      pushed.current = guide;
+      set({ guide }, "push");
+    },
+    [set],
+  );
+  const closeIt = useCallback(() => {
+    if (openGuide && pushed.current === openGuide) {
+      pushed.current = null;
+      window.history.back();
+    } else set({ guide: undefined });
+  }, [openGuide, set]);
 
   const range = <Segmented label="Time range" value={days} onChange={(next) => set({ days: next === 30 ? undefined : String(next) })} options={RANGES.map((value) => ({ value, name: `${value} days` }))} />;
 
@@ -195,7 +211,7 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
       <SiteShell me={me} current={row} view={view}>
         {page}
         {openGuide && site && (
-          <GuideDrawer siteId={site.id} guideId={openGuide} stamp={live?.stamp} onClose={() => set({ guide: undefined })} onCorrected={(corrections) => setSite({ ...site, corrections })} />
+          <GuideDrawer siteId={site.id} guideId={openGuide} stamp={live?.stamp} onClose={closeIt} onCorrected={(corrections) => setSite({ ...site, corrections })} />
         )}
         {site && <TeachDrawer site={site} onChange={setSite} />}
       </SiteShell>
