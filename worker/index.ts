@@ -64,7 +64,10 @@ export interface Env {
   HAPTIC_OFF?: string;
   /** How many different visitors must have seen a learned label before the prompt gets it. 3 unless set. */
   HAPTIC_LABEL_THRESHOLD?: string;
-  /** How many different networks those visitors must have called from. 3 unless set, and never more than the visitors needed. */
+  /**
+   * How many different networks those visitors must have called from. 3 unless set, and never more than the visitors
+   * needed. Finished guides must come from as many networks before a verified route is trusted.
+   */
   HAPTIC_NETWORK_THRESHOLD?: string;
   /** A secret, set with `wrangler secret put`. Not needed while HAPTIC_MODEL is "mock". */
   ANTHROPIC_API_KEY?: string;
@@ -252,7 +255,7 @@ export default {
         later(db?.recordStep(turn, measure, origin, route));
       },
       ...(db ? { findRoute: (site: SiteContext, lookup: RouteLookup) => db.findRoute(site.id, lookup) } : {}),
-      onReport: (site, guide, report) => later(db?.report(site, guide, report)),
+      onReport: (site, guide, report, network) => later(db?.report(site, guide, report, network)),
       onCancel: (turn) => later(db?.cancelStep(turn)),
       onOutline: (site, visitor, outline, network) => later(db?.recordOutline(site, visitor, outline, network)),
       ...(db ? { mapping: { allowed: (site, pass) => db.mappingAllowed(site.id, pass), save: (site, page) => db.saveMappedPage(site.id, page) } } : {}),

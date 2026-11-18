@@ -152,6 +152,13 @@ export default function Privacy() {
         until the company asks us to delete them. The company can switch this off.
       </p>
       <p>
+        For each question asked on a page of the product, Haptic also keeps the control it pointed at there and what it
+        said, so that if the company turns this on it can point the same way next time without asking the AI. That way
+        is used only once guides that followed it have finished on several different networks, so no one person can
+        choose it for everyone. For that we keep with it at most ten of the same very short scrambled forms of the
+        network each of those guides was reported from, until the company asks us to delete them.
+      </p>
+      <p>
         A company can teach Haptic a task by doing it in its own product. Someone at the company starts it from the
         dashboard, which opens the product with a link that works once, for half an hour, and only on that
         company&apos;s site. While they do the task, Haptic notes which buttons, links, fields and lists they use,

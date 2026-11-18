@@ -107,8 +107,12 @@ export interface AppParts {
     allowed(site: SiteContext, pass: string): Promise<boolean>;
     save(site: SiteContext, page: PageNode): Promise<void>;
   };
-  /** Told how a guide ended, whether it helped, or that the visitor asked for a person. Must not throw. */
-  onReport?(site: SiteContext, guide: string, report: GuideReport): void;
+  /**
+   * Told how a guide ended, whether it helped, or that the visitor asked for a person. `network` is the network the
+   * report came from, hashed as for an outline, which a finished guide counts for the routes it used (`Store.report`).
+   * Must not throw.
+   */
+  onReport?(site: SiteContext, guide: string, report: GuideReport, network?: string): void;
   /** How the handoff form is posted to a company's webhook. The web's own fetch unless a test says otherwise. */
   fetch?: typeof fetch;
   /** True on a developer's machine, where a webhook may be on the same machine. */
@@ -221,7 +225,9 @@ export function createApp(parts: AppParts) {
 
       // The step's verified route (routes.ts) is looked up from here on, beside the budget and the model call. On a
       // site that serves routes, a trusted one that matches this page answers the step without the model. That step
-      // makes no model call, so nothing is set aside from the budget for it and nothing is charged.
+      // makes no model call, so nothing is set aside from the budget for it and nothing is charged. It is answered
+      // only after the caller's limit above, which it counts toward like any other step: with no budget to stop it,
+      // that limit is what bounds how many guides one caller can have answered for nothing.
       const routing = startRouting(parts, site, turn);
       const served = await servedStep(routing, site, turn);
       if (served) {
@@ -275,7 +281,7 @@ export function createApp(parts: AppParts) {
       if (!site) return json(404, { error: "No site with that id." });
       if (!mayWrite(site, origin)) return json(403, { error: refusal(origin) });
       if (await parts.overLimit(`${site.id} ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
-      parts.onReport?.(site, guide, report);
+      parts.onReport?.(site, guide, report, await networkHash(site.id, address));
       return json(200, { ok: true });
     }
 

@@ -165,6 +165,30 @@ test("serving answers from a trusted route without the model, and neither sets a
   assert.deepEqual(calls.settle, []);
 });
 
+test("a step a route answers counts toward the caller's limit like any other, and over it nothing is looked up", async () => {
+  // A served step costs nothing and no budget holds it, so the caller's limit is what bounds how many one caller gets.
+  const keys: string[] = [];
+  let looked = 0;
+  const app = createApp({
+    loadSite: async () => site("serve"),
+    widget: async () => "",
+    widgetMaxAge: 0,
+    overLimit: (key) => (keys.push(key), keys.length > 2),
+    findRoute: async () => (looked++, trusted),
+  });
+  const send = async (from: string) => {
+    const body = JSON.stringify(turn({ guide: "8f0a2f1e-4c8b-4a52-9d3e-6c1b2a3d4e5f" }));
+    const response = await app(new Request("https://widget.test/v1/turn", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://app.test" }, body }), from);
+    return { status: response?.status, reply: await response?.json() };
+  };
+  assert.deepEqual(await send("2001:db8:9:1::1"), { status: 200, reply: { target: "e1", status: "continue", say: "Click Billing." } });
+  assert.equal((await send("2001:db8:9:1::2")).status, 200);
+  // A third address in the same /64 is the same caller, and over its limit.
+  assert.equal((await send("2001:db8:9:1::3")).status, 429);
+  assert.equal(looked, 2);
+  assert.deepEqual([...new Set(keys)], ["site_test 2001:db8:9:1::/64"]);
+});
+
 test("a site that has spent its budget still gets the steps a route answers, and the fixed sentence for the rest", async () => {
   const { budget, calls } = countingBudget(true);
   const { send } = server(site("serve"), async () => trusted, budget);

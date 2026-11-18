@@ -128,6 +128,15 @@ export function endingFor(last: LastStep | undefined): GuideOutcome | undefined 
   return "finished";
 }
 
+/** A trusted route whose change a finished guide has just used, by its key, and whether the change now has networks enough. */
+interface RouteChange {
+  goal_key: string;
+  path: string;
+  dialog: string;
+  after_key: string;
+  ready: boolean;
+}
+
 export class Store {
   private readonly sql: NeonQueryFunction<false, false>;
   private readonly seen = new Map<string, number>();
@@ -138,6 +147,8 @@ export class Store {
 
   /** How many different networks a learned label's visitors must have called from before the prompt gets it. */
   private readonly labelNetworks: number;
+  /** How many different networks finished guides that used a route must have come from before it is trusted, or before a change to a trusted one is. */
+  private readonly routeNetworks: number;
   /** How long a report waits before each look at its guide. */
   private readonly reportWaitsMs: readonly number[];
   /** How many learned labels a site keeps, and as many items behind controls. */
@@ -150,16 +161,19 @@ export class Store {
    * the query function instead. `labelThreshold` is how many different
    * visitors must have seen a learned label before the prompt gets it, and
    * `labelNetworks` how many different networks they must have called from,
-   * the same number unless given. A test makes `reportWaitsMs` and
-   * `maxLabels` small. `stripeKey` turns on sending finished guides to Stripe.
+   * the same number unless given. `routeNetworks` is how many networks
+   * finished guides must have come from to trust a verified route, as many as
+   * a label needs unless given. A test makes `reportWaitsMs` and `maxLabels`
+   * small. `stripeKey` turns on sending finished guides to Stripe.
    */
   constructor(
     connection: string | NeonQueryFunction<false, false>,
     private readonly labelThreshold = 3,
-    options: { labelNetworks?: number; reportWaitsMs?: readonly number[]; maxLabels?: number; stripeKey?: string } = {},
+    options: { labelNetworks?: number; routeNetworks?: number; reportWaitsMs?: readonly number[]; maxLabels?: number; stripeKey?: string } = {},
   ) {
     this.sql = typeof connection === "string" ? neon(connection) : connection;
     this.labelNetworks = options.labelNetworks ?? labelThreshold;
+    this.routeNetworks = options.routeNetworks ?? this.labelNetworks;
     this.reportWaitsMs = options.reportWaitsMs ?? REPORT_RETRIES_MS;
     this.maxLabels = options.maxLabels ?? MAX_LABELS;
     this.stripeKey = options.stripeKey || undefined;
@@ -399,25 +413,47 @@ export class Store {
     const target = reply.target ? request.snapshot.elements.find((element) => element.id === reply.target) : undefined;
     const path = normalizePath(request.snapshot.path || "/");
     const targetKey = target ? routeKey(target) : null;
-    // The model's answer becomes the stored route for this question on this screen (routes.ts). A different answer
-    // replaces the route and takes its trust away, until a finished guide confirms the new one. Only a guide's step
-    // is kept: an answer in words is shown in the panel, and a route's reply is shown beside the pointer.
+    // The model's answer becomes the stored route for this question on this screen (routes.ts). Only a guide's step is
+    // kept: an answer in words is shown in the panel, and a route's reply is shown beside the pointer.
+    //
+    // Anything that can send a request can have the model answer from a page of its own making, so an answer alone
+    // never changes what a trusted route serves. On a route not yet trusted, a different answer takes its place, and
+    // the networks that had confirmed the control it pointed at no longer count. A trusted route keeps its control and
+    // its sentence, and a different answer is kept beside it as the change it may make (next_*): the change takes its
+    // place once finished guides from as many networks as trust takes have used it (`trustRoutes`). The same change
+    // asked for again keeps the networks that used it, and another one starts again from none.
     const learn =
       route && route.outcome !== "served" && target && targetKey && reply.status !== "stuck" && (!reply.mode || reply.mode === "guide") && storable(route.lookup, targetKey)
-        ? [
-            this.sql`
-              insert into routes (site_id, goal_key, path, dialog, after_key, target_key, target_context, target_role, target_label, say, status)
-              values (${request.site}, ${route.lookup.goalKey}, ${route.lookup.path}, ${route.lookup.dialog}, ${route.lookup.afterKey},
-                ${targetKey}, ${contextOf(target)}, ${target.role}, ${cleanText(target.label, 80)}, ${cleanText(reply.say, 600)}, ${reply.status})
-              on conflict (site_id, goal_key, path, dialog, after_key) do update set
-                repairs = routes.repairs + (case when routes.target_key = excluded.target_key and routes.target_context = excluded.target_context then 0 else 1 end),
-                confirmed = routes.confirmed and routes.target_key = excluded.target_key and routes.target_context = excluded.target_context,
-                confirmed_at = case when routes.target_key = excluded.target_key and routes.target_context = excluded.target_context then routes.confirmed_at end,
-                say = case when routes.confirmed and routes.target_key = excluded.target_key and routes.target_context = excluded.target_context then routes.say else excluded.say end,
-                target_key = excluded.target_key, target_context = excluded.target_context, target_role = excluded.target_role,
-                target_label = excluded.target_label, status = excluded.status, updated_at = now()`,
-          ]
-        : [];
+        ? this.sql`
+          insert into routes (site_id, goal_key, path, dialog, after_key, target_key, target_context, target_role, target_label, say, status)
+          values (${request.site}, ${route.lookup.goalKey}, ${route.lookup.path}, ${route.lookup.dialog}, ${route.lookup.afterKey},
+            ${targetKey}, ${contextOf(target)}, ${target.role}, ${cleanText(target.label, 80)}, ${cleanText(reply.say, 600)}, ${reply.status})
+          on conflict (site_id, goal_key, path, dialog, after_key) do update set
+            (target_key, target_context, target_role, target_label, say, status, networks, repairs,
+              next_target_key, next_target_context, next_target_role, next_target_label, next_say, next_status, next_networks, updated_at) = (
+            select
+              case when routes.confirmed then routes.target_key else excluded.target_key end,
+              case when routes.confirmed then routes.target_context else excluded.target_context end,
+              case when routes.confirmed then routes.target_role else excluded.target_role end,
+              case when routes.confirmed then routes.target_label else excluded.target_label end,
+              case when routes.confirmed then routes.say else excluded.say end,
+              case when routes.confirmed then routes.status else excluded.status end,
+              case when routes.confirmed or same then routes.networks else '{}' end,
+              routes.repairs + case when routes.confirmed or same then 0 else 1 end,
+              case when not routes.confirmed then null when same then routes.next_target_key else excluded.target_key end,
+              case when not routes.confirmed then null when same then routes.next_target_context else excluded.target_context end,
+              case when not routes.confirmed then null when same then routes.next_target_role else excluded.target_role end,
+              case when not routes.confirmed then null when same then routes.next_target_label else excluded.target_label end,
+              case when not routes.confirmed then null when same then routes.next_say else excluded.say end,
+              case when not routes.confirmed then null when same then routes.next_status else excluded.status end,
+              case when routes.confirmed and (same or again) then routes.next_networks else '{}' end,
+              now()
+            from (
+              select (routes.target_key, routes.target_context) = (excluded.target_key, excluded.target_context) as same,
+                (routes.next_target_key, routes.next_target_context) is not distinct from (excluded.target_key, excluded.target_context) as again
+            ) answer
+          )`
+        : undefined;
     // A step the server answered by itself cost nothing to ask for, and the widget chooses the guide's id and the
     // question. So it is added to a guide already on record and never starts one: otherwise anything that can send
     // a request could put questions of its choosing on a site's dashboard without the model ever being called.
@@ -446,8 +482,13 @@ export class Store {
             target_context = excluded.target_context, said = excluded.said, status = excluded.status, event = excluded.event,
             strayed = steps.strayed or excluded.strayed, ms = excluded.ms, ms_to_target = excluded.ms_to_target, model = excluded.model,
             target_key = excluded.target_key, after_key = excluded.after_key, dialog = excluded.dialog, route = excluded.route, created_at = now()`,
-        ...learn,
       ]);
+      // In a statement of its own, after the step is safely written, so a database without db/migrations/0018 still
+      // records every step and only stops learning routes. It is part of this write, so a report waits for it too.
+      if (learn)
+        await this.quietly("learn a route from a step (has db/migrations/0018 been applied?)", async () => {
+          await learn;
+        });
     });
     this.track(guide, write);
     return write
@@ -560,8 +601,12 @@ export class Store {
    * before the row of the step that bears out "finished" does. It waits for
    * this process's own writes for that guide, then looks a few more times in
    * case the step was answered by another process.
+   *
+   * `network` is the network the report came from, hashed with the site's id
+   * (`networkHash` in learned.ts), or empty when it is not known. A guide kept
+   * as finished counts it for the routes its steps used (`trustRoutes`).
    */
-  report(site: SiteContext, guide: string, report: GuideReport): Promise<void> {
+  report(site: SiteContext, guide: string, report: GuideReport, network = ""): Promise<void> {
     return this.quietly("record how a guide ended", async () => {
       await this.writing.get(guide);
       const waits = this.reportWaitsMs;
@@ -596,7 +641,7 @@ export class Store {
         if (outcome && found.open) {
           await this.sql`update guides set outcome = ${outcome}, ended_at = now() where id = ${guide} and site_id = ${site.id} and outcome is null`;
           // Only an ending the record bears out confirms the routes behind its steps.
-          if (outcome === "finished") await this.quietly("trust a finished guide's routes", () => this.trustRoutes(site.id, guide));
+          if (outcome === "finished") await this.quietly("trust a finished guide's routes (has db/migrations/0018 been applied?)", () => this.trustRoutes(site.id, guide, network));
           // A finished guide is billed. It goes to Stripe now if its company pays by usage, and only if the database kept it as finished.
           // The site's hourly sweep catches any that don't get through.
           if (outcome === "finished" && this.stripeKey) await reportUsage(this.sql, this.stripeKey, { guide });
@@ -633,13 +678,28 @@ export class Store {
   }
 
   /**
-   * A finished guide confirms the route behind each of its steps that the
+   * A finished guide vouches for the route behind each of its steps that the
    * visitor followed: every step whose next step was not a wrong click, and
    * its last step. Only steps that were looked up count.
+   *
+   * What is counted is the network the report came from (`network`), as a
+   * learned label counts its visitors' networks: a route is trusted once
+   * finished guides from `routeNetworks` different networks have used it, so
+   * one caller cannot trust a route of its own making however many guides it
+   * finishes. A step that used the change a trusted route holds beside it
+   * (next_*, see `recordStep`) vouches for the change instead, and the change
+   * takes the route's place once it has as many networks.
    */
-  private async trustRoutes(siteId: string, guide: string): Promise<void> {
+  private async trustRoutes(siteId: string, guide: string, network: string): Promise<void> {
     await this.sql`
-      update routes r set confirmed = true, confirmed_at = coalesce(r.confirmed_at, now()), uses = r.uses + 1, updated_at = now()
+      update routes r set (networks, confirmed, confirmed_at, uses, updated_at) = (
+        select vouched, r.confirmed or cardinality(vouched) >= ${this.routeNetworks},
+          coalesce(r.confirmed_at, case when cardinality(vouched) >= ${this.routeNetworks} then now() end), r.uses + 1, now()
+        from (
+          select case when ${network} = '' or ${network} = any(r.networks) or cardinality(r.networks) >= ${MAX_VISITORS}
+            then r.networks else r.networks || ${network}::text end as vouched
+        ) counted
+      )
       from steps s
       join guides g on g.id = s.guide_id
       left join steps next on next.guide_id = s.guide_id and next.n = s.n + 1
@@ -647,15 +707,50 @@ export class Store {
         and (next.n is null or not next.strayed)
         and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
         and r.after_key = coalesce(s.after_key, '') and r.target_key = s.target_key and r.target_context = coalesce(s.target_context, '')`;
+    const changes = (await this.sql`
+      update routes r set next_networks = case when ${network} = '' or ${network} = any(r.next_networks) or cardinality(r.next_networks) >= ${MAX_VISITORS}
+          then r.next_networks else r.next_networks || ${network}::text end,
+        updated_at = now()
+      from steps s
+      join guides g on g.id = s.guide_id
+      left join steps next on next.guide_id = s.guide_id and next.n = s.n + 1
+      where g.id = ${guide} and g.site_id = ${siteId} and s.route is not null and s.target_key is not null and s.status <> 'stuck'
+        and (next.n is null or not next.strayed)
+        and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
+        and r.after_key = coalesce(s.after_key, '') and r.confirmed and r.next_target_key = s.target_key and r.next_target_context = coalesce(s.target_context, '')
+      returning r.goal_key, r.path, r.dialog, r.after_key, cardinality(r.next_networks) >= ${this.routeNetworks} as ready`) as RouteChange[];
+    for (const change of changes.filter((row) => row.ready)) {
+      // The change has been confirmed as the route itself once was, and now it is the route.
+      await this.sql`
+        update routes set target_key = next_target_key, target_context = next_target_context, target_role = next_target_role,
+          target_label = next_target_label, say = next_say, status = next_status, networks = next_networks, confirmed_at = now(), repairs = repairs + 1,
+          next_target_key = null, next_target_context = null, next_target_role = null, next_target_label = null, next_say = null, next_status = null,
+          next_networks = '{}', updated_at = now()
+        where site_id = ${siteId} and goal_key = ${change.goal_key} and path = ${change.path} and dialog = ${change.dialog} and after_key = ${change.after_key}
+          and confirmed and next_target_key is not null and cardinality(next_networks) >= ${this.routeNetworks}`;
+    }
   }
 
+  /**
+   * A guide someone said did not help takes the trust of the routes its steps
+   * used, and what had confirmed them: to be served again, a route has to be
+   * confirmed from as many networks as at first. A change a trusted route held
+   * that the guide used loses the networks that had confirmed it.
+   */
   private async distrustRoutes(siteId: string, guide: string): Promise<void> {
     await this.sql`
-      update routes r set confirmed = false, confirmed_at = null, updated_at = now()
+      update routes r set confirmed = false, confirmed_at = null, networks = '{}', next_target_key = null, next_target_context = null,
+        next_target_role = null, next_target_label = null, next_say = null, next_status = null, next_networks = '{}', updated_at = now()
       from steps s join guides g on g.id = s.guide_id
       where g.id = ${guide} and g.site_id = ${siteId} and s.route is not null and s.target_key is not null
         and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
         and r.after_key = coalesce(s.after_key, '') and r.target_key = s.target_key`;
+    await this.sql`
+      update routes r set next_networks = '{}', updated_at = now()
+      from steps s join guides g on g.id = s.guide_id
+      where g.id = ${guide} and g.site_id = ${siteId} and s.route is not null and s.target_key is not null
+        and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
+        and r.after_key = coalesce(s.after_key, '') and r.next_target_key = s.target_key`;
   }
 
   private async quietly(what: string, work: () => Promise<void>): Promise<void> {

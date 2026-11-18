@@ -78,6 +78,8 @@ export function labelThreshold(env: Record<string, string | undefined>): number 
  * developer's machine every call comes from the same address, so it is none.
  * Never more than the visitors needed. `HAPTIC_NETWORK_THRESHOLD=0` stops
  * counting networks, for a server whose callers all arrive from one address.
+ * A verified route takes as many networks of finished guides before it is
+ * trusted (`trustRoutes` in db.ts).
  */
 export function networkThreshold(env: Record<string, string | undefined>): number {
   const set = env.HAPTIC_NETWORK_THRESHOLD?.trim() ? Number(env.HAPTIC_NETWORK_THRESHOLD) : NaN;

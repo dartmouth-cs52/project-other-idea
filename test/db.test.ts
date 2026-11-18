@@ -189,8 +189,8 @@ function onRecord(...looks: (Record<string, unknown> | undefined)[]) {
   const store = new Store(sql as unknown as ConstructorParameters<typeof Store>[0], 3, { reportWaitsMs: [0, 0, 0] });
   /** What was written to the guide, without the looks, and without what a guide's ending does to verified routes. */
   const written = () => sent.filter((query) => !query.text.startsWith("select") && !query.text.startsWith("update routes"));
-  /** The writes that trust the verified routes behind a finished guide's steps (src/server/routes.ts). */
-  const trusted = () => sent.filter((query) => query.text.startsWith("update routes r set confirmed = true"));
+  /** The writes that count a finished guide for the verified routes behind its steps (src/server/routes.ts). */
+  const trusted = () => sent.filter((query) => query.text.startsWith("update routes r set (networks, confirmed"));
   return { store, sent, written, trusted, looks: () => look };
 }
 
