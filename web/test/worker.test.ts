@@ -43,6 +43,52 @@ test("the Worker hands /install/<site>.md to the install steps before the static
   assert.equal((await handle(new Request("https://joinhaptic.com/install/nope.md"), env, assets)).status, 404);
 });
 
+test("the request access form turns away a page with no address of ours, Origin: null included, without failing", async () => {
+  const form = (origin: string | null, body: unknown = {}) =>
+    handle(
+      new Request("https://joinhaptic.com/api/request-access", { method: "POST", headers: { "content-type": "application/json", ...(origin === null ? {} : { origin }) }, body: JSON.stringify(body) }),
+      env,
+      assets,
+    );
+  // A sandboxed frame, a saved page and some privacy settings send "null", which new URL() can't read.
+  for (const origin of ["null", "not an address", "https://evil.example", "https://joinhaptic.com.evil.example"]) {
+    const response = await form(origin);
+    assert.equal(response.status, 403, origin);
+    assert.equal(response.headers.get("content-type"), "application/json");
+    assert.deepEqual(await response.json(), { error: "Not allowed from this site." });
+  }
+  // Our own page, and a program that sends no Origin, get as far as checking the entry. Nothing is sent or saved.
+  for (const origin of ["https://joinhaptic.com", null]) {
+    const response = await form(origin);
+    assert.equal(response.status, 400, String(origin));
+    assert.equal(((await response.json()) as { field?: string }).field, "email");
+  }
+});
+
+test("a failure anywhere under /api answers JSON, and an address under /api nothing answers is a JSON 404", async () => {
+  const broken = { limit: async (): Promise<{ success: boolean }> => { throw new Error("The rate limit binding is down."); } };
+  const failing = { ...env, FORM_LIMIT: broken, AUTH_LIMIT: broken };
+  const errors: unknown[][] = [];
+  const real = console.error;
+  console.error = (...args: unknown[]) => void errors.push(args);
+  try {
+    for (const path of ["/api/request-access", "/api/auth/sign-in/magic-link"]) {
+      const response = await handle(new Request(`https://joinhaptic.com${path}`, { method: "POST", headers: { origin: "https://joinhaptic.com" }, body: "{}" }), failing, assets);
+      assert.equal(response.status, 500, path);
+      assert.equal(response.headers.get("content-type"), "application/json");
+      assert.deepEqual(await response.json(), { error: "Something went wrong on our side." });
+    }
+  } finally {
+    console.error = real;
+  }
+  assert.equal(errors.length, 2, "each failure is logged");
+  for (const path of ["/api/nothing-here", "/api/app", "/api/auth"]) {
+    const response = await handle(new Request(`https://joinhaptic.com${path}`), env, assets);
+    assert.equal(response.status, 404, path);
+    assert.deepEqual(await response.json(), { error: "Not found." });
+  }
+});
+
 test("approving a request emails a sign-in link that comes back to the list of sites", async () => {
   const entry = { email: "dana@example.com", company: "Example Co", firstName: "Dana", lastName: "Reyes", details: "" };
   const approving = {

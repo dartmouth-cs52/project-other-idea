@@ -72,6 +72,31 @@ export async function handle(request: Request, env: Env, assets: Assets, later?:
     return Response.redirect(url.toString(), 301);
   }
 
+  // Everything under /api/ is answered here, as JSON. Whatever goes wrong in it, the caller gets JSON back,
+  // never the runtime's own error page.
+  if (url.pathname.startsWith("/api/")) {
+    try {
+      return await api(request, env, url, later);
+    } catch (error) {
+      console.error(`${request.method} ${url.pathname} failed:`, error);
+      return json({ error: "Something went wrong on our side." }, 500);
+    }
+  }
+  // The install steps a coding agent fetches, /install/<site>.md. The install page itself is static.
+  if (isPlaybookPath(url.pathname)) return playbook(request, env, url);
+
+  const response = await assets.fetch(request);
+  // Anything that is not the real domain is a preview, and search engines should skip it.
+  if (url.hostname !== SITE) {
+    const preview = new Response(response.body, response);
+    preview.headers.set("X-Robots-Tag", "noindex");
+    return preview;
+  }
+  return response;
+}
+
+/** The routes under /api/. Nothing static lives there, so a path none of them knows is answered here too. */
+async function api(request: Request, env: Env, url: URL, later?: Later): Promise<Response> {
   if (url.pathname === "/api/request-access") return requestAccess(request, env, url);
   // Stripe, telling us a subscription or an invoice changed. Signed by Stripe, and checked in billing.ts.
   if (url.pathname === WEBHOOK_PATH) return stripeWebhook(request, env);
@@ -86,17 +111,7 @@ export async function handle(request: Request, env: Env, assets: Assets, later?:
     return proxyAuth(request, env);
   }
   if (url.pathname.startsWith("/api/app/")) return appApi(request, env, url, later);
-  // The install steps a coding agent fetches, /install/<site>.md. The install page itself is static.
-  if (isPlaybookPath(url.pathname)) return playbook(request, env, url);
-
-  const response = await assets.fetch(request);
-  // Anything that is not the real domain is a preview, and search engines should skip it.
-  if (url.hostname !== SITE) {
-    const preview = new Response(response.body, response);
-    preview.headers.set("X-Robots-Tag", "noindex");
-    return preview;
-  }
-  return response;
+  return json({ error: "Not found." }, 404);
 }
 
 /**
@@ -106,9 +121,10 @@ export async function handle(request: Request, env: Env, assets: Assets, later?:
  */
 async function requestAccess(request: Request, env: Env, url: URL): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Use POST." }, 405);
-  // The form only posts from our own pages.
+  // The form only posts from our own pages. A browser sends "null" from a sandboxed frame, a page saved to disk
+  // or under some privacy settings, which is no page of ours, and neither is anything else that isn't an address.
   const origin = request.headers.get("origin");
-  if (origin && new URL(origin).host !== url.host) return json({ error: "Not allowed from this site." }, 403);
+  if (origin && !(URL.canParse(origin) && new URL(origin).host === url.host)) return json({ error: "Not allowed from this site." }, 403);
 
   // Each request sends an email, so one address only gets a few tries a minute.
   const caller = request.headers.get("cf-connecting-ip") ?? "unknown";
