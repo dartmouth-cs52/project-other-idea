@@ -683,6 +683,7 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
 
   describe("on a phone, and with long names", () => {
     const PHONE = { width: 375, height: 667 };
+    const SMALLEST = { width: 320, height: 640 };
 
     /**
      * A new tab on a page, as `dash.open` opens one, at `size`: a touch screen when `touch` is set, and with `prepare`
@@ -799,6 +800,33 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         const chart = part(tab, /^Guides each day/);
         await chart.getByText("Something went wrong on our side.").waitFor({ timeout: 10_000 });
         assert.equal(await chart.locator('[data-slot="skeleton"]').count(), 0, "a block still holds the chart's place");
+      });
+    });
+
+    test("the last setup screen fits the smallest phone when the site's address is long", async () => {
+      const long = "https://app.northpine-enterprise-solutions.example";
+      const tab = await openOn(`/dashboard/setup/?site=${SETTING_UP}`, SMALLEST, {
+        company: SETTING_UP_COMPANY,
+        prepare: (context) =>
+          // The site as it is once the script has called from its long address: the screen that says Haptic is live there.
+          context.route(`${dash.url}/api/app/sites/${SETTING_UP}`, async (route) => {
+            if (route.request().method() !== "GET") return route.fallback();
+            try {
+              const site = await (await route.fetch()).json();
+              const now = new Date().toISOString();
+              await route.fulfill({ json: { ...site, origin: long, allowedOrigins: [long], connected: true, setup: { step: "connect" }, origins: [{ origin: long, allowed: true, first_seen_at: now, last_seen_at: now, requests: 3 }] } });
+            } catch {
+              // The tab closed while the screen was still checking for the script.
+            }
+          }),
+      });
+      await closing(tab, async () => {
+        const heading = tab.getByRole("heading", { name: /^Haptic is live on/ });
+        await heading.waitFor({ timeout: 10_000 });
+        assert.ok((await sideways(tab)) <= 0, "the page scrolls sideways");
+        assert.equal(await heading.evaluate((element) => element.scrollWidth <= element.clientWidth), true, "the heading runs past the screen");
+        const open = (await tab.getByRole("link", { name: /^Open app\.northpine/ }).boundingBox())!;
+        assert.ok(open.x + open.width <= SMALLEST.width - 24 + 1, `the link to the site ends at ${Math.round(open.x + open.width)}px`);
       });
     });
   });

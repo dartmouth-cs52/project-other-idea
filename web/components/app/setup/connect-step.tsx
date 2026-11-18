@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ExternalLink } from "lucide-react";
+import { cn } from "cn";
 import { FormAlert, failureFrom, type Failure } from "@/components/form";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { api } from "@/lib/app-api";
@@ -63,13 +64,23 @@ export function ConnectStep({
       <StepFrame
         step="connect"
         mark={<DoneMark className="size-7 [&_svg]:size-4" />}
-        title={`Haptic is live on ${hostOf(status.origin)}`}
+        // An address is one long word to the browser, so it may break anywhere rather than run off a phone's screen.
+        title={
+          <>
+            Haptic is live on <span className="[overflow-wrap:anywhere]">{hostOf(status.origin)}</span>
+          </>
+        }
         lead="The script called Haptic from an address this site allows. Open a page there and ask Haptic how to do something. Each question shows on your dashboard as it comes in."
         actions={
           <>
             <Back onClick={onBack} />
             <Primary onClick={onFinish}>Go to your dashboard</Primary>
-            <a href={status.origin} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "ghost", size: "xl" })}>
+            <a
+              href={status.origin}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(buttonVariants({ variant: "ghost", size: "xl" }), "h-auto min-h-11 max-w-full py-2 text-left whitespace-normal [overflow-wrap:anywhere]")}
+            >
               Open {hostOf(status.origin)}
               <ExternalLink />
             </a>
@@ -81,7 +92,7 @@ export function ConnectStep({
             <DoneMark />
             Connected
           </p>
-          <p className="text-sm leading-5 text-muted-foreground">
+          <p className="text-sm leading-5 text-muted-foreground [overflow-wrap:anywhere]">
             Seen on {status.origin}
             {seen ? `, ${when(seen.last_seen_at)}` : ""}.
             {allowed === status.origin ? " You just allowed it, so Haptic shows there within a minute." : ""}
@@ -95,7 +106,11 @@ export function ConnectStep({
     <StepFrame
       step="connect"
       title="See it connect"
-      lead={`Open any page of ${host} that has the tag. This screen changes a few seconds after the page loads.`}
+      lead={
+        <>
+          Open any page of <span className="[overflow-wrap:anywhere]">{host}</span> that has the tag. This screen changes a few seconds after the page loads.
+        </>
+      }
       actions={
         <>
           <Back onClick={onBack} />
@@ -126,7 +141,7 @@ export function ConnectStep({
     >
       {status.kind === "refused" ? (
         <div className="flex flex-col gap-2 rounded-xl border bg-card p-6" role="status" data-connect="refused">
-          <p className="text-base leading-6 font-medium">The script is running on {status.origin}, which this site doesn&apos;t allow yet.</p>
+          <p className="text-base leading-6 font-medium [overflow-wrap:anywhere]">The script is running on {status.origin}, which this site doesn&apos;t allow yet.</p>
           <p className="max-w-[60ch] text-sm leading-5 text-muted-foreground">
             The tag works. Haptic stays hidden on an address until you allow it, such as a staging or local copy of your app. Allow it only if it is
             yours. It then shows there within a minute.
@@ -135,7 +150,7 @@ export function ConnectStep({
       ) : (
         <div className="flex flex-col gap-2 rounded-xl border bg-card p-6" role="status" data-connect="waiting">
           <p className="shimmer w-fit text-base font-medium">Waiting for the script</p>
-          <p className="max-w-[60ch] text-sm leading-5 text-muted-foreground">
+          <p className="max-w-[60ch] text-sm leading-5 text-muted-foreground [overflow-wrap:anywhere]">
             Haptic checks every few seconds. It allows {site.allowedOrigins.map(hostOf).join(", ")} now, and shows any other address it sees here.
           </p>
         </div>
