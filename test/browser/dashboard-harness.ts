@@ -305,6 +305,11 @@ export async function startDashboard(): Promise<Dashboard> {
     browser,
     async open(path = `/dashboard/?site=${SITE}`, size = { width: 1440, height: 900 }, company = COMPANY) {
       const context = await browser.newContext({ viewport: size });
+      // Nothing a test opens goes past this machine: only this server and the fixture site are reached. The public
+      // pages, the sign-in page among them, carry Haptic's own guide (web/components/haptic-tag.tsx), which would
+      // load the real widget from widget.joinhaptic.com and have the real server record this page's address against
+      // Haptic's own site, on every run.
+      await context.route((address) => address.origin !== url && address.origin !== siteOrigin, (route) => route.abort("blockedbyclient"));
       await context.addCookies([{ name: "company", value: company, url }]);
       const tab = await context.newPage();
       await tab.goto(`${url}${path}`);
