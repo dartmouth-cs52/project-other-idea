@@ -753,5 +753,25 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         assert.equal(await box.evaluate((element) => getComputedStyle(element).fontSize), "16px");
       });
     });
+
+    test("what a number counts opens with a tap on a touch screen, from a mark 24px across, and still with the mouse over it", async () => {
+      const tab = await openOn(`/dashboard/?site=${SITE}`, { width: 390, height: 844 }, { touch: true });
+      await closing(tab, async () => {
+        const mark = tab.getByRole("button", { name: "What guides finished counts" });
+        await mark.waitFor({ timeout: 10_000 });
+        const box = (await mark.boundingBox())!;
+        assert.ok(box.width >= 24 && box.height >= 24, `what a finger has to press is ${box.width}x${box.height}px`);
+        const about = tab.getByText("Guides where the person reached the end.");
+        await mark.tap();
+        await about.waitFor({ timeout: 5_000 });
+        await mark.tap();
+        await about.waitFor({ state: "hidden", timeout: 5_000 });
+      });
+      const laptop = await openOn(`/dashboard/?site=${SITE}`, { width: 1280, height: 800 });
+      await closing(laptop, async () => {
+        await laptop.getByRole("button", { name: "What guides finished counts" }).hover();
+        await laptop.getByText("Guides where the person reached the end.").waitFor({ timeout: 5_000 });
+      });
+    });
   });
 });

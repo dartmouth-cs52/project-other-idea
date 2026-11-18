@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Popover } from "@base-ui/react/popover";
 import { ArrowDownRight, ArrowUpRight, ExternalLink, Info, Minus } from "lucide-react";
 import { cn } from "cn";
 import { buttonVariants } from "@/components/ui/button";
@@ -8,7 +9,6 @@ import { api } from "@/lib/app-api";
 import { countChange, duration, durationChange, hostOf, rateChange, utcDayLabel, type Change } from "@/lib/setup";
 import type { Headline as HeadlineData } from "@/worker/insights";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Card, Panel } from "./parts";
 
 /**
@@ -60,35 +60,33 @@ export function HeadlineTiles({ data, days, error }: { data: HeadlineData | null
   const finishRate = rate(now);
 
   return (
-    <TooltipProvider>
-      <div className={cn("grid grid-cols-1 gap-4 transition-opacity duration-200 sm:grid-cols-2 xl:grid-cols-4", stale && "opacity-60")} aria-busy={stale}>
-        <Tile label="Guides finished" better="up" value={now.finished.toLocaleString()} about="Guides where the person reached the end. The number billing counts, free during early access." change={countChange(now.finished, before.finished, period)} />
-        <Tile
-          label="Finish rate"
-          better="up"
-          value={finishRate === null ? null : `${Math.round(finishRate * 100)}%`}
-          empty="No guides to count yet"
-          about="Of the questions Haptic could guide, the share that finished."
-          change={rateChange(finishRate, rate(before), period)}
-        />
-        <Tile
-          label="Couldn't guide"
-          better="down"
-          value={now.unguided.toLocaleString()}
-          about="Questions Haptic couldn't guide: stuck, not in the help docs, given up on, or said it didn't help."
-          context={now.started ? `${Math.round((now.unguided / now.started) * 100)}% of ${now.started.toLocaleString()} questions` : undefined}
-          change={countChange(now.unguided, before.unguided, period)}
-        />
-        <Tile
-          label="Median time to finish"
-          better="down"
-          value={now.medianMsToFinish === null ? null : duration(now.medianMsToFinish)}
-          empty="No finished guides yet"
-          about="From the question to the last step."
-          change={durationChange(now.medianMsToFinish, before.medianMsToFinish, period)}
-        />
-      </div>
-    </TooltipProvider>
+    <div className={cn("grid grid-cols-1 gap-4 transition-opacity duration-200 sm:grid-cols-2 xl:grid-cols-4", stale && "opacity-60")} aria-busy={stale}>
+      <Tile label="Guides finished" better="up" value={now.finished.toLocaleString()} about="Guides where the person reached the end. The number billing counts, free during early access." change={countChange(now.finished, before.finished, period)} />
+      <Tile
+        label="Finish rate"
+        better="up"
+        value={finishRate === null ? null : `${Math.round(finishRate * 100)}%`}
+        empty="No guides to count yet"
+        about="Of the questions Haptic could guide, the share that finished."
+        change={rateChange(finishRate, rate(before), period)}
+      />
+      <Tile
+        label="Couldn't guide"
+        better="down"
+        value={now.unguided.toLocaleString()}
+        about="Questions Haptic couldn't guide: stuck, not in the help docs, given up on, or said it didn't help."
+        context={now.started ? `${Math.round((now.unguided / now.started) * 100)}% of ${now.started.toLocaleString()} questions` : undefined}
+        change={countChange(now.unguided, before.unguided, period)}
+      />
+      <Tile
+        label="Median time to finish"
+        better="down"
+        value={now.medianMsToFinish === null ? null : duration(now.medianMsToFinish)}
+        empty="No finished guides yet"
+        about="From the question to the last step."
+        change={durationChange(now.medianMsToFinish, before.medianMsToFinish, period)}
+      />
+    </div>
   );
 }
 
@@ -160,12 +158,7 @@ function Tile({
     <div className="flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-5" data-metric={label}>
       <span className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
         <span className="min-w-0 truncate">{label}</span>
-        <Tooltip>
-          <TooltipTrigger aria-label={`What ${label.toLowerCase()} counts`} className="shrink-0 rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-            <Info className="size-3.5" aria-hidden />
-          </TooltipTrigger>
-          <TooltipContent>{about}</TooltipContent>
-        </Tooltip>
+        <About label={label}>{about}</About>
       </span>
       {value === null ? (
         <span className="text-2xl font-medium tracking-[-0.02em] text-muted-foreground">{empty}</span>
@@ -186,6 +179,35 @@ function Tile({
       )}
       {context && <span className="text-xs leading-4 text-muted-foreground">{context}</span>}
     </div>
+  );
+}
+
+/**
+ * What a number counts, in an Ink bubble on the small mark beside its name: one hover away with a mouse, and one
+ * press away on a touch screen or from the keyboard, where a second press or a press elsewhere puts it away. It is a
+ * popover and not a tooltip, since a tooltip never opens on a touch screen. The mark is 14px, and what answers a
+ * press is 24px across around it, held to the label's line so the tile doesn't grow.
+ */
+function About({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Popover.Root>
+      <Popover.Trigger
+        openOnHover
+        delay={0}
+        aria-label={`What ${label.toLowerCase()} counts`}
+        className="-mx-1 -my-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        <Info className="size-3.5" aria-hidden />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Positioner side="top" sideOffset={4} className="isolate z-50">
+          <Popover.Popup className="z-50 w-fit max-w-xs origin-(--transform-origin) rounded-md bg-foreground px-3 py-1.5 text-xs text-background outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+            {children}
+            <Popover.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=top]:-bottom-2.5" />
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 
