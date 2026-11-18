@@ -9,10 +9,11 @@ export function SiteNav() {
     <header className="@container mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-6">
       <Link href="/" className="flex h-7 min-w-6 items-center gap-1.5 rounded-md text-lg font-medium tracking-tight outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
         <Pointer className="size-[22px]" />
-        {/* The lockup is the pointer beside the name where there is room for the name (DESIGN.md). On the narrowest
-            phones there isn't, beside Sign in and Request access, so the pointer stands for Haptic alone and the name
-            is only read out, rather than Sign in breaking over two lines. */}
-        <span className="sr-only @xs:not-sr-only">{site.name}</span>
+        {/* The lockup is the pointer beside the name where there is room for the name (DESIGN.md). With Sign in on one
+            line and Request access, that takes 19rem of the bar, which a window 352px wide has. The narrowest phones,
+            such as 320px, don't have it, so there the pointer stands for Haptic alone and the name is only read out,
+            rather than Sign in breaking over two lines. */}
+        <span className="sr-only @min-[19rem]:not-sr-only">{site.name}</span>
       </Link>
       {/* Each text link is padded to a 24px target, so it is not too small to press on a phone. */}
       <nav className="flex items-center gap-6 text-sm font-medium">

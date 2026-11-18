@@ -945,12 +945,19 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         const inside = await invite.evaluate((button) => button.getBoundingClientRect().right <= button.closest('[role="img"]')!.getBoundingClientRect().right);
         assert.equal(inside, true, "Invite teammate is cut off by the demo's window");
       });
-      // Where there is room, the name is beside the pointer.
-      const wider = await openOn("/", PHONE);
-      await closing(wider, async () => {
-        const name = await wider.locator("header").first().getByText("Haptic", { exact: true }).boundingBox();
-        assert.ok(name && name.width > 20, "the name is beside the pointer on a 375px phone");
-      });
+      // Where there is room, from a window 352px wide, the name is beside the pointer, with Sign in still on one line.
+      // That includes the common 360px Android phone.
+      for (const size of [{ width: 360, height: 740 }, PHONE]) {
+        const wider = await openOn("/", size);
+        await closing(wider, async () => {
+          const bar = wider.locator("header").first();
+          const name = await bar.getByText("Haptic", { exact: true }).boundingBox();
+          assert.ok(name && name.width > 20, `the name is beside the pointer on a ${size.width}px phone`);
+          const signIn = (await bar.getByRole("link", { name: "Sign in" }).boundingBox())!;
+          assert.ok(signIn.height <= 24, `at ${size.width}px wide Sign in is ${signIn.height}px tall, on two lines`);
+          assert.ok((await sideways(wider)) <= 0, `at ${size.width}px wide the page scrolls sideways`);
+        });
+      }
     });
 
     test("on a phone Haptic's own launcher keeps its corner of the public pages, with room under the footer's links", async () => {
