@@ -13,8 +13,10 @@
 //
 // Anyone can ask for a sign-in link for any address, on the sign-in page or
 // straight from Neon, past any limit this Worker keeps on its own pages. So each
-// email is counted here before it goes, in sign_in_emails (db/migrations/0017),
-// and one mailbox gets at most 5 an hour, and the site sends at most 300.
+// email is counted here before it goes, in sign_in_emails (db/migrations/0017).
+// One mailbox gets at most 5 an hour. The people Haptic knows have only that, so
+// nobody else's emails can use up their sign-in. Everyone else is also counted
+// with others like them, which is what bounds a flood of made-up addresses.
 
 import { mailboxOf } from "../lib/setup";
 import { boundedText } from "./body";
@@ -32,8 +34,10 @@ export const HOOK_PATH = "/api/neon-auth-hook";
 
 /** The most sign-in emails one mailbox gets in any hour, however its address is written. */
 export const EMAILS_PER_MAILBOX = 5;
-/** The most the site sends in any hour, to everyone together. */
-export const EMAILS_PER_HOUR = 300;
+/** The most the site sends in any hour to the people one approved domain covers who haven't signed in yet, together. */
+export const EMAILS_PER_DOMAIN = 50;
+/** The most it sends in any hour to everyone else together: addresses neither approved nor at an approved domain. */
+export const EMAILS_TO_OTHERS = 300;
 
 /** Older than this, a request could be a replay, so it is turned away. */
 const MAX_AGE_MS = 5 * 60 * 1000;
@@ -91,8 +95,12 @@ export async function neonHook(request: Request, env: HookEnv, deps: HookDeps = 
 
   // Past a limit, the event is answered as handled, so Neon doesn't try it again, and nothing is sent.
   const sql = deps.sql ?? (env.DATABASE_URL ? database(env.DATABASE_URL) : undefined);
-  if (sql && (await counted(sql, event.event_id, to)) === "over") {
-    console.warn(`Did not send the sign-in email for event ${event.event_id}: its mailbox, or the site, has had as many as it may this hour.`);
+  const over = sql ? await counted(sql, event.event_id, to) : undefined;
+  if (over) {
+    if (over === "mailbox") console.warn(`Did not send the sign-in email for event ${event.event_id}: its mailbox has had ${EMAILS_PER_MAILBOX} this hour.`);
+    // Someone asking for links in bulk is what fills these, so they are logged as errors, to be seen.
+    else if (over === "domain") console.error(`Did not send the sign-in email for event ${event.event_id}: the people its approved domain covers who haven't signed in yet have had ${EMAILS_PER_DOMAIN} this hour.`);
+    else console.error(`Did not send the sign-in email for event ${event.event_id}: addresses no approval covers have had ${EMAILS_TO_OTHERS} this hour.`);
     return reply(200, "Not sent: over the limit for sign-in emails.");
   }
 
@@ -115,43 +123,80 @@ function reply(status: number, message: string): Response {
 // ---------------------------------------------------------------------------
 // Limits
 
+/** Which limit an email went past: its mailbox's own, or the one it shares with others. */
+type Over = "mailbox" | "domain" | "others";
+
 /**
- * Counts a sign-in email before it is sent. "send" when it was counted now; "again" for an event already
- * counted, which Neon sends again when a try failed, and which Resend's idempotency key keeps to one email;
- * "over" when the mailbox or the site has had all it may this hour. The limits are checked as the row is
- * written, under one lock for every sign-in email, so emails at the same moment take turns.
+ * Counts a sign-in email before it is sent. Nothing when it may go: it was counted now, or it is an event
+ * already counted, which Neon sends again when a try failed, and which Resend's idempotency key keeps to one
+ * email. Otherwise, the limit it went past. The limits are checked as the row is written, under one lock for
+ * every sign-in email, so emails at the same moment take turns.
  *
  * Sign-in matters more than the count, so when the count can't be kept, because the database is down or
  * its migration isn't applied yet, the email is sent, and the log says so.
  */
-async function counted(sql: Sql, eventId: string, to: string): Promise<"send" | "again" | "over"> {
+async function counted(sql: Sql, eventId: string, to: string): Promise<Over | undefined> {
   try {
-    const recipient = await mailboxHash(to);
+    const recipient = await hashed(`sign-in mailbox ${mailboxOf(to)}`);
+    const pool = await poolOf(sql, to);
     const [, , kept] = await sql.transaction([
       sql.query(`select pg_advisory_xact_lock(hashtext('sign-in-email'))`),
       sql.query(`delete from sign_in_emails where sent_at < now() - interval '1 day'`),
       sql.query(
-        `insert into sign_in_emails (event_id, recipient)
-        select $1, $2
-        where (select count(*) from sign_in_emails where recipient = $2 and sent_at > now() - interval '1 hour') < $3
-          and (select count(*) from sign_in_emails where sent_at > now() - interval '1 hour') < $4
+        `insert into sign_in_emails (event_id, recipient, pool)
+        select $1, $2, $3
+        where (select count(*) from sign_in_emails where recipient = $2 and sent_at > now() - interval '1 hour') < $4
+          and ($3 = 'known' or (select count(*) from sign_in_emails where pool = $3 and sent_at > now() - interval '1 hour') < $5)
         on conflict (event_id) do nothing
         returning event_id`,
-        [eventId, recipient, EMAILS_PER_MAILBOX, EMAILS_PER_HOUR],
+        [eventId, recipient, pool, EMAILS_PER_MAILBOX, pool === "others" ? EMAILS_TO_OTHERS : EMAILS_PER_DOMAIN],
       ),
     ]);
-    if ((kept as unknown[]).length) return "send";
-    return (await sql.query(`select 1 from sign_in_emails where event_id = $1`, [eventId])).length ? "again" : "over";
+    if ((kept as unknown[]).length) return undefined;
+    const [state] = (await sql.query(
+      `select exists (select 1 from sign_in_emails where event_id = $1) as again,
+        (select count(*) from sign_in_emails where recipient = $2 and sent_at > now() - interval '1 hour') >= $3 as full`,
+      [eventId, recipient, EMAILS_PER_MAILBOX],
+    )) as { again: boolean; full: boolean }[];
+    if (state?.again) return undefined;
+    if (state?.full || pool === "known") return "mailbox";
+    return pool === "others" ? "others" : "domain";
   } catch (error) {
     if (notMigrated(error)) console.error("Sign-in emails are counted once db/migrations/0017 is applied. Until then they are sent uncounted.");
     else console.error("Could not count a sign-in email, so it was sent uncounted:", (error as Error).message);
-    return "send";
+    return undefined;
   }
 }
 
-/** A mailbox, written one way however its address is, as a hash: the address itself is never kept. */
-async function mailboxHash(email: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(`sign-in mailbox ${mailboxOf(email)}`));
+/**
+ * Who else an email to this address is counted with, beyond its own mailbox. "known" is a person Haptic
+ * knows: approved by their own address, or on the team of a company an approval made. There are only so many
+ * of them, so their mailboxes' own limits bound what they can be sent, and nobody else's emails can use up
+ * their sign-in. Any address at an approved domain is covered by it, so the people it covers who haven't
+ * signed in yet share a limit of their own, kept under a hash of the domain: a flood of made-up addresses
+ * there stays bounded, and reaches no other company. Everyone else, "others", shares one.
+ */
+async function poolOf(sql: Sql, to: string): Promise<string> {
+  const address = to.trim().toLowerCase();
+  const domain = address.slice(address.lastIndexOf("@") + 1);
+  const [row] = (await sql.query(
+    `select case
+      when exists (select 1 from approvals where email = $1)
+        or exists (
+          select 1 from neon_auth."user" u join neon_auth.member m on m."userId" = u.id
+          where lower(u.email) = $1 and exists (select 1 from approvals a where a.organization_id = m."organizationId"))
+        then 'known'
+      when exists (select 1 from approvals where domain = $2) then 'domain'
+      else 'others' end as pool`,
+    [address, domain],
+  )) as { pool: string }[];
+  if (row?.pool === "known" || row?.pool === "others") return row.pool;
+  return `domain ${await hashed(`sign-in domain ${domain}`)}`;
+}
+
+/** A hash of a mailbox, written one way however its address is, or of a domain: the address itself is never kept. */
+async function hashed(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(text));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("").slice(0, 32);
 }
 
