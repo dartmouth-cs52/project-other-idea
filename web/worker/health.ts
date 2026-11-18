@@ -13,6 +13,7 @@
 //
 // Grouping is by normalized text, in the database. No model is asked.
 
+import { cleanText } from "../../src/shared/types";
 import type { Sql } from "./db";
 
 /** A guide with no ending reported, and nothing new for this long, was abandoned. Matches insights.ts. */
@@ -236,15 +237,72 @@ async function whereItBroke(sql: Sql, site: string, key: string, weeks: Week[]) 
   return { stop, ...(missing ? { missing } : {}) };
 }
 
-/** A flagged group's news, in words, as the dashboard and the email both give it. */
+/**
+ * A flagged group's news, in words, for the email to the company's people. The question, the page and the
+ * control's name all came from visitors' browsers, and anyone can send the widget server those, so each is
+ * quoted the way `quoted` makes safe, and the question is said to be a visitor's.
+ */
 export function describeBreak(group: Health): string[] {
   const flag = group.flag;
   if (!flag) return [];
   const pct = (share: number) => `${Math.round(share * 100)}%`;
-  const lines = [`"${group.question}" finished ${pct(flag.before)} of the time in the three weeks before, and ${pct(flag.now)} in the last seven days.`];
-  if (flag.stop) lines.push(`Guides now stop at step ${flag.stop.step} on ${flag.stop.path}${flag.stop.label ? `, at "${flag.stop.label}"` : ""}.`);
-  if (flag.missing) lines.push(`Before, they pointed at "${flag.missing.label}" on ${flag.missing.path}, and no guide has this week. It may have moved or been renamed.`);
+  const lines = [`Guides for "${quoted(group.question, 80)}", as a visitor last asked it, finished ${pct(flag.before)} of the time in the three weeks before, and ${pct(flag.now)} in the last seven days.`];
+  if (flag.stop) lines.push(`Guides now stop at step ${flag.stop.step} on ${quotedPath(flag.stop.path)}${flag.stop.label ? `, at "${quoted(flag.stop.label, 40)}"` : ""}.`);
+  if (flag.missing) lines.push(`Before, they pointed at "${quoted(flag.missing.label, 40)}" on ${quotedPath(flag.missing.path)}, and no guide has this week. It may have moved or been renamed.`);
   return lines;
+}
+
+/**
+ * A word a mail program could make a link of, or a person could type into a browser: an address with a scheme,
+ * one starting www., a name with a dot and at least two letters after it, as evil.example or bit.ly/x, or an IP
+ * address. Abbreviations such as e.g. and U.S. end in one letter, and are left alone.
+ */
+const LINK_LIKE = /:\/\/|^\W*www[.。]|[\p{L}\p{N}][.。]\p{L}{2,}(?![\p{L}\p{N}])|\d{1,3}(?:[.。]\d{1,3}){3}/iu;
+
+/**
+ * Text as it shows: full-width letters and dots written plainly, characters that draw nothing dropped, so none
+ * can split a link the check above would see, and line breaks as spaces.
+ */
+function shown(text: string): string {
+  return text.normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, " ");
+}
+
+/**
+ * Words a visitor's browser sent, made safe to quote in an email that comes from alerts@joinhaptic.com and so
+ * reads as Haptic's own. Anyone can put a question on a site, such as "Your account is locked, sign in again at
+ * evil.example", so a word that could be a link becomes [link], emails and long numbers are masked as
+ * everywhere else (cleanText), a double quote becomes a single one so the quote can't be closed early, and it
+ * is cut short.
+ */
+export function quoted(text: string, max: number): string {
+  // Masked first, so an email address reads as [email] and not as a link, then cut once the links are out.
+  const words = cleanText(shown(text), Number.MAX_SAFE_INTEGER).split(" ").map((word) => (LINK_LIKE.test(word) ? "[link]" : word));
+  return cleanText(words.join(" ").replace(/["“”„‟«»]/g, "'"), max);
+}
+
+/** A page's path, quoted the same way a segment at a time, so a page named like a file keeps the rest of its path. */
+function quotedPath(path: string): string {
+  const segments = shown(path).replace(/\s+/g, "").split("/").map((segment) => (LINK_LIKE.test(segment) ? "[link]" : segment));
+  return cleanText(segments.join("/"), 80);
+}
+
+/** Line breaks, every other control character, and the marks that make text run the other way. */
+const BREAKS = /[\p{Cc}\p{Zl}\p{Zp}\u202a-\u202e\u2066-\u2069]/gu;
+
+/**
+ * A site's name on one line, as an email's subject must be: anything that could start another line, or turn
+ * the subject around, is a space. The site's name is chosen by its company, and kept this way (app-api.ts).
+ */
+export function oneLine(text: string, max = 80): string {
+  return Array.from(text.replace(BREAKS, " ").replace(/\s+/g, " ").trim()).slice(0, max).join("").trim();
+}
+
+/** The email to a company's people about one flagged group on one of its sites. */
+export function alertEmail(site: { name: string }, group: Health, dashboard: string): { subject: string; text: string } {
+  return {
+    subject: `Guides for a common question on ${oneLine(site.name)} stopped finishing`,
+    text: [...describeBreak(group), "", `This often follows a change to the product. Open the guides on your dashboard to see where they stop, and correct a step if Haptic now points at the wrong thing.`, dashboard].join("\n"),
+  };
 }
 
 export interface MailEnv {
@@ -274,10 +332,10 @@ export async function sendHealthAlerts(sql: Sql, env: MailEnv, dashboard = "http
         where m."organizationId" = ${site.company_id}::uuid and u."emailVerified" = true`) as { email: string }[];
       let emailed = false;
       if (env.EMAIL && people.length) {
-        const text = [...describeBreak(group), "", `This often follows a change to the product. Open the guides on your dashboard to see where they stop, and correct a step if Haptic now points at the wrong thing.`, dashboard].join("\n");
+        const { subject, text } = alertEmail(site, group, dashboard);
         try {
           for (const person of people) {
-            await env.EMAIL.send({ to: person.email, from: { email: "alerts@joinhaptic.com", name: "Haptic" }, subject: `Guides for a common question on ${site.name} stopped finishing`, text });
+            await env.EMAIL.send({ to: person.email, from: { email: "alerts@joinhaptic.com", name: "Haptic" }, subject, text });
           }
           emailed = true;
         } catch (error) {
