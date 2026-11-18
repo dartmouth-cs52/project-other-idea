@@ -483,11 +483,15 @@ export class Store {
     // kept: an answer in words is shown in the panel, and a route's reply is shown beside the pointer.
     //
     // Anything that can send a request can have the model answer from a page of its own making, so an answer alone
-    // never changes what a trusted route serves. On a route not yet trusted, a different answer takes its place, and
-    // the networks that had confirmed the control it pointed at no longer count. A trusted route keeps its control and
-    // its sentence, and a different answer is kept beside it as the change it may make (next_*): the change takes its
-    // place once finished guides from as many networks as trust takes have used it (`trustRoutes`). The same change
-    // asked for again keeps the networks that used it, and another one starts again from none.
+    // never changes what a trusted route serves. What a route serves is its control, its sentence and its status
+    // together, so the networks that confirm it vouch for all three: a finished guide counts only for the answer its
+    // own step was given (`trustRoutes`). On a route not yet trusted, an answer that differs in any of them takes its
+    // place and starts again from no networks. Were the networks kept when only the words changed, the last caller to
+    // finish on a control others had confirmed would choose what every visitor reads beside it, and whether the guide
+    // ends there. A trusted route keeps all three, and a different answer is kept beside it as the change it may make
+    // (next_*): the change takes its place once finished guides from as many networks as trust takes have used it. The
+    // same change asked for again keeps the networks that used it, and any other starts again from none. Only a
+    // different control counts as a repair.
     const learn =
       route && route.outcome !== "served" && target && targetKey && reply.status !== "stuck" && (!reply.mode || reply.mode === "guide") && storable(route.lookup, targetKey)
         ? this.sql`
@@ -505,7 +509,7 @@ export class Store {
               case when routes.confirmed then routes.say else excluded.say end,
               case when routes.confirmed then routes.status else excluded.status end,
               case when routes.confirmed or same then routes.networks else '{}' end,
-              routes.repairs + case when routes.confirmed or same then 0 else 1 end,
+              routes.repairs + case when routes.confirmed or control then 0 else 1 end,
               case when not routes.confirmed then null when same then routes.next_target_key else excluded.target_key end,
               case when not routes.confirmed then null when same then routes.next_target_context else excluded.target_context end,
               case when not routes.confirmed then null when same then routes.next_target_role else excluded.target_role end,
@@ -515,8 +519,10 @@ export class Store {
               case when routes.confirmed and (same or again) then routes.next_networks else '{}' end,
               now()
             from (
-              select (routes.target_key, routes.target_context) = (excluded.target_key, excluded.target_context) as same,
-                (routes.next_target_key, routes.next_target_context) is not distinct from (excluded.target_key, excluded.target_context) as again
+              select (routes.target_key, routes.target_context) = (excluded.target_key, excluded.target_context) as control,
+                (routes.target_key, routes.target_context, routes.say, routes.status) = (excluded.target_key, excluded.target_context, excluded.say, excluded.status) as same,
+                (routes.next_target_key, routes.next_target_context, routes.next_say, routes.next_status)
+                  is not distinct from (excluded.target_key, excluded.target_context, excluded.say, excluded.status) as again
             ) answer
           )`
         : undefined;
@@ -755,6 +761,10 @@ export class Store {
    * finishes. A step that used the change a trusted route holds beside it
    * (next_*, see `recordStep`) vouches for the change instead, and the change
    * takes the route's place once it has as many networks.
+   *
+   * A step vouches only for what it was given: the same control, the same
+   * sentence and the same status, since all three are served. A step whose
+   * answer was replaced before its guide finished vouches for neither.
    */
   private async trustRoutes(siteId: string, guide: string, network: string): Promise<void> {
     await this.sql`
@@ -772,7 +782,8 @@ export class Store {
       where g.id = ${guide} and g.site_id = ${siteId} and s.route is not null and s.target_key is not null and s.status <> 'stuck'
         and (next.n is null or not next.strayed)
         and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
-        and r.after_key = coalesce(s.after_key, '') and r.target_key = s.target_key and r.target_context = coalesce(s.target_context, '')`;
+        and r.after_key = coalesce(s.after_key, '') and r.target_key = s.target_key and r.target_context = coalesce(s.target_context, '')
+        and r.say = s.said and r.status = s.status`;
     const changes = (await this.sql`
       update routes r set next_networks = case when ${network} = '' or ${network} = any(r.next_networks) or cardinality(r.next_networks) >= ${MAX_VISITORS}
           then r.next_networks else r.next_networks || ${network}::text end,
@@ -784,12 +795,14 @@ export class Store {
         and (next.n is null or not next.strayed)
         and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
         and r.after_key = coalesce(s.after_key, '') and r.confirmed and r.next_target_key = s.target_key and r.next_target_context = coalesce(s.target_context, '')
+        and r.next_say = s.said and r.next_status = s.status
       returning r.goal_key, r.path, r.dialog, r.after_key, cardinality(r.next_networks) >= ${this.routeNetworks} as ready`) as RouteChange[];
     for (const change of changes.filter((row) => row.ready)) {
-      // The change has been confirmed as the route itself once was, and now it is the route.
+      // The change has been confirmed as the route itself once was, and now it is the route. Only a new control is a repair.
       await this.sql`
         update routes set target_key = next_target_key, target_context = next_target_context, target_role = next_target_role,
-          target_label = next_target_label, say = next_say, status = next_status, networks = next_networks, confirmed_at = now(), repairs = repairs + 1,
+          target_label = next_target_label, say = next_say, status = next_status, networks = next_networks, confirmed_at = now(),
+          repairs = repairs + case when (target_key, target_context) = (next_target_key, next_target_context) then 0 else 1 end,
           next_target_key = null, next_target_context = null, next_target_role = null, next_target_label = null, next_say = null, next_status = null,
           next_networks = '{}', updated_at = now()
         where site_id = ${siteId} and goal_key = ${change.goal_key} and path = ${change.path} and dialog = ${change.dialog} and after_key = ${change.after_key}

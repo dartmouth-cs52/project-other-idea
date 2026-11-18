@@ -15,7 +15,7 @@ const MODES: { value: Site["routesMode"]; name: string; says: string }[] = [
   {
     value: "serve",
     name: "Answer from routes",
-    says: "A route that finished guides confirmed answers on its own, when exactly one control on the page matches it. Anything else goes to the model, and so does a step your corrections or a taught route cover. A No to Did this help sends that route back to the model too.",
+    says: "A route that finished guides on several networks confirmed answers on its own, when exactly one control on the page matches it. Anything else goes to the model, and so does a step your corrections or a taught route cover. A No to Did this help sends that route back to the model too.",
   },
 ];
 
@@ -50,8 +50,8 @@ export function RoutesCard({ site, metrics, onChange }: { site: Site; metrics: R
     <Card>
       <CardTitle>Questions asked again</CardTitle>
       <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
-        When the same question comes up on the same screen, Haptic can point from the route a finished guide confirmed, without asking the model. The
-        pointer moves sooner and the step costs nothing.
+        When the same question comes up on the same screen, Haptic can point from a route that finished guides on several networks confirmed,
+        without asking the model. The pointer moves sooner and the step costs nothing.
       </p>
       <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 lg:grid-cols-4">
         {[

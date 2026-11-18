@@ -14,9 +14,10 @@ import { cleanText, normalizePath, questionKey, routeKey, type SiteContext, type
 // - Serve only a route finished guides have confirmed. On any doubt, ask the model. A miss costs one call.
 //
 // Anything that can send a request can ask a question, have the model answer it from a page of its own making, and
-// report the guide finished. So "confirmed" here means by finished guides from several networks (three online), and a
-// different answer never moves a trusted route at once: the change waits beside it until it is confirmed the same
-// way (`recordStep` and `trustRoutes` in db.ts).
+// report the guide finished. So "confirmed" here means by finished guides from several networks (three online), each
+// given the same control, sentence and status, since a served reply is all three. A different answer never moves a
+// trusted route at once: the change waits beside it until it is confirmed the same way (`recordStep` and
+// `trustRoutes` in db.ts).
 
 /** Where a route is looked up: the question, the screen, and the control the previous step used. */
 export interface RouteLookup {

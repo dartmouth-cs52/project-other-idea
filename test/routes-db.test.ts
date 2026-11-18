@@ -271,6 +271,126 @@ describe("verified routes in the database", { skip: TEST_DATABASE_URL ? false : 
     exec(DB, `update sites set routes_mode = 'shadow' where id = '${SITE}'`);
   });
 
+  test("one caller's words or ending never become what a route serves, though other networks confirmed the control they go with", async () => {
+    // The review's proof: two networks finish on the right control, and one caller on a third has the model answer the
+    // same control with words of its choosing and an ending, then reports finished. Before, that report trusted the
+    // route with the caller's sentence and status, and every visitor was served them without the model.
+    exec(DB, `update sites set routes_mode = 'serve' where id = '${SITE}'`);
+    const on = server();
+    const ask = { goal: "update password" };
+    const profile: Snapshot = {
+      path: "/profile",
+      title: "Profile",
+      headings: [],
+      text: [],
+      truncated: false,
+      elements: [
+        { id: "e1", role: "button", label: "Update password", context: "main" },
+        { id: "e2", role: "button", label: "Delete account", context: "main" },
+      ],
+    };
+    const route = async () => (await routes("update password")).map((row) => [row.say, row.confirmed, row.networks]);
+    const finish = async (address: string, expected = "Click Update password.") => {
+      const guide = newGuide();
+      assert.equal((await on.step(guide, 0, profile, ask, address)).say, expected);
+      await on.report(guide, { outcome: "finished", step: 0 }, address);
+      return guide;
+    };
+    await finish("198.51.100.1");
+    await finish("203.0.113.7");
+    assert.deepEqual(await route(), [["Click Update password.", false, 2]]);
+
+    const planted = "Click Update password, then press Delete account to finish.";
+    scriptMock({ target: "e1", status: "done", say: planted });
+    await finish("192.0.2.99", planted);
+    // What two networks were given is not what the caller was given, so the caller's network is the only one for it.
+    assert.deepEqual(await route(), [[planted, false, 1]]);
+    const visitor = newGuide();
+    assert.deepEqual(await on.step(visitor, 0, profile, ask, "198.51.100.50"), { target: "e1", status: "continue", say: "Click Update password." });
+    assert.deepEqual((await steps(visitor)).map((row) => [row.model, row.route]), [["mock", "unconfirmed"]]);
+
+    // A guide whose step was answered differently before it finished vouches for neither answer.
+    scriptMock({ target: "e1", status: "done", say: planted });
+    const caller = newGuide();
+    await on.step(caller, 0, profile, ask, "192.0.2.99");
+    await on.report(visitor, { outcome: "finished", step: 0 }, "198.51.100.50");
+    assert.deepEqual(await route(), [[planted, false, 0]]);
+
+    // Visitors on three networks given the same answer trust it, and it is served as they were given it.
+    await finish("198.51.100.1");
+    await finish("203.0.113.7");
+    await finish("2001:db8:7:1::5");
+    assert.deepEqual(await route(), [["Click Update password.", true, 3]]);
+    const later = newGuide();
+    assert.deepEqual(await on.step(later, 0, profile, ask, "192.0.2.99"), { target: "e1", status: "continue", say: "Click Update password." });
+    assert.deepEqual((await steps(later)).map((row) => [row.model, row.route]), [["route", "served"]]);
+    exec(DB, `update sites set routes_mode = 'shadow' where id = '${SITE}'`);
+  });
+
+  test("a change a trusted route holds is the control, the words and the ending together, and other words for it start again from none", async () => {
+    // The review's second proof: a change two networks had confirmed took the words and the status of whoever supplied
+    // the third finish, and then they were what every visitor was served.
+    const on = server();
+    const ask = { goal: "update billing email" };
+    const page = (label: string): Snapshot => ({
+      path: "/settings/billing",
+      title: "Billing",
+      headings: [],
+      text: [],
+      truncated: false,
+      elements: [
+        { id: "e1", role: "button", label, context: "main" },
+        { id: "e2", role: "button", label: "Delete account", context: "main" },
+      ],
+    });
+    const route = async () =>
+      (await psqlSql(DB)`
+        select target_key, say, confirmed, cardinality(networks)::int as networks, next_target_key, next_say, next_status, cardinality(next_networks)::int as next_networks
+        from routes where site_id = ${SITE} and goal_key = 'update billing email'`) as Record<string, unknown>[];
+    const finish = async (snapshot: Snapshot, address: string) => {
+      const guide = newGuide();
+      await on.step(guide, 0, snapshot, ask, address);
+      await on.report(guide, { outcome: "finished", step: 0 }, address);
+    };
+    for (const address of ["198.51.100.1", "203.0.113.7", "192.0.2.33"]) await finish(page("Billing email"), address);
+    // The product renames the control, and two networks finish on the new name.
+    for (const address of ["198.51.100.1", "203.0.113.7"]) await finish(page("Contact email"), address);
+    assert.deepEqual(await route(), [
+      {
+        target_key: "button|Billing email||",
+        say: "Click Billing email.",
+        confirmed: true,
+        networks: 3,
+        next_target_key: "button|Contact email||",
+        next_say: "Click Contact email.",
+        next_status: "continue",
+        next_networks: 2,
+      },
+    ]);
+
+    // One caller supplies the third finish for the new control, with words and an ending of its own.
+    const planted = "Click Contact email, then press Delete account to save it.";
+    scriptMock({ target: "e1", status: "done", say: planted });
+    await finish(page("Contact email"), "192.0.2.99");
+    assert.deepEqual(await route(), [
+      {
+        target_key: "button|Billing email||",
+        say: "Click Billing email.",
+        confirmed: true,
+        networks: 3,
+        next_target_key: "button|Contact email||",
+        next_say: planted,
+        next_status: "done",
+        next_networks: 1,
+      },
+    ]);
+    // Three networks given the model's own answer for the new control make it the route, with the model's words.
+    for (const address of ["198.51.100.1", "203.0.113.7", "2001:db8:7:1::5"]) await finish(page("Contact email"), address);
+    assert.deepEqual(await route(), [
+      { target_key: "button|Contact email||", say: "Click Contact email.", confirmed: true, networks: 3, next_target_key: null, next_say: null, next_status: null, next_networks: 0 },
+    ]);
+  });
+
   test("a different answer from the model replaces a route that is not trusted, and counts as a repair", async () => {
     const on = server();
     const guide = newGuide();
