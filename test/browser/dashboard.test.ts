@@ -702,6 +702,9 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     /** How far the page reaches past the right edge of what can be seen. On a phone that zooms a page out to fit it, the window grows with it, so this measures against the page's own width. */
     const sideways = (tab: Page) => tab.evaluate(() => document.scrollingElement!.scrollWidth - document.documentElement.clientWidth);
 
+    /** The innermost part of the page with this heading. */
+    const part = (tab: Page, heading: string | RegExp) => tab.locator("section", { has: tab.getByRole("heading", { name: heading, exact: typeof heading === "string" }) }).last();
+
     test("the Questions page can be read on a phone: a question wraps, with how it ended and when under it", async () => {
       const question = "How do I change the billing address on an invoice I already sent to a customer last month?";
       dash.end(dash.ask(question));
@@ -772,6 +775,20 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         await laptop.getByRole("button", { name: "What guides finished counts" }).hover();
         await laptop.getByText("Guides where the person reached the end.").waitFor({ timeout: 5_000 });
       });
+    });
+
+    test("How guides ended keeps its bars wide enough to compare, on a phone and in the Overview's narrow column on a laptop", async () => {
+      for (const size of [PHONE, { width: 1024, height: 768 }, { width: 1280, height: 800 }]) {
+        const tab = await openOn(`/dashboard/?site=${SITE}`, size);
+        await closing(tab, async () => {
+          const endings = part(tab, "How guides ended");
+          await endings.locator("li").first().waitFor({ timeout: 10_000 });
+          // The track each share is drawn on. They were 5px wide on a phone and none at all on a 1024px laptop.
+          const widths = await endings.locator("li > span.block").evaluateAll((bars) => bars.map((bar) => Math.round(bar.getBoundingClientRect().width)));
+          assert.ok(widths.length > 0, "no bars");
+          assert.ok(Math.min(...widths) >= 120, `at ${size.width}px wide the bars are ${widths.join(", ")}px`);
+        });
+      }
     });
   });
 });
