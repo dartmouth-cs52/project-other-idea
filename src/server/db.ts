@@ -738,17 +738,26 @@ export class Store {
     });
   }
 
-  /** The route stored for a question on a screen, if any. */
+  /**
+   * The route stored for a question on a screen, if any. It is trusted only
+   * while it has the networks trust takes (`routeNetworks`), whatever marks
+   * it trusted: a deploy applies db/migrations before the new server goes
+   * live, and the server from before 0018, answering in between, trusts a
+   * route on one finished guide and counts no networks. So does a route
+   * trusted before the threshold was raised. Without 0018 there are no
+   * networks to count, so the lookup fails and says so, and the model answers.
+   */
   async findRoute(siteId: string, lookup: RouteLookup): Promise<StoredRoute | undefined> {
-    const rows = (await this.sql`
-      select target_key, target_context, say, status, confirmed from routes
-      where site_id = ${siteId} and goal_key = ${lookup.goalKey} and path = ${lookup.path} and dialog = ${lookup.dialog} and after_key = ${lookup.afterKey}`) as {
-      target_key: string;
-      target_context: string;
-      say: string;
-      status: "continue" | "done";
-      confirmed: boolean;
-    }[];
+    type Row = { target_key: string; target_context: string; say: string; status: "continue" | "done"; confirmed: boolean };
+    let rows: Row[];
+    try {
+      rows = (await this.sql`
+        select target_key, target_context, say, status, confirmed and cardinality(networks) >= ${this.routeNetworks} as confirmed from routes
+        where site_id = ${siteId} and goal_key = ${lookup.goalKey} and path = ${lookup.path} and dialog = ${lookup.dialog} and after_key = ${lookup.afterKey}`) as Row[];
+    } catch (error) {
+      console.error("Couldn't look up a verified route (has db/migrations/0018 been applied?):", error instanceof Error ? error.message : error);
+      throw error;
+    }
     const row = rows[0];
     return row ? { targetKey: row.target_key, targetContext: row.target_context, say: row.say, status: row.status, confirmed: row.confirmed } : undefined;
   }

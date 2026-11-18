@@ -38,7 +38,7 @@ Without it the Worker still answers, from the KV store sites were kept in before
 
 `db/migrations/0014` counts the networks each learned label was seen from. Until it is applied, nothing learned reaches the prompt and nothing new is learned (the server logs it); once it is, labels learned before have to be seen from three networks again before the prompt uses them.
 
-`db/migrations/0018` counts the networks that confirmed each [verified route](#verified-routes). Until it is applied, every step is still recorded, but no route is learned and none is newly trusted (the server logs it); once it is, routes trusted before have to be confirmed from three networks again before they are served.
+`db/migrations/0018` counts the networks that confirmed each [verified route](#verified-routes). Until it is applied, every step is still recorded, but no route is learned, looked up or served (the server logs it); once it is, routes trusted before have to be confirmed from three networks again before they are served. A route is served only while it has those networks, whatever else marks it trusted. Both deploys apply migrations before they publish, so for a while the server from before 0018 answers on a database that has it, and trusts a route on one finished guide without counting a network: the new server does not serve such a route. The same holds when `HAPTIC_NETWORK_THRESHOLD` is raised for routes trusted before.
 
 `db/migrations/0019` keeps each network to its day's share of new learned labels. Until it is applied, nothing new is learned (the server logs it), and what was learned before still reaches the prompt.
 

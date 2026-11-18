@@ -403,6 +403,34 @@ describe("verified routes in the database", { skip: TEST_DATABASE_URL ? false : 
     ]);
   });
 
+  test("a route is served only while it has the networks trust takes, whatever marks it trusted", async () => {
+    // The review's proof: a deploy applies db/migrations before the new server goes live, and the server from before
+    // 0018, still answering meanwhile, trusts a route on one finished guide and counts no networks. The new server then
+    // served that route to everyone.
+    exec(DB, `update sites set routes_mode = 'serve' where id = '${SITE}'`);
+    const on = server();
+    const ask = { goal: "export invoices" };
+    const page: Snapshot = { path: "/invoices", title: "Invoices", headings: [], text: [], truncated: false, elements: [{ id: "e1", role: "button", label: "Export invoices", context: "main" }] };
+    exec(
+      DB,
+      `insert into routes (site_id, goal_key, path, dialog, after_key, target_key, target_context, target_role, target_label, say, status, confirmed, confirmed_at)
+        values ('${SITE}', 'export invoices', '/invoices', '', '', 'button|Export invoices||', 'main', 'button', 'Export invoices', 'Click Export invoices.', 'continue', true, now())`,
+    );
+    const first = newGuide();
+    await on.step(first, 0, page, ask);
+    assert.deepEqual((await steps(first)).map((row) => [row.model, row.route]), [["mock", "unconfirmed"]]);
+    exec(DB, `update routes set networks = '{0a1b,2c3d}' where site_id = '${SITE}' and goal_key = 'export invoices'`);
+    const second = newGuide();
+    await on.step(second, 0, page, ask);
+    assert.deepEqual((await steps(second)).map((row) => [row.model, row.route]), [["mock", "unconfirmed"]]);
+    // With as many networks as trust takes, it is served.
+    exec(DB, `update routes set networks = '{0a1b,2c3d,4e5f}' where site_id = '${SITE}' and goal_key = 'export invoices'`);
+    const third = newGuide();
+    assert.deepEqual(await on.step(third, 0, page, ask), { target: "e1", status: "continue", say: "Click Export invoices." });
+    assert.deepEqual((await steps(third)).map((row) => [row.model, row.route]), [["route", "served"]]);
+    exec(DB, `update sites set routes_mode = 'shadow' where id = '${SITE}'`);
+  });
+
   test("a different answer from the model replaces a route that is not trusted, and counts as a repair", async () => {
     const on = server();
     const guide = newGuide();
@@ -442,5 +470,38 @@ describe("verified routes on a database without db/migrations/0018", { skip: TES
     const rows = (await psqlSql(UNMIGRATED)`select n, target_label, route from steps where guide_id = ${guide}`) as { n: number; target_label: string; route: string }[];
     assert.deepEqual(rows, [{ n: 0, target_label: "Billing", route: "miss" }]);
     assert.match(said.join("\n"), /Couldn't learn a route from a step \(has db\/migrations\/0018 been applied\?\)/);
+  });
+
+  test("a route trusted before 0018 is neither served nor compared, and the server says which migration routes need", async () => {
+    // Without 0018 there are no networks to count. Before, such a route was served on the trust one finished guide gave
+    // it, and a No could not take that away, since taking it away clears the networks too.
+    exec(UNMIGRATED, `update sites set routes_mode = 'serve' where id = '${SITE}'`);
+    exec(
+      UNMIGRATED,
+      `insert into routes (site_id, goal_key, path, dialog, after_key, target_key, target_context, target_role, target_label, say, status, confirmed, confirmed_at)
+        values ('${SITE}', 'open billing', '/', '', '', 'link|Billing||', 'nav', 'link', 'Billing', 'Click Billing.', 'continue', true, now())`,
+    );
+    const store = new Store(psqlSql(UNMIGRATED) as unknown as ConstructorParameters<typeof Store>[0], 3, { reportWaitsMs: [0] });
+    const turns: [string, string | undefined][] = [];
+    const app = createApp({
+      loadSite: (id) => store.loadSite(id),
+      widget: async () => "",
+      widgetMaxAge: 0,
+      overLimit: () => false,
+      findRoute: (site, lookup) => store.findRoute(site.id, lookup),
+      onTurn: (_turn, measure, _site, _origin, route) => void turns.push([measure.model, route?.outcome]),
+    });
+    const said: string[] = [];
+    const logged = console.error;
+    console.error = (...args: unknown[]) => void said.push(args.join(" "));
+    try {
+      const body = JSON.stringify({ site: SITE, guide: newGuide(), goal: "open billing", step: 0, history: [], snapshot: HOME });
+      const response = await app(new Request("https://widget.test/v1/turn", { method: "POST", headers: { "Content-Type": "application/json", Origin: ORIGIN }, body }), "198.51.100.1");
+      assert.equal(((await response?.json()) as TurnReply).target, "e1");
+    } finally {
+      console.error = logged;
+    }
+    assert.deepEqual(turns, [["mock", undefined]]);
+    assert.match(said.join("\n"), /Couldn't look up a verified route \(has db\/migrations\/0018 been applied\?\)/);
   });
 });
