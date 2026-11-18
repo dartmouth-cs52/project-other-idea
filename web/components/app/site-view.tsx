@@ -363,6 +363,10 @@ function MapApp({ site, reload }: { site: Site; reload: () => void }) {
     // The tab is opened now, while the click still counts as theirs, and sent on once the link is ready.
     // Opened after the wait, a browser would block it as a popup.
     const tab = window.open("", "_blank");
+    // A page whose session has ended goes to sign in without this call ever settling (api in lib/app-api.ts), so the
+    // tab goes with the page rather than stay open and blank.
+    const leave = () => tab?.close();
+    window.addEventListener("pagehide", leave);
     try {
       const { url } = await api<{ url: string }>(`/sites/${site.id}/map`, { method: "POST", body: { url: start.trim() } });
       if (tab) {
@@ -378,6 +382,7 @@ function MapApp({ site, reload }: { site: Site; reload: () => void }) {
       setError((failure as Error).message);
     } finally {
       setBusy(false);
+      window.removeEventListener("pagehide", leave);
     }
   }
 

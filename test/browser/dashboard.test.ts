@@ -427,10 +427,10 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     /**
      * The session ends, from signing out in another tab or being away too long: the Worker turns every call away, and
      * the session itself says no one is signed in. The Worker turns calls away when it can't reach Neon Auth too, and
-     * the page tells the two apart by asking the session.
+     * the page tells the two apart by asking the session. `calls` narrows which calls are turned away.
      */
-    const endSession = async (tab: Page) => {
-      await tab.route("**/api/app/**", (route) => route.fulfill({ status: 401, json: { error: "Sign in first." } }));
+    const endSession = async (tab: Page, calls = "**/api/app/**") => {
+      await tab.route(calls, (route) => route.fulfill({ status: 401, json: { error: "Sign in first." } }));
       await tab.route("**/api/auth/get-session**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));
     };
     /** Signed in again in another tab, which signs in every tab, since they share the cookie. */
@@ -505,6 +505,32 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         assert.equal(tab.url(), at);
         assert.equal(await doc.inputValue(), "https://help.northpine.example/billing");
       });
+    });
+
+    test("a tab opened for teaching or mapping after the session ended closes as the page goes to sign in", async () => {
+      // Teach Haptic and Start mapping open their tab at the click, since a browser blocks one opened after a wait, and
+      // close it when the server says no. A page going to sign in never hears back, and the tab was once left open and
+      // blank in front of it.
+      for (const how of ["teaching", "mapping"] as const) {
+        const tab = await dash.open(`/dashboard/?site=${SITE}${how === "teaching" ? "&view=knowledge" : ""}`);
+        await closing(tab, async () => {
+          if (how === "teaching") {
+            await tab.getByRole("button", { name: "Teach Haptic a task" }).click({ timeout: 15_000 });
+            await tab.getByLabel("What should Haptic learn to do?").fill("how do I add a budget");
+            await endSession(tab);
+          } else {
+            await tab.getByRole("button", { name: "Start mapping" }).waitFor({ timeout: 15_000 });
+            // The Overview asks what is new every second and a half, so only this call is turned away, or the page
+            // could go to sign in before the button is pressed.
+            await endSession(tab, "**/api/app/sites/*/map");
+          }
+          const opened = tab.context().waitForEvent("page");
+          await tab.getByRole("button", { name: how === "teaching" ? "Start teaching" : "Start mapping" }).click();
+          const blank = await opened;
+          await tab.waitForURL("**/sign-in/", { timeout: 10_000 });
+          await eventually(async () => blank.isClosed(), `the tab opened for ${how} should close with the page`, 5_000);
+        });
+      }
     });
 
     test("a call turned away while the session is still there doesn't send anyone to sign in", async () => {

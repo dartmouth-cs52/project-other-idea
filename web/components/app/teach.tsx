@@ -64,6 +64,10 @@ async function beginTeaching(siteId: string, question: string, from: Active["fro
       // Nothing to do.
     }
   }
+  // A page whose session has ended goes to sign in without the call below ever settling (api in lib/app-api.ts), so
+  // the tab goes with the page rather than stay open and blank.
+  const leave = () => tab?.close();
+  window.addEventListener("pagehide", leave);
   setActive({ siteId, question, from, starting: true });
   try {
     const result = await api<{ session: TeachSession; url: string }>(`/sites/${siteId}/teach`, { method: "POST", body: { question, ...from } });
@@ -72,6 +76,8 @@ async function beginTeaching(siteId: string, question: string, from: Active["fro
   } catch (failure) {
     tab?.close();
     setActive({ siteId, question, from, error: (failure as Error).message });
+  } finally {
+    window.removeEventListener("pagehide", leave);
   }
 }
 
