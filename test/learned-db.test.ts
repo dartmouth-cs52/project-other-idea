@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { Store } from "../src/server/db.ts";
 import { DEFAULT_APPEARANCE, type PageOutline, type SiteContext } from "../src/shared/types.ts";
+import { knownControls } from "../web/worker/corrections.ts";
 import { exec, freshDatabase, psqlSql, TEST_DATABASE_URL, testDatabase } from "./psql.ts";
 
 /** This file's own database, when TEST_DATABASE_URL is set. */
@@ -103,6 +104,32 @@ describe("learning from visits, against Postgres", { skip: TEST_DATABASE_URL ? f
     // A label nobody has seen for a month is one the product may have dropped, and gives way to one seen lately.
     exec(DB, `update outline_labels set last_seen_at = now() - interval '40 days' where label = 'Share'`);
     assert.deepEqual(await buttonsOn(store, "/reports"), ["Export", "Fake one"]);
+  });
+
+  test("visitor ids made up on networks already counted don't lift a label over one seen from as many networks before it", async () => {
+    // The review's probe: four real visitors on four networks saw a page weeks ago. Callers on four networks then sent
+    // forty pages of their own, with ten made-up visitor ids each, which cost nothing once the network is counted.
+    // Ranked by visitors after networks, the forty filled every place for a page only traffic knows, and the real one
+    // went from every visitor's site map.
+    const store = new Store(sql(), 3, { labelNetworks: 3 });
+    for (const [visitor, network] of [["a", "aaaa"], ["b", "bbbb"], ["c", "cccc"], ["d", "dddd"]] as const)
+      await store.recordOutline(site, visitor, { path: "/billing/invoices", title: "Invoices", headings: [], links: [], buttons: ["Download invoice"] }, network);
+    exec(DB, `update outline_labels set first_seen_at = now() - interval '20 days'`);
+    exec(
+      DB,
+      `insert into outline_labels (site_id, route, kind, label, href, visitors, networks)
+        select '${site.id}', '/x' || i, 'title', 'Fake page ' || i, '', array['x0','x1','x2','x3','x4','x5','x6','x7','x8','x9'], array['eeee','ffff','gggg','hhhh']
+        from generate_series(0, 39) i`,
+    );
+    const pages = (await store.loadSite(site.id))?.pages.map((page) => page.path) ?? [];
+    assert.ok(pages.includes("/billing/invoices"), "the page real visitors saw stays in the site map");
+    assert.deepEqual(await buttonsOn(store, "/billing/invoices"), ["Download invoice"]);
+    // The same in the dashboard's picker for Point here instead, which offers learned labels in the same order.
+    exec(DB, `insert into outline_labels (site_id, route, kind, label, href, visitors, networks)
+      select '${site.id}', '/billing/invoices', 'button', 'Fake ' || i, '', array['x0','x1','x2','x3','x4','x5','x6','x7','x8','x9'], array['eeee','ffff','gggg','hhhh']
+      from generate_series(0, 99) i`);
+    const picked = await knownControls(psqlSql(DB) as unknown as Parameters<typeof knownControls>[0], { id: site.id, context: site }, "/billing/invoices");
+    assert.deepEqual(picked[0], { role: "button", label: "Download invoice" });
   });
 
   test("a full site keeps the labels the prompt reads, in the same order, whatever was sent most", async () => {

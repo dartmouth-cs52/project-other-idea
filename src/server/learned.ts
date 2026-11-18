@@ -99,7 +99,7 @@ export function labelNeeds(env: Record<string, string | undefined>): LabelNeeds 
 
 /** Each label keeps at most this many visitor hashes, and as many network hashes. Enough for any threshold we would use, and a bounded row. */
 export const MAX_VISITORS = 10;
-/** Pages that only traffic knows, beyond the crawl's. The most visited win. */
+/** Pages that only traffic knows, beyond the crawl's. The most widely seen win (`widest`). */
 const MAX_LEARNED_ROUTES = 40;
 /** Links learned for one page, beyond the crawl's. */
 const MAX_LEARNED_LINKS = 20;
@@ -270,12 +270,12 @@ const asNeeds = (needs: number | LabelNeeds): LabelNeeds => (typeof needs === "n
 /** Enough visitors, from enough networks. */
 const enough = (row: { visitors: number; networks?: number }, needs: LabelNeeds): boolean => row.visitors >= needs.visitors && (row.networks ?? 0) >= needs.networks;
 /**
- * The most widely seen first: by networks, which are the hardest to make up, then visitors. Never by how often a
- * label was sent, which anyone can raise as fast as they can post. Rows that tie keep the order they came in: the
- * database sends those seen lately and known longest first (`learnedLabels` in db.ts), and memory keeps them in
- * the order they were first seen.
+ * The most widely seen first: by networks, which a caller cannot make up. Never by how often a label was sent, which
+ * anyone can raise as fast as they can post, nor by its visitors, which are the widget's random ids and so one
+ * network can be ten of them. Rows that tie keep the order they came in: the database sends those seen lately and
+ * known longest first (`learnedLabels` in db.ts), and memory keeps them in the order they were first seen.
  */
-const widest = (a: { visitors: number; networks?: number }, b: { visitors: number; networks?: number }): number => (b.networks ?? 0) - (a.networks ?? 0) || b.visitors - a.visitors;
+const widest = (a: { networks?: number }, b: { networks?: number }): number => (b.networks ?? 0) - (a.networks ?? 0);
 
 /**
  * The site's pages with what traffic has taught Haptic merged in, for the

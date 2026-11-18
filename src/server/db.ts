@@ -70,14 +70,18 @@ const MAX_LABELS = 5000;
 /**
  * The most learned labels read with a site, and as many items behind
  * controls, the most widely seen first. Each query that ranks them writes the
- * same order out: by how many networks and then how many visitors have seen
- * them, the counts that are hard to make up, each up to ten. Then whether they
- * were seen in the last 30 days, then the longest known first, then the row's
- * own key, so the order is the same every time. Never by how many times a
- * label was sent, which anyone can raise as fast as they can post: ranked by
- * that, labels sent from ten networks over and over took every place in every
- * visitor's prompt, and the ones real visitors saw were dropped. Now a label
- * first sent today cannot outrank one real visitors keep seeing with the same counts.
+ * same order out: by how many networks have seen them, up to ten, the one
+ * count a caller cannot make up. Then whether they were seen in the last 30
+ * days, then the longest known first, then the row's own key, so the order is
+ * the same every time. Never by how many times a label was sent, which anyone
+ * can raise as fast as they can post: ranked by that, labels sent from ten
+ * networks over and over took every place in every visitor's prompt, and the
+ * ones real visitors saw were dropped. Nor by how many visitors saw them: a
+ * visitor is the widget's random id, so one network can be ten of them for
+ * nothing, and callers on four networks with ten made-up ids each pushed out a
+ * page four real visitors on four networks had seen. Visitors only decide
+ * whether a label is read at all. Now a label first sent today cannot outrank
+ * one seen from as many networks before it.
  */
 const LABELS_READ = 1500;
 /**
@@ -265,7 +269,7 @@ export class Store {
       const rows = await this.sql`
         select route, control, label, href, visitor_count as visitors, network_count as networks, seen_count::int as seen from outline_openings
         where site_id = ${id} and visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}
-        order by network_count desc, visitor_count desc, last_seen_at > now() - interval '30 days' desc, first_seen_at, route, control, label, href
+        order by network_count desc, last_seen_at > now() - interval '30 days' desc, first_seen_at, route, control, label, href
         limit ${this.labelsRead}`;
       return rows as LearnedOpening[];
     } catch (error) {
@@ -284,7 +288,7 @@ export class Store {
       const rows = await this.sql`
         select route, kind, label, href, visitor_count as visitors, network_count as networks, seen_count::int as seen from outline_labels
         where site_id = ${id} and visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}
-        order by network_count desc, visitor_count desc, last_seen_at > now() - interval '30 days' desc, first_seen_at, route, kind, label, href
+        order by network_count desc, last_seen_at > now() - interval '30 days' desc, first_seen_at, route, kind, label, href
         limit ${this.labelsRead}`;
       return rows as LearnedLabel[];
     } catch (error) {
@@ -361,7 +365,7 @@ export class Store {
           select route, kind, label, href from (
             select route, kind, label, href, last_seen_at, seen_count,
               (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) and row_number() over (
-                order by (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) desc, network_count desc, visitor_count desc,
+                order by (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) desc, network_count desc,
                   last_seen_at > now() - interval '30 days' desc, first_seen_at, route, kind, label, href
               ) <= ${this.labelsRead} as read
             from outline_labels where site_id = ${site.id}
@@ -420,7 +424,7 @@ export class Store {
           select route, control, label, href from (
             select route, control, label, href, last_seen_at, seen_count,
               (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) and row_number() over (
-                order by (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) desc, network_count desc, visitor_count desc,
+                order by (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) desc, network_count desc,
                   last_seen_at > now() - interval '30 days' desc, first_seen_at, route, control, label, href
               ) <= ${this.labelsRead} as read
             from outline_openings where site_id = ${site.id}
