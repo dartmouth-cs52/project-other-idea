@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormAlert } from "@/components/form";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { ApiError, api, type Me } from "@/lib/app-api";
+import { api, type Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
 import { siteAt } from "@/lib/dashboard";
 import { accessHref } from "@/lib/site";
@@ -35,15 +35,10 @@ export function Dashboard() {
       // one-time verifier in the address, and the auth client trades it for the session cookie.
       await auth().getSession();
       try {
+        // Anyone not signed in, a sign-in link that didn't work among them, is sent to sign in by api().
         const me = await api<Me>("/me");
         if (live) setState({ kind: "ready", me });
       } catch (failure) {
-        if (failure instanceof ApiError && failure.status === 401) {
-          // A sign-in link that was already used or has expired comes back here with an error in the address.
-          // Take it along, so the sign-in page can say what happened.
-          const linkError = new URLSearchParams(window.location.search).get("error");
-          return window.location.replace(linkError ? `/sign-in/?error=${encodeURIComponent(linkError)}` : "/sign-in/");
-        }
         if (live) setState({ kind: "failed", message: (failure as Error).message });
       }
     })();

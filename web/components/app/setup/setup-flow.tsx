@@ -61,7 +61,6 @@ export function SetupFlow() {
         if (!answer.approved) return window.location.replace("/dashboard/");
         setMe(answer);
       } catch (error) {
-        if (error instanceof ApiError && error.status === 401) return window.location.replace("/sign-in/");
         if (live) setFailure((error as Error).message);
       }
     })();
@@ -80,7 +79,6 @@ export function SetupFlow() {
       setFailure(null);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return router.replace("/dashboard/");
-      if (error instanceof ApiError && error.status === 401) return window.location.replace("/sign-in/");
       setFailure((error as Error).message);
     }
   }, [siteId, router]);

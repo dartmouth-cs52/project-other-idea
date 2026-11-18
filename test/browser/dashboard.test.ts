@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import type { Locator, Page } from "playwright";
+import type { Locator, Page, Route } from "playwright";
 import { launcherColour } from "../../src/shared/colour.ts";
 import { BRAND, COMPANY, NO_SITE_COMPANY, ONE_SITE, ONE_SITE_COMPANY, SETTING_UP, SETTING_UP_COMPANY, SITE, SKIP, WAITING, startDashboard, type Dashboard } from "./dashboard-harness.ts";
 
@@ -347,6 +347,42 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
           await tab.waitForURL("**/sign-in/", { timeout: 10_000 });
         });
       }
+    });
+  });
+
+  describe("when the session ends", () => {
+    const signedOut = (route: Route) => route.fulfill({ status: 401, json: { error: "Sign in first." } });
+
+    test("a page open when the session ends goes to sign in, from a page that keeps itself current and from a save", async () => {
+      // Questions asks what is new every second and a half. Knowledge asks for nothing until Save notes is pressed. Both
+      // once said "Sign in first." with a Try again that was turned away the same way, again and again.
+      for (const view of ["questions", "knowledge"] as const) {
+        const tab = await dash.open(`/dashboard/?site=${SITE}&view=${view}`);
+        await closing(tab, async () => {
+          if (view === "questions") await tab.getByRole("table").getByText("How do I issue a new card?").first().waitFor({ timeout: 15_000 });
+          else await tab.getByRole("button", { name: "Save notes" }).waitFor({ timeout: 15_000 });
+          const steps = await tab.evaluate(() => history.length);
+          // From now on the Worker turns every call away, as it does once no one is signed in.
+          await tab.route("**/api/app/**", signedOut);
+          if (view === "knowledge") {
+            await tab.getByLabel("Notes").fill("Cards are under Spend.");
+            await tab.getByRole("button", { name: "Save notes" }).click();
+          }
+          await tab.waitForURL("**/sign-in/", { timeout: 10_000 });
+          await tab.getByRole("heading", { name: "Sign in to Haptic." }).waitFor();
+          assert.equal(await tab.evaluate(() => history.length), steps, "the sign-in page should take the dashboard's place, so Back doesn't return to it");
+        });
+      }
+    });
+
+    test("a sign-in link that didn't work lands on the sign-in page, which says why", async () => {
+      const tab = await dash.open("/sign-in/");
+      await closing(tab, async () => {
+        await tab.route("**/api/app/**", signedOut);
+        await tab.goto(`${dash.url}/dashboard/?view=sites&error=INVALID_TOKEN`);
+        await tab.waitForURL("**/sign-in/?error=INVALID_TOKEN", { timeout: 10_000 });
+        await tab.getByText("That sign-in link no longer works").waitFor();
+      });
     });
   });
 

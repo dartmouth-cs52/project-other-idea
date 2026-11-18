@@ -18,6 +18,16 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Leaves for the sign-in page. A sign-in link that was already used or has expired comes back to the dashboard with an
+ * error in the address, and that goes along, so the sign-in page can say what happened. It replaces this page rather
+ * than adding a step, so Back doesn't return to a page that would only send the person here again.
+ */
+function toSignIn() {
+  const linkError = new URLSearchParams(window.location.search).get("error");
+  window.location.replace(linkError ? `/sign-in/?error=${encodeURIComponent(linkError)}` : "/sign-in/");
+}
+
 export async function api<T>(path: string, init?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<T> {
   const response = await fetch(`/api/app${path}`, {
     method: init?.method ?? "GET",
@@ -28,6 +38,13 @@ export async function api<T>(path: string, init?: { method?: string; body?: unkn
   }).catch(() => null);
   // The browser's own words for this differ in each browser, and none of them say what to do.
   if (!response) throw new ApiError(0, "Haptic couldn't be reached. Check your connection and try again.");
+  // No one is signed in: the session ended while the page was open, from signing out in another tab or being away too
+  // long, or there never was one. Every call after this one would be turned away too, so the page goes to sign in. The
+  // call never settles, so nothing on the page has time to say "Sign in first." with a Try again that can't work.
+  if (response.status === 401) {
+    toSignIn();
+    return new Promise<never>(() => {});
+  }
   const data = (await response.json().catch(() => ({}))) as { error?: string; field?: string };
   if (!response.ok) throw new ApiError(response.status, data.error ?? "Something went wrong on our side. Try again in a moment.", data.field);
   return data as T;
