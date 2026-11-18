@@ -17,6 +17,7 @@ The rest of the Worker's tests are at the top of the repository, in `../test/`. 
 - `app/page.tsx`: the landing page (hero, demo, feature cards, pricing, FAQ).
 - `app/request-access/`: the request access page, the one call to action on the site.
 - `app/privacy/`, `app/terms/`: plain text pages.
+- `app/not-found.tsx`: the page for an address the site doesn't have, with the bar, the footer and the way home. The export writes it to `out/404.html`, which the Worker serves with status 404.
 - `components/demo.tsx`: the scripted demo. One task on a loop, driven by a list of steps at the top of the file.
 - `components/pointer.tsx`: the Haptic pointer. Same path as `../assets/pointer.svg` and the widget in `../src/widget/ui.ts`.
 - `lib/site.ts`: the name, contact address, links, FAQ copy and the pricing plans. A price is changed there and nowhere else. Billing reads the same plans: see [Billing](#billing).

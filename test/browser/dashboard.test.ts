@@ -914,5 +914,18 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         });
       }
     });
+
+    test("an address that isn't on the site gets a page in the site's own frame, with the way home", async () => {
+      // The Worker answers an address it has no file for with out/404.html and status 404 (wrangler.jsonc, worker/embedded.ts).
+      const tab = await openOn("/404.html", PHONE);
+      await closing(tab, async () => {
+        await tab.getByRole("heading", { level: 1, name: "Page not found." }).waitFor({ timeout: 5_000 });
+        assert.equal(await tab.title(), "Page not found, Haptic");
+        assert.equal(await tab.getByRole("link", { name: "Go to the home page" }).getAttribute("href"), "/");
+        assert.equal(await tab.locator("header").first().getByRole("link", { name: "Request access" }).count(), 1, "the bar with the call to action");
+        assert.equal(await tab.locator("footer").getByRole("link", { name: "Privacy" }).count(), 1, "the footer");
+        assert.ok((await sideways(tab)) <= 0, "the page scrolls sideways");
+      });
+    });
   });
 });
