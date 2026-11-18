@@ -829,5 +829,31 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         assert.ok(open.x + open.width <= SMALLEST.width - 24 + 1, `the link to the site ends at ${Math.round(open.x + open.width)}px`);
       });
     });
+
+    test("the Approve page fits a phone when a name and an email are long, and its buttons still say whom they approve in full", async () => {
+      const request = {
+        name: "Alexandra Richardson-Montgomery",
+        email: "alexandra.richardson-montgomery@northwind-traders.com",
+        company: "Northwind Traders International",
+        details: "",
+        domain: "northwind-traders.com",
+        domainAllowed: true,
+        approved: { email: false, domain: false },
+      };
+      for (const size of [SMALLEST, PHONE, { width: 768, height: 1024 }]) {
+        const tab = await openOn("/approve/?key=k&sig=s", size, { prepare: (context) => context.route(/\/api\/app\/approve\b/, (route) => route.fulfill({ json: request })) });
+        await closing(tab, async () => {
+          const buttons = [tab.getByRole("button", { name: `Approve ${request.email}` }), tab.getByRole("button", { name: `Approve everyone at ${request.domain}` })];
+          await buttons[0]!.waitFor({ timeout: 10_000 });
+          assert.ok((await sideways(tab)) <= 0, `at ${size.width}px wide the page scrolls sideways`);
+          const card = (await tab.locator("main section").first().boundingBox())!;
+          for (const button of buttons) {
+            const box = (await button.boundingBox())!;
+            assert.ok(box.x >= card.x && box.x + box.width <= card.x + card.width + 1, `at ${size.width}px wide a button runs out of its card`);
+            assert.equal(await button.evaluate((element) => element.scrollWidth <= element.clientWidth), true, `at ${size.width}px wide a button's words are cut off`);
+          }
+        });
+      }
+    });
   });
 });
