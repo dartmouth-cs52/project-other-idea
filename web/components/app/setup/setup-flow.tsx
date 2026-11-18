@@ -58,7 +58,10 @@ export function SetupFlow() {
   useEffect(() => {
     let live = true;
     (async () => {
-      await auth().getSession();
+      // A check that fails is left to /me, as on the dashboard.
+      await auth()
+        .getSession()
+        .catch(() => undefined);
       try {
         const answer = await api<Me>("/me");
         if (!live) return;

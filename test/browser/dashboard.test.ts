@@ -433,6 +433,23 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
         });
       }
     });
+
+    test("a session check that fails doesn't hold the dashboard or the setup screens where they start", async () => {
+      // The auth client throws when its check fails, and both pages once waited on it for good, at "Signing you in" and
+      // "Loading". Signed in all the same, they carry on.
+      for (const [company, path] of [
+        [COMPANY, "/dashboard/?view=sites"],
+        [NO_SITE_COMPANY, "/dashboard/setup/"],
+      ] as const) {
+        const tab = await dash.open("/sign-in/", undefined, company);
+        await closing(tab, async () => {
+          await tab.route("**/api/auth/get-session**", (route) => route.fulfill({ status: 500, json: { message: "Server error" } }));
+          await tab.goto(`${dash.url}${path}`);
+          if (company === NO_SITE_COMPANY) await tab.getByLabel("Your app's address").waitFor({ timeout: 10_000 });
+          else await tab.locator("main ul > li").first().getByText("questions in the last 7 days").waitFor({ timeout: 10_000 });
+        });
+      }
+    });
   });
 
   describe("where signing in lands", () => {

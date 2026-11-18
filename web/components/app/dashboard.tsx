@@ -33,7 +33,11 @@ export function Dashboard() {
     (async () => {
       // This first check also finishes a sign-in: an emailed link or Google lands here with a
       // one-time verifier in the address, and the auth client trades it for the session cookie.
-      await auth().getSession();
+      // The client throws when the check fails, and /me below then says what to do: it fails the same way
+      // when Haptic can't be reached, and sends anyone who isn't signed in to sign in.
+      await auth()
+        .getSession()
+        .catch(() => undefined);
       try {
         // Anyone not signed in, a sign-in link that didn't work among them, is sent to sign in by api().
         const me = await api<Me>("/me");
