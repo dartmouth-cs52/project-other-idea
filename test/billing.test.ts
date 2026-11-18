@@ -485,3 +485,53 @@ describe("the billing page's calls", { skip: !TEST_DATABASE_URL && "set TEST_DAT
     );
   });
 });
+
+/** Ten megabytes, or what `pieces` makes, with no length given. Says how many pieces were pulled and whether the rest was cancelled. */
+function longBody(pieces = 160) {
+  const piece = new Uint8Array(64 * 1024).fill(0x20);
+  const seen = { bytes: 0, cancelled: false };
+  let pulled = 0;
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (pulled++ === pieces) return controller.close();
+        seen.bytes += piece.byteLength;
+        controller.enqueue(piece);
+      },
+      cancel() {
+        seen.cancelled = true;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { body, seen, piece: piece.byteLength };
+}
+
+test("a body too long for the billing page's calls reads as empty, and is not read in full", async () => {
+  // From someone signed in. A member may not buy, which is said once the body is read, and Stripe and the
+  // database are never asked.
+  const sent = longBody();
+  const url = new URL("https://joinhaptic.com/api/app/billing/checkout");
+  const answer = await billingRoutes({
+    request: new Request(url, { method: "POST", body: sent.body, duplex: "half" } as RequestInit),
+    env: { STRIPE_SECRET_KEY: KEY, STRIPE_WEBHOOK_SECRET: SECRET },
+    sql: (() => assert.fail("nothing is looked up")) as never,
+    org: { id: ORG, name: "Example Co", role: "member" },
+    user: { email: "dana@example.com" },
+    path: "/billing/checkout",
+    url,
+  });
+  assert.equal(answer?.status, 403);
+  assert.ok(sent.seen.bytes <= 2_000 * 3 + 2 * sent.piece, `read ${sent.seen.bytes} bytes`);
+  assert.ok(sent.seen.cancelled, "the rest is cancelled");
+});
+
+test("Stripe's webhook reads a body too long only so far, before it checks the signature", async () => {
+  // Sixty megabytes: past three bytes for each of the million characters a webhook may have.
+  const sent = longBody(960);
+  const request = new Request("https://joinhaptic.com/api/stripe/webhook", { method: "POST", body: sent.body, duplex: "half", headers: { "stripe-signature": "t=1,v1=00" } } as RequestInit);
+  const response = await stripeWebhook(request, { STRIPE_SECRET_KEY: KEY, STRIPE_WEBHOOK_SECRET: SECRET }, (() => assert.fail("nothing is looked up")) as never);
+  assert.equal(response.status, 413);
+  assert.ok(sent.seen.bytes <= 3_000_000 + 2 * sent.piece, `read ${sent.seen.bytes} bytes`);
+  assert.ok(sent.seen.cancelled);
+});

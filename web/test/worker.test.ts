@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { signForTest } from "../../src/shared/stripe";
 import { appApi, approveLink } from "../worker/app-api";
 import { handle } from "../worker/handler";
 import worker from "../worker/index";
@@ -160,6 +161,66 @@ test("the form's and sign-in's limits count an IPv6 caller by its /64, and an IP
   assert.equal(await from("203.0.113.7"), "203.0.113.7");
   assert.equal(await from("::ffff:203.0.113.7"), "203.0.113.7", "IPv4 written as IPv6 is that IPv4 address");
   assert.equal(await from("2001:db8::1::2"), "2001:db8::1::2", "anything that isn't an address is counted as it is");
+});
+
+/** A body of `piece` over and over, `pieces` times, made only as it is read. Counts what was read, and whether the rest was cancelled. */
+function long(piece: Uint8Array, pieces: number) {
+  const seen = { bytes: 0, cancelled: false };
+  let sent = 0;
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (sent++ === pieces) return controller.close();
+        seen.bytes += piece.byteLength;
+        controller.enqueue(piece);
+      },
+      cancel() {
+        seen.cancelled = true;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { body, seen };
+}
+
+test("no route under /api reads a body past its limit: not Neon's sign-in proxy, and not Stripe's webhook, before any signature or sign-in", async () => {
+  const piece = new Uint8Array(64 * 1024).fill(0x20);
+  const signing = { ...env, NEON_AUTH_URL: "https://auth.example/neondb/auth", NEON_AUTH_COOKIE_SECRET: "c".repeat(32), STRIPE_SECRET_KEY: "sk_test_x", STRIPE_WEBHOOK_SECRET: "whsec_x" };
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => assert.fail("nothing should be fetched for a body that is too long");
+  try {
+    for (const [path, limit] of [["/api/auth/sign-in/magic-link", 16 * 1024], ["/api/stripe/webhook", 1_000_000]] as const) {
+      // Ten megabytes with no length given, as a program can send.
+      const sent = long(piece, 160);
+      const init = { method: "POST", headers: { origin: "https://joinhaptic.com", "content-type": "application/json" }, body: sent.body, duplex: "half" };
+      const response = await handle(new Request(`https://joinhaptic.com${path}`, init as RequestInit), signing, assets);
+      assert.equal(response.status, 413, path);
+      assert.deepEqual(await response.json(), { error: "That is too long." });
+      assert.ok(sent.seen.bytes <= limit + 2 * piece.byteLength, `${path}: read ${sent.seen.bytes.toLocaleString()} bytes for a limit of ${limit.toLocaleString()}`);
+      assert.ok(sent.seen.cancelled, `${path}: the rest is cancelled`);
+
+      // A length given up front that is too long is enough: nothing is read.
+      const told = long(piece, 160);
+      const toldInit = { ...init, headers: { ...init.headers, "content-length": String(160 * piece.byteLength) }, body: told.body };
+      assert.equal((await handle(new Request(`https://joinhaptic.com${path}`, toldInit as RequestInit), signing, assets)).status, 413);
+      assert.equal(told.seen.bytes, 0, `${path}: nothing read`);
+    }
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test("a body within the limit reaches its route byte for byte, so Stripe's signature over it still holds", async () => {
+  const secret = "whsec_test_secret";
+  // A live event to a test key is checked and then set aside, which needs no database: the signature is what is tested.
+  const body = JSON.stringify({ id: "evt_1", type: "invoice.paid", created: 1, livemode: true, data: { object: { customer_name: "Zoë Ångström 請求書" } } });
+  const bytes = new TextEncoder().encode(body);
+  const pieces = [bytes.subarray(0, 37), bytes.subarray(37, 101), bytes.subarray(101)];
+  const stream = new ReadableStream<Uint8Array>({ pull: (controller) => void (pieces.length ? controller.enqueue(pieces.shift()!) : controller.close()) });
+  const init = { method: "POST", headers: { "stripe-signature": await signForTest(body, secret) }, body: stream, duplex: "half" };
+  const response = await handle(new Request("https://joinhaptic.com/api/stripe/webhook", init as RequestInit), { ...env, STRIPE_SECRET_KEY: "sk_test_x", STRIPE_WEBHOOK_SECRET: secret }, assets);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { received: true, ignored: "other mode" });
 });
 
 test("approving a request emails a sign-in link that comes back to the list of sites", async () => {

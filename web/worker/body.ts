@@ -36,6 +36,36 @@ export async function boundedText(request: Request, maxChars: number): Promise<s
   return text.length > maxChars ? null : text;
 }
 
+/**
+ * The same request, with a body that can't be read past `maxBytes`: reading on fails, and the rest is never
+ * read. For code that reads a body whole and can't be changed to use the above, such as Neon's sign-in proxy.
+ * Nothing is read here, so a route that turns the caller away first reads none of it, and the bytes it does
+ * read are the ones sent, so a signature over them still holds. `cut` says whether reading went past the
+ * limit, however the error that came of it was passed on. Null when the request says its body is longer.
+ */
+export function boundedRequest(request: Request, maxBytes: number): { request: Request; cut: () => boolean } | null {
+  if (!request.body || request.method === "GET" || request.method === "HEAD") return { request, cut: () => false };
+  if (Number(request.headers.get("content-length")) > maxBytes) return null;
+  const reader = request.body.getReader();
+  let bytes = 0;
+  let cut = false;
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) return controller.close();
+      bytes += value.byteLength;
+      if (bytes <= maxBytes) return controller.enqueue(value);
+      cut = true;
+      await reader.cancel().catch(() => {});
+      controller.error(new Error("That is too long."));
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
+  return { request: new Request(request, { body, duplex: "half" } as RequestInit), cut: () => cut };
+}
+
 // What Haptic fetches from a company's own site, its pages, stylesheets, sitemap
 // and help docs, is held to a limit in the same way. The site chooses what it
 // sends, and one that streams a page for ever, with no length given, would

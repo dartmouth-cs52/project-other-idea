@@ -214,3 +214,23 @@ describe("the Team page", { skip: !TEST_DATABASE_URL && "set TEST_DATABASE_URL t
     assert.ok(still);
   });
 });
+
+test("a body too long for the Team page's calls reads as empty, and is not read in full", async () => {
+  // Ten megabytes, with no length given, from someone signed in. A member may not add people, which is said
+  // once the body is read, and nothing is asked of the database.
+  const piece = new Uint8Array(64 * 1024).fill(0x20);
+  let pulled = 0;
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({ pull: (controller) => void (pulled++ < 160 ? controller.enqueue(piece) : controller.close()), cancel: () => void (cancelled = true) }, { highWaterMark: 0 });
+  const answer = await teamRoutes({
+    request: new Request("https://joinhaptic.com/api/app/team/invites", { method: "POST", body, duplex: "half" } as RequestInit),
+    sql: (() => assert.fail("nothing is looked up")) as never,
+    org: { id: ORG, name: "Acme", role: "member" },
+    user: { id: MEMBER, email: "max@acme.test" },
+    path: "/team/invites",
+    sendLink: async () => assert.fail("nobody is emailed"),
+  });
+  assert.equal(answer?.status, 403);
+  assert.ok(pulled * piece.byteLength <= 2_000 * 3 + 2 * piece.byteLength, `read ${pulled} pieces`);
+  assert.ok(cancelled, "the rest is cancelled");
+});

@@ -5,7 +5,7 @@ import { checkRequest, cleanRequest, emailDomain, isPersonalEmail, type AccessFi
 import { appApi, approveLink, type AppEnv, type Later } from "./app-api";
 import { billingSweep, stripeWebhook, WEBHOOK_PATH } from "./billing";
 import { proxyAuth } from "./auth";
-import { boundedText } from "./body";
+import { boundedRequest, boundedText } from "./body";
 import { database } from "./db";
 import { sendHealthAlerts } from "./health";
 import { forgetOldSignInEmails, HOOK_PATH, neonHook, type HookEnv } from "./neon-hook";
@@ -32,6 +32,14 @@ export interface Env extends AppEnv, HookEnv {
 }
 
 const SITE = "joinhaptic.com";
+
+/**
+ * The most of a body anything under /api/ reads, in bytes. The largest bodies sent here are a pasted help doc
+ * (DOC_BODY in app-api.ts, at most 732,000 bytes) and Stripe's webhook (billing.ts, 1,000,000 characters).
+ */
+const MAX_BODY = 1_000_000;
+/** The most Neon's sign-in proxy reads. Signing in sends an address and where to come back to. */
+const MAX_AUTH_BODY = 16 * 1024;
 
 /** The Worker's schedules, in wrangler.jsonc: billing every hour, and the rest once a day. Runs apart from any request. */
 export async function onSchedule(cron: string, env: Env): Promise<void> {
@@ -105,9 +113,14 @@ async function route(request: Request, env: Env, assets: Assets, later?: Later):
   // Everything under /api/ is answered here, as JSON. Whatever goes wrong in it, the caller gets JSON back,
   // never the runtime's own error page.
   if (url.pathname.startsWith("/api/")) {
+    // No body is read past its limit by anything under /api/. Most routes hold theirs to less, but Neon's
+    // sign-in proxy and Stripe's webhook would read whatever was sent, before anyone signed in.
+    const held = boundedRequest(request, url.pathname.startsWith("/api/auth/") ? MAX_AUTH_BODY : MAX_BODY);
+    if (!held) return json({ error: "That is too long." }, 413);
     try {
-      return await api(request, env, url, later);
+      return await api(held.request, env, url, later);
     } catch (error) {
+      if (held.cut()) return json({ error: "That is too long." }, 413);
       console.error(`${request.method} ${url.pathname} failed:`, error);
       return json({ error: "Something went wrong on our side." }, 500);
     }

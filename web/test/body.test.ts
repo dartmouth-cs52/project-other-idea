@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { boundedText, capped, cappedText } from "../worker/body";
+import { boundedRequest, boundedText, capped, cappedText } from "../worker/body";
 
 // The body is read a piece at a time and given up on once it is bound to be too
 // long, so a large request is refused without being held in memory. These check
@@ -114,6 +114,37 @@ test("a body that lies about its length is still cut off", async () => {
   request.headers.set("content-length", "10");
   assert.equal(await boundedText(request, 1_000), null);
   assert.ok(seen.bytes <= 1_000 * 3 + piece.byteLength * 2);
+});
+
+// A request handed on to code that reads its body whole, such as Neon's sign-in proxy, is bounded as it is read.
+
+test("a bounded request reads nothing until its body is asked for, then gives the bytes as sent", async () => {
+  // Bytes that are not all text, so anything that decoded and wrote them out again would change them.
+  const data = new Uint8Array([...bytes('{"a":"é"}'), 0xff, 0xc3, ...bytes(" end")]);
+  const { request, seen } = streamed(split(data, [2, 7, 11]), { "content-type": "application/json" });
+  const held = boundedRequest(request, 1_000)!;
+  assert.equal(seen.pulled, 0, "nothing is read before a route asks");
+  assert.equal(held.request.url, URL);
+  assert.equal(held.request.method, "POST");
+  assert.equal(held.request.headers.get("content-type"), "application/json");
+  assert.deepEqual(new Uint8Array(await held.request.arrayBuffer()), data);
+  assert.equal(held.cut(), false);
+  const get = new Request(URL);
+  assert.equal(boundedRequest(get, 1_000)!.request, get, "a request with no body is handed on as it is");
+});
+
+test("a bounded request that says its body is too long is turned away unread, and one that runs on fails once past the limit", async () => {
+  const told = streamed([bytes("x".repeat(10))], { "content-length": "2001" });
+  assert.equal(boundedRequest(told.request, 2_000), null);
+  assert.equal(told.seen.pulled, 0);
+
+  const piece = new Uint8Array(64 * 1024).fill(0x78);
+  const { request, seen } = endless(piece);
+  const held = boundedRequest(request, 100_000)!;
+  await assert.rejects(held.request.text());
+  assert.equal(held.cut(), true);
+  assert.ok(seen.cancelled, "the rest of the body is cancelled");
+  assert.ok(seen.bytes <= 100_000 + piece.byteLength * 2, `read ${seen.bytes} bytes for a limit of 100,000`);
 });
 
 // A response from a site a company chose is held to a limit the same way, since the site decides what it sends.
