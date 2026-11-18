@@ -15,6 +15,13 @@ const LINK_ERRORS: Record<string, Failure> = {
 };
 const LINK_FAILED: Failure = { title: "That sign-in didn't work", detail: "Try again below." };
 
+/** The HTTP status of an auth call that failed, whether the auth client returned the error or threw it. */
+function statusOf(failure: unknown): number | undefined {
+  const { status, error } = (failure ?? {}) as { status?: unknown; error?: { status?: unknown } };
+  const found = error?.status ?? status;
+  return typeof found === "number" ? found : undefined;
+}
+
 /**
  * Sign-in with an emailed link or Google. Anyone can get this far: whether
  * they get a dashboard is decided by the approved list, on the next page.
@@ -53,11 +60,22 @@ export function SignInForm({ linkError }: { linkError?: string | null }) {
     setFailure(null);
     fields.show({});
     setStatus("google");
-    const { error: failed } = await auth().signIn.social({ provider: "google", callbackURL: dashboardUrl() });
-    if (failed) {
-      setStatus("idle");
-      setFailure({ title: "Couldn't open Google", detail: "Try again, or use an emailed link." });
+    // On success the auth client takes the page to Google, so there is nothing more to do here.
+    let failed: unknown;
+    try {
+      ({ error: failed } = await auth().signIn.social({ provider: "google", callbackURL: dashboardUrl() }));
+    } catch (error) {
+      // The client throws, more often than it returns an error: when the server turns the call down, and when it
+      // can't be reached at all. Either way the buttons come back, or the page would say "Opening Google" for good.
+      failed = error ?? new Error("Google sign-in failed");
     }
+    if (!failed) return;
+    setStatus("idle");
+    setFailure(
+      statusOf(failed) === 429
+        ? { title: "Too many tries", detail: "Wait a minute, then try again." }
+        : { title: "Couldn't open Google", detail: "Try again, or use an emailed link." },
+    );
   }
 
   if (status === "sent") {

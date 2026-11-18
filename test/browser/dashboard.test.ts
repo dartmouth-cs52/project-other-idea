@@ -263,6 +263,34 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     });
   });
 
+  describe("signing in and out", () => {
+    test("Continue with Google that fails says so, and gives both ways to sign in back", async () => {
+      const tab = await dash.open("/sign-in/");
+      await closing(tab, async () => {
+        const google = tab.getByRole("button", { name: "Continue with Google" });
+        const link = tab.getByRole("button", { name: "Email me a sign-in link" });
+        // Turned down by the server, turned down for too many tries as the Worker does it, and never reaching it at all.
+        // The auth client throws for each of these, and the page once said "Opening Google" for good.
+        for (const [fail, says] of [
+          ["server", "Couldn't open Google"],
+          ["busy", "Too many tries"],
+          ["network", "Couldn't open Google"],
+        ] as const) {
+          await tab.route("**/api/auth/sign-in/social", (route) =>
+            fail === "network"
+              ? route.abort("failed")
+              : route.fulfill(fail === "busy" ? { status: 429, json: { message: "Too many tries. Wait a minute and try again.", code: "TOO_MANY_REQUESTS" } } : { status: 500, json: { message: "Server error" } }),
+          );
+          await google.click();
+          await tab.getByRole("alert").filter({ hasText: says }).waitFor({ timeout: 5_000 });
+          assert.ok((await google.isEnabled()) && (await link.isEnabled()), `after the ${fail} failure, both ways to sign in should work again`);
+          assert.equal((await google.innerText()).trim(), "Continue with Google");
+          await tab.unroute("**/api/auth/sign-in/social");
+        }
+      });
+    });
+  });
+
   describe("where signing in lands", () => {
     const SITES = "/dashboard/?view=sites";
     const where = (tab: Page) => new URL(tab.url()).pathname + new URL(tab.url()).search;
