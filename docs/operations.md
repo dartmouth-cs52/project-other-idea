@@ -95,6 +95,8 @@ The limit of 30 steps a minute slows one caller down. A caller is an IPv4 addres
 
    A step's cost is only known once the model has answered, so a step is let through with the most it could cost set aside, and that is swapped for what it did cost when it ends. Steps that arrive together are counted against what is left, and a site can pass a limit by less than one step. Near a limit this lets fewer steps run at once: a visitor can read the resting sentence a little before the money has run out.
 
+   A step the widget hangs up on, because the page changed while the model was answering, is charged what the model had streamed by then (`TurnCancelled` in `src/server/model.ts`). One it hangs up on before the model's first event has nothing counted, so nothing is added here, though the provider may still bill for reading its prompt. That has not been measured, and the spend limit at the provider is what holds for it.
+
    A step answered from a [verified route](#verified-routes) makes no model call, so nothing is set aside for it and nothing is added. It is answered even when the site has spent its budget, and it does not count toward a visitor's steps for the day. It does count toward the caller's 30 steps a minute, which is checked before the route is looked up: with no budget to stop it, that limit is what bounds how many guides one caller can have answered for nothing.
 
 A site can have its own limits, and a public demo can also limit each visitor:
