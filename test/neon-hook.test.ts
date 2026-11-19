@@ -386,6 +386,17 @@ describe("sign-in emails counted, against Postgres", { skip: TEST_DATABASE_URL ?
     assert.equal((await rows()).filter((row) => row.pool === "known").length, 1 + EMAILS_PER_MAILBOX, "Owen's and Tess's, counted with no one else");
   });
 
+  test("other spellings of a known person's mailbox can't use up the emails to their own address", async () => {
+    fresh();
+    const key = await neonKey();
+    // Someone else asks for links to owen+1@ to owen+5@. They reach Owen's mailbox, and they get nobody in.
+    for (let i = 1; i <= EMAILS_PER_MAILBOX; i++) assert.equal((await signInLink(key, `owen+${i}@initech.example`, sql())).sent, 1);
+    assert.equal((await quietly(() => signInLink(key, "owen+6@initech.example", sql()))).sent, 0, "a sixth spelling is over that mailbox's limit");
+    // Owen's own address, which his approval names, still gets his five, and no more.
+    for (let i = 0; i < EMAILS_PER_MAILBOX; i++) assert.equal((await signInLink(key, "owen@initech.example", sql())).sent, 1);
+    assert.equal((await quietly(() => signInLink(key, "owen@initech.example", sql()))).sent, 0);
+  });
+
   test(`the people an approved domain covers who haven't signed in yet get ${EMAILS_PER_DOMAIN} an hour together, and no one else is counted with them`, async () => {
     fresh();
     const key = await neonKey();

@@ -132,6 +132,10 @@ type Over = "mailbox" | "domain" | "others";
  * email. Otherwise, the limit it went past. The limits are checked as the row is written, under one lock for
  * every sign-in email, so emails at the same moment take turns.
  *
+ * A person Haptic knows is counted only on emails to their own address: owen+1@ or o.wen@ reach the same
+ * mailbox, but were asked for by someone else and get nobody in, so they can't use up Owen's own five. They
+ * still count with every other spelling of that mailbox, so it gets at most five of those an hour as well.
+ *
  * Sign-in matters more than the count, so when the count can't be kept, because the database is down or
  * its migration isn't applied yet, the email is sent, and the log says so.
  */
@@ -145,7 +149,7 @@ async function counted(sql: Sql, eventId: string, to: string): Promise<Over | un
       sql.query(
         `insert into sign_in_emails (event_id, recipient, pool)
         select $1, $2, $3
-        where (select count(*) from sign_in_emails where recipient = $2 and sent_at > now() - interval '1 hour') < $4
+        where (select count(*) from sign_in_emails where recipient = $2 and ($3 <> 'known' or pool = 'known') and sent_at > now() - interval '1 hour') < $4
           and ($3 = 'known' or (select count(*) from sign_in_emails where pool = $3 and sent_at > now() - interval '1 hour') < $5)
         on conflict (event_id) do nothing
         returning event_id`,
@@ -155,8 +159,8 @@ async function counted(sql: Sql, eventId: string, to: string): Promise<Over | un
     if ((kept as unknown[]).length) return undefined;
     const [state] = (await sql.query(
       `select exists (select 1 from sign_in_emails where event_id = $1) as again,
-        (select count(*) from sign_in_emails where recipient = $2 and sent_at > now() - interval '1 hour') >= $3 as full`,
-      [eventId, recipient, EMAILS_PER_MAILBOX],
+        (select count(*) from sign_in_emails where recipient = $2 and ($4 <> 'known' or pool = 'known') and sent_at > now() - interval '1 hour') >= $3 as full`,
+      [eventId, recipient, EMAILS_PER_MAILBOX, pool],
     )) as { again: boolean; full: boolean }[];
     if (state?.again) return undefined;
     if (state?.full || pool === "known") return "mailbox";
