@@ -128,7 +128,7 @@ export interface Flag {
   /** Share of guides that finished in the three weeks before, and in the last seven days. */
   before: number;
   now: number;
-  /** People who asked in the three weeks before. */
+  /** People who asked in the three weeks before. flagDrop has only each week's own count, so its sum counts a person once for each week they asked; guideHealth puts in each person once. */
   visitorsBefore: number;
 }
 
@@ -195,14 +195,17 @@ export async function guideHealth(sql: Sql, site: string): Promise<Health[]> {
     select t.question_group as key,
       (select g2.question from g g2 where g2.question_group = t.question_group order by g2.started_at desc limit 1) as question,
       (select json_agg(json_build_object('ago', w.ago, 'guides', w.guides, 'finished', w.finished, 'visitors', w.visitors) order by w.ago)
-        from weeks w where w.question_group = t.question_group) as weeks
+        from weeks w where w.question_group = t.question_group) as weeks,
+      (select count(distinct g3.who)::int from g g3 where g3.question_group = t.question_group and g3.ago between 1 and 3) as visitors_before
     from top t order by t.people desc, t.question_group`,
     [site],
   );
   const groups: Health[] = rows.map((row) => ({ key: row.key, question: row.question, weeks: row.weeks as Week[] }));
-  for (const group of groups) {
+  for (const [index, group] of groups.entries()) {
     const flag = flagDrop(group.weeks);
-    if (flag) group.flag = { ...flag, ...(await whereItBroke(sql, site, group.key, group.weeks)) };
+    // Each week counts its own people, so a person who asked in two of the weeks is in both. Who asked in the
+    // three weeks together, each counted once, is what says the question is a common one (COMMON_VISITORS).
+    if (flag) group.flag = { ...flag, visitorsBefore: Number(rows[index]!.visitors_before), ...(await whereItBroke(sql, site, group.key, group.weeks)) };
   }
   return groups.sort((a, b) => Number(Boolean(b.flag)) - Number(Boolean(a.flag)));
 }

@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { test } from "node:test";
+import { describe, test } from "node:test";
 import { FILLER, groupOfKey, questionGroup } from "../src/shared/questions.ts";
+import { exec, freshDatabase, psqlSql, TEST_DATABASE_URL, testDatabase } from "./psql.ts";
 
 process.env.HAPTIC_MODEL = "mock";
 const { parseTurn } = await import("../src/server/app.ts");
 const { Store } = await import("../src/server/db.ts");
 const { visitorHash } = await import("../src/server/learned.ts");
-const { ALERTS_FROM, alertEmail, alertPeople, describeBreak, flagDrop, missingControl, MIN_GUIDES, oneLine } = await import("../web/worker/health.ts");
+const { ALERTS_FROM, alertEmail, alertPeople, COMMON_VISITORS, describeBreak, flagDrop, guideHealth, missingControl, MIN_GUIDES, oneLine } = await import("../web/worker/health.ts");
 
 // Questions grouped by meaning, counted by person, and guides that stopped
 // finishing. The queries themselves were run against Postgres 16 by hand
@@ -199,4 +200,27 @@ test("the guide keeps a hash of the visitor made with the site, never the id its
   assert.match(update.text, /where id = \? and site_id = \? and visitor is null/);
   assert.equal(update.values[0], await visitorHash("site_test", VISITOR));
   assert.ok(!JSON.stringify(sent).includes(VISITOR), "the id itself never reaches the database");
+});
+
+describe("guide health, against Postgres", { skip: TEST_DATABASE_URL ? false : "set TEST_DATABASE_URL to a local, empty database to run these" }, () => {
+  const DB = testDatabase("health");
+  const SITE = "site_health_db";
+
+  // Two people asked every week for three weeks and their guides finished; this week five guides stopped. The
+  // question isn't a common one: two people asked it, not six, whatever each week counts.
+  test("the people who asked in the three weeks before are each counted once, however many of the weeks they asked in", async () => {
+    freshDatabase(DB);
+    exec(DB, `insert into sites (id, name, origin, allowed_origins, context) values ('${SITE}', 'Acme', 'https://app.acme.example', '{https://app.acme.example}', '{}')`);
+    const guide = (n: number, daysAgo: number, visitor: string, outcome: string) =>
+      `('00000000-0000-4000-8000-${String(n).padStart(12, "0")}', '${SITE}', 'Where are invoices?', 'where are invoices', '/', now() - interval '${daysAgo} days', now() - interval '${daysAgo} days', '${outcome}', '${visitor}')`;
+    const rows = [
+      ...[8, 15, 22].flatMap((days, week) => ["ana", "bo"].map((visitor, one) => guide(week * 2 + one + 1, days, visitor, "finished"))),
+      ...["c1", "c2", "c3", "c4", "c5"].map((visitor, n) => guide(100 + n, 1, visitor, "stopped")),
+    ];
+    exec(DB, `insert into guides (id, site_id, question, question_key, started_path, started_at, ended_at, outcome, visitor) values ${rows.join(", ")}`);
+    const [group] = await guideHealth(psqlSql(DB) as unknown as Parameters<typeof guideHealth>[0], SITE);
+    assert.ok(group?.flag, "the drop is flagged on the dashboard");
+    assert.equal(group.flag.visitorsBefore, 2);
+    assert.ok(group.flag.visitorsBefore < COMMON_VISITORS, "so it isn't emailed about as a common question");
+  });
 });
