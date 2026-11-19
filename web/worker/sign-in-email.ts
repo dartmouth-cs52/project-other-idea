@@ -169,3 +169,36 @@ export async function sendEmail(env: SendEnv, email: Email, idempotencyKey: stri
   if (!response.ok || !data.id) return { ok: false, status: response.status, detail: data.message ?? data.name ?? "" };
   return { ok: true, id: data.id };
 }
+
+/** The most emails Resend takes in one call to its batch endpoint. */
+export const BATCH_MAX = 100;
+
+/**
+ * Hands Resend up to BATCH_MAX emails in one call. Resend checks the whole batch before it sends any of it,
+ * so one answer says whether everyone was sent theirs, and the idempotency key works as it does for one.
+ * Status 0 means it was never tried, as for sendEmail.
+ */
+export async function sendEmails(env: SendEnv, emails: Email[], idempotencyKey: string, fetcher: Fetch): Promise<{ ok: true; ids: string[] } | { ok: false; status: number; detail: string }> {
+  if (!env.RESEND_API_KEY) return { ok: false, status: 0, detail: "RESEND_API_KEY is not set." };
+  let response: Response;
+  try {
+    response = await fetcher("https://api.resend.com/emails/batch", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+        "user-agent": "haptic-web",
+      },
+      body: JSON.stringify(emails.map((email) => ({ from: email.from ?? FROM, to: [email.to], reply_to: email.replyTo ?? REPLY_TO, subject: email.subject, html: email.html, text: email.text }))),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (error) {
+    return { ok: false, status: 0, detail: (error as Error).message };
+  }
+  const data = (await response.json().catch(() => ({}))) as { data?: { id?: unknown }[]; message?: string; name?: string };
+  const ids = (data.data ?? []).map((item) => item.id).filter((id): id is string => typeof id === "string");
+  // Anything short of an id for every email counts as not sent: the next try, or the next day's, sends them again.
+  if (!response.ok || ids.length !== emails.length) return { ok: false, status: response.status, detail: data.message ?? data.name ?? `${ids.length} of ${emails.length} sent` };
+  return { ok: true, ids };
+}

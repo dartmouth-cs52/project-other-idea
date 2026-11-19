@@ -64,6 +64,63 @@ interface LabStore extends LabSettings {
 }
 
 /**
+ * The values each setting that is a choice may take. A setting can come from
+ * the page's address, and it is kept for later visits, so a link with a value
+ * the app doesn't know would break the demo for whoever opened it, on that
+ * visit and every one after. Such a value is dropped instead.
+ */
+const CHOICES: Partial<Record<keyof LabSettings, readonly string[]>> = {
+  role: ["admin", "finance", "manager", "employee", "auditor"] satisfies Role[],
+  plan: ["starter", "growth", "enterprise"] satisfies Plan[],
+  latency: ["none", "fast", "slow", "random"] satisfies Latency[],
+  nav: ["classic", "renamed", "rail"] satisfies NavVariant[],
+  locale: ["en", "es"] satisfies Locale[],
+  theme: ["light", "dark", "system"] satisfies Theme[],
+};
+
+/** Haptic's own servers, the only ones a widget may be loaded from over the internet: the live one and staging. */
+const WIDGET_HOSTS = new Set(["widget.joinhaptic.com", "haptic-widget-staging.joinhaptic.workers.dev"]);
+
+/**
+ * Whether the widget may be loaded from this address: the one this build was
+ * made with, Haptic's live or staging server, a server on this machine, or
+ * this page's own origin, which serves only Northpine's own files and is
+ * where eval/browser.ts answers for a widget it builds. The address can come
+ * from the page's URL and is kept for later visits, so any other would let a
+ * link run whatever script it named on demo.joinhaptic.com, then and on every
+ * visit after.
+ */
+export function trustedWidgetSrc(src: string): boolean {
+  if (src === LAB_DEFAULTS.widgetSrc) return true;
+  let url: URL;
+  try {
+    url = new URL(src);
+  } catch {
+    return false;
+  }
+  // Over http(s) only: a blob: address carries the origin of the page that made it, too.
+  if (/^https?:$/.test(url.protocol) && typeof location !== "undefined" && url.origin === location.origin) return true;
+  if (url.protocol === "https:") return WIDGET_HOSTS.has(url.hostname);
+  return url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+}
+
+/** Whether a value is one this setting can take, as the test panel itself would set it. */
+function fits<K extends keyof LabSettings>(name: K, value: unknown): value is LabSettings[K] {
+  const current = LAB_DEFAULTS[name];
+  if (typeof current === "boolean") return typeof value === "boolean";
+  if (typeof current === "number") {
+    if (typeof value !== "number" || !Number.isFinite(value)) return false;
+    // The panel's slider runs from 0 to 0.5, and a seed is a whole number.
+    if (name === "failureRate") return value >= 0 && value <= 0.5;
+    return name !== "seed" || Number.isInteger(value);
+  }
+  if (typeof value !== "string") return false;
+  if (name === "widgetSrc") return trustedWidgetSrc(value);
+  // Own names only: a name every object has, such as toString or constructor, is no choice.
+  return Object.hasOwn(CHOICES, name) ? CHOICES[name]!.includes(value) : true;
+}
+
+/**
  * The widget this build was made with. Saved settings are marked with it, so
  * after a deploy that changes the widget's address or site, the new tag wins
  * over the one an earlier visit left in the browser.
@@ -86,6 +143,11 @@ export const useLab = create<LabStore>()(
         if (widgetBuild !== WIDGET_BUILD) {
           delete rest.widgetSrc;
           delete rest.widgetSite;
+        }
+        // A value an earlier visit kept that no setting can take, such as one a link put there before links were
+        // checked, goes back to the default rather than break the app or load a script from elsewhere.
+        for (const name of Object.keys(rest) as (keyof LabSettings)[]) {
+          if (Object.hasOwn(LAB_DEFAULTS, name) && !fits(name, rest[name])) delete rest[name];
         }
         return { ...current, ...rest };
       },
@@ -110,16 +172,21 @@ export function latencyMs(): number {
   }
 }
 
-/** Lab settings can also come from the URL, so a test can open a page in a known state: ?lab.role=employee&lab.nav=rail */
+/**
+ * Lab settings can also come from the URL, so a test can open a page in a known state: ?lab.role=employee&lab.nav=rail.
+ * Anyone can send such a link, and what it sets is kept, so a value no setting can take is left out (`fits`).
+ */
 export function applyLabParams(search: string) {
   const params = new URLSearchParams(search);
   const patch: Record<string, unknown> = {};
   for (const [key, raw] of params) {
     if (!key.startsWith("lab.")) continue;
     const name = key.slice(4) as keyof LabSettings;
-    if (!(name in LAB_DEFAULTS)) continue;
+    // Own names only: ?lab.toString= or ?lab.__proto__= names something every object has, and no setting.
+    if (!Object.hasOwn(LAB_DEFAULTS, name)) continue;
     const current = LAB_DEFAULTS[name];
-    patch[name] = typeof current === "boolean" ? raw === "1" || raw === "true" : typeof current === "number" ? Number(raw) : raw;
+    const value = typeof current === "boolean" ? raw === "1" || raw === "true" : typeof current === "number" ? Number(raw) : raw;
+    if (fits(name, value)) patch[name] = value;
   }
   if (Object.keys(patch).length) useLab.getState().set(patch as Partial<LabSettings>);
 }

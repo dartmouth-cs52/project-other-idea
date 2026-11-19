@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { test } from "node:test";
+import { describe, test } from "node:test";
 import { FILLER, groupOfKey, questionGroup } from "../src/shared/questions.ts";
+import { exec, freshDatabase, psqlSql, TEST_DATABASE_URL, testDatabase } from "./psql.ts";
 
 process.env.HAPTIC_MODEL = "mock";
 const { parseTurn } = await import("../src/server/app.ts");
 const { Store } = await import("../src/server/db.ts");
 const { visitorHash } = await import("../src/server/learned.ts");
-const { describeBreak, flagDrop, missingControl, MIN_GUIDES } = await import("../web/worker/health.ts");
+const { ALERTS_FROM, alertEmail, alertPeople, COMMON_VISITORS, describeBreak, flagDrop, guideHealth, missingControl, MIN_GUIDES, oneLine } = await import("../web/worker/health.ts");
 
 // Questions grouped by meaning, counted by person, and guides that stopped
 // finishing. The queries themselves were run against Postgres 16 by hand
@@ -49,7 +50,7 @@ test("the missing control is one most earlier finished guides used, on a page th
   assert.equal(missingControl(rows, 0, new Set(["/billing"])), undefined);
 });
 
-test("the news is said plainly, the same on the dashboard and in the email", () => {
+test("the news is said plainly in the email, with the question said to be a visitor's", () => {
   const lines = describeBreak({
     key: "export invoice",
     question: "How do I export invoices?",
@@ -57,10 +58,126 @@ test("the news is said plainly, the same on the dashboard and in the email", () 
     flag: { before: 0.82, now: 0.31, visitorsBefore: 40, stop: { path: "/billing", step: 2, label: null }, missing: { path: "/billing", role: "button", label: "Download invoice" } },
   });
   assert.deepEqual(lines, [
-    '"How do I export invoices?" finished 82% of the time in the three weeks before, and 31% in the last seven days.',
+    'Guides for "How do I export invoices?", as a visitor last asked it, finished 82% of the time in the three weeks before, and 31% in the last seven days.',
     "Guides now stop at step 2 on /billing.",
     'Before, they pointed at "Download invoice" on /billing, and no guide has this week. It may have moved or been renamed.',
   ]);
+});
+
+// The email goes from alerts@joinhaptic.com to everyone at the company, and the question, the page and the
+// control's name in it are whatever visitors' browsers sent, which anyone can send.
+test("what a visitor could have written reaches the email short, with nothing in it a mail program could link", () => {
+  const zeroWidth = String.fromCodePoint(0x200b);
+  const fullStop = String.fromCodePoint(0xff0e);
+  const flag = (question: string, label: string, path: string) =>
+    describeBreak({ key: "k", question, weeks: [], flag: { before: 0.9, now: 0.2, visitorsBefore: 9, stop: { path, step: 1, label }, missing: { path, role: "link", label } } });
+
+  const lines = flag(
+    'Your Haptic account is locked. Verify now at evil.example/login or "https://evil.example" before it is deleted, the Haptic team',
+    "Call http://10.0.0.1 now",
+    "/verify-at.evil.example/now",
+  );
+  const all = lines.join("\n");
+  for (const gone of [/evil/, /https?:/, /10\.0\.0\.1/]) assert.doesNotMatch(all, gone);
+  assert.match(lines[0]!, /^Guides for "Your Haptic account is locked\. Verify now at \[link\] or \[link\] before it is…", as a visitor last asked it,/, "and cut short");
+  assert.match(lines[1]!, /on \/\[link\]\/now, at "Call \[link\] now"\.$/);
+  assert.match(flag('Press "OK", then the Haptic team will call', "x", "/")[0]!, /^Guides for "Press 'OK', then the Haptic team will call", as/, "a quote of its own can't close ours");
+
+  // Written to slip past: full-width letters and dots, a character that draws nothing, www., a bare IP address.
+  for (const sly of [`evil${fullStop}example`, `ｅｖｉｌ.ｅｘａｍｐｌｅ`, `evil${zeroWidth}.example`, "www.evil", "go to 192.168.4.20", "evil。example"]) {
+    assert.doesNotMatch(flag(sly, "x", "/").join("\n"), /evil|192/, sly);
+  }
+  // More that draws nothing, or only a mark on a letter, so the name still reads as evil.example: the combining
+  // grapheme joiner, variation selectors, a Mongolian one, a Hangul filler, and an underline under a letter.
+  const inside = (code: number) => `evil.e${String.fromCodePoint(code)}xample`;
+  for (const sly of [inside(0x034f), inside(0xfe0f), `evil${String.fromCodePoint(0xfe00)}.example`, inside(0xe0100), inside(0x180b), inside(0x3164), inside(0xffa0), inside(0x0332), "10.0.0͏.1"]) {
+    const all = flag(`Your account is locked, verify at ${sly}`, `Go to ${sly}`, `/${sly}/login`).join("\n");
+    assert.doesNotMatch(all, /evil|10\.0/, JSON.stringify(sly));
+    assert.doesNotMatch(all, /\p{Default_Ignorable_Code_Point}/u, `${JSON.stringify(sly)}: none of it is left in`);
+  }
+  // Everyday questions keep their words, abbreviations included, and the marks of their own script.
+  assert.match(flag("How do I export v2.0 invoices for the U.S. office, e.g. last month's?", "Export", "/billing")[0]!, /"How do I export v2\.0 invoices for the U\.S\. office, e\.g\. last month's\?"/);
+  assert.match(flag("मैं चालान कैसे डाउनलोड करूं?", "x", "/")[0]!, /"मैं चालान कैसे डाउनलोड करूं\?"/);
+  // A page named like a file keeps the rest of its path.
+  assert.match(flag("x", "Download", "/docs/guide.pdf")[1]!, /on \/docs\/\[link\], at "Download"/);
+  // Emails and long numbers are masked as everywhere else.
+  assert.match(flag("refund order 123456789 for ana@example.com", "x", "/")[0]!, /refund order \[number\] for \[email\]/);
+});
+
+const ACME = { id: "site_health1", name: "Acme", origin: "https://app.acme.example" };
+
+test("the email's subject is one line, whatever the site's name holds", () => {
+  const group = { key: "k", question: "Where are invoices?", weeks: [], flag: { before: 0.9, now: 0.2, visitorsBefore: 9, stop: null } };
+  const { subject, text } = alertEmail({ ...ACME, name: "Acme\r\nBcc: everyone@example.com\u2028\u202eEvil" }, group, "https://joinhaptic.com/dashboard/");
+  assert.equal(subject, "Guides for a common question on Acme Bcc: everyone@example.com Evil stopped finishing");
+  assert.doesNotMatch(subject, /[\r\n\u2028\u202e]/u);
+  assert.ok(text.endsWith("\nhttps://joinhaptic.com/dashboard/?site=site_health1"));
+  assert.equal(oneLine("  Acme\t\tCo  "), "Acme Co");
+  assert.equal(oneLine("👩\u200d💻 Acme"), "👩\u200d💻 Acme", "the joiner inside an emoji is kept");
+  assert.equal(oneLine("x".repeat(100)).length, 80);
+});
+
+test("the email's page escapes what it quotes, names the site's address, and links only to that site on the dashboard", () => {
+  const group = { key: "k", question: "Where is <b>billing</b>? See evil.example", weeks: [], flag: { before: 0.9, now: 0.2, visitorsBefore: 9, stop: null } };
+  const { html, text } = alertEmail({ ...ACME, name: "Acme <script>alert(1)</script>" }, group, "https://joinhaptic.com/dashboard/", "0123456789abcdef0123456789abcdef");
+  assert.doesNotMatch(html, /<script>|<b>/);
+  assert.match(html, /&#60;b&#62;billing&#60;\/b&#62;/);
+  assert.doesNotMatch(html + text, /evil\.example/);
+  // Two sites of one company share its name, so each alert says which by its address.
+  assert.match(html, /app\.acme\.example/);
+  assert.ok(text.startsWith("Acme <script>alert(1)</script>, app.acme.example\n"), "the text version is read only by mail apps that show no HTML");
+  assert.deepEqual([...html.matchAll(/href="([^"]+)"/g)].map((match) => match[1]), ["https://joinhaptic.com/dashboard/?site=site_health1", "https://joinhaptic.com"]);
+  assert.match(html, /0123456789abcdef0123456789abcdef<\/span>/, "the alert's id keeps Gmail from folding a later alert's button");
+});
+
+// Cloudflare's own email binding only delivers to inboxes verified under Email Routing, so the alerts go through
+// Resend, as the sign-in and install emails do: the whole team in one batch, which Resend sends whole or not at all.
+test("an alert goes to the whole team in one batch through Resend, and is kept as emailed only when Resend took all of it", async () => {
+  const group = { key: "export invoice", question: "How do I export invoices?", weeks: [], flag: { before: 0.82, now: 0.31, visitorsBefore: 40, stop: null } };
+  const calls: { url: string; key: string | null; body: { from: string; to: string[]; subject: string; html: string; text: string }[] }[] = [];
+  /** Resend, answering each call in turn with the next status in `statuses`, then 200. */
+  const resend = (...statuses: number[]) => async (url: string, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body));
+    calls.push({ url, key: new Headers(init?.headers).get("idempotency-key"), body });
+    const status = statuses.shift() ?? 200;
+    if (status === 0) throw new TypeError("fetch failed");
+    return status === 200 ? Response.json({ data: body.map((_: unknown, n: number) => ({ id: `email_${n}` })) }) : Response.json({ name: "error", message: `Resend answered ${status}` }, { status });
+  };
+  const paused: number[] = [];
+  const pause = async (ms: number) => void paused.push(ms);
+  const dashboard = "https://joinhaptic.com/dashboard/";
+  const key = "re_test";
+
+  assert.deepEqual(await alertPeople({}, ACME, group, ["ana@acme.example"], dashboard, resend(), pause), { tried: false, emailed: false }, "no key, kept for the dashboard only");
+  assert.deepEqual(await alertPeople({ RESEND_API_KEY: key }, ACME, group, [], dashboard, resend(), pause), { tried: false, emailed: false }, "nobody to send to");
+  assert.equal(calls.length, 0);
+
+  assert.deepEqual(await alertPeople({ RESEND_API_KEY: key }, ACME, group, ["ana@acme.example", "bo@acme.example", "cy@acme.example"], dashboard, resend(), pause), { tried: true, emailed: true });
+  assert.equal(calls.length, 1, "one call for the whole team, so Resend's rate limit isn't met person by person");
+  const [call] = calls;
+  assert.equal(call!.url, "https://api.resend.com/emails/batch");
+  assert.deepEqual(call!.body.map((email) => email.to), [["ana@acme.example"], ["bo@acme.example"], ["cy@acme.example"]]);
+  for (const email of call!.body) {
+    assert.equal(email.from, ALERTS_FROM);
+    assert.equal(email.subject, "Guides for a common question on Acme stopped finishing");
+  }
+  assert.match(call!.key ?? "", /^health-alert\/site_health1\/\d{4}-\d{2}-\d{2}\/[0-9a-f]{32}\/0$/);
+
+  // Over Resend's rate, then failing itself, then taking it: tried again after a pause, with the same key, so a
+  // batch Resend did take before is not sent twice.
+  calls.length = 0;
+  assert.deepEqual(await alertPeople({ RESEND_API_KEY: key }, ACME, group, ["ana@acme.example"], dashboard, resend(429, 503), pause), { tried: true, emailed: true });
+  assert.equal(calls.length, 3);
+  assert.equal(new Set(calls.map((sent) => sent.key)).size, 1);
+  assert.deepEqual(paused, [1000, 4000]);
+
+  // Still failing after its tries, or refused for a reason another try won't change: not kept, so tomorrow's run tries again.
+  calls.length = 0;
+  assert.deepEqual(await alertPeople({ RESEND_API_KEY: key }, ACME, group, ["ana@acme.example"], dashboard, resend(0, 500, 502), pause), { tried: true, emailed: false });
+  assert.equal(calls.length, 3);
+  calls.length = 0;
+  assert.deepEqual(await alertPeople({ RESEND_API_KEY: key }, ACME, group, ["ana@acme.example"], dashboard, resend(422), pause), { tried: true, emailed: false });
+  assert.equal(calls.length, 1, "a refusal another try won't change is not tried again");
 });
 
 const VISITOR = "1b2c3d4e-5f60-4a1b-8c2d-3e4f5a6b7c8d";
@@ -83,4 +200,27 @@ test("the guide keeps a hash of the visitor made with the site, never the id its
   assert.match(update.text, /where id = \? and site_id = \? and visitor is null/);
   assert.equal(update.values[0], await visitorHash("site_test", VISITOR));
   assert.ok(!JSON.stringify(sent).includes(VISITOR), "the id itself never reaches the database");
+});
+
+describe("guide health, against Postgres", { skip: TEST_DATABASE_URL ? false : "set TEST_DATABASE_URL to a local, empty database to run these" }, () => {
+  const DB = testDatabase("health");
+  const SITE = "site_health_db";
+
+  // Two people asked every week for three weeks and their guides finished; this week five guides stopped. The
+  // question isn't a common one: two people asked it, not six, whatever each week counts.
+  test("the people who asked in the three weeks before are each counted once, however many of the weeks they asked in", async () => {
+    freshDatabase(DB);
+    exec(DB, `insert into sites (id, name, origin, allowed_origins, context) values ('${SITE}', 'Acme', 'https://app.acme.example', '{https://app.acme.example}', '{}')`);
+    const guide = (n: number, daysAgo: number, visitor: string, outcome: string) =>
+      `('00000000-0000-4000-8000-${String(n).padStart(12, "0")}', '${SITE}', 'Where are invoices?', 'where are invoices', '/', now() - interval '${daysAgo} days', now() - interval '${daysAgo} days', '${outcome}', '${visitor}')`;
+    const rows = [
+      ...[8, 15, 22].flatMap((days, week) => ["ana", "bo"].map((visitor, one) => guide(week * 2 + one + 1, days, visitor, "finished"))),
+      ...["c1", "c2", "c3", "c4", "c5"].map((visitor, n) => guide(100 + n, 1, visitor, "stopped")),
+    ];
+    exec(DB, `insert into guides (id, site_id, question, question_key, started_path, started_at, ended_at, outcome, visitor) values ${rows.join(", ")}`);
+    const [group] = await guideHealth(psqlSql(DB) as unknown as Parameters<typeof guideHealth>[0], SITE);
+    assert.ok(group?.flag, "the drop is flagged on the dashboard");
+    assert.equal(group.flag.visitorsBefore, 2);
+    assert.ok(group.flag.visitorsBefore < COMMON_VISITORS, "so it isn't emailed about as a common question");
+  });
 });

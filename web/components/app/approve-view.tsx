@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { FormAlert, failureFrom, type Failure } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/app-api";
-import { Card, FailedCard } from "./parts";
+import { Card, FailedCard, WRAPS } from "./parts";
 
 interface Request {
   name: string;
@@ -51,9 +51,11 @@ export function ApproveView() {
   if (error) return <FailedCard className="max-w-2xl" title="This link does not work" message={error} />;
   if (!request) return <p className="text-base text-muted-foreground">Loading the request</p>;
 
+  // A work email or a company's name can be longer than a phone is wide, and an email is one word to the browser,
+  // so the words on this page may break anywhere rather than run off the screen.
   if (done) {
     return (
-      <Card className="max-w-2xl">
+      <Card className="max-w-2xl [overflow-wrap:anywhere]">
         <h1 className="text-2xl font-medium tracking-[-0.02em]">{done.scope === "domain" ? `Everyone at ${request.domain} is approved` : `${request.email} is approved`}</h1>
         <p className="text-base leading-6 text-muted-foreground">
           {done.sent
@@ -66,18 +68,19 @@ export function ApproveView() {
 
   const already = request.approved.email || request.approved.domain;
   return (
-    <Card className="max-w-2xl">
+    <Card className="max-w-2xl [overflow-wrap:anywhere]">
       <h1 className="text-2xl font-medium tracking-[-0.02em]">Approve {request.company}</h1>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 rounded-lg border bg-card p-4 text-base">
+      {/* On a phone each name sits over its value, so an email has the panel's whole width. */}
+      <dl className="grid grid-cols-1 gap-x-6 rounded-lg border bg-card p-4 text-base sm:grid-cols-[auto_1fr] sm:gap-y-2">
         <dt className="text-muted-foreground">Name</dt>
         <dd>{request.name}</dd>
-        <dt className="text-muted-foreground">Email</dt>
+        <dt className="mt-3 text-muted-foreground sm:mt-0">Email</dt>
         <dd>{request.email}</dd>
-        <dt className="text-muted-foreground">Company</dt>
+        <dt className="mt-3 text-muted-foreground sm:mt-0">Company</dt>
         <dd>{request.company}</dd>
         {request.details && (
           <>
-            <dt className="text-muted-foreground">Details</dt>
+            <dt className="mt-3 text-muted-foreground sm:mt-0">Details</dt>
             <dd className="whitespace-pre-wrap">{request.details}</dd>
           </>
         )}
@@ -87,12 +90,13 @@ export function ApproveView() {
           {request.approved.domain ? `Everyone at ${request.domain} is already approved.` : `${request.email} is already approved.`} Approving again sends a new sign-in link.
         </p>
       )}
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Button size="xl" onClick={() => approve("email")} disabled={busy}>
+      {/* Each button says whom it approves in full, on more than one line when it must. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+        <Button size="xl" onClick={() => approve("email")} disabled={busy} className={WRAPS}>
           Approve {request.email}
         </Button>
         {request.domainAllowed && (
-          <Button size="xl" variant="secondary" onClick={() => approve("domain")} disabled={busy}>
+          <Button size="xl" variant="secondary" onClick={() => approve("domain")} disabled={busy} className={WRAPS}>
             Approve everyone at {request.domain}
           </Button>
         )}

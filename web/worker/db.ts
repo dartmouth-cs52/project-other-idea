@@ -107,3 +107,14 @@ export async function joinOrganization(sql: Sql, email: string, userId: string):
   return org ? { id: org.id, name: org.name, role: org.role } : undefined;
 }
 
+
+/**
+ * Deletes the days before today of how many labels each network taught a site, and how many of its steps
+ * verified routes answered (db/migrations/0019 and 0020). Only today's are read. The widget server deletes
+ * them too, the first time each day it learns or answers from a route, so a site that stops doing either
+ * would keep its last day's: the site's daily schedule deletes them as well.
+ */
+export async function forgetOldNetworkDays(sql: Sql): Promise<void> {
+  await sql`delete from outline_network_days where day < current_date`;
+  await sql`delete from route_network_days where day < current_date`;
+}

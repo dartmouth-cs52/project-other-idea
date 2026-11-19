@@ -18,6 +18,7 @@
 // sign-in link. Their first sign-in puts them on the team as a member
 // (joinOrganization in db.ts). Until then they are listed as invited.
 
+import { boundedText } from "./body";
 import type { Organization, Sql } from "./db";
 
 export type Answer = { status: number; body: unknown };
@@ -72,8 +73,9 @@ export async function teamRoutes(call: TeamRequest): Promise<Answer | undefined>
 }
 
 async function body(request: Request): Promise<Record<string, unknown>> {
-  const text = await request.text();
-  if (text.length > 2_000) return {};
+  // Read only so far: a body past the limit is never read in full, and reads as empty.
+  const text = await boundedText(request, 2_000);
+  if (text === null) return {};
   try {
     const value = JSON.parse(text || "{}");
     return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};

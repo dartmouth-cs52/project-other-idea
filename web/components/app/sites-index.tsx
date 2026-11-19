@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
@@ -9,7 +10,8 @@ import { hostOf } from "@/lib/setup";
 import { Spark } from "./chart";
 import { usePolled } from "./live";
 import { NEW_SITE_HREF, siteHref } from "./nav";
-import { GuideStatus, PageHeader, SiteIcon, useNow, when } from "./parts";
+import { DashboardSurface, FailedCard, GuideStatus, PageHeader, SiteIcon, useNow, when } from "./parts";
+import { Reconnecting } from "./site-view";
 import { BillingNotice } from "./upgrade";
 
 /** How often the list of sites asks what is new. Each card is a few counts, so this is slower than a site's own page. */
@@ -24,36 +26,49 @@ const SITES_MS = 3_000;
  * The whole card is the way in.
  */
 export function SitesIndex({ me }: { me: Me }) {
-  const { data } = usePolled<{ sites: SiteCard[] }>(`/sites?${clock()}`, SITES_MS);
+  // Try again starts the list over, so its placeholders show while it asks again.
+  const [attempt, setAttempt] = useState(0);
+  return <Sites key={attempt} me={me} retry={() => setAttempt((count) => count + 1)} />;
+}
+
+function Sites({ me, retry }: { me: Me; retry: () => void }) {
+  const { data, failing } = usePolled<{ sites: SiteCard[] }>(`/sites?${clock()}`, SITES_MS);
   useNow();
   // Until the counts arrive, the names from sign-in hold each card's place.
   const sites = data ? [...data.sites].sort(byActivity) : undefined;
   const names = me.sites ?? [];
 
   return (
-    <>
+    <DashboardSurface>
       <PageHeader title="Sites">
+        {/* Once the cards are in, a list that has stopped hearing from the server says so, as a site's pages do. */}
+        <Reconnecting failing={failing && Boolean(data)} />
         <Link href={NEW_SITE_HREF} className={buttonVariants()}>
           <Plus />
           Add a site
         </Link>
       </PageHeader>
       <BillingNotice me={me} />
-      <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {sites
-          ? sites.map((site) => (
-              <li key={site.id}>
-                {/* A new site is named after its company, so two can share a name. Only then does a card carry its address. */}
-                <Card site={site} address={sites.filter((other) => other.name === site.name).length > 1} />
-              </li>
-            ))
-          : names.map((site) => (
-              <li key={site.id}>
-                <Skeleton className="h-52 rounded-xl" />
-              </li>
-            ))}
-      </ul>
-    </>
+      {/* The list keeps asking, so the cards still arrive by themselves once the server answers. */}
+      {failing && !data ? (
+        <FailedCard level={2} title="Your sites didn't load" message="Haptic couldn't be reached, or something went wrong on our side. Try again in a moment." retry={retry} />
+      ) : (
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {sites
+            ? sites.map((site) => (
+                <li key={site.id}>
+                  {/* A new site is named after its company, so two can share a name. Only then does a card carry its address. */}
+                  <Card site={site} address={sites.filter((other) => other.name === site.name).length > 1} />
+                </li>
+              ))
+            : names.map((site) => (
+                <li key={site.id}>
+                  <Skeleton className="h-52 rounded-xl" />
+                </li>
+              ))}
+        </ul>
+      )}
+    </DashboardSurface>
   );
 }
 

@@ -4,7 +4,7 @@ import { DEFAULT_APPEARANCE, isLearnableLabel, isLearnableRoute, type PageNode, 
 
 process.env.HAPTIC_MODEL = "mock";
 const { createApp } = await import("../src/server/app.ts");
-const { labelNeeds, MemoryLearned, networkHash, networkOf, networkThreshold, parseOutlineReport, withLearned } = await import("../src/server/learned.ts");
+const { callerKey, labelNeeds, MemoryLearned, networkHash, networkOf, networkThreshold, parseOutlineReport, withLearned } = await import("../src/server/learned.ts");
 type LabelNeeds = ReturnType<typeof labelNeeds>;
 const { buildSystemPrompt, buildUserMessage, inert, renderSiteMap } = await import("../src/server/prompt.ts");
 
@@ -225,4 +225,16 @@ test("a caller's network: an IPv4 address whole, the first three groups of an IP
   assert.notEqual(await networkHash(site.id, "203.0.113.7"), await networkHash(site.id, "203.0.113.8"));
   assert.notEqual(here, await networkHash("site_other", "203.0.113.7"), "the same network is someone else on another site");
   assert.equal(await networkHash(site.id, ""), undefined);
+});
+
+test("a caller, to the limits on asking: an IPv4 address whole, the first four groups of an IPv6 one, and anything else as it is", () => {
+  assert.equal(callerKey("203.0.113.7"), "203.0.113.7");
+  assert.equal(callerKey("::ffff:203.0.113.7"), "203.0.113.7");
+  assert.equal(callerKey("2001:db8:1:2::5"), "2001:db8:1:2::/64");
+  assert.equal(callerKey("2001:0DB8:0001:0002:ffff:ffff:ffff:fffe"), "2001:db8:1:2::/64");
+  assert.equal(callerKey("[2001:db8::1]"), "2001:db8:0:0::/64");
+  assert.notEqual(callerKey("2001:db8:1:2::5"), callerKey("2001:db8:1:3::5"), "two homes beside each other at one provider are two callers");
+  assert.equal(networkOf("2001:db8:1:2::5"), networkOf("2001:db8:1:3::5"), "though learning counts them as one network");
+  for (const other of ["", "unknown", "999.1.1.1"]) assert.equal(callerKey(other), other);
+  assert.equal(callerKey(callerKey("2001:db8:1:2::5")), "2001:db8:1:2::/64", "a key given again is the same key");
 });

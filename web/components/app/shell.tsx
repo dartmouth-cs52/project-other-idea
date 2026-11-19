@@ -3,12 +3,15 @@
 // The frame around every signed-in page: a bar across the top that says where
 // you are, and, inside a site, a list of its pages down the left.
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronsUpDown, CreditCard, LayoutGrid, LogOut, Plus, Users } from "lucide-react";
+import { AlertCircleIcon, Check, ChevronsUpDown, CreditCard, LayoutGrid, LogOut, Plus, Users } from "lucide-react";
 import { cn } from "cn";
+import { FormAlert, type Failure } from "@/components/form";
 import { Pointer } from "@/components/pointer";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,12 +21,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Me } from "@/lib/app-api";
-import { auth } from "@/lib/auth-client";
+import { useSignedOut, type Me } from "@/lib/app-api";
 import { hostOf } from "@/lib/setup";
-import { site as haptic } from "@/lib/site";
+import { site as haptic, signInHref } from "@/lib/site";
 import { BILLING_HREF, NEW_SITE_HREF, SITES_HREF, TEAM_HREF, VIEWS, siteHref, type View } from "./nav";
-import { SiteIcon, leaveFor } from "./parts";
+import { SiteIcon } from "./parts";
+import { useSignOut } from "./sign-out";
 import { PlanLink } from "./upgrade";
 
 type SiteRow = NonNullable<Me["sites"]>[number];
@@ -32,6 +35,35 @@ type SiteRow = NonNullable<Me["sites"]>[number];
 /** The first word of the person's name, from Google. Someone who signed in by an emailed link has none. */
 function firstName(name: string | undefined): string | undefined {
   return name?.trim().split(/\s+/)[0] || undefined;
+}
+
+/** What Sign out in the bar says when it didn't go through. It sits at the top of the page, which is brought into view. */
+function SignOutFailed({ failure, retry }: { failure: Failure | null; retry: () => void }) {
+  useEffect(() => {
+    if (failure) window.scrollTo({ top: 0 });
+  }, [failure]);
+  return <FormAlert failure={failure} retry={retry} />;
+}
+
+/**
+ * Says the session has ended, on a page that stayed so as not to throw away typing not saved yet (api in
+ * lib/app-api.ts). Signing in again in a new tab signs this page in too, and it goes with the next call that gets
+ * through. Its way on is a link, where a failure's is Try again, and it sits under the words, since the description
+ * underlines any link in it.
+ */
+function SignedOut() {
+  const signedOut = useSignedOut();
+  if (!signedOut) return null;
+  return (
+    <Alert variant="destructive" className="px-3.5 py-3">
+      <AlertCircleIcon />
+      <AlertTitle>You were signed out</AlertTitle>
+      <AlertDescription>What you typed is still here. Sign in again in a new tab, then save it.</AlertDescription>
+      <a href={signInHref} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ variant: "secondary" }), "col-start-2 mt-1.5 justify-self-start")}>
+        Sign in again
+      </a>
+    </Alert>
+  );
 }
 
 const CRUMB = "inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50";
@@ -49,20 +81,16 @@ function Slash() {
  * leads to the list of sites, then the site, which is a menu of the company's
  * sites. Who is signed in is on the right, with their company in the menu.
  * It sticks to the top of the window. `className` can hold it there another
- * way, as SiteShell does.
+ * way, as SiteShell does. `onSignOut` is what Sign out in the menu does: the
+ * frames below pass the one from useSignOut, and show what it says.
  */
-export function TopBar({ me, current, className }: { me?: Me; current?: SiteRow; className?: string }) {
+export function TopBar({ me, current, className, onSignOut }: { me?: Me; current?: SiteRow; className?: string; onSignOut?: () => void }) {
   const router = useRouter();
   // The sites whose script is running come first, here and on the list of sites, since those are the ones with something to see.
   const sites = [...(me?.sites ?? [])].sort((a, b) => Number(b.connected) - Number(a.connected));
   const inside = Boolean(me?.approved && sites.length);
   // A new site is named after its company, so two of a company's sites can share a name. Only then is the address needed to tell them apart.
   const shared = (site: SiteRow) => sites.filter((other) => other.name === site.name).length > 1;
-
-  async function signOut() {
-    await auth().signOut();
-    leaveFor("/sign-in/");
-  }
 
   return (
     <header className={cn("sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-4 border-b bg-background px-4 sm:px-6", className)}>
@@ -143,7 +171,7 @@ export function TopBar({ me, current, className }: { me?: Me; current?: SiteRow;
                 Billing
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={signOut} className="gap-2 py-1.5">
+            <DropdownMenuItem onClick={onSignOut} className="gap-2 py-1.5">
               <LogOut className="text-muted-foreground" />
               Sign out
             </DropdownMenuItem>
@@ -157,10 +185,14 @@ export function TopBar({ me, current, className }: { me?: Me; current?: SiteRow;
 
 /** A page with the bar across the top and nothing down the side: the list of sites, adding one, and the pages before a company is approved. */
 export function Plain({ me, children, wide = false }: { me?: Me; children: ReactNode; wide?: boolean }) {
+  const { signOut, failure } = useSignOut();
   return (
     <>
-      <TopBar me={me} />
-      <main className={cn("mx-auto flex w-full flex-col gap-6 px-4 py-10 sm:px-6", wide ? "max-w-6xl" : "max-w-5xl")}>{children}</main>
+      <TopBar me={me} onSignOut={signOut} />
+      <main className={cn("mx-auto flex w-full flex-col gap-6 px-4 py-10 sm:px-6", wide ? "max-w-6xl" : "max-w-5xl")}>
+        <SignOutFailed failure={failure} retry={signOut} />
+        {children}
+      </main>
     </>
   );
 }
@@ -176,9 +208,10 @@ export function Plain({ me, children, wide = false }: { me?: Me; children: React
  * the bar and the row both stick, so they move together.
  */
 export function SiteShell({ me, current, view, children }: { me: Me; current: SiteRow; view: View; children: ReactNode }) {
+  const { signOut, failure } = useSignOut();
   return (
     <>
-      <TopBar me={me} current={current} className="lg:fixed lg:inset-x-0" />
+      <TopBar me={me} current={current} className="lg:fixed lg:inset-x-0" onSignOut={signOut} />
       <nav aria-label={`${current.name} pages`} className="sticky top-14 z-30 flex gap-1 overflow-x-auto border-b bg-background px-4 py-2 sm:px-6 lg:hidden">
         {VIEWS.map((item) => (
           <PageLink key={item.id} site={current.id} item={item} on={item.id === view} />
@@ -193,7 +226,12 @@ export function SiteShell({ me, current, view, children }: { me: Me; current: Si
       </aside>
       {/* The bar takes no room of its own from 1024px, so the page leaves room for it. */}
       <main className="min-w-0 flex-1 lg:pt-14 lg:pl-56">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">{children}</div>
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
+          {/* The forms that keep a page whose session has ended are all on a site's pages, so only they say so. */}
+          <SignedOut />
+          <SignOutFailed failure={failure} retry={signOut} />
+          {children}
+        </div>
       </main>
     </>
   );

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { Store } from "../src/server/db.ts";
 import { DEFAULT_APPEARANCE, type PageOutline, type SiteContext } from "../src/shared/types.ts";
+import { knownControls } from "../web/worker/corrections.ts";
+import { forgetOldNetworkDays } from "../web/worker/db.ts";
 import { exec, freshDatabase, psqlSql, TEST_DATABASE_URL, testDatabase } from "./psql.ts";
 
 /** This file's own database, when TEST_DATABASE_URL is set. */
@@ -91,6 +93,103 @@ describe("learning from visits, against Postgres", { skip: TEST_DATABASE_URL ? f
     assert.equal((await rows("outline_labels")).length, 10);
   });
 
+  test("a label sent over and over doesn't outrank the ones real visitors keep seeing, and one nobody has seen for a month gives way", async () => {
+    const store = new Store(sql(), 3, { labelNetworks: 3, labelsRead: 2 });
+    // Two labels visitors on three networks keep seeing, known for weeks.
+    for (const [visitor, network] of [["a", "aaaa"], ["b", "bbbb"], ["c", "cccc"]] as const) await store.recordOutline(site, visitor, buttons("/reports", "Export", "Share"), network);
+    exec(DB, `update outline_labels set first_seen_at = now() - interval '20 days', seen_count = 40`);
+    // Two made up today, from as many networks, and sent a million times. Sightings used to decide the order.
+    for (const [visitor, network] of [["x", "dddd"], ["y", "eeee"], ["z", "ffff"]] as const) await store.recordOutline(site, visitor, buttons("/reports", "Fake one", "Fake two"), network);
+    exec(DB, `update outline_labels set seen_count = 1000000 where label like 'Fake%'`);
+    assert.deepEqual(await buttonsOn(store, "/reports"), ["Export", "Share"]);
+    // A label nobody has seen for a month is one the product may have dropped, and gives way to one seen lately.
+    exec(DB, `update outline_labels set last_seen_at = now() - interval '40 days' where label = 'Share'`);
+    assert.deepEqual(await buttonsOn(store, "/reports"), ["Export", "Fake one"]);
+  });
+
+  test("visitor ids made up on networks already counted don't lift a label over one seen from as many networks before it", async () => {
+    // The review's probe: four real visitors on four networks saw a page weeks ago. Callers on four networks then sent
+    // forty pages of their own, with ten made-up visitor ids each, which cost nothing once the network is counted.
+    // Ranked by visitors after networks, the forty filled every place for a page only traffic knows, and the real one
+    // went from every visitor's site map.
+    const store = new Store(sql(), 3, { labelNetworks: 3 });
+    for (const [visitor, network] of [["a", "aaaa"], ["b", "bbbb"], ["c", "cccc"], ["d", "dddd"]] as const)
+      await store.recordOutline(site, visitor, { path: "/billing/invoices", title: "Invoices", headings: [], links: [], buttons: ["Download invoice"] }, network);
+    exec(DB, `update outline_labels set first_seen_at = now() - interval '20 days'`);
+    exec(
+      DB,
+      `insert into outline_labels (site_id, route, kind, label, href, visitors, networks)
+        select '${site.id}', '/x' || i, 'title', 'Fake page ' || i, '', array['x0','x1','x2','x3','x4','x5','x6','x7','x8','x9'], array['eeee','ffff','gggg','hhhh']
+        from generate_series(0, 39) i`,
+    );
+    const pages = (await store.loadSite(site.id))?.pages.map((page) => page.path) ?? [];
+    assert.ok(pages.includes("/billing/invoices"), "the page real visitors saw stays in the site map");
+    assert.deepEqual(await buttonsOn(store, "/billing/invoices"), ["Download invoice"]);
+    // The same in the dashboard's picker for Point here instead, which offers learned labels in the same order.
+    exec(DB, `insert into outline_labels (site_id, route, kind, label, href, visitors, networks)
+      select '${site.id}', '/billing/invoices', 'button', 'Fake ' || i, '', array['x0','x1','x2','x3','x4','x5','x6','x7','x8','x9'], array['eeee','ffff','gggg','hhhh']
+      from generate_series(0, 99) i`);
+    const picked = await knownControls(psqlSql(DB) as unknown as Parameters<typeof knownControls>[0], { id: site.id, context: site }, "/billing/invoices");
+    assert.deepEqual(picked[0], { role: "button", label: "Download invoice" });
+  });
+
+  test("a full site keeps the labels the prompt reads, in the same order, whatever was sent most", async () => {
+    const store = new Store(sql(), 3, { labelNetworks: 3, labelsRead: 2, maxLabels: 4 });
+    for (const [visitor, network] of [["a", "aaaa"], ["b", "bbbb"], ["c", "cccc"]] as const) await store.recordOutline(site, visitor, buttons("/reports", "Export", "Share"), network);
+    exec(DB, `update outline_labels set first_seen_at = now() - interval '20 days', last_seen_at = now() - interval '10 days'`);
+    for (const [visitor, network] of [["x", "dddd"], ["y", "eeee"], ["z", "ffff"]] as const) await store.recordOutline(site, visitor, buttons("/reports", "Fake one", "Fake two"), network);
+    exec(DB, `update outline_labels set seen_count = 1000000 where label like 'Fake%'`);
+    // One more takes the site past its limit. What the prompt reads stays, and room is made from the rest.
+    await store.recordOutline(site, "w", buttons("/reports", "Junk"), "gggg");
+    assert.deepEqual((await rows("outline_labels")).map((row) => row.label), ["Export", "Fake one", "Junk", "Share"]);
+  });
+
+  test("one network teaches a site only so many new labels a day, and a label it is already counted on costs nothing", async () => {
+    const store = new Store(sql(), 3, { labelNetworks: 3, networkRowsADay: 5 });
+    const said: string[] = [];
+    const warned = console.warn;
+    console.warn = (...args: unknown[]) => void said.push(args.join(" "));
+    try {
+      await store.recordOutline(site, "v1", buttons("/reports", "Export", "Share", "Star"), "aaaa");
+      await store.recordOutline(site, "v2", buttons("/reports", "Export", "Share", "Star"), "aaaa");
+      assert.deepEqual((await rows("outline_labels")).map((row) => [row.label, row.visitor_count]), [["Export", 2], ["Share", 2], ["Star", 2]]);
+      // An outline that goes past the share keeps its first new labels, in its own order, up to the share.
+      await store.recordOutline(site, "v3", buttons("/reports", "Print", "Copy", "Paste"), "aaaa");
+      assert.deepEqual((await rows("outline_labels")).map((row) => [row.label, row.visitor_count]), [["Copy", 1], ["Export", 2], ["Print", 1], ["Share", 2], ["Star", 2]]);
+      assert.match(said.join("\n"), /A network has taught site_learned01 5 new labels today, so it teaches it no new ones until tomorrow/);
+      // Past it, a new label is left out, and the rest of the outline still counts: one more visitor on what the
+      // network is already counted on. Before, the whole outline was dropped, and so was every outline after it that day.
+      await store.recordOutline(site, "v4", buttons("/reports", "Archive", "Export"), "aaaa");
+      assert.deepEqual((await rows("outline_labels")).map((row) => [row.label, row.visitor_count]), [["Copy", 1], ["Export", 3], ["Print", 1], ["Share", 2], ["Star", 2]]);
+      assert.equal(said.length, 1, "the log says so once");
+      // Another network has a share of its own.
+      await store.recordOutline(site, "v5", buttons("/reports", "Archive"), "bbbb");
+      assert.ok((await rows("outline_labels")).some((row) => row.label === "Archive"));
+    } finally {
+      console.warn = warned;
+    }
+    // The next day the first network may teach again, and the days before are forgotten.
+    exec(DB, `update outline_network_days set day = current_date - 1`);
+    await new Store(sql(), 3, { labelNetworks: 3, networkRowsADay: 5 }).recordOutline(site, "v6", buttons("/reports", "Rename"), "aaaa");
+    assert.ok((await rows("outline_labels")).some((row) => row.label === "Rename"));
+    assert.deepEqual(await psqlSql(DB)`select network, day = current_date as today, labels, openings from outline_network_days`, [{ network: "aaaa", today: true, labels: 1, openings: 0 }]);
+  });
+
+  test("what menus show has a day's share of its own, apart from the page's labels", async () => {
+    const store = new Store(sql(), 3, { labelNetworks: 3, networkRowsADay: 5 });
+    const said: string[] = [];
+    const warned = console.warn;
+    console.warn = (...args: unknown[]) => void said.push(args.join(" "));
+    try {
+      await store.recordOutline(site, "v1", { ...buttons("/", "Search"), opens: [{ control: "Help", links: [], buttons: ["m1", "m2", "m3", "m4", "m5", "m6"] }] }, "aaaa");
+    } finally {
+      console.warn = warned;
+    }
+    assert.deepEqual((await rows("outline_openings")).map((row) => row.label), ["m1", "m2", "m3", "m4", "m5"]);
+    assert.deepEqual((await rows("outline_labels")).map((row) => row.label), ["Search"]);
+    assert.match(said.join("\n"), /5 new items behind controls today/);
+  });
+
   test("what menus show makes room the same way", async () => {
     const store = new Store(sql(), 3, { labelNetworks: 3, maxLabels: 4 });
     const menu = (...items: string[]): PageOutline => ({ ...buttons("/"), opens: [{ control: "Help", links: [], buttons: items }] });
@@ -101,5 +200,31 @@ describe("learning from visits, against Postgres", { skip: TEST_DATABASE_URL ? f
     await store.recordOutline(site, "d", menu("Shortcuts"), "dddd");
     assert.deepEqual((await rows("outline_openings")).map((row) => row.label), ["Docs", "Shortcuts", "m1", "m2"]);
     assert.deepEqual((await store.loadSite(site.id))?.pages[0]?.opens, [{ control: "Help", links: [], buttons: ["Docs"] }]);
+  });
+
+  test("the site's daily schedule forgets each network's counts from the days before today", async () => {
+    await new Store(sql(), 3, { labelNetworks: 3 }).recordOutline(site, "v1", buttons("/", "Search"), "aaaa");
+    exec(DB, `insert into outline_network_days (site_id, network, day, labels) values ('${site.id}', 'bbbb', current_date - 1, 3);
+      insert into route_network_days (site_id, network, day, served) values ('${site.id}', 'aaaa', current_date - 1, 7), ('${site.id}', 'cccc', current_date, 2)`);
+    await forgetOldNetworkDays(psqlSql(DB) as unknown as Parameters<typeof forgetOldNetworkDays>[0]);
+    assert.deepEqual(await psqlSql(DB)`select network, day = current_date as today from outline_network_days order by network`, [{ network: "aaaa", today: true }]);
+    assert.deepEqual(await psqlSql(DB)`select network, served from route_network_days order by network`, [{ network: "cccc", served: 2 }]);
+  });
+
+  // On the Worker, waitUntil holds the request open only for the promise it is given. What menus show is written
+  // in statements of its own, and here it is made the slower of the two, as it can be online.
+  test("waiting on a page's outline waits for what its menus show to be written as well", async () => {
+    const base = psqlSql(DB);
+    const slow = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+      const query = base(strings, ...values);
+      if (!strings.join("").includes("insert into outline_openings")) return query;
+      return { then: (done: (rows: unknown) => unknown, failed: (error: unknown) => unknown) => new Promise((wait) => setTimeout(wait, 400)).then(() => query).then(done, failed) };
+    }) as typeof base;
+    slow.query = base.query;
+    slow.transaction = base.transaction;
+    const store = new Store(slow as unknown as ConstructorParameters<typeof Store>[0], 3, { labelNetworks: 3 });
+    await store.recordOutline(site, "v1", { ...buttons("/", "Search"), opens: [{ control: "Help", links: [], buttons: ["Docs"] }] }, "aaaa");
+    assert.deepEqual((await rows("outline_openings")).map((row) => row.label), ["Docs"]);
+    assert.deepEqual((await rows("outline_labels")).map((row) => row.label), ["Search"]);
   });
 });

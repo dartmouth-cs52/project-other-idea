@@ -47,6 +47,10 @@ async function saveContextField(sql: Sql, siteId: string, orgId: string, field: 
  * The controls known to be on a page, for the "Point here instead" picker: the
  * crawl's, and those enough visitors have seen there. The page itself is not
  * kept with a guide, so this is what can be offered, with a box for any other.
+ * Learned ones come in the order the prompt reads them (`learnedLabels` in
+ * src/server/db.ts): by networks, then seen lately, then known longest. Never
+ * by how often a label was sent or how many visitor ids sent it, which anyone
+ * can raise, so labels sent over and over don't push real ones out of the list.
  */
 export async function knownControls(sql: Sql, site: { id: string; context: SiteContext }, route: string): Promise<ControlName[]> {
   const page: PageNode | undefined = (site.context.pages ?? []).find((item) => item.path === route);
@@ -61,7 +65,7 @@ export async function knownControls(sql: Sql, site: { id: string; context: SiteC
     const learned = (await sql`
       select kind, label from outline_labels where site_id = ${site.id} and route = ${route} and kind in ('link', 'button')
         and visitor_count >= ${LEARNED_SHOWN_AT} and network_count >= ${LEARNED_SHOWN_AT}
-      order by network_count desc, visitor_count desc, seen_count desc limit 100`) as { kind: string; label: string }[];
+      order by network_count desc, last_seen_at > now() - interval '30 days' desc, first_seen_at, kind, label, href limit 100`) as { kind: string; label: string }[];
     for (const row of learned) add(row.kind, row.label);
   } catch {
     // Nothing learned yet, or the table or its networks (db/migrations/0014) aren't there. The crawl's controls are still offered.

@@ -67,8 +67,45 @@ const MAX_REFUSED_ORIGINS = 20;
  * a flood of made-up ones is pushed out by the labels real visitors keep seeing.
  */
 const MAX_LABELS = 5000;
-/** The most learned labels read with a site, the most seen first. */
+/**
+ * The most learned labels read with a site, and as many items behind
+ * controls, the most widely seen first. Each query that ranks them writes the
+ * same order out: by how many networks have seen them, up to ten, the one
+ * count a caller cannot make up. Then whether they were seen in the last 30
+ * days, then the longest known first, then the row's own key, so the order is
+ * the same every time. Never by how many times a label was sent, which anyone
+ * can raise as fast as they can post: ranked by that, labels sent from ten
+ * networks over and over took every place in every visitor's prompt, and the
+ * ones real visitors saw were dropped. Nor by how many visitors saw them: a
+ * visitor is the widget's random id, so one network can be ten of them for
+ * nothing, and callers on four networks with ten made-up ids each pushed out a
+ * page four real visitors on four networks had seen. Visitors only decide
+ * whether a label is read at all. Now a label first sent today cannot outrank
+ * one seen from as many networks before it.
+ */
 const LABELS_READ = 1500;
+/**
+ * How many rows of each kind one network may be counted on for the first time
+ * on one site in a day (db/migrations/0019). A row it is already counted on
+ * costs nothing, and an outline that goes past the share loses only its rows
+ * past it: the rest still count the visitor and when they were seen. On a new
+ * site every row is new, and one visitor's first pages send hundreds: 761
+ * over ten pages of Wikipedia, the most of the products recorded in
+ * eval/cases. So the share is a few times that, and the people behind one
+ * address using a new product all day stay under it, while each network a
+ * caller has can still put it on only so many rows a day.
+ */
+const NETWORK_ROWS_A_DAY = 2000;
+
+/**
+ * How many steps verified routes may answer for one network on one site in a
+ * day (db/migrations/0020). A step a route answers costs nothing and no budget
+ * holds it, yet a guide that finishes on one is billed, so without this one
+ * network could have as many billed guides answered for nothing as it could
+ * ask for. Past it, the network's steps go to the model, inside the budget, as
+ * they would without routes: the people behind a busy address lose only the speed.
+ */
+const ROUTE_STEPS_A_DAY = 100;
 
 /** How long a report waits before each look for its guide's row. A Worker may keep working this long after it has answered. */
 const REPORT_RETRIES_MS = [0, 1000, 3000, 6000];
@@ -128,6 +165,21 @@ export function endingFor(last: LastStep | undefined): GuideOutcome | undefined 
   return "finished";
 }
 
+/** What a network has been counted on today, an outline's new rows included, and how many of those are the outline's. */
+interface Today {
+  total: number;
+  fresh: number;
+}
+
+/** A trusted route whose change a finished guide has just used, by its key, and whether the change now has networks enough. */
+interface RouteChange {
+  goal_key: string;
+  path: string;
+  dialog: string;
+  after_key: string;
+  ready: boolean;
+}
+
 export class Store {
   private readonly sql: NeonQueryFunction<false, false>;
   private readonly seen = new Map<string, number>();
@@ -138,10 +190,22 @@ export class Store {
 
   /** How many different networks a learned label's visitors must have called from before the prompt gets it. */
   private readonly labelNetworks: number;
+  /** How many different networks finished guides that used a route must have come from before it is trusted, or before a change to a trusted one is. */
+  private readonly routeNetworks: number;
   /** How long a report waits before each look at its guide. */
   private readonly reportWaitsMs: readonly number[];
   /** How many learned labels a site keeps, and as many items behind controls. */
   private readonly maxLabels: number;
+  /** How many learned labels are read with a site, and as many items behind controls. */
+  private readonly labelsRead: number;
+  /** How many rows of each kind one network may be counted on for the first time on one site in a day. */
+  private readonly networkRowsADay: number;
+  /** The day this process last cleared the days before from outline_network_days. */
+  private clearedDay = "";
+  /** How many steps verified routes may answer for one network on one site in a day. */
+  private readonly routeStepsADay: number;
+  /** The day this process last cleared the days before from route_network_days. */
+  private clearedRouteDay = "";
   /** Stripe's secret key. With it, a guide kept as finished is sent to Stripe as usage straight away. */
   private readonly stripeKey: string | undefined;
 
@@ -150,18 +214,34 @@ export class Store {
    * the query function instead. `labelThreshold` is how many different
    * visitors must have seen a learned label before the prompt gets it, and
    * `labelNetworks` how many different networks they must have called from,
-   * the same number unless given. A test makes `reportWaitsMs` and
-   * `maxLabels` small. `stripeKey` turns on sending finished guides to Stripe.
+   * the same number unless given. `routeNetworks` is how many networks
+   * finished guides must have come from to trust a verified route, as many as
+   * a label needs unless given. A test makes `reportWaitsMs`, `maxLabels`,
+   * `labelsRead`, `networkRowsADay` and `routeStepsADay` small. `stripeKey`
+   * turns on sending finished guides to Stripe.
    */
   constructor(
     connection: string | NeonQueryFunction<false, false>,
     private readonly labelThreshold = 3,
-    options: { labelNetworks?: number; reportWaitsMs?: readonly number[]; maxLabels?: number; stripeKey?: string } = {},
+    options: {
+      labelNetworks?: number;
+      routeNetworks?: number;
+      reportWaitsMs?: readonly number[];
+      maxLabels?: number;
+      labelsRead?: number;
+      networkRowsADay?: number;
+      routeStepsADay?: number;
+      stripeKey?: string;
+    } = {},
   ) {
     this.sql = typeof connection === "string" ? neon(connection) : connection;
     this.labelNetworks = options.labelNetworks ?? labelThreshold;
+    this.routeNetworks = options.routeNetworks ?? this.labelNetworks;
     this.reportWaitsMs = options.reportWaitsMs ?? REPORT_RETRIES_MS;
     this.maxLabels = options.maxLabels ?? MAX_LABELS;
+    this.labelsRead = options.labelsRead ?? LABELS_READ;
+    this.networkRowsADay = options.networkRowsADay ?? NETWORK_ROWS_A_DAY;
+    this.routeStepsADay = options.routeStepsADay ?? ROUTE_STEPS_A_DAY;
     this.stripeKey = options.stripeKey || undefined;
   }
 
@@ -189,7 +269,8 @@ export class Store {
       const rows = await this.sql`
         select route, control, label, href, visitor_count as visitors, network_count as networks, seen_count::int as seen from outline_openings
         where site_id = ${id} and visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}
-        order by network_count desc, visitor_count desc, seen_count desc limit ${LABELS_READ}`;
+        order by network_count desc, last_seen_at > now() - interval '30 days' desc, first_seen_at, route, control, label, href
+        limit ${this.labelsRead}`;
       return rows as LearnedOpening[];
     } catch (error) {
       console.error("Couldn't read what menus show (have db/migrations/0012 and 0014 been applied?):", error instanceof Error ? error.message : error);
@@ -207,7 +288,8 @@ export class Store {
       const rows = await this.sql`
         select route, kind, label, href, visitor_count as visitors, network_count as networks, seen_count::int as seen from outline_labels
         where site_id = ${id} and visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}
-        order by network_count desc, visitor_count desc, seen_count desc limit ${LABELS_READ}`;
+        order by network_count desc, last_seen_at > now() - interval '30 days' desc, first_seen_at, route, kind, label, href
+        limit ${this.labelsRead}`;
       return rows as LearnedLabel[];
     } catch (error) {
       console.error("Couldn't read what was learned (have db/migrations/0009 and 0014 been applied?):", error instanceof Error ? error.message : error);
@@ -224,19 +306,53 @@ export class Store {
    * A site at its limit still learns: the new labels go in, and then the
    * labels the prompt does not read that were seen longest ago are dropped
    * to make room.
+   *
+   * A network that has already been counted on its day's share of new rows
+   * on this site (`networkRowsADay`) is counted on no new ones that day. The
+   * rows of an outline past the share are left out, and the rest of it still
+   * counts: the rows the network is already on, and its first new rows, in
+   * the outline's order, up to the share.
    */
   recordOutline(site: SiteContext, visitor: string, outline: PageOutline, network = ""): Promise<void> {
     const rows = outlineRows(outline);
-    // In a statement of their own, so a database without 0012 still learns the page's labels.
+    // In a statement of their own, so a database without 0012 still learns the page's labels. Both are waited for:
+    // on the Worker this promise is what waitUntil holds the request open for, and a write it doesn't cover can be
+    // cut off once the answer has gone, as what menus show was, some of the time.
     const opened = this.recordOpenings(site, visitor, openingRows(outline), network);
     if (!rows.length) return opened;
-    return this.quietly("learn from a page (have db/migrations/0009 and 0014 been applied?)", async () => {
+    const labelled = this.quietly("learn from a page (have db/migrations/0009, 0014 and 0019 been applied?)", async () => {
+      const placed = JSON.stringify(rows.map((row, place) => ({ ...row, place })));
+      let room = rows.length;
+      if (network) {
+        // The rows this outline would count the network on for the first time, added to what it has been counted on today.
+        const [day] = (await this.sql`
+          with fresh as (
+            select count(*)::int as count
+            from jsonb_to_recordset(${placed}::jsonb) as r(route text, kind text, label text, href text)
+            left join outline_labels o on o.site_id = ${site.id} and o.route = r.route and o.kind = r.kind and o.label = r.label and o.href = r.href
+            where o.site_id is null or (not (${network} = any(o.networks)) and cardinality(o.networks) < ${MAX_VISITORS})
+          )
+          insert into outline_network_days (site_id, network, day, labels)
+          select ${site.id}, ${network}, current_date, count from fresh
+          on conflict (site_id, network, day) do update set labels = outline_network_days.labels + excluded.labels
+          returning labels as total, (select count from fresh) as fresh`) as Today[];
+        room = await this.roomToday(site, day, "labels");
+      }
       const [counted] = (await this.sql`select count(*)::int as count from outline_labels where site_id = ${site.id}`) as { count: number }[];
       await this.sql`
         insert into outline_labels (site_id, route, kind, label, href, visitors, networks)
         select ${site.id}, r.route, r.kind, r.label, r.href, array[${visitor}::text],
           case when ${network} = '' then '{}'::text[] else array[${network}::text] end
-        from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as r(route text, kind text, label text, href text)
+        from (
+          select r.route, r.kind, r.label, r.href, r.fresh, row_number() over (partition by r.fresh order by r.place) as nth
+          from (
+            select r.route, r.kind, r.label, r.href, r.place,
+              o.site_id is null or (not (${network} = any(o.networks)) and cardinality(o.networks) < ${MAX_VISITORS}) as fresh
+            from jsonb_to_recordset(${placed}::jsonb) as r(route text, kind text, label text, href text, place int)
+            left join outline_labels o on o.site_id = ${site.id} and o.route = r.route and o.kind = r.kind and o.label = r.label and o.href = r.href
+          ) r
+        ) r
+        where not r.fresh or r.nth <= ${room}
         on conflict (site_id, route, kind, label, href) do update set
           seen_count = outline_labels.seen_count + 1, last_seen_at = now(),
           visitors = case when ${visitor} = any(outline_labels.visitors) or cardinality(outline_labels.visitors) >= ${MAX_VISITORS}
@@ -251,8 +367,9 @@ export class Store {
           select route, kind, label, href from (
             select route, kind, label, href, last_seen_at, seen_count,
               (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) and row_number() over (
-                order by (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) desc, network_count desc, visitor_count desc, seen_count desc
-              ) <= ${LABELS_READ} as read
+                order by (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) desc, network_count desc,
+                  last_seen_at > now() - interval '30 days' desc, first_seen_at, route, kind, label, href
+              ) <= ${this.labelsRead} as read
             from outline_labels where site_id = ${site.id}
           ) ranked
           order by read desc, last_seen_at desc, seen_count desc, route, kind, label, href
@@ -260,18 +377,45 @@ export class Store {
         ) least
         where o.site_id = ${site.id} and o.route = least.route and o.kind = least.kind and o.label = least.label and o.href = least.href`;
     });
+    // Neither rejects (`quietly`), so this settles once both are written.
+    return Promise.all([opened, labelled]).then(() => undefined);
   }
 
-  /** Counts what a visitor saw behind each control, the same way as a page's labels, and makes room the same way. */
+  /** Counts what a visitor saw behind each control, the same way as a page's labels, and makes room and keeps each network to its day's share the same way. */
   private recordOpenings(site: SiteContext, visitor: string, rows: ReturnType<typeof openingRows>, network: string): Promise<void> {
     if (!rows.length) return Promise.resolve();
-    return this.quietly("learn what a menu shows (have db/migrations/0012 and 0014 been applied?)", async () => {
+    return this.quietly("learn what a menu shows (have db/migrations/0012, 0014 and 0019 been applied?)", async () => {
+      const placed = JSON.stringify(rows.map((row, place) => ({ ...row, place })));
+      let room = rows.length;
+      if (network) {
+        const [day] = (await this.sql`
+          with fresh as (
+            select count(*)::int as count
+            from jsonb_to_recordset(${placed}::jsonb) as r(route text, control text, label text, href text)
+            left join outline_openings o on o.site_id = ${site.id} and o.route = r.route and o.control = r.control and o.label = r.label and o.href = r.href
+            where o.site_id is null or (not (${network} = any(o.networks)) and cardinality(o.networks) < ${MAX_VISITORS})
+          )
+          insert into outline_network_days (site_id, network, day, openings)
+          select ${site.id}, ${network}, current_date, count from fresh
+          on conflict (site_id, network, day) do update set openings = outline_network_days.openings + excluded.openings
+          returning openings as total, (select count from fresh) as fresh`) as Today[];
+        room = await this.roomToday(site, day, "items behind controls");
+      }
       const [counted] = (await this.sql`select count(*)::int as count from outline_openings where site_id = ${site.id}`) as { count: number }[];
       await this.sql`
         insert into outline_openings (site_id, route, control, label, href, visitors, networks)
         select ${site.id}, r.route, r.control, r.label, r.href, array[${visitor}::text],
           case when ${network} = '' then '{}'::text[] else array[${network}::text] end
-        from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as r(route text, control text, label text, href text)
+        from (
+          select r.route, r.control, r.label, r.href, r.fresh, row_number() over (partition by r.fresh order by r.place) as nth
+          from (
+            select r.route, r.control, r.label, r.href, r.place,
+              o.site_id is null or (not (${network} = any(o.networks)) and cardinality(o.networks) < ${MAX_VISITORS}) as fresh
+            from jsonb_to_recordset(${placed}::jsonb) as r(route text, control text, label text, href text, place int)
+            left join outline_openings o on o.site_id = ${site.id} and o.route = r.route and o.control = r.control and o.label = r.label and o.href = r.href
+          ) r
+        ) r
+        where not r.fresh or r.nth <= ${room}
         on conflict (site_id, route, control, label, href) do update set
           seen_count = outline_openings.seen_count + 1, last_seen_at = now(),
           visitors = case when ${visitor} = any(outline_openings.visitors) or cardinality(outline_openings.visitors) >= ${MAX_VISITORS}
@@ -284,8 +428,9 @@ export class Store {
           select route, control, label, href from (
             select route, control, label, href, last_seen_at, seen_count,
               (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) and row_number() over (
-                order by (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) desc, network_count desc, visitor_count desc, seen_count desc
-              ) <= ${LABELS_READ} as read
+                order by (visitor_count >= ${this.labelThreshold} and network_count >= ${this.labelNetworks}) desc, network_count desc,
+                  last_seen_at > now() - interval '30 days' desc, first_seen_at, route, control, label, href
+              ) <= ${this.labelsRead} as read
             from outline_openings where site_id = ${site.id}
           ) ranked
           order by read desc, last_seen_at desc, seen_count desc, route, control, label, href
@@ -399,25 +544,53 @@ export class Store {
     const target = reply.target ? request.snapshot.elements.find((element) => element.id === reply.target) : undefined;
     const path = normalizePath(request.snapshot.path || "/");
     const targetKey = target ? routeKey(target) : null;
-    // The model's answer becomes the stored route for this question on this screen (routes.ts). A different answer
-    // replaces the route and takes its trust away, until a finished guide confirms the new one. Only a guide's step
-    // is kept: an answer in words is shown in the panel, and a route's reply is shown beside the pointer.
+    // The model's answer becomes the stored route for this question on this screen (routes.ts). Only a guide's step is
+    // kept: an answer in words is shown in the panel, and a route's reply is shown beside the pointer.
+    //
+    // Anything that can send a request can have the model answer from a page of its own making, so an answer alone
+    // never changes what a trusted route serves. What a route serves is its control, its sentence and its status
+    // together, so the networks that confirm it vouch for all three: a finished guide counts only for the answer its
+    // own step was given (`trustRoutes`). On a route not yet trusted, an answer that differs in any of them takes its
+    // place and starts again from no networks. Were the networks kept when only the words changed, the last caller to
+    // finish on a control others had confirmed would choose what every visitor reads beside it, and whether the guide
+    // ends there. A trusted route keeps all three, and a different answer is kept beside it as the change it may make
+    // (next_*): the change takes its place once finished guides from as many networks as trust takes have used it. The
+    // same change asked for again keeps the networks that used it, and any other starts again from none. Only a
+    // different control counts as a repair.
     const learn =
       route && route.outcome !== "served" && target && targetKey && reply.status !== "stuck" && (!reply.mode || reply.mode === "guide") && storable(route.lookup, targetKey)
-        ? [
-            this.sql`
-              insert into routes (site_id, goal_key, path, dialog, after_key, target_key, target_context, target_role, target_label, say, status)
-              values (${request.site}, ${route.lookup.goalKey}, ${route.lookup.path}, ${route.lookup.dialog}, ${route.lookup.afterKey},
-                ${targetKey}, ${contextOf(target)}, ${target.role}, ${cleanText(target.label, 80)}, ${cleanText(reply.say, 600)}, ${reply.status})
-              on conflict (site_id, goal_key, path, dialog, after_key) do update set
-                repairs = routes.repairs + (case when routes.target_key = excluded.target_key and routes.target_context = excluded.target_context then 0 else 1 end),
-                confirmed = routes.confirmed and routes.target_key = excluded.target_key and routes.target_context = excluded.target_context,
-                confirmed_at = case when routes.target_key = excluded.target_key and routes.target_context = excluded.target_context then routes.confirmed_at end,
-                say = case when routes.confirmed and routes.target_key = excluded.target_key and routes.target_context = excluded.target_context then routes.say else excluded.say end,
-                target_key = excluded.target_key, target_context = excluded.target_context, target_role = excluded.target_role,
-                target_label = excluded.target_label, status = excluded.status, updated_at = now()`,
-          ]
-        : [];
+        ? this.sql`
+          insert into routes (site_id, goal_key, path, dialog, after_key, target_key, target_context, target_role, target_label, say, status)
+          values (${request.site}, ${route.lookup.goalKey}, ${route.lookup.path}, ${route.lookup.dialog}, ${route.lookup.afterKey},
+            ${targetKey}, ${contextOf(target)}, ${target.role}, ${cleanText(target.label, 80)}, ${cleanText(reply.say, 600)}, ${reply.status})
+          on conflict (site_id, goal_key, path, dialog, after_key) do update set
+            (target_key, target_context, target_role, target_label, say, status, networks, repairs,
+              next_target_key, next_target_context, next_target_role, next_target_label, next_say, next_status, next_networks, updated_at) = (
+            select
+              case when routes.confirmed then routes.target_key else excluded.target_key end,
+              case when routes.confirmed then routes.target_context else excluded.target_context end,
+              case when routes.confirmed then routes.target_role else excluded.target_role end,
+              case when routes.confirmed then routes.target_label else excluded.target_label end,
+              case when routes.confirmed then routes.say else excluded.say end,
+              case when routes.confirmed then routes.status else excluded.status end,
+              case when routes.confirmed or same then routes.networks else '{}' end,
+              routes.repairs + case when routes.confirmed or control then 0 else 1 end,
+              case when not routes.confirmed then null when same then routes.next_target_key else excluded.target_key end,
+              case when not routes.confirmed then null when same then routes.next_target_context else excluded.target_context end,
+              case when not routes.confirmed then null when same then routes.next_target_role else excluded.target_role end,
+              case when not routes.confirmed then null when same then routes.next_target_label else excluded.target_label end,
+              case when not routes.confirmed then null when same then routes.next_say else excluded.say end,
+              case when not routes.confirmed then null when same then routes.next_status else excluded.status end,
+              case when routes.confirmed and (same or again) then routes.next_networks else '{}' end,
+              now()
+            from (
+              select (routes.target_key, routes.target_context) = (excluded.target_key, excluded.target_context) as control,
+                (routes.target_key, routes.target_context, routes.say, routes.status) = (excluded.target_key, excluded.target_context, excluded.say, excluded.status) as same,
+                (routes.next_target_key, routes.next_target_context, routes.next_say, routes.next_status)
+                  is not distinct from (excluded.target_key, excluded.target_context, excluded.say, excluded.status) as again
+            ) answer
+          )`
+        : undefined;
     // A step the server answered by itself cost nothing to ask for, and the widget chooses the guide's id and the
     // question. So it is added to a guide already on record and never starts one: otherwise anything that can send
     // a request could put questions of its choosing on a site's dashboard without the model ever being called.
@@ -446,15 +619,20 @@ export class Store {
             target_context = excluded.target_context, said = excluded.said, status = excluded.status, event = excluded.event,
             strayed = steps.strayed or excluded.strayed, ms = excluded.ms, ms_to_target = excluded.ms_to_target, model = excluded.model,
             target_key = excluded.target_key, after_key = excluded.after_key, dialog = excluded.dialog, route = excluded.route, created_at = now()`,
-        ...learn,
       ]);
+      // In a statement of its own, after the step is safely written, so a database without db/migrations/0018 still
+      // records every step and only stops learning routes. It is part of this write, so a report waits for it too.
+      if (learn)
+        await this.quietly("learn a route from a step (has db/migrations/0018 been applied?)", async () => {
+          await learn;
+        });
     });
     this.track(guide, write);
     return write
       .then(() => (request.step === 0 ? undefined : this.recordVisitor(request)))
-      .then(() => this.recordCost(guide, request.step, measure))
-      .then(() => this.recordKind(guide, request.step, measure))
-      .then(() => this.recordUnseen(guide, request.step, measure));
+      .then(() => this.recordCost(request.site, guide, request.step, measure))
+      .then(() => this.recordKind(request.site, guide, request.step, measure))
+      .then(() => this.recordUnseen(request.site, guide, request.step, measure));
   }
 
   /**
@@ -481,12 +659,18 @@ export class Store {
    * On one with, every step sends it, as nothing when there are none: a step
    * written again, when the widget asks for it a second time, must not keep
    * the list from the first answer.
+   *
+   * Like the other additions below, it is written only to a guide of the
+   * step's own site. The widget chooses the guide's id, so a step for one site
+   * can name a guide of another, and must not rewrite that guide's steps.
    */
-  private recordUnseen(guide: string, step: number, measure: TurnMeasure): Promise<void> {
+  private recordUnseen(site: string, guide: string, step: number, measure: TurnMeasure): Promise<void> {
     const unseen = measure.unseen?.length ? measure.unseen : null;
     if (!unseen && (!measure.reply.mode || measure.reply.mode === "act")) return Promise.resolve();
     return this.quietly("record controls an answer named that aren't in the product (has db/migrations/0007 been applied?)", async () => {
-      await this.sql`update steps set unseen = ${unseen} where guide_id = ${guide} and n = ${step}`;
+      await this.sql`
+        update steps set unseen = ${unseen}
+        where guide_id = ${guide} and n = ${step} and exists (select 1 from guides where id = ${guide} and site_id = ${site})`;
     });
   }
 
@@ -496,7 +680,7 @@ export class Store {
    * columns that came later (db/migrations/0005). A site without Answers
    * sends nothing here.
    */
-  private recordKind(guide: string, step: number, measure: TurnMeasure): Promise<void> {
+  private recordKind(site: string, guide: string, step: number, measure: TurnMeasure): Promise<void> {
     const { mode, reason } = measure.reply;
     // An act step's mode is "act", which the column does not take: it says what kind of reply a guide's step was, on a
     // site with Answers on. How acting went is in the server's log of counts (turnCounts in app.ts).
@@ -504,7 +688,7 @@ export class Store {
     return this.quietly("record what kind of reply a step was (has db/migrations/0005 been applied?)", async () => {
       await this.sql`
         update steps set mode = ${mode}, reason = ${reason ?? null}, sources = ${measure.cited}, overruled = ${measure.overruled ?? null}
-        where guide_id = ${guide} and n = ${step}`;
+        where guide_id = ${guide} and n = ${step} and exists (select 1 from guides where id = ${guide} and site_id = ${site})`;
     });
   }
 
@@ -514,7 +698,7 @@ export class Store {
    * (db/migrations/0004): on a database that does not have them yet this
    * fails, says so, and the step itself is still there.
    */
-  private recordCost(guide: string, step: number, measure: TurnMeasure): Promise<void> {
+  private recordCost(site: string, guide: string, step: number, measure: TurnMeasure): Promise<void> {
     const { tokens } = measure;
     if (!tokens && !measure.broke.length) return Promise.resolve();
     return this.quietly("record what a step cost (has db/migrations/0004 been applied?)", async () => {
@@ -522,7 +706,7 @@ export class Store {
         update steps set input_tokens = ${tokens?.input ?? null}, cache_read_tokens = ${tokens?.cacheRead ?? null},
           cache_write_tokens = ${tokens?.cacheWrite ?? null}, output_tokens = ${tokens?.output ?? null},
           usd = ${tokens ? measure.usd : null}, broke = ${measure.broke}
-        where guide_id = ${guide} and n = ${step}`;
+        where guide_id = ${guide} and n = ${step} and exists (select 1 from guides where id = ${guide} and site_id = ${site})`;
     });
   }
 
@@ -554,8 +738,12 @@ export class Store {
    * before the row of the step that bears out "finished" does. It waits for
    * this process's own writes for that guide, then looks a few more times in
    * case the step was answered by another process.
+   *
+   * `network` is the network the report came from, hashed with the site's id
+   * (`networkHash` in learned.ts), or empty when it is not known. A guide kept
+   * as finished counts it for the routes its steps used (`trustRoutes`).
    */
-  report(site: SiteContext, guide: string, report: GuideReport): Promise<void> {
+  report(site: SiteContext, guide: string, report: GuideReport, network = ""): Promise<void> {
     return this.quietly("record how a guide ended", async () => {
       await this.writing.get(guide);
       const waits = this.reportWaitsMs;
@@ -588,12 +776,16 @@ export class Store {
           }
         }
         if (outcome && found.open) {
-          await this.sql`update guides set outcome = ${outcome}, ended_at = now() where id = ${guide} and site_id = ${site.id} and outcome is null`;
+          // Only the report whose write ends the guide goes on. Reports of one guide sent together, from as many
+          // networks, all find it open, and each would count its own network for the routes of one guide.
+          const ended = (await this.sql`
+            update guides set outcome = ${outcome}, ended_at = now() where id = ${guide} and site_id = ${site.id} and outcome is null returning id`) as unknown[];
           // Only an ending the record bears out confirms the routes behind its steps.
-          if (outcome === "finished") await this.quietly("trust a finished guide's routes", () => this.trustRoutes(site.id, guide));
+          if (ended.length && outcome === "finished")
+            await this.quietly("trust a finished guide's routes (has db/migrations/0018 been applied?)", () => this.trustRoutes(site.id, guide, network));
           // A finished guide is billed. It goes to Stripe now if its company pays by usage, and only if the database kept it as finished.
           // The site's hourly sweep catches any that don't get through.
-          if (outcome === "finished" && this.stripeKey) await reportUsage(this.sql, this.stripeKey, { guide });
+          if (ended.length && outcome === "finished" && this.stripeKey) await reportUsage(this.sql, this.stripeKey, { guide });
         }
         if (report.helped !== undefined) {
           await this.sql`update guides set helped = ${report.helped} where id = ${guide} and site_id = ${site.id}`;
@@ -611,45 +803,161 @@ export class Store {
     });
   }
 
-  /** The route stored for a question on a screen, if any. */
+  /**
+   * The route stored for a question on a screen, if any. It is trusted only
+   * while it has the networks trust takes (`routeNetworks`), whatever marks
+   * it trusted: a deploy applies db/migrations before the new server goes
+   * live, and the server from before 0018, answering in between, trusts a
+   * route on one finished guide and counts no networks. So does a route
+   * trusted before the threshold was raised. Without 0018 there are no
+   * networks to count, so the lookup fails and says so, and the model answers.
+   */
   async findRoute(siteId: string, lookup: RouteLookup): Promise<StoredRoute | undefined> {
-    const rows = (await this.sql`
-      select target_key, target_context, say, status, confirmed from routes
-      where site_id = ${siteId} and goal_key = ${lookup.goalKey} and path = ${lookup.path} and dialog = ${lookup.dialog} and after_key = ${lookup.afterKey}`) as {
-      target_key: string;
-      target_context: string;
-      say: string;
-      status: "continue" | "done";
-      confirmed: boolean;
-    }[];
+    type Row = { target_key: string; target_context: string; say: string; status: "continue" | "done"; confirmed: boolean };
+    let rows: Row[];
+    try {
+      rows = (await this.sql`
+        select target_key, target_context, say, status, confirmed and cardinality(networks) >= ${this.routeNetworks} as confirmed from routes
+        where site_id = ${siteId} and goal_key = ${lookup.goalKey} and path = ${lookup.path} and dialog = ${lookup.dialog} and after_key = ${lookup.afterKey}`) as Row[];
+    } catch (error) {
+      console.error("Couldn't look up a verified route (has db/migrations/0018 been applied?):", error instanceof Error ? error.message : error);
+      throw error;
+    }
     const row = rows[0];
     return row ? { targetKey: row.target_key, targetContext: row.target_context, say: row.say, status: row.status, confirmed: row.confirmed } : undefined;
   }
 
   /**
-   * A finished guide confirms the route behind each of its steps that the
+   * Counts a step about to be answered from a verified route for `network`,
+   * the network the caller is in, hashed with the site's id (`networkHash` in
+   * learned.ts), and says whether that network is still within its day's share
+   * of such steps on this site (`routeStepsADay`). False when it cannot be
+   * counted, such as on a database without db/migrations/0020: the model
+   * answers then. Once a day this process also deletes the counts of earlier
+   * days, which nothing reads.
+   */
+  async serveRoute(siteId: string, network: string): Promise<boolean> {
+    let within = false;
+    await this.quietly("count a step answered from a route (has db/migrations/0020 been applied?)", async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      if (this.clearedRouteDay !== today) {
+        this.clearedRouteDay = today;
+        await this.sql`delete from route_network_days where day < current_date`;
+      }
+      const [day] = (await this.sql`
+        insert into route_network_days (site_id, network, day, served) values (${siteId}, ${network}, current_date, 1)
+        on conflict (site_id, network, day) do update set served = route_network_days.served + 1
+        returning served`) as { served: number }[];
+      within = day !== undefined && day.served <= this.routeStepsADay;
+      if (day?.served === this.routeStepsADay + 1)
+        console.warn(`A network has had ${this.routeStepsADay} steps on ${siteId} answered from routes today, so the model answers the rest until tomorrow.`);
+    });
+    return within;
+  }
+
+  /**
+   * A finished guide vouches for the route behind each of its steps that the
    * visitor followed: every step whose next step was not a wrong click, and
    * its last step. Only steps that were looked up count.
+   *
+   * What is counted is the network the report came from (`network`), as a
+   * learned label counts its visitors' networks: a route is trusted once
+   * finished guides from `routeNetworks` different networks have used it, so
+   * one caller cannot trust a route of its own making however many guides it
+   * finishes. A step that used the change a trusted route holds beside it
+   * (next_*, see `recordStep`) vouches for the change instead, and the change
+   * takes the route's place once it has as many networks.
+   *
+   * A step vouches only for what it was given: the same control, the same
+   * sentence and the same status, since all three are served. A step whose
+   * answer was replaced before its guide finished vouches for neither.
    */
-  private async trustRoutes(siteId: string, guide: string): Promise<void> {
+  private async trustRoutes(siteId: string, guide: string, network: string): Promise<void> {
     await this.sql`
-      update routes r set confirmed = true, confirmed_at = coalesce(r.confirmed_at, now()), uses = r.uses + 1, updated_at = now()
+      update routes r set (networks, confirmed, confirmed_at, uses, updated_at) = (
+        select vouched, r.confirmed or cardinality(vouched) >= ${this.routeNetworks},
+          coalesce(r.confirmed_at, case when cardinality(vouched) >= ${this.routeNetworks} then now() end), r.uses + 1, now()
+        from (
+          select case when ${network} = '' or ${network} = any(r.networks) or cardinality(r.networks) >= ${MAX_VISITORS}
+            then r.networks else r.networks || ${network}::text end as vouched
+        ) counted
+      )
       from steps s
       join guides g on g.id = s.guide_id
       left join steps next on next.guide_id = s.guide_id and next.n = s.n + 1
       where g.id = ${guide} and g.site_id = ${siteId} and s.route is not null and s.target_key is not null and s.status <> 'stuck'
         and (next.n is null or not next.strayed)
         and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
-        and r.after_key = coalesce(s.after_key, '') and r.target_key = s.target_key and r.target_context = coalesce(s.target_context, '')`;
+        and r.after_key = coalesce(s.after_key, '') and r.target_key = s.target_key and r.target_context = coalesce(s.target_context, '')
+        and r.say = s.said and r.status = s.status`;
+    const changes = (await this.sql`
+      update routes r set next_networks = case when ${network} = '' or ${network} = any(r.next_networks) or cardinality(r.next_networks) >= ${MAX_VISITORS}
+          then r.next_networks else r.next_networks || ${network}::text end,
+        updated_at = now()
+      from steps s
+      join guides g on g.id = s.guide_id
+      left join steps next on next.guide_id = s.guide_id and next.n = s.n + 1
+      where g.id = ${guide} and g.site_id = ${siteId} and s.route is not null and s.target_key is not null and s.status <> 'stuck'
+        and (next.n is null or not next.strayed)
+        and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
+        and r.after_key = coalesce(s.after_key, '') and r.confirmed and r.next_target_key = s.target_key and r.next_target_context = coalesce(s.target_context, '')
+        and r.next_say = s.said and r.next_status = s.status
+      returning r.goal_key, r.path, r.dialog, r.after_key, cardinality(r.next_networks) >= ${this.routeNetworks} as ready`) as RouteChange[];
+    for (const change of changes.filter((row) => row.ready)) {
+      // The change has been confirmed as the route itself once was, and now it is the route. Only a new control is a repair.
+      await this.sql`
+        update routes set target_key = next_target_key, target_context = next_target_context, target_role = next_target_role,
+          target_label = next_target_label, say = next_say, status = next_status, networks = next_networks, confirmed_at = now(),
+          repairs = repairs + case when (target_key, target_context) = (next_target_key, next_target_context) then 0 else 1 end,
+          next_target_key = null, next_target_context = null, next_target_role = null, next_target_label = null, next_say = null, next_status = null,
+          next_networks = '{}', updated_at = now()
+        where site_id = ${siteId} and goal_key = ${change.goal_key} and path = ${change.path} and dialog = ${change.dialog} and after_key = ${change.after_key}
+          and confirmed and next_target_key is not null and cardinality(next_networks) >= ${this.routeNetworks}`;
+    }
   }
 
+  /**
+   * A guide someone said did not help takes the trust of the routes its steps
+   * used, and what had confirmed them: to be served again, a route has to be
+   * confirmed from as many networks as at first. A change a trusted route held
+   * that the guide used loses the networks that had confirmed it.
+   */
   private async distrustRoutes(siteId: string, guide: string): Promise<void> {
     await this.sql`
-      update routes r set confirmed = false, confirmed_at = null, updated_at = now()
+      update routes r set confirmed = false, confirmed_at = null, networks = '{}', next_target_key = null, next_target_context = null,
+        next_target_role = null, next_target_label = null, next_say = null, next_status = null, next_networks = '{}', updated_at = now()
       from steps s join guides g on g.id = s.guide_id
       where g.id = ${guide} and g.site_id = ${siteId} and s.route is not null and s.target_key is not null
         and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
         and r.after_key = coalesce(s.after_key, '') and r.target_key = s.target_key`;
+    await this.sql`
+      update routes r set next_networks = '{}', updated_at = now()
+      from steps s join guides g on g.id = s.guide_id
+      where g.id = ${guide} and g.site_id = ${siteId} and s.route is not null and s.target_key is not null
+        and r.site_id = g.site_id and r.goal_key = g.question_key and r.path = s.path and r.dialog = coalesce(s.dialog, '')
+        and r.after_key = coalesce(s.after_key, '') and r.next_target_key = s.target_key`;
+  }
+
+  /**
+   * How many of an outline's rows that are new to a network it may still be
+   * counted on today, within its day's share on a site. `day.total` is how
+   * many it has been counted on today with this outline's new rows, and
+   * `day.fresh` how many of those are this outline's. The first outline past
+   * the share says so in the log. Once a day this process also deletes the
+   * counts of earlier days, which nothing reads.
+   */
+  private async roomToday(site: SiteContext, day: Today | undefined, what: string): Promise<number> {
+    const today = new Date().toISOString().slice(0, 10);
+    if (this.clearedDay !== today) {
+      this.clearedDay = today;
+      await this.sql`delete from outline_network_days where day < current_date`;
+    }
+    if (!day) return 0;
+    const before = day.total - day.fresh;
+    const room = Math.max(0, Math.min(day.fresh, this.networkRowsADay - before));
+    if (room < day.fresh && before <= this.networkRowsADay)
+      console.warn(`A network has taught ${site.id} ${this.networkRowsADay} new ${what} today, so it teaches it no new ones until tomorrow.`);
+    return room;
   }
 
   private async quietly(what: string, work: () => Promise<void>): Promise<void> {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { before, describe, test } from "node:test";
+import type { TurnMeasure } from "../src/server/model.ts";
 import { DEFAULT_APPEARANCE, NO_MODEL, type GuideOutcome, type SiteContext, type Snapshot, type TurnReply } from "../src/shared/types.ts";
 import { exec, freshDatabase, psqlSql, TEST_DATABASE_URL, testDatabase } from "./psql.ts";
 
@@ -242,6 +243,43 @@ describe("which guides are stored as finished", { skip: TEST_DATABASE_URL ? fals
     assert.equal((await step(answers, answered, 0, BILLING, { goal: "who can invite teammates" })).mode, "answer");
     await hearing(() => report(answers, answered, { outcome: "finished" }));
     assert.equal((await kept(answered))?.outcome, "answered");
+  });
+
+  test("a step for one site that names another site's guide changes nothing of that guide, nor how it ends", async () => {
+    // The widget makes the guide's id, so anything that can send a step for one site can name a guide of another in it.
+    const { step, report } = server();
+    const guide = newGuide();
+    await step(plain, guide, 0, HOME);
+    const row = async () =>
+      (await psqlSql(DB)`select said, target_label, mode, reason, sources, overruled, usd, input_tokens, broke, unseen from steps where guide_id = ${guide} and n = 0`)[0];
+    const before = await row();
+    assert.deepEqual(before, { said: "Click Billing.", target_label: "Billing", mode: null, reason: null, sources: null, overruled: null, usd: null, input_tokens: null, broke: null, unseen: null });
+
+    // Through the server: a step for the site with Answers on, from its own page, carrying this guide's id.
+    assert.equal((await step(answers, guide, 0, BILLING, { goal: "who can invite teammates" })).mode, "answer");
+    // And straight to the store, with everything a step the model answered adds after the step itself.
+    const store = new Store(psqlSql(DB) as unknown as ConstructorParameters<typeof Store>[0], 3, { reportWaitsMs: [0] });
+    const measure: TurnMeasure = {
+      reply: { target: null, status: "done", say: "The help docs don't cover that.", mode: "cannot_help", reason: "not_covered" },
+      model: "claude-sonnet-5-5",
+      ms: 900,
+      msToTarget: 900,
+      wrote: "The help docs don't cover that.",
+      broke: ["link"],
+      cited: ["help/teammates.md"],
+      overruled: "no_source",
+      tokens: { input: 600, cacheRead: 0, cacheWrite: 0, output: 40 },
+      usd: 0.01,
+      unseen: ["Invite teammate"],
+    };
+    await store.recordStep({ site: answers.id, guide, goal: "who can invite teammates", step: 0, history: [], snapshot: BILLING }, measure, ORIGIN);
+    assert.deepEqual(await row(), before);
+    const [owner] = await psqlSql(DB)`select site_id from guides where id = ${guide}`;
+    assert.equal(owner?.site_id, plain.id);
+
+    // So the step the guide's own visitor used still bears out the ending the widget reports.
+    await report(plain, guide, { outcome: "finished" });
+    assert.equal((await kept(guide))?.outcome, "finished");
   });
 
   test("the report still counts when it arrives before the step that ends the guide is written", async () => {

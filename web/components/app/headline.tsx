@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Popover } from "@base-ui/react/popover";
 import { ArrowDownRight, ArrowUpRight, ExternalLink, Info, Minus } from "lucide-react";
 import { cn } from "cn";
 import { buttonVariants } from "@/components/ui/button";
@@ -8,8 +9,7 @@ import { api } from "@/lib/app-api";
 import { countChange, duration, durationChange, hostOf, rateChange, utcDayLabel, type Change } from "@/lib/setup";
 import type { Headline as HeadlineData } from "@/worker/insights";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Card, Panel } from "./parts";
+import { Card, Panel, PanelEmpty, WRAPS } from "./parts";
 
 /**
  * The numbers at the top of a site's dashboard, for the chosen range: four of
@@ -60,40 +60,42 @@ export function HeadlineTiles({ data, days, error }: { data: HeadlineData | null
   const finishRate = rate(now);
 
   return (
-    <TooltipProvider>
-      <div className={cn("grid grid-cols-1 gap-4 transition-opacity duration-200 sm:grid-cols-2 xl:grid-cols-4", stale && "opacity-60")} aria-busy={stale}>
-        <Tile label="Guides finished" better="up" value={now.finished.toLocaleString()} about="Guides where the person reached the end. The number billing counts, free during early access." change={countChange(now.finished, before.finished, period)} />
-        <Tile
-          label="Finish rate"
-          better="up"
-          value={finishRate === null ? null : `${Math.round(finishRate * 100)}%`}
-          empty="No guides to count yet"
-          about="Of the questions Haptic could guide, the share that finished."
-          change={rateChange(finishRate, rate(before), period)}
-        />
-        <Tile
-          label="Couldn't guide"
-          better="down"
-          value={now.unguided.toLocaleString()}
-          about="Questions Haptic couldn't guide: stuck, not in the help docs, given up on, or said it didn't help."
-          context={now.started ? `${Math.round((now.unguided / now.started) * 100)}% of ${now.started.toLocaleString()} questions` : undefined}
-          change={countChange(now.unguided, before.unguided, period)}
-        />
-        <Tile
-          label="Median time to finish"
-          better="down"
-          value={now.medianMsToFinish === null ? null : duration(now.medianMsToFinish)}
-          empty="No finished guides yet"
-          about="From the question to the last step."
-          change={durationChange(now.medianMsToFinish, before.medianMsToFinish, period)}
-        />
-      </div>
-    </TooltipProvider>
+    <div className={cn("grid grid-cols-1 gap-4 transition-opacity duration-200 sm:grid-cols-2 xl:grid-cols-4", stale && "opacity-60")} aria-busy={stale}>
+      <Tile label="Guides finished" better="up" value={now.finished.toLocaleString()} about="Guides where the person reached the end. The number billing counts, free during early access." change={countChange(now.finished, before.finished, period)} />
+      <Tile
+        label="Finish rate"
+        better="up"
+        value={finishRate === null ? null : `${Math.round(finishRate * 100)}%`}
+        empty="No guides to count yet"
+        about="Of the questions Haptic could guide, the share that finished."
+        change={rateChange(finishRate, rate(before), period)}
+      />
+      <Tile
+        label="Couldn't guide"
+        better="down"
+        value={now.unguided.toLocaleString()}
+        about="Questions Haptic couldn't guide: stuck, not in the help docs, given up on, or said it didn't help."
+        context={now.started ? `${Math.round((now.unguided / now.started) * 100)}% of ${now.started.toLocaleString()} questions` : undefined}
+        change={countChange(now.unguided, before.unguided, period)}
+      />
+      <Tile
+        label="Median time to finish"
+        better="down"
+        value={now.medianMsToFinish === null ? null : duration(now.medianMsToFinish)}
+        empty="No finished guides yet"
+        about="From the question to the last step."
+        change={durationChange(now.medianMsToFinish, before.medianMsToFinish, period)}
+      />
+    </div>
   );
 }
 
-/** Guides started and finished, a bar for each day of the range. */
-export function HeadlineChart({ data }: { data: HeadlineData | null }) {
+/**
+ * Guides started and finished, a bar for each day of the range. When the numbers couldn't be had, the panel says
+ * why in place of the chart, as the tiles above it do, instead of holding a chart's place for good.
+ */
+export function HeadlineChart({ data, error }: { data: HeadlineData | null; error?: string | null }) {
+  const failed = !data && error;
   return (
     <Panel
       title={
@@ -102,19 +104,21 @@ export function HeadlineChart({ data }: { data: HeadlineData | null }) {
         </>
       }
       aside={
-        <ul className="flex items-center gap-4 text-xs text-muted-foreground" aria-label="Legend">
-          <li className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-muted-foreground" aria-hidden />
-            Started
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-foreground" aria-hidden />
-            Finished
-          </li>
-        </ul>
+        !failed && (
+          <ul className="flex items-center gap-4 text-xs text-muted-foreground" aria-label="Legend">
+            <li className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-muted-foreground" aria-hidden />
+              Started
+            </li>
+            <li className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-foreground" aria-hidden />
+              Finished
+            </li>
+          </ul>
+        )
       }
     >
-      <div className="px-5 pb-4">{data ? <DailyChart daily={data.daily} /> : <Skeleton className="h-[168px]" />}</div>
+      {failed ? <PanelEmpty>{error}</PanelEmpty> : <div className="px-5 pb-4">{data ? <DailyChart daily={data.daily} /> : <Skeleton className="h-[168px]" />}</div>}
     </Panel>
   );
 }
@@ -160,12 +164,7 @@ function Tile({
     <div className="flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-5" data-metric={label}>
       <span className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
         <span className="min-w-0 truncate">{label}</span>
-        <Tooltip>
-          <TooltipTrigger aria-label={`What ${label.toLowerCase()} counts`} className="shrink-0 rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-            <Info className="size-3.5" aria-hidden />
-          </TooltipTrigger>
-          <TooltipContent>{about}</TooltipContent>
-        </Tooltip>
+        <About label={label}>{about}</About>
       </span>
       {value === null ? (
         <span className="text-2xl font-medium tracking-[-0.02em] text-muted-foreground">{empty}</span>
@@ -189,6 +188,43 @@ function Tile({
   );
 }
 
+/**
+ * What a number counts, in an Ink bubble on the small mark beside its name: one hover away with a mouse, and one
+ * press away on a touch screen or from the keyboard, where a second press or a press elsewhere puts it away. It is a
+ * popover and not a tooltip, since a tooltip never opens on a touch screen. The mark is 14px, and what answers a
+ * press is 24px across around it, held to the label's line so the tile doesn't grow.
+ *
+ * A press moves the focus into the bubble, so the bubble is named as its mark is and its words describe it, which a
+ * screen reader then reads out. It is at most 20rem wide, and narrower on a phone with less room than that beside
+ * the window's edges.
+ */
+function About({ label, children }: { label: string; children: ReactNode }) {
+  const name = `What ${label.toLowerCase()} counts`;
+  return (
+    <Popover.Root>
+      <Popover.Trigger
+        openOnHover
+        delay={0}
+        aria-label={name}
+        className="-mx-1 -my-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        <Info className="size-3.5" aria-hidden />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Positioner side="top" sideOffset={4} className="isolate z-50">
+          <Popover.Popup
+            aria-label={name}
+            className="z-50 w-fit max-w-[min(20rem,var(--available-width))] origin-(--transform-origin) rounded-md bg-foreground px-3 py-1.5 text-xs text-background outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+          >
+            <Popover.Description>{children}</Popover.Description>
+            <Popover.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=top]:-bottom-2.5" />
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
 /** For a site no one has asked anything yet: what the top of the dashboard will hold, and when. */
 export function HeadlineWaiting({ origin }: { origin?: string }) {
   const items = [
@@ -202,7 +238,8 @@ export function HeadlineWaiting({ origin }: { origin?: string }) {
       <Card>
         <div className="flex flex-col gap-2">
           <h2 className="text-base font-medium">Your numbers start with the first question</h2>
-          <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
+          {/* The site's address is one long word to the browser, so it may break anywhere rather than run off a phone's screen. */}
+          <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground [overflow-wrap:anywhere]">
             A minute after someone asks Haptic something{origin ? ` on ${hostOf(origin)}` : ""}, these show here, each against the days before, with a chart
             of every day. Try it yourself to see the first one.
           </p>
@@ -216,7 +253,8 @@ export function HeadlineWaiting({ origin }: { origin?: string }) {
           ))}
         </dl>
         {origin && (
-          <a href={origin} target="_blank" rel="noopener noreferrer" className={buttonVariants({ size: "xl", className: "self-start" })}>
+          // It names the site, so on a phone its words go on to a second line rather than past the card's edge.
+          <a href={origin} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ size: "xl" }), "self-start", WRAPS)}>
             Ask Haptic something on {hostOf(origin)}
             <ExternalLink />
           </a>

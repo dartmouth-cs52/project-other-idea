@@ -3,6 +3,7 @@ import type { perform as performStep } from "./act.ts";
 import { ACTING_BUILD, ACTING_FILE, ACTING_HAND, ACTING_SHARED, type ActingCode } from "./acting-handshake.ts";
 import type { confirmationAction as findConfirmationAction, planFor as planStep, Plan } from "./gate.ts";
 import * as observe from "./observe.ts";
+import type { OwnScript } from "./own-script.ts";
 import * as popups from "./popups.ts";
 import * as says from "./says.ts";
 import * as snapshot from "./snapshot.ts";
@@ -37,12 +38,13 @@ let code: ActingCode | undefined;
 let loading: Promise<boolean> | undefined;
 
 /**
- * Loads the second file, once, from beside `script` (the widget's own script
- * tag), with its nonce when it has one. True once its code is in; false when
- * it could not be loaded, ran without handing anything back, came from
- * another build, or took longer than `LOAD_MS`.
+ * Loads the second file, once, from beside the widget's own script tag, as
+ * its address and its nonce were read when the widget first ran
+ * (own-script.ts), not as anything on the page says now. True once its code
+ * is in; false when it could not be loaded, ran without handing anything back,
+ * came from another build, or took longer than `LOAD_MS`.
  */
-export function loadActing(script: HTMLScriptElement): Promise<boolean> {
+export function loadActing(script: Pick<OwnScript, "src" | "nonce">): Promise<boolean> {
   loading ??= new Promise<boolean>((resolve) => {
     const slots = globalThis as unknown as Record<symbol, unknown>;
     let tag: HTMLScriptElement | undefined;

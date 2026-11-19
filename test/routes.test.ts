@@ -9,6 +9,7 @@ import { DEFAULT_APPEARANCE, routeKey, STREAM_TYPE, type SiteContext, type SnapE
 process.env.HAPTIC_MODEL = "mock";
 const { comparedRoute, createApp, servedStep, startRouting } = await import("../src/server/app.ts");
 const { measureTurn } = await import("../src/server/model.ts");
+const { networkHash } = await import("../src/server/learned.ts");
 const { compareRoute, matchRoute, ownerSteers, ROUTE_MODEL, routeLookup, servedReply } = await import("../src/server/routes.ts");
 
 const site = (routes?: SiteContext["routes"], extra: Partial<SiteContext> = {}): SiteContext => ({
@@ -163,6 +164,87 @@ test("serving answers from a trusted route without the model, and neither sets a
   assert.deepEqual(lines, [{ target: "e1" }, { target: "e1", status: "continue", say: "Click Billing." }]);
   assert.equal(calls.admit, 0);
   assert.deepEqual(calls.settle, []);
+});
+
+test("a step a route answers counts toward the caller's limit like any other, and over it nothing is looked up", async () => {
+  // A served step costs nothing and no budget holds it, so the caller's limit is what bounds how many one caller gets.
+  const keys: string[] = [];
+  let looked = 0;
+  const app = createApp({
+    loadSite: async () => site("serve"),
+    widget: async () => "",
+    widgetMaxAge: 0,
+    overLimit: (key) => (keys.push(key), keys.length > 2),
+    findRoute: async () => (looked++, trusted),
+  });
+  const send = async (from: string) => {
+    const body = JSON.stringify(turn({ guide: "8f0a2f1e-4c8b-4a52-9d3e-6c1b2a3d4e5f" }));
+    const response = await app(new Request("https://widget.test/v1/turn", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://app.test" }, body }), from);
+    return { status: response?.status, reply: await response?.json() };
+  };
+  assert.deepEqual(await send("2001:db8:9:1::1"), { status: 200, reply: { target: "e1", status: "continue", say: "Click Billing." } });
+  assert.equal((await send("2001:db8:9:1::2")).status, 200);
+  // A third address in the same /64 is the same caller, and over its limit.
+  assert.equal((await send("2001:db8:9:1::3")).status, 429);
+  assert.equal(looked, 2);
+  assert.deepEqual([...new Set(keys)], ["site_test 2001:db8:9:1::/64"]);
+});
+
+test("a step a route would answer is counted against its network's share for the day, and once that is spent the model answers inside the budget", async () => {
+  // The caller's limit counts an IPv6 caller by its /64, and one /48 holds 65,536 of them, each with a limit of its
+  // own. The share counts the network learning counts: an IPv4 address, or the /48.
+  const { budget, calls } = countingBudget();
+  const counted: string[] = [];
+  let left = 1;
+  const models: string[] = [];
+  const app = createApp({
+    loadSite: async () => site("serve"),
+    widget: async () => "",
+    widgetMaxAge: 0,
+    overLimit: () => false,
+    budget,
+    findRoute: async () => trusted,
+    serveRoute: async (_site, network) => (counted.push(network), left-- > 0),
+    onTurn: (_request, measure) => void models.push(measure.model),
+  });
+  const send = async (from: string) => {
+    const body = JSON.stringify(turn({ guide: "8f0a2f1e-4c8b-4a52-9d3e-6c1b2a3d4e5f" }));
+    const response = await app(new Request("https://widget.test/v1/turn", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://app.test" }, body }), from);
+    return response?.json();
+  };
+  assert.deepEqual(await send("2001:db8:9:1::1"), { target: "e1", status: "continue", say: "Click Billing." });
+  assert.equal((await send("2001:db8:9:2::1")).target, "e1");
+  assert.deepEqual(models, [ROUTE_MODEL, "mock"]);
+  assert.equal(calls.admit, 1);
+  assert.deepEqual(counted, [await networkHash("site_test", "2001:db8:9:1::1"), await networkHash("site_test", "2001:db8:9:2::1")]);
+  assert.equal(new Set(counted).size, 1, "two /64s of one /48 are one network");
+
+  // A share that can't be counted in time is spent, and a step no route would answer is not counted at all.
+  const slow = createApp({
+    loadSite: async () => site("serve"),
+    widget: async () => "",
+    widgetMaxAge: 0,
+    overLimit: () => false,
+    findRoute: async () => trusted,
+    serveRoute: () => new Promise<boolean>(() => {}),
+    onTurn: (_request, measure) => void models.push(measure.model),
+  });
+  const started = Date.now();
+  const body = JSON.stringify(turn({ guide: "8f0a2f1e-4c8b-4a52-9d3e-6c1b2a3d4e5f" }));
+  await slow(new Request("https://widget.test/v1/turn", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://app.test" }, body }), "198.51.100.1");
+  assert.equal(models.at(-1), "mock");
+  assert.ok(Date.now() - started < 600, "a share that is slow to count never holds the step for long");
+  const before = counted.length;
+  const untrusted = createApp({
+    loadSite: async () => site("serve"),
+    widget: async () => "",
+    widgetMaxAge: 0,
+    overLimit: () => false,
+    findRoute: async () => ({ ...trusted, confirmed: false }),
+    serveRoute: async (_site, network) => (counted.push(network), true),
+  });
+  await untrusted(new Request("https://widget.test/v1/turn", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://app.test" }, body }), "198.51.100.1");
+  assert.equal(counted.length, before);
 });
 
 test("a site that has spent its budget still gets the steps a route answers, and the fixed sentence for the rest", async () => {

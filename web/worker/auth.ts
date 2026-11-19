@@ -4,7 +4,8 @@
 // the browser would make its session cookie a third-party cookie, which Safari
 // and others block. So every auth call goes to /api/auth on our own domain and
 // is passed on from here, and the cookies come back as joinhaptic.com's own.
-// This uses the same framework-neutral proxy Neon's Next.js integration does.
+// This uses the same framework-neutral proxy Neon's Next.js integration does,
+// for the few calls the site's pages make (AUTH_CALLS) and nothing else.
 //
 // Google sign-in returns to our page with a one-time verifier in the address.
 // The browser client sends it on its next session check, through this proxy,
@@ -29,15 +30,34 @@ export interface SignedInUser {
 
 const PREFIX = "/api/auth/";
 
+/**
+ * The only calls the site's pages make to Neon Auth, each with its method, and so the only ones passed on.
+ * Neon answers many more at its address: its API reference and schema, and organization/*, through which an
+ * owner or admin could add people and owners past the rules team.ts keeps. Anything else is a 404 here and
+ * never reaches Neon. A call made straight to NEON_AUTH_URL is not covered: see web/README.md.
+ *
+ * - get-session: who is signed in (lib/auth-client.ts, on the dashboard and the setup screens). With
+ *   neon_auth_session_verifier in the query, it also finishes a sign-in that came back from an emailed link
+ *   or from Google.
+ * - sign-in/magic-link: "Email me a sign-in link" (components/app/sign-in-form.tsx).
+ * - sign-in/social: "Continue with Google". Google and the emailed link both go back to Neon's own address,
+ *   which then sends the person to the dashboard with the verifier above.
+ * - sign-out: Sign out, in the dashboard's account menu and on the setup screens.
+ *
+ * A page that starts using another of Neon's calls has to add it here.
+ */
+export const AUTH_CALLS: readonly string[] = ["GET get-session", "POST sign-in/magic-link", "POST sign-in/social", "POST sign-out"];
+
 export function authConfigured(env: AuthEnv): env is Required<AuthEnv> {
   return Boolean(env.NEON_AUTH_URL && env.NEON_AUTH_COOKIE_SECRET && env.NEON_AUTH_COOKIE_SECRET.length >= 32);
 }
 
 /** Answers /api/auth/*, the browser's way to Neon Auth. */
 export async function proxyAuth(request: Request, env: AuthEnv): Promise<Response> {
-  if (!authConfigured(env)) return Response.json({ error: "Sign-in is not set up on this server." }, { status: 503 });
+  // Matched exactly, before anything is decoded, so no spelling of another path gets through.
   const path = new URL(request.url).pathname.slice(PREFIX.length);
-  if (!path || path.includes("..")) return Response.json({ error: "Not found." }, { status: 404 });
+  if (!AUTH_CALLS.includes(`${request.method} ${path}`)) return Response.json({ error: "Not found." }, { status: 404 });
+  if (!authConfigured(env)) return Response.json({ error: "Sign-in is not set up on this server." }, { status: 503 });
   return handleAuthProxyRequest({ request, path, baseUrl: env.NEON_AUTH_URL!, cookieSecret: env.NEON_AUTH_COOKIE_SECRET! });
 }
 

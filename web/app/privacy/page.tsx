@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Privacy", alternates: { canonical: "
 
 export default function Privacy() {
   return (
-    <LegalPage title="Privacy" updated="November 17, 2026">
+    <LegalPage title="Privacy" updated="November 18, 2026">
       <p>
         {site.company} makes Haptic. This page says what we collect on this website, and what Haptic reads when it runs
         inside a product.
@@ -23,8 +23,9 @@ export default function Privacy() {
         If you sign in, we keep your email address, your name if you give one, and the company you belong to, so you
         can reach your dashboard. Signing in sets cookies that keep you signed in, and they are used for nothing else.
         Sign in is run for us by Neon. The sign in email is sent for us by Resend, which gets your email address
-        and the link, and nothing else. If you choose to sign in with Google, Google tells us your name and email
-        address.
+        and the link, and nothing else. So that no address gets more than a few of these emails, we keep a
+        scrambled form of it with the time each one was sent, and delete that record once it is a day old, always
+        within two days. If you choose to sign in with Google, Google tells us your name and email address.
       </p>
       <p>
         When you add a site, we read its public pages the way a visitor would, to learn what your product calls
@@ -120,6 +121,12 @@ export default function Privacy() {
         run for us by Neon.
       </p>
       <p>
+        When guides for a question many people ask stop finishing, we email the company&apos;s people about it through
+        Resend. The email quotes that question as a visitor last asked it, cut short and with email addresses, long
+        numbers and anything that could be a link taken out, with the page and the name of the control where guides
+        now stop.
+      </p>
+      <p>
         With each question we also keep a scrambled form of the random id described below, so the company can see how
         many different people asked something, and one person asking ten times counts once. It is made differently for
         each product, cannot be turned back into the id, and says nothing about who the person is. It does let the
@@ -145,10 +152,20 @@ export default function Privacy() {
         product, and at most ten of those for each name. Because any program could make up such ids, a name is also
         counted by the network it was sent from: for each name we keep at most ten very short scrambled forms of the
         sender&apos;s network address, made differently for each product. Each of these is shared by tens of thousands
-        of addresses, so it cannot be turned back into an address. A name is used to guide anyone only once several
-        different people on different networks have seen it, so a name that only one person sees, like the title of
-        their own document, is never used. The names, with when each was first and last seen and how often, are kept
+        of addresses, so it cannot be turned back into an address. So that no one network can teach Haptic too many
+        names at once, we also keep how many new names each of these sent that day, until the day ends. A name is used
+        to guide anyone only once several different people on different networks have seen it, so a name that only one
+        person sees, like the title of their own document, is never used. The names, with when each was first and last
+        seen and how often, are kept
         until the company asks us to delete them. The company can switch this off.
+      </p>
+      <p>
+        For each question asked on a page of the product, Haptic also keeps the control it pointed at there and what it
+        said, so that if the company turns this on it can point the same way next time without asking the AI. That way
+        is used only once guides that followed it have finished on several different networks, so no one person can
+        choose it for everyone. For that we keep with it at most ten of the same very short scrambled forms of the
+        network each of those guides was reported from, until the company asks us to delete them. So that no one
+        network can have too many steps answered that way, we also keep how many it had that day, until the day ends.
       </p>
       <p>
         A company can teach Haptic a task by doing it in its own product. Someone at the company starts it from the

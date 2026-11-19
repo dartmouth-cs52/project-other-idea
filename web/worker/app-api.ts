@@ -42,7 +42,7 @@ import { teamRoutes } from "./team";
 import { launcherState, matchLauncher, siteBrand } from "./brand";
 import { INK, launcherColour, POINTER_BLUE } from "../../src/shared/colour";
 import { addCorrection, Invalid, knownControls, removeCorrection, setBlocked } from "./corrections";
-import { groupGuides } from "./health";
+import { groupGuides, oneLine } from "./health";
 import { finishedCsv, finishedGuides, guideSteps, insights, live, monthOf, sitesOverview } from "./insights";
 import { routeView, teachApi, TeachRefused } from "./teach";
 import { MAX_PAGES, readMore, startReading, type BrowserBinding, type Reading } from "./reader";
@@ -532,7 +532,8 @@ async function deleteSite(sql: Sql, org: Organization, id: string, input: Record
 
 async function changeSite(sql: Sql, env: AppEnv, org: Organization, id: string, input: Record<string, unknown>) {
   const site = await ownedSite(sql, org, id);
-  const name = input.name === undefined ? site.name : typeof input.name === "string" && input.name.trim() ? input.name.trim().slice(0, 80) : null;
+  // The name goes into the subject of the emails about the site, which is one line, so nothing that could start another is kept.
+  const name = input.name === undefined ? site.name : typeof input.name === "string" ? oneLine(input.name, 80) || null : null;
   if (!name) throw new Refusal(400, "Give the site a name.", "name");
   const origins = input.allowedOrigins === undefined ? site.allowed_origins : originList(input.allowedOrigins);
   if (!origins.length) throw new Refusal(400, "Keep at least one origin, or the widget can't run anywhere.");

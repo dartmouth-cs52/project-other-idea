@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Field, FormAlert, useFieldErrors, type Failure } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,13 @@ const LINK_ERRORS: Record<string, Failure> = {
 };
 const LINK_FAILED: Failure = { title: "That sign-in didn't work", detail: "Try again below." };
 
+/** The HTTP status of an auth call that failed, whether the auth client returned the error or threw it. */
+function statusOf(failure: unknown): number | undefined {
+  const { status, error } = (failure ?? {}) as { status?: unknown; error?: { status?: unknown } };
+  const found = error?.status ?? status;
+  return typeof found === "number" ? found : undefined;
+}
+
 /**
  * Sign-in with an emailed link or Google. Anyone can get this far: whether
  * they get a dashboard is decided by the approved list, on the next page.
@@ -24,6 +31,16 @@ export function SignInForm({ linkError }: { linkError?: string | null }) {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "google">("idle");
   const [failure, setFailure] = useState<Failure | null>(linkError ? (LINK_ERRORS[linkError] ?? LINK_FAILED) : null);
   const fields = useFieldErrors({ email: "sign-in-email" });
+  const sentTitle = useRef<HTMLHeadingElement>(null);
+  const shown = useRef(status);
+
+  // Once the link has gone, the focus moves to the panel that says so, as it does to the request access form's thank
+  // you, so a screen reader reads it. Leaving that panel to use a different email puts the cursor back in the field.
+  useEffect(() => {
+    if (status === "sent") sentTitle.current?.focus();
+    else if (shown.current === "sent") document.getElementById("sign-in-email")?.focus();
+    shown.current = status;
+  }, [status]);
 
   async function sendLink(event: FormEvent) {
     event.preventDefault();
@@ -53,17 +70,30 @@ export function SignInForm({ linkError }: { linkError?: string | null }) {
     setFailure(null);
     fields.show({});
     setStatus("google");
-    const { error: failed } = await auth().signIn.social({ provider: "google", callbackURL: dashboardUrl() });
-    if (failed) {
-      setStatus("idle");
-      setFailure({ title: "Couldn't open Google", detail: "Try again, or use an emailed link." });
+    // On success the auth client takes the page to Google, by the address in the answer, so there is nothing more to
+    // do here. An answer with no address goes nowhere, and counts as a failure.
+    let failed: unknown;
+    let answer: { url?: string } | null = null;
+    try {
+      ({ data: answer, error: failed } = await auth().signIn.social({ provider: "google", callbackURL: dashboardUrl() }));
+    } catch (error) {
+      // The client throws, more often than it returns an error: when the server turns the call down, and when it
+      // can't be reached at all. Either way the buttons come back, or the page would say "Opening Google" for good.
+      failed = error ?? new Error("Google sign-in failed");
     }
+    if (!failed && answer?.url) return;
+    setStatus("idle");
+    setFailure(
+      statusOf(failed) === 429
+        ? { title: "Too many tries", detail: "Wait a minute, then try again." }
+        : { title: "Couldn't open Google", detail: "Try again, or use an emailed link." },
+    );
   }
 
   if (status === "sent") {
     return (
-      <div className="flex flex-col gap-2 rounded-xl border bg-muted p-6">
-        <h2 className="text-2xl font-medium tracking-[-0.02em]">
+      <div role="status" className="flex flex-col gap-2 rounded-xl border bg-muted p-6">
+        <h2 ref={sentTitle} tabIndex={-1} className="text-2xl font-medium tracking-[-0.02em] outline-none">
           Check your email
         </h2>
         <p className="text-base leading-6 text-muted-foreground">

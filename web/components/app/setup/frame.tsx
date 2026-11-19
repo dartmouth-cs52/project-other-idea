@@ -39,7 +39,9 @@ export function StepFrame({
   }, [focusHeading]);
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-3">
+      {/* The title and the lead often name the site's address, one long word to the browser, so their words may break
+          anywhere rather than run off a phone's screen. */}
+      <div className="flex flex-col gap-3 [overflow-wrap:anywhere]">
         <p className="text-sm font-medium text-muted-foreground">{stepLabel(step)}</p>
         <h1 ref={heading} tabIndex={-1} className="flex items-start gap-3 text-4xl font-medium tracking-[-0.03em] text-balance outline-none">
           {mark && <span className="flex h-10 shrink-0 items-center">{mark}</span>}

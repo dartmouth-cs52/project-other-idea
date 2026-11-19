@@ -30,7 +30,8 @@ export function SetupGate({ site }: { site: Site }) {
   const step = stepFor(setupSite);
   const status = installStatus(site, null, 0);
   return (
-    <Card>
+    // The card names the site's address, one long word to the browser, so its words may break anywhere rather than run off a phone's screen.
+    <Card className="[overflow-wrap:anywhere]">
       <div className="flex flex-col gap-1">
         <p className="text-sm font-medium text-muted-foreground">
           Step {stepIndex(step) + 1} of {SETUP_STEPS.length}, {SETUP_STEPS[stepIndex(step)]!.title.toLowerCase()}

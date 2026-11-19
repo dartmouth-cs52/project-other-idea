@@ -13,7 +13,9 @@
 //
 // Grouping is by normalized text, in the database. No model is asked.
 
+import { cleanText } from "../../src/shared/types";
 import type { Sql } from "./db";
+import { BATCH_MAX, emailButton, emailPage, escape, sendEmails, type, type SendEnv } from "./sign-in-email";
 
 /** A guide with no ending reported, and nothing new for this long, was abandoned. Matches insights.ts. */
 const ABANDONED_AFTER = "30 minutes";
@@ -126,7 +128,7 @@ export interface Flag {
   /** Share of guides that finished in the three weeks before, and in the last seven days. */
   before: number;
   now: number;
-  /** People who asked in the three weeks before. */
+  /** People who asked in the three weeks before. flagDrop has only each week's own count, so its sum counts a person once for each week they asked; guideHealth puts in each person once. */
   visitorsBefore: number;
 }
 
@@ -193,14 +195,17 @@ export async function guideHealth(sql: Sql, site: string): Promise<Health[]> {
     select t.question_group as key,
       (select g2.question from g g2 where g2.question_group = t.question_group order by g2.started_at desc limit 1) as question,
       (select json_agg(json_build_object('ago', w.ago, 'guides', w.guides, 'finished', w.finished, 'visitors', w.visitors) order by w.ago)
-        from weeks w where w.question_group = t.question_group) as weeks
+        from weeks w where w.question_group = t.question_group) as weeks,
+      (select count(distinct g3.who)::int from g g3 where g3.question_group = t.question_group and g3.ago between 1 and 3) as visitors_before
     from top t order by t.people desc, t.question_group`,
     [site],
   );
   const groups: Health[] = rows.map((row) => ({ key: row.key, question: row.question, weeks: row.weeks as Week[] }));
-  for (const group of groups) {
+  for (const [index, group] of groups.entries()) {
     const flag = flagDrop(group.weeks);
-    if (flag) group.flag = { ...flag, ...(await whereItBroke(sql, site, group.key, group.weeks)) };
+    // Each week counts its own people, so a person who asked in two of the weeks is in both. Who asked in the
+    // three weeks together, each counted once, is what says the question is a common one (COMMON_VISITORS).
+    if (flag) group.flag = { ...flag, visitorsBefore: Number(rows[index]!.visitors_before), ...(await whereItBroke(sql, site, group.key, group.weeks)) };
   }
   return groups.sort((a, b) => Number(Boolean(b.flag)) - Number(Boolean(a.flag)));
 }
@@ -236,23 +241,177 @@ async function whereItBroke(sql: Sql, site: string, key: string, weeks: Week[]) 
   return { stop, ...(missing ? { missing } : {}) };
 }
 
-/** A flagged group's news, in words, as the dashboard and the email both give it. */
+/**
+ * A flagged group's news, in words, for the email to the company's people. The question, the page and the
+ * control's name all came from visitors' browsers, and anyone can send the widget server those, so each is
+ * quoted the way `quoted` makes safe, and the question is said to be a visitor's.
+ */
 export function describeBreak(group: Health): string[] {
   const flag = group.flag;
   if (!flag) return [];
   const pct = (share: number) => `${Math.round(share * 100)}%`;
-  const lines = [`"${group.question}" finished ${pct(flag.before)} of the time in the three weeks before, and ${pct(flag.now)} in the last seven days.`];
-  if (flag.stop) lines.push(`Guides now stop at step ${flag.stop.step} on ${flag.stop.path}${flag.stop.label ? `, at "${flag.stop.label}"` : ""}.`);
-  if (flag.missing) lines.push(`Before, they pointed at "${flag.missing.label}" on ${flag.missing.path}, and no guide has this week. It may have moved or been renamed.`);
+  const lines = [`Guides for "${quoted(group.question, 80)}", as a visitor last asked it, finished ${pct(flag.before)} of the time in the three weeks before, and ${pct(flag.now)} in the last seven days.`];
+  if (flag.stop) lines.push(`Guides now stop at step ${flag.stop.step} on ${quotedPath(flag.stop.path)}${flag.stop.label ? `, at "${quoted(flag.stop.label, 40)}"` : ""}.`);
+  if (flag.missing) lines.push(`Before, they pointed at "${quoted(flag.missing.label, 40)}" on ${quotedPath(flag.missing.path)}, and no guide has this week. It may have moved or been renamed.`);
   return lines;
 }
 
-export interface MailEnv {
-  EMAIL?: { send(message: { to: string; from: { email: string; name: string }; subject: string; text: string }): Promise<unknown> };
+/**
+ * A word a mail program could make a link of, or a person could type into a browser: an address with a scheme,
+ * one starting www., a name with a dot and at least two letters after it, as evil.example or bit.ly/x, or an IP
+ * address. Abbreviations such as e.g. and U.S. end in one letter, and are left alone.
+ */
+const LINK_LIKE = /:\/\/|^\W*www[.。]|[\p{L}\p{N}][.。]\p{L}{2,}(?![\p{L}\p{N}])|\d{1,3}(?:[.。]\d{1,3}){3}/iu;
+
+/**
+ * Whether a word is LINK_LIKE, read without the marks that sit on a letter, such as an accent or an underline,
+ * so none can split a name the check would otherwise see. The word itself keeps them.
+ */
+function linkLike(word: string): boolean {
+  return LINK_LIKE.test(word.replace(/\p{M}/gu, ""));
+}
+
+/**
+ * Text as it shows: full-width letters and dots written plainly, characters that draw nothing dropped, so none
+ * can split a link the check above would see, and line breaks as spaces. What draws nothing is every format
+ * character and every one Unicode says to ignore by default, among them the combining grapheme joiner, the
+ * variation selectors and the Hangul fillers.
+ */
+function shown(text: string): string {
+  return text
+    .normalize("NFKC")
+    .replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu, "")
+    .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, " ");
+}
+
+/**
+ * Words a visitor's browser sent, made safe to quote in an email that comes from alerts@joinhaptic.com and so
+ * reads as Haptic's own. Anyone can put a question on a site, such as "Your account is locked, sign in again at
+ * evil.example", so a word that could be a link becomes [link], emails and long numbers are masked as
+ * everywhere else (cleanText), a double quote becomes a single one so the quote can't be closed early, and it
+ * is cut short.
+ */
+export function quoted(text: string, max: number): string {
+  // Masked first, so an email address reads as [email] and not as a link, then cut once the links are out.
+  const words = cleanText(shown(text), Number.MAX_SAFE_INTEGER).split(" ").map((word) => (linkLike(word) ? "[link]" : word));
+  return cleanText(words.join(" ").replace(/["“”„‟«»]/g, "'"), max);
+}
+
+/** A page's path, quoted the same way a segment at a time, so a page named like a file keeps the rest of its path. */
+function quotedPath(path: string): string {
+  const segments = shown(path).replace(/\s+/g, "").split("/").map((segment) => (linkLike(segment) ? "[link]" : segment));
+  return cleanText(segments.join("/"), 80);
+}
+
+/** Line breaks, every other control character, and the marks that make text run the other way. */
+const BREAKS = /[\p{Cc}\p{Zl}\p{Zp}\u202a-\u202e\u2066-\u2069]/gu;
+
+/**
+ * A site's name on one line, as an email's subject must be: anything that could start another line, or turn
+ * the subject around, is a space. The site's name is chosen by its company, and kept this way (app-api.ts).
+ */
+export function oneLine(text: string, max = 80): string {
+  return Array.from(text.replace(BREAKS, " ").replace(/\s+/g, " ").trim()).slice(0, max).join("").trim();
+}
+
+/** What the email suggests, after the news. */
+const ADVICE = "This often follows a change to the product. Open the guides on your dashboard to see where they stop, and correct a step if Haptic now points at the wrong thing.";
+
+/** Who the alert comes from. Any address at joinhaptic.com sends through Resend once the domain is verified there. */
+export const ALERTS_FROM = "Haptic <alerts@joinhaptic.com>";
+
+/** A site as an alert names it. Its address tells two sites apart: a new site is named after its company. */
+export interface AlertSite {
+  id: string;
+  name: string;
+  origin: string;
+}
+
+/**
+ * The email to a company's people about one flagged group on one of its sites, on the page every Haptic email
+ * sits on (sign-in-email.ts). Everything a visitor sent is already quoted short by describeBreak, and escaped here.
+ * The button opens that site on the dashboard. `id` is hidden at the end, so Gmail, which threads emails with one
+ * subject and folds an ending it has shown before, doesn't fold a later alert's button away.
+ */
+export function alertEmail(site: AlertSite, group: Health, dashboard: string, id?: string): { subject: string; text: string; html: string } {
+  const name = oneLine(site.name);
+  const host = URL.canParse(site.origin) ? new URL(site.origin).host : oneLine(site.origin);
+  const subject = `Guides for a common question on ${name} stopped finishing`;
+  const lines = describeBreak(group);
+  const link = `${dashboard}?site=${encodeURIComponent(site.id)}`;
+  const paragraph = (text: string, last = false) => `<p class="muted" style="margin:0 0 ${last ? 24 : 16}px;${type(16, 24, 400)}color:#78716C;">${escape(text)}</p>`;
+  const html = emailPage({
+    title: subject,
+    preview: lines[0] ?? subject,
+    id,
+    card: `<h1 class="ink" style="margin:0 0 8px;${type(24, 32, 500)}letter-spacing:-0.02em;color:#1C1917;">A common question stopped finishing</h1>
+<p class="ink" style="margin:0 0 16px;${type(14, 20, 500)}color:#1C1917;word-break:break-all;">${escape(`${name}, ${host}`)}</p>
+${lines.map((line) => paragraph(line)).join("\n")}
+${paragraph(ADVICE, true)}
+${emailButton("Open the site on the dashboard", link)}`,
+  });
+  return { subject, text: [`${name}, ${host}`, "", ...lines, "", ADVICE, link].join("\n"), html };
+}
+
+/** Resend's key, which every Haptic email is sent with. */
+export type MailEnv = SendEnv;
+
+type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
+
+/** One flagged group on one site, as 32 hex characters, whatever the group's key holds. */
+async function alertId(site: string, group: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${site}\n${group}`)));
+  return Array.from(digest.slice(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /** Days before the same group on the same site is emailed about again. */
 const ALERT_AGAIN_DAYS = 14;
+
+/** How many times one batch is tried, and the pauses between, in milliseconds. */
+const PAUSES_MS = [1_000, 4_000];
+
+/** Worth trying again: Resend couldn't be reached or timed out (0), was over its rate (429), or failed itself (5xx). */
+const passing = (status: number) => status === 0 || status === 429 || status >= 500;
+
+/**
+ * Emails one flagged group to a company's people, through Resend, as every other Haptic email is. Cloudflare's
+ * own email binding only delivers to inboxes verified under Email Routing, which a customer's are not.
+ *
+ * Everyone is sent it in one batch, which Resend sends whole or not at all, so one answer says whether the
+ * team was emailed. A batch Resend couldn't take for a passing reason is tried again after a pause, with
+ * the same key, so a retry it already took is not sent twice. `tried` is false with no key or no one to send
+ * to; `emailed` is true only once everyone was sent it.
+ */
+export async function alertPeople(
+  env: MailEnv,
+  site: AlertSite,
+  group: Health,
+  people: string[],
+  dashboard: string,
+  fetcher: Fetch,
+  pause: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+): Promise<{ tried: boolean; emailed: boolean }> {
+  if (!env.RESEND_API_KEY || !people.length) return { tried: false, emailed: false };
+  const id = await alertId(site.id, group.key);
+  const { subject, text, html } = alertEmail(site, group, dashboard, id);
+  const day = new Date().toISOString().slice(0, 10);
+  let everyone = true;
+  for (let start = 0; start < people.length; start += BATCH_MAX) {
+    const emails = people.slice(start, start + BATCH_MAX).map((to) => ({ to, subject, text, html, from: ALERTS_FROM }));
+    const key = `health-alert/${site.id}/${day}/${id}/${start / BATCH_MAX}`;
+    let sent = await sendEmails(env, emails, key, fetcher);
+    for (const ms of PAUSES_MS) {
+      if (sent.ok || !passing(sent.status)) break;
+      await pause(ms);
+      sent = await sendEmails(env, emails, key, fetcher);
+    }
+    if (!sent.ok) {
+      everyone = false;
+      console.error(`Couldn't email ${site.id} about ${group.key}: Resend answered ${sent.status} ${sent.detail}`);
+    }
+  }
+  return { tried: true, emailed: everyone };
+}
 
 /**
  * Run once a day by the Worker's schedule. For every company's site, finds the
@@ -260,8 +419,8 @@ const ALERT_AGAIN_DAYS = 14;
  * people about each one not already sent in the last fortnight. It runs apart
  * from any visitor's step.
  */
-export async function sendHealthAlerts(sql: Sql, env: MailEnv, dashboard = "https://joinhaptic.com/dashboard/"): Promise<number> {
-  const sites = (await sql`select id, name, company_id from sites where company_id is not null`) as { id: string; name: string; company_id: string }[];
+export async function sendHealthAlerts(sql: Sql, env: MailEnv, dashboard = "https://joinhaptic.com/dashboard/", fetcher: Fetch = (input, init) => fetch(input, init)): Promise<number> {
+  const sites = (await sql`select id, name, origin, company_id from sites where company_id is not null`) as (AlertSite & { company_id: string })[];
   let sent = 0;
   for (const site of sites) {
     const broken = (await guideHealth(sql, site.id)).filter((group) => group.flag && group.flag.visitorsBefore >= COMMON_VISITORS);
@@ -272,18 +431,10 @@ export async function sendHealthAlerts(sql: Sql, env: MailEnv, dashboard = "http
       const people = (await sql`
         select u.email from neon_auth.member m join neon_auth."user" u on u.id = m."userId"
         where m."organizationId" = ${site.company_id}::uuid and u."emailVerified" = true`) as { email: string }[];
-      let emailed = false;
-      if (env.EMAIL && people.length) {
-        const text = [...describeBreak(group), "", `This often follows a change to the product. Open the guides on your dashboard to see where they stop, and correct a step if Haptic now points at the wrong thing.`, dashboard].join("\n");
-        try {
-          for (const person of people) {
-            await env.EMAIL.send({ to: person.email, from: { email: "alerts@joinhaptic.com", name: "Haptic" }, subject: `Guides for a common question on ${site.name} stopped finishing`, text });
-          }
-          emailed = true;
-        } catch (error) {
-          console.error(`Couldn't email ${site.id} about ${group.key}:`, (error as Error).message);
-        }
-      }
+      const { tried, emailed } = await alertPeople(env, site, group, people.map((person) => person.email), dashboard, fetcher);
+      // Sent to nobody it was tried for: nothing is kept, so tomorrow's run tries again instead of waiting a
+      // fortnight. With no key or no one to send to, the alert is kept for the dashboard only, as before.
+      if (tried && !emailed) continue;
       await sql`
         insert into health_alerts (site_id, question_group, finished_before, finished_now, emailed)
         values (${site.id}, ${group.key}, ${group.flag!.before}, ${group.flag!.now}, ${emailed})`;

@@ -44,7 +44,7 @@ export interface LearnedLabel {
   visitors: number;
   /** Distinct networks they called from, up to ten. Absent on a row counted before networks were. */
   networks?: number;
-  /** Every time it was sent. Used to rank, never to decide. */
+  /** Every time it was sent. Kept, but never used to rank or to decide: anyone can send a label as often as it likes. */
   seen: number;
 }
 
@@ -78,6 +78,8 @@ export function labelThreshold(env: Record<string, string | undefined>): number 
  * developer's machine every call comes from the same address, so it is none.
  * Never more than the visitors needed. `HAPTIC_NETWORK_THRESHOLD=0` stops
  * counting networks, for a server whose callers all arrive from one address.
+ * A verified route takes as many networks of finished guides before it is
+ * trusted (`trustRoutes` in db.ts).
  */
 export function networkThreshold(env: Record<string, string | undefined>): number {
   const set = env.HAPTIC_NETWORK_THRESHOLD?.trim() ? Number(env.HAPTIC_NETWORK_THRESHOLD) : NaN;
@@ -97,7 +99,7 @@ export function labelNeeds(env: Record<string, string | undefined>): LabelNeeds 
 
 /** Each label keeps at most this many visitor hashes, and as many network hashes. Enough for any threshold we would use, and a bounded row. */
 export const MAX_VISITORS = 10;
-/** Pages that only traffic knows, beyond the crawl's. The most visited win. */
+/** Pages that only traffic knows, beyond the crawl's. The most widely seen win (`widest`). */
 const MAX_LEARNED_ROUTES = 40;
 /** Links learned for one page, beyond the crawl's. */
 const MAX_LEARNED_LINKS = 20;
@@ -194,17 +196,11 @@ export async function visitorHash(site: string, visitor: string): Promise<string
 
 const hex = (bytes: ArrayBuffer, count: number): string => Array.from(new Uint8Array(bytes).slice(0, count), (byte) => byte.toString(16).padStart(2, "0")).join("");
 
-/**
- * The network a caller's address belongs to, which is what is counted: an
- * IPv4 address whole, and the first three groups (the /48) of an IPv6 one.
- * One subscriber can be handed a whole /48 to use as they like, so anything
- * smaller would let one home count as thousands of networks. Nothing for what
- * is not an address.
- */
-export function networkOf(address: string): string | undefined {
+/** An IPv4 address as its four numbers, or an IPv6 one as its eight groups written short. Nothing for what is not an address. */
+function parseAddress(address: string): { four: string } | { six: string[] } | undefined {
   const bare = address.trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/%.*$/, "");
   const four = /^(?:::ffff:)?(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(bare);
-  if (four) return four.slice(1).every((part) => Number(part) <= 255) ? four.slice(1).map(Number).join(".") : undefined;
+  if (four) return four.slice(1).every((part) => Number(part) <= 255) ? { four: four.slice(1).map(Number).join(".") } : undefined;
   if (!/^[0-9a-f:]{2,39}$/.test(bare) || !bare.includes(":")) return undefined;
   const halves = bare.split("::");
   if (halves.length > 2) return undefined;
@@ -215,7 +211,36 @@ export function networkOf(address: string): string | undefined {
   if (halves.length === 1 ? missing !== 0 : missing < 1) return undefined;
   const all = [...head, ...Array<string>(halves.length === 1 ? 0 : missing).fill("0"), ...tail];
   if (!all.every((group) => /^[0-9a-f]{1,4}$/.test(group))) return undefined;
-  return all.slice(0, 3).map((group) => parseInt(group, 16).toString(16)).join(":") + "::/48";
+  return { six: all.map((group) => parseInt(group, 16).toString(16)) };
+}
+
+/**
+ * The network a caller's address belongs to, which is what is counted: an
+ * IPv4 address whole, and the first three groups (the /48) of an IPv6 one.
+ * One subscriber can be handed a whole /48 to use as they like, so anything
+ * smaller would let one home count as thousands of networks. Nothing for what
+ * is not an address.
+ */
+export function networkOf(address: string): string | undefined {
+  const parsed = parseAddress(address);
+  if (!parsed) return undefined;
+  return "four" in parsed ? parsed.four : parsed.six.slice(0, 3).join(":") + "::/48";
+}
+
+/**
+ * Who a caller is to every limit on how often they may ask, and how much in a
+ * day: an IPv4 address whole, and the first four groups (the /64) of an IPv6
+ * one. A /64 is the least a home, an office or a phone is given, and every
+ * address in it is the holder's to use, so a limit on whole IPv6 addresses
+ * would give one caller billions of allowances. It is finer than the /48 that
+ * learning counts (`networkOf`): a limit has to tell apart the people an
+ * internet provider puts side by side, and learning only has to know that one
+ * caller is not several. Anything that is not an address is counted as itself.
+ */
+export function callerKey(address: string): string {
+  const parsed = parseAddress(address);
+  if (!parsed) return address.trim();
+  return "four" in parsed ? parsed.four : parsed.six.slice(0, 4).join(":") + "::/64";
 }
 
 /**
@@ -244,9 +269,13 @@ const sound = (row: { route: string; label: string; href: string; control?: stri
 const asNeeds = (needs: number | LabelNeeds): LabelNeeds => (typeof needs === "number" ? { visitors: needs, networks: 0 } : needs);
 /** Enough visitors, from enough networks. */
 const enough = (row: { visitors: number; networks?: number }, needs: LabelNeeds): boolean => row.visitors >= needs.visitors && (row.networks ?? 0) >= needs.networks;
-/** The most widely seen first: by networks, which are the hardest to make up, then visitors, then sightings. */
-const widest = (a: { visitors: number; networks?: number; seen: number }, b: { visitors: number; networks?: number; seen: number }): number =>
-  (b.networks ?? 0) - (a.networks ?? 0) || b.visitors - a.visitors || b.seen - a.seen;
+/**
+ * The most widely seen first: by networks, which a caller cannot make up. Never by how often a label was sent, which
+ * anyone can raise as fast as they can post, nor by its visitors, which are the widget's random ids and so one
+ * network can be ten of them. Rows that tie keep the order they came in: the database sends those seen lately and
+ * known longest first (`learnedLabels` in db.ts), and memory keeps them in the order they were first seen.
+ */
+const widest = (a: { networks?: number }, b: { networks?: number }): number => (b.networks ?? 0) - (a.networks ?? 0);
 
 /**
  * The site's pages with what traffic has taught Haptic merged in, for the
@@ -254,7 +283,7 @@ const widest = (a: { visitors: number; networks?: number; seen: number }, b: { v
  * from fewer networks, are left out, and so is any row that could not be
  * learned today. The crawl's pages keep their order and their own labels come first.
  *
- * How often a label was seen decides only whether it makes the cut. What is
+ * How widely a label was seen decides only whether it makes the cut. What is
  * kept is then listed in a fixed order, by page and label, because the site
  * map is part of the prompt the model provider keeps cached: if it reshuffled
  * every time a count went up, every step would pay to cache it again.

@@ -11,7 +11,13 @@ import { cleanText, normalizePath, questionKey, routeKey, type SiteContext, type
 // - Match the question exactly, after masking and normalizing. No guessing at meaning.
 // - Key on the screen as the visitor sees it: the page, any open dialog, and the control they just used.
 // - Never point at a control that is not on the live page, and refuse when more than one could be meant.
-// - Serve only a route a finished guide has confirmed. On any doubt, ask the model. A miss costs one call.
+// - Serve only a route finished guides have confirmed. On any doubt, ask the model. A miss costs one call.
+//
+// Anything that can send a request can ask a question, have the model answer it from a page of its own making, and
+// report the guide finished. So "confirmed" here means by finished guides from several networks (three online), each
+// given the same control, sentence and status, since a served reply is all three. A different answer never moves a
+// trusted route at once: the change waits beside it until it is confirmed the same way (`recordStep` and
+// `trustRoutes` in db.ts).
 
 /** Where a route is looked up: the question, the screen, and the control the previous step used. */
 export interface RouteLookup {
@@ -129,7 +135,9 @@ export function servedReply(route: StoredRoute | undefined, snapshot: Snapshot, 
  * page, or a route someone at the company taught for the same task. The model
  * reads those with the question (src/server/prompt.ts), so such a step is
  * answered by the model even in serve mode, and the route is only compared
- * with its answer. A route the model then answers differently loses its trust.
+ * with its answer. A different answer is kept beside the route as the change
+ * it may make, and takes its place once finished guides from enough networks
+ * have used it (db.ts).
  */
 export function ownerSteers(site: Pick<SiteContext, "corrections" | "taught">, turn: TurnRequest): boolean {
   return correctionsFor(site.corrections, turn.snapshot.path, turn.goal).length > 0 || taughtFor(site.taught, turn.goal) !== undefined;

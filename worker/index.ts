@@ -64,7 +64,10 @@ export interface Env {
   HAPTIC_OFF?: string;
   /** How many different visitors must have seen a learned label before the prompt gets it. 3 unless set. */
   HAPTIC_LABEL_THRESHOLD?: string;
-  /** How many different networks those visitors must have called from. 3 unless set, and never more than the visitors needed. */
+  /**
+   * How many different networks those visitors must have called from. 3 unless set, and never more than the visitors
+   * needed. Finished guides must come from as many networks before a verified route is trusted.
+   */
   HAPTIC_NETWORK_THRESHOLD?: string;
   /** A secret, set with `wrangler secret put`. Not needed while HAPTIC_MODEL is "mock". */
   ANTHROPIC_API_KEY?: string;
@@ -166,8 +169,9 @@ function budgetFor(env: Env): AppParts["budget"] {
   if (!store) return undefined;
   const reach = async (site: SiteContext, caller: string) => {
     const { name, limits } = meterFor(site, { HAPTIC_BUDGET_HOUR: env.HAPTIC_BUDGET_HOUR, HAPTIC_BUDGET_DAY: env.HAPTIC_BUDGET_DAY, HAPTIC_BUDGET_SHARED: env.HAPTIC_BUDGET_SHARED });
-    // Callers are only told apart when the site limits each one. The site's own object scrambles the
-    // address before it keeps it. This copy of the Worker holds the address only in memory, for a few seconds.
+    // Callers are only told apart when the site limits each one. A caller is an IPv4 address, or the /64 an IPv6 one is
+    // in (`callerKey` in src/server/learned.ts, applied by app.ts), so one home has one allowance. The site's own object
+    // scrambles it before it keeps it. This copy of the Worker holds it only in memory, for a few seconds.
     const who = limits.perCaller ? caller : "";
     return { limits, who, key: `${name} ${who}`, meter: store.get(store.idFromName(name)) };
   };
@@ -250,8 +254,10 @@ export default {
         // And the step on the guide's record, as the dashboard shows it (src/server/db.ts).
         later(db?.recordStep(turn, measure, origin, route));
       },
-      ...(db ? { findRoute: (site: SiteContext, lookup: RouteLookup) => db.findRoute(site.id, lookup) } : {}),
-      onReport: (site, guide, report) => later(db?.report(site, guide, report)),
+      ...(db
+        ? { findRoute: (site: SiteContext, lookup: RouteLookup) => db.findRoute(site.id, lookup), serveRoute: (site: SiteContext, network: string) => db.serveRoute(site.id, network) }
+        : {}),
+      onReport: (site, guide, report, network) => later(db?.report(site, guide, report, network)),
       onCancel: (turn) => later(db?.cancelStep(turn)),
       onOutline: (site, visitor, outline, network) => later(db?.recordOutline(site, visitor, outline, network)),
       ...(db ? { mapping: { allowed: (site, pass) => db.mappingAllowed(site.id, pass), save: (site, page) => db.saveMappedPage(site.id, page) } } : {}),

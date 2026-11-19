@@ -99,7 +99,23 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
   // The numbers wait for the first live answer, so they are asked for once and not twice. If live can't be reached they go ahead without it.
   const stamp = live?.stamp ?? (failing ? "unreachable" : undefined);
   const numbers = useInsights(connected && counted && stamp ? siteId : null, days, stamp);
-  const openIt = useCallback((guide: string) => set({ guide }, "push"), [set]);
+  // Opening a guide adds a step to Back, so Back closes it. Closing it another way takes that step back too, or Back
+  // would land on this same page once for every guide opened. A guide that came in the address, from a link or a
+  // reload, added no step here, so closing it only takes it out of the address.
+  const pushed = useRef<string | null>(null);
+  const openIt = useCallback(
+    (guide: string) => {
+      pushed.current = guide;
+      set({ guide }, "push");
+    },
+    [set],
+  );
+  const closeIt = useCallback(() => {
+    if (openGuide && pushed.current === openGuide) {
+      pushed.current = null;
+      window.history.back();
+    } else set({ guide: undefined });
+  }, [openGuide, set]);
 
   const range = <Segmented label="Time range" value={days} onChange={(next) => set({ days: next === 30 ? undefined : String(next) })} options={RANGES.map((value) => ({ value, name: `${value} days` }))} />;
 
@@ -195,7 +211,7 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
       <SiteShell me={me} current={row} view={view}>
         {page}
         {openGuide && site && (
-          <GuideDrawer siteId={site.id} guideId={openGuide} stamp={live?.stamp} onClose={() => set({ guide: undefined })} onCorrected={(corrections) => setSite({ ...site, corrections })} />
+          <GuideDrawer siteId={site.id} guideId={openGuide} stamp={live?.stamp} onClose={closeIt} onCorrected={(corrections) => setSite({ ...site, corrections })} />
         )}
         {site && <TeachDrawer site={site} onChange={setSite} />}
       </SiteShell>
@@ -208,7 +224,7 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
  * arrive. It speaks up only when it has stopped hearing from the server, so
  * nobody takes what is on screen for the latest.
  */
-function Reconnecting({ failing }: { failing: boolean }) {
+export function Reconnecting({ failing }: { failing: boolean }) {
   if (!failing) return null;
   return (
     <span className="text-sm text-muted-foreground" role="status">
@@ -347,6 +363,10 @@ function MapApp({ site, reload }: { site: Site; reload: () => void }) {
     // The tab is opened now, while the click still counts as theirs, and sent on once the link is ready.
     // Opened after the wait, a browser would block it as a popup.
     const tab = window.open("", "_blank");
+    // A page whose session has ended goes to sign in without this call ever settling (api in lib/app-api.ts), so the
+    // tab goes with the page rather than stay open and blank.
+    const leave = () => tab?.close();
+    window.addEventListener("pagehide", leave);
     try {
       const { url } = await api<{ url: string }>(`/sites/${site.id}/map`, { method: "POST", body: { url: start.trim() } });
       if (tab) {
@@ -362,6 +382,7 @@ function MapApp({ site, reload }: { site: Site; reload: () => void }) {
       setError((failure as Error).message);
     } finally {
       setBusy(false);
+      window.removeEventListener("pagehide", leave);
     }
   }
 
@@ -512,7 +533,7 @@ function RefusedOrigin({
   }
   return (
     <li className="flex items-center justify-between gap-4 px-4 py-3">
-      <span className="min-w-0 text-sm">
+      <span className="min-w-0 text-sm [overflow-wrap:anywhere]">
         <span className="font-medium">{origin}</span>
         <span className="text-muted-foreground">, seen {when(lastSeen)}</span>
       </span>
@@ -557,7 +578,7 @@ function AllowedOrigins({ site, onChange }: { site: Site; onChange: (site: Site)
       <ul className="flex flex-col divide-y rounded-lg border bg-card">
         {site.allowedOrigins.map((origin) => (
           <li key={origin} className="flex items-center justify-between gap-4 px-4 py-2 text-sm">
-            <span>{origin}</span>
+            <span className="min-w-0 [overflow-wrap:anywhere]">{origin}</span>
             {site.allowedOrigins.length > 1 && (
               <Button variant="ghost" size="sm" onClick={() => remove(origin)}>
                 Remove
@@ -606,12 +627,13 @@ function InstallHealth({ site, reading, onChange }: { site: Site; reading: Readi
           {reading.read} public {reading.read === 1 ? "page" : "pages"} read{reading.done ? "." : ", and still reading."}
         </p>
       )}
+      {/* An address is one long word to the browser, so it may break anywhere rather than run off a phone's screen, here as in AllowedOrigins and RefusedOrigin. */}
       <ul className="flex flex-col divide-y rounded-lg border bg-card">
         {site.origins.map((row) => (
           <li key={row.origin} className="flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <span className="flex items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2">
               {row.allowed && <DoneMark className="size-4" />}
-              <span className="font-medium">{row.origin}</span>
+              <span className="min-w-0 font-medium [overflow-wrap:anywhere]">{row.origin}</span>
             </span>
             <span className="text-muted-foreground">
               {row.allowed ? "Running" : "Not allowed, so Haptic stays hidden"}, last seen {when(row.last_seen_at)}

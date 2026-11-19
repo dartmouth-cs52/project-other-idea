@@ -19,7 +19,7 @@ import { publicActing } from "./acting.ts";
 import { INK, launcherColour, POINTER_BLUE } from "../shared/colour.ts";
 import type { Alert, Budget, Gate } from "./budget.ts";
 import { parseHandoff, publicHandoff, sendHandoff } from "./handoff.ts";
-import { networkHash, parseOutlineReport, visitorHash } from "./learned.ts";
+import { callerKey, networkHash, parseOutlineReport, visitorHash } from "./learned.ts";
 import { parseMapReport } from "./mapped.ts";
 import { ceilingFor, measureTurn, TurnCancelled, TurnError } from "./model.ts";
 import type { TurnMeasure } from "./model.ts";
@@ -49,7 +49,10 @@ export interface AppParts {
   widgetTeaching?(): Promise<string>;
   /** How long browsers may keep the widget before asking again, in seconds. 0 for never. */
   widgetMaxAge: number;
-  /** True when this caller has asked for too many steps lately. */
+  /**
+   * True when this caller has asked for too many steps lately. `key` names the site, the kind of call and the caller:
+   * an IPv4 address, or the /64 an IPv6 one is in (`callerKey` in learned.ts).
+   */
   overLimit(key: string): boolean | Promise<boolean>;
   /**
    * Told when a guide's first question is about to be put to the model, or
@@ -73,6 +76,14 @@ export interface AppParts {
   onTurn?(request: TurnRequest, measure: TurnMeasure, site: SiteContext, origin: string | undefined, route?: RouteResult): void;
   /** The verified route stored for a question on a screen. Without it, every step goes to the model. See routes.ts. */
   findRoute?(site: SiteContext, lookup: RouteLookup): Promise<StoredRoute | undefined>;
+  /**
+   * Counts a step about to be answered from a verified route for the network the caller is in, hashed as for an
+   * outline, and says whether that network still has such steps left today on this site (`Store.serveRoute`). When it
+   * has none, the model answers, inside the budget. A step a route answers costs nothing and no budget holds it, yet a
+   * guide that finishes on one is billed, so this is what bounds how many guides one network can have answered for
+   * nothing. Without it, only the caller's limit on steps a minute does. Must not throw.
+   */
+  serveRoute?(site: SiteContext, network: string): Promise<boolean>;
   /**
    * Told when the widget hung up before a step was ready, because the page
    * changed while the model was answering. The widget asks for the step again
@@ -104,8 +115,12 @@ export interface AppParts {
     allowed(site: SiteContext, pass: string): Promise<boolean>;
     save(site: SiteContext, page: PageNode): Promise<void>;
   };
-  /** Told how a guide ended, whether it helped, or that the visitor asked for a person. Must not throw. */
-  onReport?(site: SiteContext, guide: string, report: GuideReport): void;
+  /**
+   * Told how a guide ended, whether it helped, or that the visitor asked for a person. `network` is the network the
+   * report came from, hashed as for an outline, which a finished guide counts for the routes it used (`Store.report`).
+   * Must not throw.
+   */
+  onReport?(site: SiteContext, guide: string, report: GuideReport, network?: string): void;
   /** How the handoff form is posted to a company's webhook. The web's own fetch unless a test says otherwise. */
   fetch?: typeof fetch;
   /** True on a developer's machine, where a webhook may be on the same machine. */
@@ -149,11 +164,17 @@ export function publicAppearance(saved: SiteContext["appearance"]): SiteContext[
   return { ...rest, accent: POINTER_BLUE, ...(launcher === INK ? {} : { launcher }) };
 }
 
-/** Returns the handler. It answers `undefined` for addresses that are not its own, so a host can serve other things. */
+/**
+ * Returns the handler. It answers `undefined` for addresses that are not its own, so a host can serve other things.
+ * `address` is the network address the request came from.
+ */
 export function createApp(parts: AppParts) {
-  return async function handle(request: Request, caller: string): Promise<Response | undefined> {
+  return async function handle(request: Request, address: string): Promise<Response | undefined> {
     const url = new URL(request.url);
     const origin = request.headers.get("Origin") ?? undefined;
+    // Who the caller is to every limit and to the budget: its IPv4 address, or the /64 its IPv6 address is in, so one
+    // home cannot be millions of callers. Learning counts the address's network itself (`networkHash`).
+    const caller = callerKey(address);
     // Which origins may read a response is decided per site below. This only says the API speaks CORS.
     const cors: Record<string, string> = origin ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {};
     const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
@@ -212,9 +233,12 @@ export function createApp(parts: AppParts) {
 
       // The step's verified route (routes.ts) is looked up from here on, beside the budget and the model call. On a
       // site that serves routes, a trusted one that matches this page answers the step without the model. That step
-      // makes no model call, so nothing is set aside from the budget for it and nothing is charged.
+      // makes no model call, so nothing is set aside from the budget for it and nothing is charged. With no budget to
+      // stop it, two things bound how many guides can be answered for nothing: the caller's limit above, which it
+      // counts toward like any other step, and its network's share of such steps for the day (`serveRoute`). The
+      // limit counts an IPv6 caller by its /64, and one /48 holds 65,536 of them. The share counts the network.
       const routing = startRouting(parts, site, turn);
-      const served = await servedStep(routing, site, turn);
+      const served = await servedStep(routing, site, turn, shareFor(parts, site, address));
       if (served) {
         if (turn.step === 0 && turn.guide) parts.onAsk?.(turn, site, origin);
         parts.onTurn?.(turn, served.measure, site, origin, served.route);
@@ -266,7 +290,7 @@ export function createApp(parts: AppParts) {
       if (!site) return json(404, { error: "No site with that id." });
       if (!mayWrite(site, origin)) return json(403, { error: refusal(origin) });
       if (await parts.overLimit(`${site.id} ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
-      parts.onReport?.(site, guide, report);
+      parts.onReport?.(site, guide, report, await networkHash(site.id, address));
       return json(200, { ok: true });
     }
 
@@ -288,7 +312,7 @@ export function createApp(parts: AppParts) {
       if (await parts.overLimit(`${site.id} outline ${caller}`)) return json(429, { error: "Too many requests. Try again in a minute." });
       // Without the widget's random id there is no way to count this visitor once, so the outline isn't used.
       if (site.learn === false || !report.visitor) return json(200, { ok: false });
-      parts.onOutline?.(site, await visitorHash(site.id, report.visitor), report.outline, await networkHash(site.id, caller));
+      parts.onOutline?.(site, await visitorHash(site.id, report.visitor), report.outline, await networkHash(site.id, address));
       return json(200, { ok: true });
     }
 
@@ -452,18 +476,36 @@ export function startRouting(parts: Pick<AppParts, "findRoute">, site: SiteConte
 /**
  * The step answered from its route, on a site that serves them, when a trusted
  * route matches exactly one control on this page that the site's owner has
- * not ruled out, and nothing the owner said since applies to this step
- * (`ownerSteers`). Undefined otherwise, and the model answers.
+ * not ruled out, nothing the owner said since applies to this step
+ * (`ownerSteers`), and `share`, when the host keeps one, says the caller's
+ * network has such a step left today. Undefined otherwise, and the model answers.
  */
-export async function servedStep(routing: Routing | undefined, site: SiteContext, turn: TurnRequest): Promise<{ measure: TurnMeasure; route: RouteResult } | undefined> {
+export async function servedStep(
+  routing: Routing | undefined,
+  site: SiteContext,
+  turn: TurnRequest,
+  share?: () => Promise<boolean>,
+): Promise<{ measure: TurnMeasure; route: RouteResult } | undefined> {
   if (!routing?.serve || ownerSteers(site, turn)) return undefined;
   const route = await routing.found;
   const reply = route === TIMED_OUT ? undefined : servedReply(route, turn.snapshot, routing.lookup, site.blocked);
   if (!reply) return undefined;
+  // Asked only for a step the route would answer, so that is all the share counts. One not counted in time is spent.
+  if (share && (await within(share(), ROUTE_WAIT_MS.serve)) !== true) return undefined;
   const ms = Date.now() - routing.started;
   // A stored sentence was tidied when the model first wrote it, so it is its own original.
   const measure: TurnMeasure = { reply, model: ROUTE_MODEL, ms, msToTarget: ms, cited: [], wrote: reply.say, broke: [], usd: 0 };
   return { measure, route: { lookup: routing.lookup, outcome: "served" } };
+}
+
+/** The caller's network's share of steps answered from routes, when the host keeps one. A caller whose network can't be told has none. */
+function shareFor(parts: Pick<AppParts, "serveRoute">, site: SiteContext, address: string): (() => Promise<boolean>) | undefined {
+  const serveRoute = parts.serveRoute;
+  if (!serveRoute) return undefined;
+  return async () => {
+    const network = await networkHash(site.id, address);
+    return network ? serveRoute(site, network) : false;
+  };
 }
 
 /** What the lookup found, given the model's answer. Undefined when no lookup was made, or it did not answer in time, which says nothing about the route. */

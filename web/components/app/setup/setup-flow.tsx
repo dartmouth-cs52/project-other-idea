@@ -10,7 +10,7 @@ import { ApiError, api, type Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
 import { nextStep, previousStep, SETUP_STEPS, stepFor, stepIndex, type SetupStepId } from "@/lib/setup";
 import { site as brand } from "@/lib/site";
-import { leaveFor } from "../parts";
+import { useSignOut } from "../sign-out";
 import { AddressStep } from "./address-step";
 import { ConnectStep } from "./connect-step";
 import { useEnterToContinue } from "./frame";
@@ -39,6 +39,10 @@ export function SetupFlow() {
   const router = useRouter();
   const siteId = params.get("site");
   const [me, setMe] = useState<Me | null>(null);
+  // Why who is signed in couldn't be found out, kept apart from the site's own failure, which a good answer for the
+  // site would clear. Try again counts up `meAsked` to ask again.
+  const [meFailure, setMeFailure] = useState<string | null>(null);
+  const [meAsked, setMeAsked] = useState(0);
   const [site, setSite] = useState<SetupSite | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   // Null until someone moves, so the first screen comes from the site as it loads.
@@ -47,27 +51,30 @@ export function SetupFlow() {
   // Where the setup is, when saving it failed: shown on every screen with Retry, until a save goes through.
   const [unsaved, setUnsaved] = useState<{ id: string; body: Record<string, unknown> } | null>(null);
   const pages = useSetupReading(site);
+  const { signOut, signingOut, failure: signOutFailure } = useSignOut();
   useEnterToContinue();
 
   // Who is signed in. Sign-in links land on the dashboard, so this only sends people back where they belong.
   useEffect(() => {
     let live = true;
     (async () => {
-      await auth().getSession();
+      // A check that fails is left to /me, as on the dashboard.
+      await auth()
+        .getSession()
+        .catch(() => undefined);
       try {
         const answer = await api<Me>("/me");
         if (!live) return;
         if (!answer.approved) return window.location.replace("/dashboard/");
         setMe(answer);
       } catch (error) {
-        if (error instanceof ApiError && error.status === 401) return window.location.replace("/sign-in/");
-        if (live) setFailure((error as Error).message);
+        if (live) setMeFailure((error as Error).message);
       }
     })();
     return () => {
       live = false;
     };
-  }, []);
+  }, [meAsked]);
 
   const load = useCallback(async () => {
     if (!siteId) return;
@@ -79,7 +86,6 @@ export function SetupFlow() {
       setFailure(null);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return router.replace("/dashboard/");
-      if (error instanceof ApiError && error.status === 401) return window.location.replace("/sign-in/");
       setFailure((error as Error).message);
     }
   }, [siteId, router]);
@@ -97,6 +103,17 @@ export function SetupFlow() {
 
   const current = site && site.id === siteId ? site : null;
   const step: SetupStepId | null = chosen && chosen.for === siteId ? chosen.step : !siteId ? "address" : current ? stepFor(current) : null;
+  // What keeps every screen from showing: who is signed in, or the site in the address, couldn't be loaded.
+  const stuck = !me && meFailure ? meFailure : failure && !current && siteId ? failure : null;
+
+  /** Asks again for whichever of the two couldn't be loaded. */
+  function retry() {
+    if (!me) {
+      setMeFailure(null);
+      setMeAsked((count) => count + 1);
+    }
+    if (siteId && !current) void load();
+  }
 
   /** Saves where the setup is on the site. True when it went. When it didn't, every screen says so, with Retry. */
   async function save(body: Record<string, unknown>, id = siteId): Promise<boolean> {
@@ -184,21 +201,19 @@ export function SetupFlow() {
             Back to the dashboard
           </Button>
         ) : me ? (
-          <Button
-            variant="ghost"
-            size="lg"
-            onClick={async () => {
-              await auth().signOut();
-              leaveFor("/sign-in/");
-            }}
-          >
-            Sign out
+          <Button variant="ghost" size="lg" onClick={signOut} disabled={signingOut}>
+            {signingOut ? "Signing out" : "Sign out"}
           </Button>
         ) : null}
       </header>
       <div className="h-0.5 w-full bg-border" role="progressbar" aria-label="Setup" aria-valuemin={1} aria-valuemax={SETUP_STEPS.length} aria-valuenow={index + 1}>
         <div className="h-full bg-primary transition-[width] duration-250 ease-out motion-reduce:transition-none" style={{ width: `${((index + 1) / SETUP_STEPS.length) * 100}%` }} />
       </div>
+      {signOutFailure && (
+        <div className="mx-auto w-full max-w-2xl px-6 pt-6">
+          <FormAlert failure={signOutFailure} retry={signOut} />
+        </div>
+      )}
       {unsaved && (
         <div className="mx-auto w-full max-w-2xl px-6 pt-6">
           <FormAlert
@@ -209,11 +224,11 @@ export function SetupFlow() {
       )}
       <main className="flex flex-1 flex-col px-6 py-10 sm:py-16">
         <div className={cn("mx-auto my-auto w-full", step === "install" ? "max-w-3xl" : "max-w-2xl")}>
-          {failure && !current && siteId ? (
+          {stuck ? (
             <div className="flex flex-col gap-4">
               <h1 className="text-2xl font-medium tracking-[-0.02em]">Something went wrong</h1>
-              <p className="text-base text-muted-foreground">{failure}</p>
-              <Button variant="secondary" className="self-start" onClick={() => void load()}>
+              <p className="text-base text-muted-foreground">{stuck}</p>
+              <Button variant="secondary" className="self-start" onClick={retry}>
                 Try again
               </Button>
             </div>

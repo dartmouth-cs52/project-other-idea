@@ -27,6 +27,7 @@
 import { reportUsage } from "../../src/shared/billing";
 import { isTestKey, stripe, StripeError, verifiedEvent, type StripeEvent } from "../../src/shared/stripe";
 import { FREE_PLAN, lookupKey, paidPlan, paidPlans, planName, type PaidPlan } from "../lib/billing-plans";
+import { boundedText } from "./body";
 import { database, type Organization, type Sql } from "./db";
 
 export interface BillingEnv {
@@ -104,8 +105,9 @@ export async function billingRoutes(call: BillingRequest): Promise<Answer | unde
 }
 
 async function body(request: Request): Promise<Record<string, unknown>> {
-  const text = await request.text();
-  if (text.length > 2_000) return {};
+  // Read only so far: a body past the limit is never read in full, and reads as empty.
+  const text = await boundedText(request, 2_000);
+  if (text === null) return {};
   try {
     const value = JSON.parse(text || "{}");
     return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -456,8 +458,10 @@ export async function stripeWebhook(request: Request, env: BillingEnv, db?: Sql)
   const key = env.STRIPE_SECRET_KEY;
   const sql = db ?? (env.DATABASE_URL ? database(env.DATABASE_URL) : undefined);
   if (!key || !env.STRIPE_WEBHOOK_SECRET || !sql) return Response.json({ error: "Billing isn't set up on this server." }, { status: 503 });
-  const text = await request.text();
-  if (text.length > MAX_WEBHOOK_BYTES) return Response.json({ error: "Too large." }, { status: 413 });
+  // Read only so far, before the signature is checked, since anyone can post here. What is read is the text
+  // Request.text() would give, so the signature, over the bytes as sent, is checked the same.
+  const text = await boundedText(request, MAX_WEBHOOK_BYTES);
+  if (text === null) return Response.json({ error: "Too large." }, { status: 413 });
   const event = await verifiedEvent(text, request.headers.get("stripe-signature"), env.STRIPE_WEBHOOK_SECRET);
   if (!event) return Response.json({ error: "The signature doesn't match." }, { status: 400 });
   // An endpoint is registered in one mode, so this is a key from the other mode. Nothing here can act on it.

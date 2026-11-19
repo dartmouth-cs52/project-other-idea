@@ -11,8 +11,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FormAlert, failureFrom, type Failure } from "@/components/form";
-import { api, ApiError, type Billing } from "@/lib/app-api";
+import { api, ApiError, type Billing, type Me } from "@/lib/app-api";
 import { monthTotal, type PaidPlan } from "@/lib/billing-plans";
+import { hostOf } from "@/lib/setup";
 import { pricing, site } from "@/lib/site";
 import { siteHref } from "./nav";
 import { forgetBilling, Reasons } from "./upgrade";
@@ -27,7 +28,10 @@ const lastDay = (end: string) => day(new Date(new Date(end).getTime() - 1).toISO
 /** A billing action that didn't go through: which one ("portal", or the plan whose button was pressed), and what to say. */
 type Failed = { at: string; failure: Failure; retry?: () => void };
 
-export function BillingPage() {
+/** The company's sites with their addresses, as the dashboard already has them from /api/app/me. */
+type Sites = NonNullable<Me["sites"]>;
+
+export function BillingPage({ sites }: { sites: Sites }) {
   const params = useSearchParams();
   const router = useRouter();
   const [billing, setBilling] = useState<Billing | null>(null);
@@ -63,12 +67,12 @@ export function BillingPage() {
           <Skeleton className="h-72 rounded-xl" />
         </div>
       )}
-      {billing && <Loaded billing={billing} onChange={setBilling} />}
+      {billing && <Loaded billing={billing} sites={sites} onChange={setBilling} />}
     </DashboardSurface>
   );
 }
 
-function Loaded({ billing, onChange }: { billing: Billing; onChange: (next: Billing) => void }) {
+function Loaded({ billing, sites, onChange }: { billing: Billing; sites: Sites; onChange: (next: Billing) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   // What didn't go through, said under the button that was pressed: the portal's in the plan's card, a plan's in its own
   // tile. Try again where trying again could help: Haptic couldn't be reached, or Stripe or Haptic failed on their side.
@@ -135,14 +139,18 @@ function Loaded({ billing, onChange }: { billing: Billing; onChange: (next: Bill
 
       {/* During early access the plans come first: choosing one is what this page is for. On a paid plan, what has been used this period is. */}
       {!subscription && plans}
-      <Usage billing={billing} plan={current} />
+      <Usage billing={billing} plan={current} sites={sites} />
       {subscription && plans}
     </>
   );
 }
 
 /** Finished guides so far this period, against what the plan includes, and what that comes to. */
-function Usage({ billing, plan }: { billing: Billing; plan: PaidPlan | undefined }) {
+function Usage({ billing, plan, sites }: { billing: Billing; plan: PaidPlan | undefined; sites: Sites }) {
+  // A new site is named after its company, so two of a company's sites can share a name. Only then is the address needed
+  // to tell them apart. The billing answer names the sites and not their addresses, which the dashboard already has.
+  const shared = (site: Billing["sites"][number]) => billing.sites.filter((other) => other.name === site.name).length > 1;
+  const addresses = new Map(sites.map((site) => [site.id, hostOf(site.origin)]));
   const included = plan?.includedGuides ?? pricing.plans.find((item) => item.id === billing.plan.id)?.includedGuides ?? null;
   const share = included ? Math.min(1, billing.finished / included) : 0;
   const total = plan ? monthTotal(plan, billing.finished) : null;
@@ -180,7 +188,12 @@ function Usage({ billing, plan }: { billing: Billing; plan: PaidPlan | undefined
           {billing.sites.map((item) => (
             <li key={item.id}>
               <Link href={siteHref(item.id, "settings", { tab: "usage" })} className="flex items-center justify-between gap-4 px-5 py-3 text-sm hover:bg-muted/60">
-                <span className="min-w-0 truncate">{item.name}</span>
+                {/* The address goes under the name, as in the menu of sites, where a long name can't push it out of
+                    sight. It is what tells the two apart, so it is shown whole, on more lines when it must be. */}
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate">{item.name}</span>
+                  {shared(item) && addresses.has(item.id) && <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{addresses.get(item.id)}</span>}
+                </span>
                 <span className="shrink-0 tabular-nums text-muted-foreground">{item.finished.toLocaleString()}</span>
               </Link>
             </li>

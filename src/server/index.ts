@@ -91,7 +91,9 @@ const app = createApp({
     void recordTurn(request, measure);
     void store?.recordStep(request, measure, origin, route);
   },
-  ...(store ? { findRoute: (site: SiteContext, lookup: RouteLookup) => store.findRoute(site.id, lookup) } : {}),
+  ...(store
+    ? { findRoute: (site: SiteContext, lookup: RouteLookup) => store.findRoute(site.id, lookup), serveRoute: (site: SiteContext, network: string) => store.serveRoute(site.id, network) }
+    : {}),
   onCancel: (request) => void store?.cancelStep(request),
   onOutline: (site, visitor, outline, network) => (store ? void store.recordOutline(site, visitor, outline, network) : learn(site.id, visitor, outline, network)),
   // With a database, a pass comes from the dashboard as it does online. Without one, a site
@@ -109,7 +111,7 @@ const app = createApp({
   },
   onSeen: (site, origin, allowed) => void store?.seenAt(site, origin, allowed),
   onAsk: (request, _site, origin) => void store?.startGuide(request, origin),
-  onReport: (site, guide, report) => void store?.report(site, guide, report),
+  onReport: (site, guide, report, network) => void store?.report(site, guide, report, network),
 });
 
 const server = createServer((req, res) => {

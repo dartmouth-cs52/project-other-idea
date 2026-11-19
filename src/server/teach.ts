@@ -87,8 +87,10 @@ const PATHS: Record<string, "claim" | "check" | "done" | "cancel"> = {
 };
 
 /**
- * Answers the teach calls, or undefined for any other address. `body` reads
- * the request's JSON, `json` makes a response with the caller's CORS headers.
+ * Answers the teach calls, or undefined for any other address. `caller` is
+ * who the caller is to the limits: an IPv4 address, or the /64 of an IPv6 one
+ * (`callerKey` in learned.ts). `body` reads the request's JSON, `json` makes a
+ * response with the caller's CORS headers.
  */
 export async function teachCall(
   parts: TeachParts,

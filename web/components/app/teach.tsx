@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { api, type Outcome, type Site, type TaughtRoute, type TaughtStep, type TeachSession } from "@/lib/app-api";
+import { api, useUnsaved, type Outcome, type Site, type TaughtRoute, type TaughtStep, type TeachSession } from "@/lib/app-api";
 import { FailedCard, StepMark, when } from "./parts";
 
 // Teach Haptic: someone at the company shows Haptic the right way by doing the
@@ -64,6 +64,10 @@ async function beginTeaching(siteId: string, question: string, from: Active["fro
       // Nothing to do.
     }
   }
+  // A page whose session has ended goes to sign in without the call below ever settling (api in lib/app-api.ts), so
+  // the tab goes with the page rather than stay open and blank.
+  const leave = () => tab?.close();
+  window.addEventListener("pagehide", leave);
   setActive({ siteId, question, from, starting: true });
   try {
     const result = await api<{ session: TeachSession; url: string }>(`/sites/${siteId}/teach`, { method: "POST", body: { question, ...from } });
@@ -72,6 +76,8 @@ async function beginTeaching(siteId: string, question: string, from: Active["fro
   } catch (failure) {
     tab?.close();
     setActive({ siteId, question, from, error: (failure as Error).message });
+  } finally {
+    window.removeEventListener("pagehide", leave);
   }
 }
 
@@ -385,6 +391,9 @@ function TeachPanel({ mine, site, onChange }: { mine: Active; site: Site; onChan
 
   const update = (index: number, change: Partial<Kept>) => setKept((list) => list && list.map((item, at) => (at === index ? { ...item, ...change } : item)));
   const deleted = steps.length - (kept?.length ?? steps.length);
+  // The recorded steps wait on the server, but what the review changed is only here until it is saved, so a page whose
+  // session ends keeps it.
+  useUnsaved(Boolean(reviewing && (deleted > 0 || leaveLast || kept!.some((item) => item.note.trim() || item.name.trim()))));
 
   return (
     <Sheet open onOpenChange={(open) => !open && close()}>

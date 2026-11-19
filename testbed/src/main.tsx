@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router";
 import { Toaster } from "sonner";
 import { router } from "@/app/router";
-import { applyLabParams, lab, useLab } from "@/lab/lab";
+import { applyLabParams, lab, trustedWidgetSrc, useLab } from "@/lab/lab";
 import { LabPanel } from "@/lab/LabPanel";
 import { TooltipProvider } from "@/ui/button";
 import "./styles.css";
@@ -33,9 +33,9 @@ function App() {
   );
 }
 
-// Haptic goes in the way a customer would add it: one script tag.
+// Haptic goes in the way a customer would add it: one script tag, and only from an address lab.ts trusts.
 const { widget, widgetSrc, widgetSite } = lab();
-if (widget && widgetSrc && widgetSite) {
+if (widget && widgetSrc && widgetSite && trustedWidgetSrc(widgetSrc)) {
   const tag = document.createElement("script");
   tag.src = widgetSrc;
   tag.async = true;

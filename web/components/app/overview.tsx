@@ -54,7 +54,7 @@ export function Overview({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <Latest siteId={siteId} live={live} onOpen={onOpen} className="lg:col-span-3" />
         <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
-          <HeadlineChart data={headline.data} />
+          <HeadlineChart data={headline.data} error={headline.error} />
           <Endings data={data} />
         </div>
       </div>
@@ -139,14 +139,17 @@ function Endings({ data }: { data: Insights | null }) {
           <Skeleton className="h-32" />
         </div>
       ) : data.outcomes.length ? (
-        <ul className="flex flex-col gap-2.5 px-5 pb-5">
+        // Each ending's name, its bar, then its count, on one line when the panel is wide enough to give the bar room
+        // beside the longest name. Narrower, as on a phone and in the Overview's right-hand column on a laptop, the bar
+        // goes under the name across the panel's width, where it once had none left at all.
+        <ul className="@container flex flex-col gap-2.5 px-5 pb-5">
           {data.outcomes.map((row) => (
-            <li key={row.outcome} className="grid grid-cols-[minmax(0,14.5rem)_1fr_2.5rem] items-center gap-3 text-sm">
+            <li key={row.outcome} className="grid grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-x-3 gap-y-1.5 text-sm @md:grid-cols-[minmax(0,14.5rem)_1fr_2.5rem]">
               <span className="flex min-w-0 items-center gap-2">
                 <StatusMark outcome={row.outcome} />
                 <span className="truncate">{OUTCOME_LABEL[row.outcome]}</span>
               </span>
-              <ShareBar share={row.count / data.summary.guides} />
+              <ShareBar share={row.count / data.summary.guides} className="col-span-2 row-start-2 @md:col-span-1 @md:row-start-auto" />
               <span className="text-right text-muted-foreground tabular-nums">{row.count.toLocaleString()}</span>
             </li>
           ))}

@@ -48,7 +48,8 @@ export function FinishedGuides({ siteId, onOpen }: { siteId: string; onOpen: (id
             aria-label="Month"
             value={month}
             onChange={(event) => setMonth(event.target.value)}
-            className="h-8 rounded-lg border bg-card px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            // 16px on a phone, as every field is (components/ui/input.tsx), since iOS zooms the page into a smaller one when it is pressed.
+            className="h-8 rounded-lg border bg-card px-3 text-base outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm"
           >
             {months.map((item) => (
               <option key={item} value={item}>

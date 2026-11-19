@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { FormAlert } from "@/components/form";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { ApiError, api, type Me } from "@/lib/app-api";
+import { api, type Me } from "@/lib/app-api";
 import { auth } from "@/lib/auth-client";
 import { siteAt } from "@/lib/dashboard";
 import { accessHref } from "@/lib/site";
 import { SITES_HREF, viewFrom } from "./nav";
-import { Card, FailedCard, leaveFor } from "./parts";
+import { Card, FailedCard } from "./parts";
 import { Plain } from "./shell";
+import { useSignOut } from "./sign-out";
 import { BillingPage } from "./billing";
 import { TeamPage } from "./team";
 import { SiteView } from "./site-view";
@@ -32,17 +34,16 @@ export function Dashboard() {
     (async () => {
       // This first check also finishes a sign-in: an emailed link or Google lands here with a
       // one-time verifier in the address, and the auth client trades it for the session cookie.
-      await auth().getSession();
+      // The client throws when the check fails, and /me below then says what to do: it fails the same way
+      // when Haptic can't be reached, and sends anyone who isn't signed in to sign in.
+      await auth()
+        .getSession()
+        .catch(() => undefined);
       try {
+        // Anyone not signed in, a sign-in link that didn't work among them, is sent to sign in by api().
         const me = await api<Me>("/me");
         if (live) setState({ kind: "ready", me });
       } catch (failure) {
-        if (failure instanceof ApiError && failure.status === 401) {
-          // A sign-in link that was already used or has expired comes back here with an error in the address.
-          // Take it along, so the sign-in page can say what happened.
-          const linkError = new URLSearchParams(window.location.search).get("error");
-          return window.location.replace(linkError ? `/sign-in/?error=${encodeURIComponent(linkError)}` : "/sign-in/");
-        }
         if (live) setState({ kind: "failed", message: (failure as Error).message });
       }
     })();
@@ -81,7 +82,7 @@ export function Dashboard() {
   if (view === "billing") {
     return (
       <Plain me={me}>
-        <BillingPage />
+        <BillingPage sites={sites} />
       </Plain>
     );
   }
@@ -124,10 +125,7 @@ export function Dashboard() {
 }
 
 function NotApproved({ me }: { me: Me }) {
-  async function signOut() {
-    await auth().signOut();
-    leaveFor("/sign-in/");
-  }
+  const { signOut, signingOut, failure } = useSignOut();
   return (
     <Card className="max-w-2xl">
       <h1 className="text-2xl font-medium tracking-[-0.02em]">{me.reason === "unverified" ? "Confirm your email first" : "You are signed in, but not approved yet"}</h1>
@@ -141,10 +139,11 @@ function NotApproved({ me }: { me: Me }) {
         <a href={accessHref} className={buttonVariants({ size: "xl" })}>
           Request access
         </a>
-        <Button variant="secondary" size="xl" onClick={signOut}>
-          Use a different account
+        <Button variant="secondary" size="xl" onClick={signOut} disabled={signingOut}>
+          {signingOut ? "Signing out" : "Use a different account"}
         </Button>
       </div>
+      <FormAlert failure={failure} retry={signOut} />
     </Card>
   );
 }
