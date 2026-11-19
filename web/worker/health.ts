@@ -15,7 +15,7 @@
 
 import { cleanText } from "../../src/shared/types";
 import type { Sql } from "./db";
-import { emailButton, emailPage, escape, sendEmail, type, type SendEnv } from "./sign-in-email";
+import { BATCH_MAX, emailButton, emailPage, escape, sendEmails, type, type SendEnv } from "./sign-in-email";
 
 /** A guide with no ending reported, and nothing new for this long, was abandoned. Matches insights.ts. */
 const ABANDONED_AFTER = "30 minutes";
@@ -317,23 +317,37 @@ const ADVICE = "This often follows a change to the product. Open the guides on y
 /** Who the alert comes from. Any address at joinhaptic.com sends through Resend once the domain is verified there. */
 export const ALERTS_FROM = "Haptic <alerts@joinhaptic.com>";
 
+/** A site as an alert names it. Its address tells two sites apart: a new site is named after its company. */
+export interface AlertSite {
+  id: string;
+  name: string;
+  origin: string;
+}
+
 /**
  * The email to a company's people about one flagged group on one of its sites, on the page every Haptic email
  * sits on (sign-in-email.ts). Everything a visitor sent is already quoted short by describeBreak, and escaped here.
+ * The button opens that site on the dashboard. `id` is hidden at the end, so Gmail, which threads emails with one
+ * subject and folds an ending it has shown before, doesn't fold a later alert's button away.
  */
-export function alertEmail(site: { name: string }, group: Health, dashboard: string): { subject: string; text: string; html: string } {
-  const subject = `Guides for a common question on ${oneLine(site.name)} stopped finishing`;
+export function alertEmail(site: AlertSite, group: Health, dashboard: string, id?: string): { subject: string; text: string; html: string } {
+  const name = oneLine(site.name);
+  const host = URL.canParse(site.origin) ? new URL(site.origin).host : oneLine(site.origin);
+  const subject = `Guides for a common question on ${name} stopped finishing`;
   const lines = describeBreak(group);
+  const link = `${dashboard}?site=${encodeURIComponent(site.id)}`;
   const paragraph = (text: string, last = false) => `<p class="muted" style="margin:0 0 ${last ? 24 : 16}px;${type(16, 24, 400)}color:#78716C;">${escape(text)}</p>`;
   const html = emailPage({
     title: subject,
     preview: lines[0] ?? subject,
+    id,
     card: `<h1 class="ink" style="margin:0 0 8px;${type(24, 32, 500)}letter-spacing:-0.02em;color:#1C1917;">A common question stopped finishing</h1>
+<p class="ink" style="margin:0 0 16px;${type(14, 20, 500)}color:#1C1917;word-break:break-all;">${escape(`${name}, ${host}`)}</p>
 ${lines.map((line) => paragraph(line)).join("\n")}
 ${paragraph(ADVICE, true)}
-${emailButton("Open the dashboard", dashboard)}`,
+${emailButton("Open the site on the dashboard", link)}`,
   });
-  return { subject, text: [...lines, "", ADVICE, dashboard].join("\n"), html };
+  return { subject, text: [`${name}, ${host}`, "", ...lines, "", ADVICE, link].join("\n"), html };
 }
 
 /** Resend's key, which every Haptic email is sent with. */
@@ -341,31 +355,59 @@ export type MailEnv = SendEnv;
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
-/** One key for one alert to one person on one day, so Resend sends a retried call once. Short, whatever the group's key holds. */
-async function alertKey(site: string, group: string, to: string): Promise<string> {
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${group}\n${to}`)));
-  const hash = Array.from(digest.slice(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `health-alert/${site}/${new Date().toISOString().slice(0, 10)}/${hash}`;
+/** One flagged group on one site, as 32 hex characters, whatever the group's key holds. */
+async function alertId(site: string, group: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${site}\n${group}`)));
+  return Array.from(digest.slice(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /** Days before the same group on the same site is emailed about again. */
 const ALERT_AGAIN_DAYS = 14;
 
+/** How many times one batch is tried, and the pauses between, in milliseconds. */
+const PAUSES_MS = [1_000, 4_000];
+
+/** Worth trying again: Resend couldn't be reached or timed out (0), was over its rate (429), or failed itself (5xx). */
+const passing = (status: number) => status === 0 || status === 429 || status >= 500;
+
 /**
  * Emails one flagged group to a company's people, through Resend, as every other Haptic email is. Cloudflare's
- * own email binding only delivers to inboxes verified under Email Routing, which a customer's are not. `tried`
- * is false with no key or no one to send to; `emailed` is true once anyone was sent it.
+ * own email binding only delivers to inboxes verified under Email Routing, which a customer's are not.
+ *
+ * Everyone is sent it in one batch, which Resend sends whole or not at all, so one answer says whether the
+ * team was emailed. A batch Resend couldn't take for a passing reason is tried again after a pause, with
+ * the same key, so a retry it already took is not sent twice. `tried` is false with no key or no one to send
+ * to; `emailed` is true only once everyone was sent it.
  */
-export async function alertPeople(env: MailEnv, site: { id: string; name: string }, group: Health, people: string[], dashboard: string, fetcher: Fetch): Promise<{ tried: boolean; emailed: boolean }> {
+export async function alertPeople(
+  env: MailEnv,
+  site: AlertSite,
+  group: Health,
+  people: string[],
+  dashboard: string,
+  fetcher: Fetch,
+  pause: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+): Promise<{ tried: boolean; emailed: boolean }> {
   if (!env.RESEND_API_KEY || !people.length) return { tried: false, emailed: false };
-  const { subject, text, html } = alertEmail(site, group, dashboard);
-  let emailed = false;
-  for (const to of people) {
-    const sent = await sendEmail(env, { to, subject, text, html, from: ALERTS_FROM }, await alertKey(site.id, group.key, to), fetcher);
-    if (sent.ok) emailed = true;
-    else console.error(`Couldn't email ${site.id} about ${group.key}: Resend answered ${sent.status} ${sent.detail}`);
+  const id = await alertId(site.id, group.key);
+  const { subject, text, html } = alertEmail(site, group, dashboard, id);
+  const day = new Date().toISOString().slice(0, 10);
+  let everyone = true;
+  for (let start = 0; start < people.length; start += BATCH_MAX) {
+    const emails = people.slice(start, start + BATCH_MAX).map((to) => ({ to, subject, text, html, from: ALERTS_FROM }));
+    const key = `health-alert/${site.id}/${day}/${id}/${start / BATCH_MAX}`;
+    let sent = await sendEmails(env, emails, key, fetcher);
+    for (const ms of PAUSES_MS) {
+      if (sent.ok || !passing(sent.status)) break;
+      await pause(ms);
+      sent = await sendEmails(env, emails, key, fetcher);
+    }
+    if (!sent.ok) {
+      everyone = false;
+      console.error(`Couldn't email ${site.id} about ${group.key}: Resend answered ${sent.status} ${sent.detail}`);
+    }
   }
-  return { tried: true, emailed };
+  return { tried: true, emailed: everyone };
 }
 
 /**
@@ -375,7 +417,7 @@ export async function alertPeople(env: MailEnv, site: { id: string; name: string
  * from any visitor's step.
  */
 export async function sendHealthAlerts(sql: Sql, env: MailEnv, dashboard = "https://joinhaptic.com/dashboard/", fetcher: Fetch = (input, init) => fetch(input, init)): Promise<number> {
-  const sites = (await sql`select id, name, company_id from sites where company_id is not null`) as { id: string; name: string; company_id: string }[];
+  const sites = (await sql`select id, name, origin, company_id from sites where company_id is not null`) as (AlertSite & { company_id: string })[];
   let sent = 0;
   for (const site of sites) {
     const broken = (await guideHealth(sql, site.id)).filter((group) => group.flag && group.flag.visitorsBefore >= COMMON_VISITORS);

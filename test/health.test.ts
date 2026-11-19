@@ -103,58 +103,80 @@ test("what a visitor could have written reaches the email short, with nothing in
   assert.match(flag("refund order 123456789 for ana@example.com", "x", "/")[0]!, /refund order \[number\] for \[email\]/);
 });
 
+const ACME = { id: "site_health1", name: "Acme", origin: "https://app.acme.example" };
+
 test("the email's subject is one line, whatever the site's name holds", () => {
   const group = { key: "k", question: "Where are invoices?", weeks: [], flag: { before: 0.9, now: 0.2, visitorsBefore: 9, stop: null } };
-  const { subject, text } = alertEmail({ name: "Acme\r\nBcc: everyone@example.com\u2028\u202eEvil" }, group, "https://joinhaptic.com/dashboard/");
+  const { subject, text } = alertEmail({ ...ACME, name: "Acme\r\nBcc: everyone@example.com\u2028\u202eEvil" }, group, "https://joinhaptic.com/dashboard/");
   assert.equal(subject, "Guides for a common question on Acme Bcc: everyone@example.com Evil stopped finishing");
   assert.doesNotMatch(subject, /[\r\n\u2028\u202e]/u);
-  assert.ok(text.endsWith("\nhttps://joinhaptic.com/dashboard/"));
+  assert.ok(text.endsWith("\nhttps://joinhaptic.com/dashboard/?site=site_health1"));
   assert.equal(oneLine("  Acme\t\tCo  "), "Acme Co");
   assert.equal(oneLine("👩\u200d💻 Acme"), "👩\u200d💻 Acme", "the joiner inside an emoji is kept");
   assert.equal(oneLine("x".repeat(100)).length, 80);
 });
 
-test("the email's page escapes what it quotes, and links only to the dashboard", () => {
+test("the email's page escapes what it quotes, names the site's address, and links only to that site on the dashboard", () => {
   const group = { key: "k", question: "Where is <b>billing</b>? See evil.example", weeks: [], flag: { before: 0.9, now: 0.2, visitorsBefore: 9, stop: null } };
-  const { html, text } = alertEmail({ name: "Acme <script>alert(1)</script>" }, group, "https://joinhaptic.com/dashboard/");
+  const { html, text } = alertEmail({ ...ACME, name: "Acme <script>alert(1)</script>" }, group, "https://joinhaptic.com/dashboard/", "0123456789abcdef0123456789abcdef");
   assert.doesNotMatch(html, /<script>|<b>/);
   assert.match(html, /&#60;b&#62;billing&#60;\/b&#62;/);
   assert.doesNotMatch(html + text, /evil\.example/);
-  assert.deepEqual([...html.matchAll(/href="([^"]+)"/g)].map((match) => match[1]), ["https://joinhaptic.com/dashboard/", "https://joinhaptic.com"]);
+  // Two sites of one company share its name, so each alert says which by its address.
+  assert.match(html, /app\.acme\.example/);
+  assert.ok(text.startsWith("Acme <script>alert(1)</script>, app.acme.example\n"), "the text version is read only by mail apps that show no HTML");
+  assert.deepEqual([...html.matchAll(/href="([^"]+)"/g)].map((match) => match[1]), ["https://joinhaptic.com/dashboard/?site=site_health1", "https://joinhaptic.com"]);
+  assert.match(html, /0123456789abcdef0123456789abcdef<\/span>/, "the alert's id keeps Gmail from folding a later alert's button");
 });
 
 // Cloudflare's own email binding only delivers to inboxes verified under Email Routing, so the alerts go through
-// Resend, as the sign-in and install emails do.
-test("an alert goes to each person through Resend, from alerts@, once a day for each of them", async () => {
+// Resend, as the sign-in and install emails do: the whole team in one batch, which Resend sends whole or not at all.
+test("an alert goes to the whole team in one batch through Resend, and is kept as emailed only when Resend took all of it", async () => {
   const group = { key: "export invoice", question: "How do I export invoices?", weeks: [], flag: { before: 0.82, now: 0.31, visitorsBefore: 40, stop: null } };
-  const site = { id: "site_health1", name: "Acme" };
-  const sent: { url: string; key: string | null; body: { from: string; to: string[]; subject: string; html: string; text: string } }[] = [];
-  const answer = (failFor: string[]) => async (url: string, init?: RequestInit) => {
+  const calls: { url: string; key: string | null; body: { from: string; to: string[]; subject: string; html: string; text: string }[] }[] = [];
+  /** Resend, answering each call in turn with the next status in `statuses`, then 200. */
+  const resend = (...statuses: number[]) => async (url: string, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body));
-    sent.push({ url, key: new Headers(init?.headers).get("idempotency-key"), body });
-    return failFor.includes(body.to[0]) ? Response.json({ message: "Resend is down" }, { status: 500 }) : Response.json({ id: `email_${sent.length}` });
+    calls.push({ url, key: new Headers(init?.headers).get("idempotency-key"), body });
+    const status = statuses.shift() ?? 200;
+    if (status === 0) throw new TypeError("fetch failed");
+    return status === 200 ? Response.json({ data: body.map((_: unknown, n: number) => ({ id: `email_${n}` })) }) : Response.json({ name: "error", message: `Resend answered ${status}` }, { status });
   };
+  const paused: number[] = [];
+  const pause = async (ms: number) => void paused.push(ms);
   const dashboard = "https://joinhaptic.com/dashboard/";
+  const key = "re_test";
 
-  assert.deepEqual(await alertPeople({}, site, group, ["ana@acme.example"], dashboard, answer([])), { tried: false, emailed: false }, "no key, kept for the dashboard only");
-  assert.deepEqual(await alertPeople({ RESEND_API_KEY: "re_test" }, site, group, [], dashboard, answer([])), { tried: false, emailed: false }, "nobody to send to");
-  assert.equal(sent.length, 0);
+  assert.deepEqual(await alertPeople({}, ACME, group, ["ana@acme.example"], dashboard, resend(), pause), { tried: false, emailed: false }, "no key, kept for the dashboard only");
+  assert.deepEqual(await alertPeople({ RESEND_API_KEY: key }, ACME, group, [], dashboard, resend(), pause), { tried: false, emailed: false }, "nobody to send to");
+  assert.equal(calls.length, 0);
 
-  assert.deepEqual(await alertPeople({ RESEND_API_KEY: "re_test" }, site, group, ["ana@acme.example", "bo@acme.example"], dashboard, answer([])), { tried: true, emailed: true });
-  assert.equal(sent.length, 2);
-  for (const [index, to] of ["ana@acme.example", "bo@acme.example"].entries()) {
-    const { url, key, body } = sent[index]!;
-    assert.equal(url, "https://api.resend.com/emails");
-    assert.equal(body.from, ALERTS_FROM);
-    assert.deepEqual(body.to, [to]);
-    assert.match(body.subject, /^Guides for a common question on Acme stopped finishing$/);
-    assert.match(key ?? "", new RegExp(`^health-alert/site_health1/\\d{4}-\\d{2}-\\d{2}/[0-9a-f]{32}$`));
+  assert.deepEqual(await alertPeople({ RESEND_API_KEY: key }, ACME, group, ["ana@acme.example", "bo@acme.example", "cy@acme.example"], dashboard, resend(), pause), { tried: true, emailed: true });
+  assert.equal(calls.length, 1, "one call for the whole team, so Resend's rate limit isn't met person by person");
+  const [call] = calls;
+  assert.equal(call!.url, "https://api.resend.com/emails/batch");
+  assert.deepEqual(call!.body.map((email) => email.to), [["ana@acme.example"], ["bo@acme.example"], ["cy@acme.example"]]);
+  for (const email of call!.body) {
+    assert.equal(email.from, ALERTS_FROM);
+    assert.equal(email.subject, "Guides for a common question on Acme stopped finishing");
   }
-  assert.notEqual(sent[0]!.key, sent[1]!.key, "each person has a key of their own");
+  assert.match(call!.key ?? "", /^health-alert\/site_health1\/\d{4}-\d{2}-\d{2}\/[0-9a-f]{32}\/0$/);
 
-  sent.length = 0;
-  assert.deepEqual(await alertPeople({ RESEND_API_KEY: "re_test" }, site, group, ["ana@acme.example", "bo@acme.example"], dashboard, answer(["ana@acme.example"])), { tried: true, emailed: true }, "one of two is enough to keep it");
-  assert.deepEqual(await alertPeople({ RESEND_API_KEY: "re_test" }, site, group, ["ana@acme.example"], dashboard, answer(["ana@acme.example"])), { tried: true, emailed: false }, "sent to nobody, so tried again tomorrow");
+  // Over Resend's rate, then failing itself, then taking it: tried again after a pause, with the same key, so a
+  // batch Resend did take before is not sent twice.
+  calls.length = 0;
+  assert.deepEqual(await alertPeople({ RESEND_API_KEY: key }, ACME, group, ["ana@acme.example"], dashboard, resend(429, 503), pause), { tried: true, emailed: true });
+  assert.equal(calls.length, 3);
+  assert.equal(new Set(calls.map((sent) => sent.key)).size, 1);
+  assert.deepEqual(paused, [1000, 4000]);
+
+  // Still failing after its tries, or refused for a reason another try won't change: not kept, so tomorrow's run tries again.
+  calls.length = 0;
+  assert.deepEqual(await alertPeople({ RESEND_API_KEY: key }, ACME, group, ["ana@acme.example"], dashboard, resend(0, 500, 502), pause), { tried: true, emailed: false });
+  assert.equal(calls.length, 3);
+  calls.length = 0;
+  assert.deepEqual(await alertPeople({ RESEND_API_KEY: key }, ACME, group, ["ana@acme.example"], dashboard, resend(422), pause), { tried: true, emailed: false });
+  assert.equal(calls.length, 1, "a refusal another try won't change is not tried again");
 });
 
 const VISITOR = "1b2c3d4e-5f60-4a1b-8c2d-3e4f5a6b7c8d";

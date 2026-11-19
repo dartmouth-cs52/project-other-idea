@@ -121,6 +121,12 @@ export default function Privacy() {
         run for us by Neon.
       </p>
       <p>
+        When guides for a question many people ask stop finishing, we email the company&apos;s people about it through
+        Resend. The email quotes that question as a visitor last asked it, cut short and with email addresses, long
+        numbers and anything that could be a link taken out, with the page and the name of the control where guides
+        now stop.
+      </p>
+      <p>
         With each question we also keep a scrambled form of the random id described below, so the company can see how
         many different people asked something, and one person asking ten times counts once. It is made differently for
         each product, cannot be turned back into the id, and says nothing about who the person is. It does let the
