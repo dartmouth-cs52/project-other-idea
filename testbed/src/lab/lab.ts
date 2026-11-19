@@ -83,10 +83,12 @@ const WIDGET_HOSTS = new Set(["widget.joinhaptic.com", "haptic-widget-staging.jo
 
 /**
  * Whether the widget may be loaded from this address: the one this build was
- * made with, Haptic's live or staging server, or a server on this machine. The
- * address can come from the page's URL and is kept for later visits, so any
- * other would let a link run whatever script it named on demo.joinhaptic.com,
- * then and on every visit after.
+ * made with, Haptic's live or staging server, a server on this machine, or
+ * this page's own origin, which serves only Northpine's own files and is
+ * where eval/browser.ts answers for a widget it builds. The address can come
+ * from the page's URL and is kept for later visits, so any other would let a
+ * link run whatever script it named on demo.joinhaptic.com, then and on every
+ * visit after.
  */
 export function trustedWidgetSrc(src: string): boolean {
   if (src === LAB_DEFAULTS.widgetSrc) return true;
@@ -96,6 +98,8 @@ export function trustedWidgetSrc(src: string): boolean {
   } catch {
     return false;
   }
+  // Over http(s) only: a blob: address carries the origin of the page that made it, too.
+  if (/^https?:$/.test(url.protocol) && typeof location !== "undefined" && url.origin === location.origin) return true;
   if (url.protocol === "https:") return WIDGET_HOSTS.has(url.hostname);
   return url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
 }
@@ -112,7 +116,8 @@ function fits<K extends keyof LabSettings>(name: K, value: unknown): value is La
   }
   if (typeof value !== "string") return false;
   if (name === "widgetSrc") return trustedWidgetSrc(value);
-  return CHOICES[name]?.includes(value) ?? true;
+  // Own names only: a name every object has, such as toString or constructor, is no choice.
+  return Object.hasOwn(CHOICES, name) ? CHOICES[name]!.includes(value) : true;
 }
 
 /**
@@ -142,7 +147,7 @@ export const useLab = create<LabStore>()(
         // A value an earlier visit kept that no setting can take, such as one a link put there before links were
         // checked, goes back to the default rather than break the app or load a script from elsewhere.
         for (const name of Object.keys(rest) as (keyof LabSettings)[]) {
-          if (name in LAB_DEFAULTS && !fits(name, rest[name])) delete rest[name];
+          if (Object.hasOwn(LAB_DEFAULTS, name) && !fits(name, rest[name])) delete rest[name];
         }
         return { ...current, ...rest };
       },
@@ -177,7 +182,8 @@ export function applyLabParams(search: string) {
   for (const [key, raw] of params) {
     if (!key.startsWith("lab.")) continue;
     const name = key.slice(4) as keyof LabSettings;
-    if (!(name in LAB_DEFAULTS)) continue;
+    // Own names only: ?lab.toString= or ?lab.__proto__= names something every object has, and no setting.
+    if (!Object.hasOwn(LAB_DEFAULTS, name)) continue;
     const current = LAB_DEFAULTS[name];
     const value = typeof current === "boolean" ? raw === "1" || raw === "true" : typeof current === "number" ? Number(raw) : raw;
     if (fits(name, value)) patch[name] = value;
