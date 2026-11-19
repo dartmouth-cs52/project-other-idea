@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, test } from "node:test";
 import { Store } from "../src/server/db.ts";
 import { DEFAULT_APPEARANCE, type PageOutline, type SiteContext } from "../src/shared/types.ts";
 import { knownControls } from "../web/worker/corrections.ts";
+import { forgetOldNetworkDays } from "../web/worker/db.ts";
 import { exec, freshDatabase, psqlSql, TEST_DATABASE_URL, testDatabase } from "./psql.ts";
 
 /** This file's own database, when TEST_DATABASE_URL is set. */
@@ -199,6 +200,15 @@ describe("learning from visits, against Postgres", { skip: TEST_DATABASE_URL ? f
     await store.recordOutline(site, "d", menu("Shortcuts"), "dddd");
     assert.deepEqual((await rows("outline_openings")).map((row) => row.label), ["Docs", "Shortcuts", "m1", "m2"]);
     assert.deepEqual((await store.loadSite(site.id))?.pages[0]?.opens, [{ control: "Help", links: [], buttons: ["Docs"] }]);
+  });
+
+  test("the site's daily schedule forgets each network's counts from the days before today", async () => {
+    await new Store(sql(), 3, { labelNetworks: 3 }).recordOutline(site, "v1", buttons("/", "Search"), "aaaa");
+    exec(DB, `insert into outline_network_days (site_id, network, day, labels) values ('${site.id}', 'bbbb', current_date - 1, 3);
+      insert into route_network_days (site_id, network, day, served) values ('${site.id}', 'aaaa', current_date - 1, 7), ('${site.id}', 'cccc', current_date, 2)`);
+    await forgetOldNetworkDays(psqlSql(DB) as unknown as Parameters<typeof forgetOldNetworkDays>[0]);
+    assert.deepEqual(await psqlSql(DB)`select network, day = current_date as today from outline_network_days order by network`, [{ network: "aaaa", today: true }]);
+    assert.deepEqual(await psqlSql(DB)`select network, served from route_network_days order by network`, [{ network: "cccc", served: 2 }]);
   });
 
   // On the Worker, waitUntil holds the request open only for the promise it is given. What menus show is written

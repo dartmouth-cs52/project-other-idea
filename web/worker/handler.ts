@@ -6,7 +6,7 @@ import { appApi, approveLink, type AppEnv, type Later } from "./app-api";
 import { billingSweep, stripeWebhook, WEBHOOK_PATH } from "./billing";
 import { proxyAuth } from "./auth";
 import { boundedRequest, boundedText } from "./body";
-import { database } from "./db";
+import { database, forgetOldNetworkDays } from "./db";
 import { sendHealthAlerts } from "./health";
 import { forgetOldSignInEmails, HOOK_PATH, neonHook, type HookEnv } from "./neon-hook";
 import { forgetOldEmails } from "./setup-api";
@@ -68,6 +68,8 @@ export async function daily(env: Env): Promise<void> {
   await forgetOldSignInEmails(database(env.DATABASE_URL)).catch((error: Error) => console.error("Could not delete old sign-in email records:", error.message));
   // Teach sessions nobody saved, a week on, and any steps a saved or closed one still holds.
   await forgetOldTeaching(database(env.DATABASE_URL)).catch((error: Error) => console.error("Could not delete old teach sessions:", error.message));
+  // What each network taught a site, or had answered from routes, on the days before today.
+  await forgetOldNetworkDays(database(env.DATABASE_URL)).catch((error: Error) => console.error("Could not delete old network counts:", error.message));
 }
 
 /**
