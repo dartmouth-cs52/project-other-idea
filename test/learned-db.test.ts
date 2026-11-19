@@ -200,4 +200,21 @@ describe("learning from visits, against Postgres", { skip: TEST_DATABASE_URL ? f
     assert.deepEqual((await rows("outline_openings")).map((row) => row.label), ["Docs", "Shortcuts", "m1", "m2"]);
     assert.deepEqual((await store.loadSite(site.id))?.pages[0]?.opens, [{ control: "Help", links: [], buttons: ["Docs"] }]);
   });
+
+  // On the Worker, waitUntil holds the request open only for the promise it is given. What menus show is written
+  // in statements of its own, and here it is made the slower of the two, as it can be online.
+  test("waiting on a page's outline waits for what its menus show to be written as well", async () => {
+    const base = psqlSql(DB);
+    const slow = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+      const query = base(strings, ...values);
+      if (!strings.join("").includes("insert into outline_openings")) return query;
+      return { then: (done: (rows: unknown) => unknown, failed: (error: unknown) => unknown) => new Promise((wait) => setTimeout(wait, 400)).then(() => query).then(done, failed) };
+    }) as typeof base;
+    slow.query = base.query;
+    slow.transaction = base.transaction;
+    const store = new Store(slow as unknown as ConstructorParameters<typeof Store>[0], 3, { labelNetworks: 3 });
+    await store.recordOutline(site, "v1", { ...buttons("/", "Search"), opens: [{ control: "Help", links: [], buttons: ["Docs"] }] }, "aaaa");
+    assert.deepEqual((await rows("outline_openings")).map((row) => row.label), ["Docs"]);
+    assert.deepEqual((await rows("outline_labels")).map((row) => row.label), ["Search"]);
+  });
 });

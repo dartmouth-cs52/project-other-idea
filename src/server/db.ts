@@ -315,10 +315,12 @@ export class Store {
    */
   recordOutline(site: SiteContext, visitor: string, outline: PageOutline, network = ""): Promise<void> {
     const rows = outlineRows(outline);
-    // In a statement of their own, so a database without 0012 still learns the page's labels.
+    // In a statement of their own, so a database without 0012 still learns the page's labels. Both are waited for:
+    // on the Worker this promise is what waitUntil holds the request open for, and a write it doesn't cover can be
+    // cut off once the answer has gone, as what menus show was, some of the time.
     const opened = this.recordOpenings(site, visitor, openingRows(outline), network);
     if (!rows.length) return opened;
-    return this.quietly("learn from a page (have db/migrations/0009, 0014 and 0019 been applied?)", async () => {
+    const labelled = this.quietly("learn from a page (have db/migrations/0009, 0014 and 0019 been applied?)", async () => {
       const placed = JSON.stringify(rows.map((row, place) => ({ ...row, place })));
       let room = rows.length;
       if (network) {
@@ -375,6 +377,8 @@ export class Store {
         ) least
         where o.site_id = ${site.id} and o.route = least.route and o.kind = least.kind and o.label = least.label and o.href = least.href`;
     });
+    // Neither rejects (`quietly`), so this settles once both are written.
+    return Promise.all([opened, labelled]).then(() => undefined);
   }
 
   /** Counts what a visitor saw behind each control, the same way as a page's labels, and makes room and keeps each network to its day's share the same way. */
