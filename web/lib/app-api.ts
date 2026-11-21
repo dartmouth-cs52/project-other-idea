@@ -273,6 +273,8 @@ export interface Site {
   reading: Reading | null;
   /** Screens mapped from a signed-in browser at the company. */
   mapped: number;
+  /** What they said about mapping those screens, at signup or since. Null on a site from before it was asked. */
+  mapChoice: "yes" | "later" | null;
   corrections: Correction[];
   blocked: ControlName[];
   /** Routes taught by doing the task. Absent from a server older than Teach Haptic. */

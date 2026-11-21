@@ -65,6 +65,12 @@ export interface SiteContext {
    * working at `expires`.
    */
   mapping?: { hash: string; expires: string };
+  /**
+   * What the company said, at signup or since, about mapping the screens
+   * behind their login. The dashboard asks for it first on "yes" and keeps
+   * out of the way on "later". Unset on sites from before it was asked.
+   */
+  mapChoice?: "yes" | "later";
   createdAt: string;
   updatedAt: string;
 }

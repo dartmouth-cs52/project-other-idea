@@ -21,9 +21,11 @@ export function AddressStep({
   /** The address already chosen, when someone came back to change it. */
   current?: string;
   /** Adds the site, or keeps the current one. Resolves with the failure, if there was one. */
-  onSubmit: (origin: string, url: string) => Promise<unknown>;
+  /** `map` is whether they want Haptic to map the screens behind their login. It is only asked when the site is first added. */
+  onSubmit: (origin: string, url: string, map: boolean) => Promise<unknown>;
 }) {
   const [value, setValue] = useState(current ? new URL(current).host : "");
+  const [map, setMap] = useState(true);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [busy, setBusy] = useState(false);
   const fields = useFieldErrors({ url: "setup-address" });
@@ -35,7 +37,7 @@ export function AddressStep({
     if (fields.show({ url: checked.ok ? undefined : checked.message })) return;
     if (!checked.ok) return;
     setBusy(true);
-    const error = await onSubmit(checked.origin, checked.url);
+    const error = await onSubmit(checked.origin, checked.url, map);
     if (error) {
       if (!fields.showRefusal(error)) setFailure(failureFrom("Couldn't add your app", error));
       setBusy(false);
@@ -98,6 +100,27 @@ export function AddressStep({
               className="h-12 bg-card px-4 text-lg md:text-lg"
             />
           </Field>
+          {/* Asked here so the choice is made once, up front. Mapping runs through the script, so it starts after the script connects. */}
+          {!current && (
+            <label htmlFor="setup-map" className="flex cursor-pointer items-start gap-3 rounded-lg border bg-card p-4">
+              <input
+                id="setup-map"
+                type="checkbox"
+                checked={map}
+                onChange={(event) => setMap(event.target.checked)}
+                aria-describedby="setup-map-about"
+                className="mt-1 size-4 shrink-0 accent-primary"
+              />
+              <span className="flex flex-col gap-1">
+                <span className="text-base font-medium">Let Haptic map the screens behind my login</span>
+                <span id="setup-map-about" className="text-sm leading-5 text-pretty text-muted-foreground">
+                  Once the script is on your app, you sign in as usual and Haptic goes through it in your own browser. It opens pages, menus and
+                  tabs, keeps only the names of buttons, links and fields, and never types, submits or sees your password. Nothing runs until you
+                  press Start, and you can change this later.
+                </span>
+              </span>
+            </label>
+          )}
           <p className="text-sm leading-5 text-pretty text-muted-foreground">By continuing you confirm you can add Haptic to this site.</p>
         </div>
       </StepFrame>

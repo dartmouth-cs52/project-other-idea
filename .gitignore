@@ -17,3 +17,5 @@ eval/toolkits/results/*.json
 # Wrangler's local state.
 .wrangler/
 .dev.vars
+# The browser profile eval/live.ts signs in with.
+eval/.profile/

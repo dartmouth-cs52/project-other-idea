@@ -1,0 +1,52 @@
+[
+  {
+    "id": "github",
+    "site": "site_github",
+    "hosts": [
+      "github.com"
+    ],
+    "url": "https://github.com/facebook/react",
+    "questions": [
+      "How do I download this code as a zip file?",
+      "Where can I see who contributed to this project?",
+      "How do I see the open bug reports?"
+    ]
+  },
+  {
+    "id": "wikipedia",
+    "site": "site_wikipedia",
+    "hosts": [
+      "en.wikipedia.org"
+    ],
+    "url": "https://en.wikipedia.org/wiki/Dartmouth_College",
+    "questions": [
+      "How do I download this article as a PDF?",
+      "How do I see who edited this page and when?",
+      "How do I cite this article?"
+    ]
+  },
+  {
+    "id": "dartmouth",
+    "site": "site_dartmouth",
+    "hosts": [
+      "home.dartmouth.edu"
+    ],
+    "url": "https://home.dartmouth.edu",
+    "questions": [
+      "How do I apply as an undergraduate?",
+      "Where do I find the academic calendar?",
+      "How do I schedule a campus visit?"
+    ]
+  },
+  {
+    "id": "airbnb",
+    "site": "site_airbnb",
+    "hosts": [
+      "www.airbnb.com"
+    ],
+    "url": "https://www.airbnb.com",
+    "questions": [
+      "Where do I find gift cards?"
+    ]
+  }
+]

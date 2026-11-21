@@ -129,7 +129,8 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
         <Notes site={site} onChange={setSite} />
         <HelpDocs site={site} onChange={setSite} />
         <GuidingRules site={site} onChange={setSite} />
-        {site.connected && site.mapped > 0 && <MapApp site={site} reload={load} />}
+        {/* Also here for someone who said not now, so there is always a way to start. */}
+        {site.connected && (site.mapped > 0 || site.mapChoice === "later") && <MapApp site={site} reload={load} onChange={setSite} />}
         <PagesRead reading={pages.reading} />
       </>
     );
@@ -197,8 +198,8 @@ export function SiteView({ me, row, view, onDeleted, onRenamed }: { me: Me; row:
           <Reconnecting failing={failing} />
           {range}
         </PageHeader>
-        {/* Asked for first until it has been done once: without it Haptic knows only the public pages. */}
-        {site.mapped === 0 && asksToMap(site) && <MapApp site={site} reload={load} />}
+        {/* Asked for first until it has been done once, unless they said not now: without it Haptic knows only the public pages. */}
+        {site.mapped === 0 && asksToMap(site) && site.mapChoice !== "later" && <MapApp site={site} reload={load} onChange={setSite} first />}
         <BillingNotice me={me} />
         <Overview siteId={site.id} origin={site.origin} days={days} stamp={stamp} data={numbers.data} live={live} onOpen={openIt} />
         {numbers.data?.routes && <RoutesCard site={site} metrics={numbers.data.routes} onChange={setSite} />}
@@ -321,14 +322,57 @@ function Setup({ site, pages, onChange }: { site: Site; pages: Pages; onChange: 
 
       <Connection site={site} onChange={onChange} />
 
-      <Card>
-        <StepTitle mark={<StepMark n={4} />}>Show Haptic the screens behind your login</StepTitle>
-        <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
-          Once the script connects, one button here has Haptic go through your signed-in app by itself, in your own browser, so it knows where
-          everything is before your first user asks.
-        </p>
-      </Card>
+      <MapChoice site={site} onChange={onChange} />
     </div>
+  );
+}
+
+/** Saves what they chose about mapping the signed-in app. */
+function useMapChoice(site: Site, onChange: (site: Site) => void) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function choose(mapChoice: "yes" | "later") {
+    setBusy(true);
+    setError(null);
+    try {
+      onChange(await api<Site>(`/sites/${site.id}`, { method: "PATCH", body: { mapChoice } }));
+    } catch (failure) {
+      setError((failure as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return { busy, error, choose };
+}
+
+/**
+ * Step 4, while the script is not on the site yet. The choice was made when
+ * the site was added and can be changed here. Mapping runs through the script
+ * in their own signed-in tab, so it cannot start before the script connects.
+ */
+function MapChoice({ site, onChange }: { site: Site; onChange: (site: Site) => void }) {
+  const { busy, error, choose } = useMapChoice(site, onChange);
+  const later = site.mapChoice === "later";
+  return (
+    <Card>
+      <StepTitle mark={<StepMark n={4} />}>Show Haptic the screens behind your login</StepTitle>
+      <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
+        {later
+          ? "You chose to skip this for now. Haptic still reads each page live, and learns your signed-in screens slowly as people use them. Mapping them yourself means it knows where everything is before your first user asks."
+          : site.mapChoice === "yes"
+            ? "You chose to do this. As soon as the script connects, this page asks you to start: you sign in to your app as usual, and Haptic goes through it by itself in your own browser. It never types, submits a form or sees your password, and nothing runs until you press Start."
+            : "Once the script connects, one button here has Haptic go through your signed-in app by itself, in your own browser, so it knows where everything is before your first user asks."}
+      </p>
+      <Button variant="secondary" className="self-start" disabled={busy} onClick={() => choose(later ? "yes" : "later")}>
+        {later ? "Map my signed-in screens after all" : "Skip this for now"}
+      </Button>
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircleIcon />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+    </Card>
   );
 }
 
@@ -338,7 +382,8 @@ function Setup({ site, pages, onChange }: { site: Site; pages: Pages; onChange: 
  * (src/widget/map.ts in the widget). The count here goes up as pages arrive,
  * because the page asks for the site again every so often.
  */
-function MapApp({ site, reload }: { site: Site; reload: () => void }) {
+function MapApp({ site, reload, onChange, first = false }: { site: Site; reload: () => void; onChange: (site: Site) => void; first?: boolean }) {
+  const skip = useMapChoice(site, onChange);
   const [start, setStart] = useState(site.origin);
   const [busy, setBusy] = useState(false);
   const [opened, setOpened] = useState(false);
@@ -410,7 +455,18 @@ function MapApp({ site, reload }: { site: Site; reload: () => void }) {
         <Button type="submit" size="xl" variant={done ? "secondary" : "default"} disabled={busy}>
           {done ? "Map again" : "Start mapping"}
         </Button>
+        {first && (
+          <Button type="button" size="xl" variant="ghost" disabled={skip.busy} onClick={() => skip.choose("later")}>
+            Not now
+          </Button>
+        )}
       </form>
+      {skip.error && (
+        <Alert variant="destructive">
+          <AlertCircleIcon />
+          <AlertDescription>{skip.error}</AlertDescription>
+        </Alert>
+      )}
       {opened && !error && (
         <p className="text-sm text-muted-foreground">
           Your app is open in a new tab. Press Start in the panel at the top of it. If no panel shows, the script is not on that page yet.
