@@ -45,6 +45,10 @@ const MAX_LINKS = 60;
 const MAX_BUTTONS = 40;
 const MAX_FIELDS = 30;
 const MAX_OPENINGS = 16;
+/** More controls than this built the same way on one page are one control repeated down a list. A menu bar has fewer. */
+const MAX_ALIKE = 6;
+/** How many of those are pressed. */
+const PRESSED_OF_ALIKE = 2;
 
 const CELL = 'td, [role="cell"], [role="gridcell"]';
 const BUTTON_ROLES = new Set(["button", "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "option"]);
@@ -58,7 +62,7 @@ const NEVER = /\b(sign\s?out|log\s?out|logout|signout|delete|remove|destroy|eras
  * "Export" that starts an export is not worth the risk.
  */
 const RISKY =
-  /\b(save|send|submit|apply|confirm|approve|reject|decline|accept|publish|unpublish|post|share|invite|subscribe|unsubscribe|upgrade|downgrade|cancel|archive|trash|discard|disconnect|connect|revoke|reset|restore|transfer|refund|charge|activate|deactivate|enable|disable|leave|merge|deploy|run|start|stop|restart|pause|resume|import|export|download|upload|duplicate|clone|copy|sync|refresh|generate|regenerate|resend|verify|print|call|book|install|uninstall|block|ban|suspend|mark|turn (on|off)|switch (account|workspace|team|organi[sz]ation))\b/i;
+  /\b(save|send|submit|apply|confirm|approve|reject|decline|accept|publish|unpublish|post|share|invite|subscribe|unsubscribe|upgrade|downgrade|cancel|archive|trash|discard|disconnect|connect|revoke|reset|restore|transfer|refund|charge|activate|deactivate|enable|disable|leave|merge|deploy|run|start|stop|restart|pause|resume|import|export|download|upload|duplicate|clone|copy|sync|refresh|generate|regenerate|resend|verify|print|call|book|install|uninstall|block|ban|suspend|mark|star|unstar|watch|unwatch|follow|unfollow|like|unlike|favou?rite|wishlist|bookmark|upvote|downvote|vote|fork|pin|unpin|add to (cart|bag|basket|wishlist|favou?rites|list)|turn (on|off)|switch (account|workspace|team|organi[sz]ation))\b/i;
 /** A link whose address says it does something rather than shows something. */
 const RISKY_PATH = /(log|sign)[-_]?out|delete|remove|destroy|unsubscribe|impersonate|disconnect|revoke|export|download|oauth|\/auth\//i;
 /** A dialog's own ways out that choose nothing. Not "OK" or "Done", which can mean yes. */
@@ -125,6 +129,11 @@ export async function startMapping(parts: MappingParts): Promise<void> {
 const keyOf = (element: Pick<SnapElement, "role" | "label" | "icon">) => `${element.role} ${nameIn(element)}`;
 const nameIn = (element: Pick<SnapElement, "label" | "icon">) => element.label || (element.icon ? `icon:${element.icon}` : "");
 const here = () => normalizePath(location.pathname);
+/** How a control is built, apart from its words: the same for every row's copy of one control. */
+function shapeOf(el: Element): string {
+  const parent = el.parentElement;
+  return `${el.tagName}|${el.getAttribute("class") ?? ""}|${parent?.tagName ?? ""}|${parent?.getAttribute("class") ?? ""}`;
+}
 
 class Mapper {
   private readonly panel: HTMLElement;
@@ -190,10 +199,14 @@ class Mapper {
   private async send(page?: PageNode): Promise<"ok" | "refused" | "failed"> {
     const body: MapReport = { site: this.parts.site, pass: this.state.pass, ...(page ? { page } : {}) };
     try {
-      // text/plain needs no preflight. The page's own fetch may be guarded, so the widget uses the one from before.
-      const response = await plainFetch(`${this.parts.api}/v1/map`, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(body) });
-      if (response.status === 403) return "refused";
-      return response.ok ? "ok" : "failed";
+      // A quick app is mapped faster than the server lets one caller send, so "too many requests" is waited out, not taken as the end.
+      for (let tries = 0; ; tries++) {
+        // text/plain needs no preflight. The page's own fetch may be guarded, so the widget uses the one from before.
+        const response = await plainFetch(`${this.parts.api}/v1/map`, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(body) });
+        if (response.status === 403) return "refused";
+        if (response.status !== 429 || tries >= 6) return response.ok ? "ok" : "failed";
+        await new Promise((resolve) => setTimeout(resolve, 15_000));
+      }
     } catch {
       return "failed";
     }
@@ -473,7 +486,17 @@ class Mapper {
       if (isBlocked(element, this.parts.blocked)) continue;
       out.push({ element, el });
     }
-    return out;
+    // A list of records, like search results, repeats one control per row with the row's name in it:
+    // a heart on every listing. The first two say what it does. The rest would only use up the page's presses.
+    const alike = new Map<string, number>();
+    for (const { element, el } of out) if (element.role !== "tab") alike.set(shapeOf(el), (alike.get(shapeOf(el)) ?? 0) + 1);
+    const taken = new Map<string, number>();
+    return out.filter(({ element, el }) => {
+      const shape = shapeOf(el);
+      if (element.role === "tab" || (alike.get(shape) ?? 0) <= MAX_ALIKE) return true;
+      taken.set(shape, (taken.get(shape) ?? 0) + 1);
+      return taken.get(shape)! <= PRESSED_OF_ALIKE;
+    });
   }
 
   /**

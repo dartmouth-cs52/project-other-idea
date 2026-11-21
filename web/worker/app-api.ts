@@ -338,6 +338,8 @@ async function addSite(sql: Sql, org: Organization, input: Record<string, unknow
     docs: [],
     pages: [],
     source: { url: url.href, maxPages: MAX_PAGES, docs: [] },
+    // Asked on the first screen of signup. Mapping itself waits for the script, which is what runs it.
+    ...(typeof input.map === "boolean" ? { mapChoice: input.map ? ("yes" as const) : ("later" as const) } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -402,6 +404,8 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string, 
     appearance: drawnAppearance(site.context.appearance),
     // Whether the launcher's colour is still being read from the site, and where the one it has came from.
     launcherMatch: { waiting: launcher.waiting, source: launcher.source },
+    // What they said at signup about mapping the screens behind their login. Null for a site added before it was asked.
+    mapChoice: site.context.mapChoice ?? null,
     notes: site.context.notes ?? "",
     docs: docsSummary(site.context.docs ?? [], answersOn(site.context)),
     // On means answering in words from the docs. Chosen is null when the site follows the default: on once it has docs.
@@ -548,6 +552,10 @@ async function changeSite(sql: Sql, env: AppEnv, org: Organization, id: string, 
   const answers = typeof input.answers === "boolean" ? { ...site.context.answers, enabled: input.answers } : null;
   const routesMode = input.routesMode === undefined ? site.routes_mode : (input.routesMode as RoutesMode);
   if (!ROUTES_MODES.includes(routesMode)) throw new Refusal(400, "routesMode is off, shadow or serve.");
+  if (input.mapChoice !== undefined && input.mapChoice !== "yes" && input.mapChoice !== "later") throw new Refusal(400, "mapChoice is yes or later.");
+  if (input.mapChoice !== undefined) {
+    await sql`update sites set context = jsonb_set(context, '{mapChoice}', to_jsonb(${input.mapChoice}::text)) where id = ${id} and company_id = ${org.id}`;
+  }
   // Only the fields given change, inside the context too, so a page read finishing meanwhile keeps its pages.
   await sql`
     update sites set name = ${name}, allowed_origins = ${origins}, routes_mode = ${routesMode},

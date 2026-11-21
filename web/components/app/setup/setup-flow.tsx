@@ -155,7 +155,7 @@ export function SetupFlow() {
    * has called from anywhere. With no site yet, one is added. A site is never deleted from here.
    * Resolves with any failure.
    */
-  async function choose(origin: string, url: string): Promise<unknown> {
+  async function choose(origin: string, url: string, map: boolean): Promise<unknown> {
     try {
       if (current && current.origin === origin) {
         go("reading");
@@ -169,7 +169,7 @@ export function SetupFlow() {
         go("reading");
         return;
       }
-      const added = await api<{ id: string }>("/sites", { method: "POST", body: { url } });
+      const added = await api<{ id: string }>("/sites", { method: "POST", body: { url, map } });
       await save({ step: "reading" }, added.id);
       setSite(null);
       setDirection(1);

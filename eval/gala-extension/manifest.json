@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Haptic demo",
+  "version": "1.0",
+  "description": "Puts the Haptic widget from a server on this machine onto a few sites, for showing it in an ordinary Chrome. Not for customers: they add the script tag themselves.",
+  "permissions": [
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": [
+    "https://github.com/*",
+    "https://en.wikipedia.org/*",
+    "https://home.dartmouth.edu/*",
+    "https://www.airbnb.com/*"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "csp",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://github.com/*",
+        "https://en.wikipedia.org/*",
+        "https://home.dartmouth.edu/*",
+        "https://www.airbnb.com/*"
+      ],
+      "js": [
+        "inject.js"
+      ],
+      "run_at": "document_end"
+    }
+  ]
+}
