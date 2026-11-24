@@ -129,6 +129,20 @@ On each page it notes the labels, then presses each button, tab and menu to see 
 
 **Limits.** 40 pages a run, 24 presses a page, and a site holds 80 pages in all. Addresses that differ only by an id are one page, so one order stands for `/orders/:id`. A control that did the same thing on two pages is not pressed on the rest. Apps that route with the `#` part of the address are one page to it. The mapper is its own file, `/map.js`, fetched only in a tab that holds a pass, so `widget.js` is no bigger for visitors.
 
+### With a test account, from Haptic's own browser
+
+A company that would rather not sit through it can give Haptic an account instead. In the dashboard, **With a test account** asks for the sign-in page, a name, a password and where the app starts. A browser on Cloudflare (Browser Rendering, the `BROWSER` binding of the site's Worker) signs in (`web/worker/sign-in.ts`), opens the app, and the same mapper runs in it under the same rules (`web/worker/map-run.ts`, which starts it with `web/worker/map-begin.ts`). Because no one is there to press Start, the tab is given a run already under way before the app is loaded. The option is shown only where the Worker has a browser.
+
+**The password.** It is sent once, used in the request that signs in, and not saved, logged or put in an error. What the site keeps while the run goes is the browser's session id (`mapRun` in its context). Mapping again means giving the password again. The dashboard asks for a test or demo account, because the mapper presses buttons in it.
+
+**Where it will type.** Only on an origin the site allows, checked before the name is typed, before the password is typed, and once signed in. A sign-in page that sends the browser to another service is refused with nothing typed. It tries once, so a wrong password cannot lock the account. It does not get past a captcha, a code sent by email or phone, or a "Sign in with" button, and says which it met. Fields inside a frame or a shadow root are not found.
+
+**Who may ask.** Only a site whose script has already been seen on an origin it allows, which is what shows the company runs that site. Without that, anyone could add someone else's site and have Haptic try passwords on it. A site gets five runs an hour and one at a time.
+
+**How long it runs.** The dashboard asks after the run every five seconds (`GET /api/app/sites/:id/map/run`), and each time the Worker connects to the same browser, reads how far the mapper has got, and lets go. The browser closes by itself five minutes after the last time it was asked after, and any run is closed at half an hour. Pages are saved as the mapper sends them, so a run that is cut short keeps what it mapped. A mapper that pauses itself after an error ends the run, since no one is there to carry on.
+
+`test/browser/sign-in.test.ts` runs the sign-in and the start of the mapper in a real browser, against small sign-in pages. The part that talks to Cloudflare's browser (launching it, connecting to it again, closing it) runs only on Cloudflare.
+
 To try it on your own machine without the dashboard, start the server with `HAPTIC_MAP_PASS` set to 48 hex characters and open `http://localhost:4000/demo/#haptic-map=<the same 48 characters>`. The pages go into the site's file in `data/sites`.
 
 ## Testing in browsers

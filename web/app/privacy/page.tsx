@@ -32,6 +32,12 @@ export default function Privacy() {
         things. We do not sign in to anything and we do not send forms.
       </p>
       <p>
+        There is one exception, and only if you ask for it. To learn the screens behind your login you can map them
+        from your own browser, or you can give us a test account. If you give us one, a browser of ours signs in to
+        your app with it, once, and reads the names of buttons, links and fields there. The password is used for that
+        one sign-in. We do not keep it, and to map again you give it again.
+      </p>
+      <p>
         If you ask us to email the install steps to your developer, we send them one email through Resend, from
         install@joinhaptic.com, with your email address so they can reply to you. Resend gets their address
         and the email, and nothing else. We do not keep their address. So that no address gets more than a few of

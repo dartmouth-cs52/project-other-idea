@@ -275,6 +275,8 @@ export interface Site {
   mapped: number;
   /** What they said about mapping those screens, at signup or since. Null on a site from before it was asked. */
   mapChoice: "yes" | "later" | null;
+  /** Mapping from Haptic's own browser, with an account the company gives: whether this server offers it, and when the run under way began. */
+  mapRun: { offered: boolean; startedAt: string | null };
   corrections: Correction[];
   blocked: ControlName[];
   /** Routes taught by doing the task. Absent from a server older than Teach Haptic. */

@@ -66,6 +66,14 @@ export interface SiteContext {
    */
   mapping?: { hash: string; expires: string };
   /**
+   * Set while Haptic's own browser is mapping the app with an account the
+   * company gave it (web/worker/map-run.ts). The session is that browser's, on
+   * Cloudflare. The account's name and password are never kept.
+   */
+  mapRun?: { session: string; startedAt: string };
+  /** When each such run was asked for in the last hour, so sign-ins to one app cannot be tried without end. */
+  mapRunTries?: string[];
+  /**
    * What the company said, at signup or since, about mapping the screens
    * behind their login. The dashboard asks for it first on "yes" and keeps
    * out of the way on "later". Unset on sites from before it was asked.
