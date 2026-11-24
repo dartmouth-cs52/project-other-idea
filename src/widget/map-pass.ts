@@ -1,11 +1,11 @@
-import { MAPPING_FRAGMENT, MAPPING_PASS } from "../shared/mapping.ts";
+import { MAP_KEY, MAPPING_FRAGMENT, MAPPING_PASS, newMapState } from "../shared/mapping.ts";
 
 // The little of mapping (map.ts) that every copy of the widget carries: seeing
 // that this tab was opened from the dashboard to map the app, and fetching the
 // rest. The mapper itself is a file of its own, /map.js, so a visitor's
 // browser never downloads code only one person at the company ever runs.
 
-export const MAP_KEY = "haptic.map";
+export { MAP_KEY };
 
 /** What the mapper is handed by the widget that loads it. */
 export interface MappingParts {
@@ -29,7 +29,7 @@ export function mappingAsked(): boolean {
       const pass = location.hash.slice(at + MAPPING_FRAGMENT.length).split(/[&#]/)[0] ?? "";
       // The pass comes out of the address at once, so it isn't copied, bookmarked or sent on in a Referer.
       history.replaceState(history.state, "", location.pathname + location.search);
-      if (MAPPING_PASS.test(pass)) sessionStorage.setItem(MAP_KEY, JSON.stringify({ pass, status: "ready", todo: [], done: [], asked: [], tried: {}, memo: {}, count: 0, loads: 0 }));
+      if (MAPPING_PASS.test(pass)) sessionStorage.setItem(MAP_KEY, JSON.stringify(newMapState(pass)));
     }
     return sessionStorage.getItem(MAP_KEY) !== null;
   } catch {

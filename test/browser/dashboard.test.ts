@@ -428,6 +428,60 @@ describe("the dashboard in chromium", { skip: SKIP }, () => {
     });
   });
 
+  test("mapping with a test account sends the account once, shows the run and stops it", async () => {
+    const tab = await dash.open(`/dashboard/?site=${SITE}`);
+    await closing(tab, async () => {
+      // As on a server with a browser of its own, which this stand-in has none of: the site says the way is offered,
+      // and the run is answered for here.
+      const pathOf = (url: URL) => url.pathname.replace(/\/$/, "");
+      await tab.route(
+        (url) => pathOf(url) === `/api/app/sites/${SITE}`,
+        async (route) => {
+          if (route.request().method() !== "GET") return route.fallback();
+          const response = await route.fetch();
+          await route.fulfill({ response, json: { ...(await response.json()), mapRun: { offered: true, startedAt: null } } });
+        },
+      );
+      let sent: Record<string, unknown> | undefined;
+      let stopped = false;
+      await tab.route(
+        (url) => pathOf(url) === `/api/app/sites/${SITE}/map/run`,
+        (route) => {
+          const method = route.request().method();
+          if (method === "POST") {
+            sent = route.request().postDataJSON();
+            return route.fulfill({ status: 201, json: { running: true, mapped: 0 } });
+          }
+          if (method === "DELETE") stopped = true;
+          return route.fulfill({ json: method === "DELETE" ? { running: false, mapped: 0 } : { running: true, screens: 3, mapped: 0 } });
+        },
+      );
+      await tab.reload();
+      await tab.getByRole("button", { name: "With a test account" }).click({ timeout: 15_000 });
+      await tab.getByLabel("Your sign-in page").fill("https://app.northpine.example/login");
+      await tab.getByLabel("The account's email or username").fill(" tester@northpine.example ");
+      await tab.getByLabel("Its password").fill("s3cret pass ");
+      await tab.getByRole("button", { name: "Sign in and map" }).click();
+
+      await tab.getByText("Haptic is signed in and mapping your app").waitFor({ timeout: 10_000 });
+      // The password goes as typed, spaces and all. The rest is trimmed.
+      assert.equal(sent?.signIn, "https://app.northpine.example/login");
+      assert.equal(sent?.username, "tester@northpine.example");
+      assert.equal(sent?.password, "s3cret pass ");
+      // While it runs there is no form, and how far it has got is asked for and shown.
+      assert.equal(await tab.locator('input[type="password"]').count(), 0);
+      await tab.getByText("3 screens so far").waitFor({ timeout: 15_000 });
+
+      await tab.getByRole("button", { name: "Stop", exact: true }).click();
+      await tab.getByText(/That run ended/).waitFor({ timeout: 10_000 });
+      assert.ok(stopped);
+      // The form is back, and the password was not kept on the page to fill it with.
+      assert.equal(await tab.getByLabel("Its password").inputValue(), "");
+      // The page goes on asking for the site, and a call caught half way as the tab closes is not this test's failure.
+      await tab.unrouteAll({ behavior: "ignoreErrors" });
+    });
+  });
+
   describe("when the session ends", () => {
     /**
      * The session ends, from signing out in another tab or being away too long: the Worker turns every call away, and

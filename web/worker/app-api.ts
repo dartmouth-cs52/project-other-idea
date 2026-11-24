@@ -6,6 +6,9 @@
 //   PATCH  /api/app/sites/:id                   change its name or the origins it may run on
 //   POST   /api/app/sites/:id/read              read a few more public pages
 //   POST   /api/app/sites/:id/map               a link that lets this person map their signed-in app from their own browser
+//   POST   /api/app/sites/:id/map/run           map it from Haptic's browser instead, signing in with an account they give
+//   GET    /api/app/sites/:id/map/run           how that run is getting on
+//   DELETE /api/app/sites/:id/map/run           stop it
 //   GET    /api/app/sites                       every site the company has, as the list of sites shows them
 //   GET    /api/app/sites/:id/insights          the dashboard: questions, outcomes, what to fix
 //   GET    /api/app/sites/:id/live              the newest questions and the step each is on, asked for every second or two
@@ -47,6 +50,8 @@ import { finishedCsv, finishedGuides, guideSteps, insights, live, monthOf, sites
 import { routeView, teachApi, TeachRefused } from "./teach";
 import { MAX_PAGES, readMore, startReading, type BrowserBinding, type Reading } from "./reader";
 import { saveReadBatch } from "./read-batch";
+import { runProgress, startRun, stopRun } from "./map-run";
+import { CannotMap } from "./sign-in";
 import { readingExtras, setupOf, setupRoutes } from "./setup-api";
 import type { SendEnv } from "./sign-in-email";
 
@@ -129,7 +134,7 @@ export async function appApi(request: Request, env: AppEnv, url: URL, later: Lat
     const people = await teamRoutes({ request, sql, org, user, path, sendLink: (email) => sendSignInLink(env, url.origin, email, signedInUrl(url.origin)) });
     if (people) return reply(people.body, people.status);
 
-    const match = /^\/sites\/([^/]+)(\/read|\/map|\/insights|\/live|\/brand|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?|\/teach(?:\/[^/]+)?|\/taught\/[^/]+)?$/.exec(path);
+    const match = /^\/sites\/([^/]+)(\/read|\/map\/run|\/map|\/insights|\/live|\/brand|\/finished|\/docs|\/guides\/([^/]+)|\/controls|\/groups|\/blocked|\/corrections(?:\/([0-9a-f]{8}))?|\/teach(?:\/[^/]+)?|\/taught\/[^/]+)?$/.exec(path);
     if (match) {
       const id = match[1] ?? "";
       if (!SITE_ID.test(id)) throw new Refusal(404, "No such site.");
@@ -141,6 +146,9 @@ export async function appApi(request: Request, env: AppEnv, url: URL, later: Lat
       if (sub === "/docs" && request.method === "DELETE") return reply(await removeDoc(sql, env, org, id, url.searchParams.get("source") ?? ""));
       if (sub === "/read" && request.method === "POST") return reply(await readSite(sql, env, org, id, (await body(request)).restart === true));
       if (sub === "/map" && request.method === "POST") return reply(await startMapping(sql, org, id, await body(request)), 201);
+      if (sub === "/map/run" && request.method === "POST") return reply(await startMapRun(sql, env, org, id, await body(request)), 201);
+      if (sub === "/map/run" && request.method === "GET") return reply(await mapRunStatus(sql, env, org, id));
+      if (sub === "/map/run" && request.method === "DELETE") return reply(await stopMapRun(sql, env, org, id));
       if (sub === "/insights" && request.method === "GET") {
         await ownedSite(sql, org, id);
         const days = Math.min(Math.max(Number(url.searchParams.get("days")) || 30, 1), 365);
@@ -406,6 +414,8 @@ async function siteStatus(sql: Sql, env: AppEnv, org: Organization, id: string, 
     launcherMatch: { waiting: launcher.waiting, source: launcher.source },
     // What they said at signup about mapping the screens behind their login. Null for a site added before it was asked.
     mapChoice: site.context.mapChoice ?? null,
+    // Mapping from Haptic's own browser: whether this server can, and the run under way if there is one.
+    mapRun: { offered: !!env.BROWSER, startedAt: site.context.mapRun?.startedAt ?? null },
     notes: site.context.notes ?? "",
     docs: docsSummary(site.context.docs ?? [], answersOn(site.context)),
     // On means answering in words from the docs. Chosen is null when the site follows the default: on once it has docs.
@@ -604,6 +614,82 @@ async function startMapping(sql: Sql, org: Organization, id: string, input: Reco
   await sql`update sites set context = jsonb_set(context, '{mapping}', ${JSON.stringify(mapping)}::jsonb), updated_at = now() where id = ${id} and company_id = ${org.id}`;
   start.hash = `${MAPPING_FRAGMENT}${pass}`;
   return { url: start.href, expires };
+}
+
+/** Runs one site may ask for in an hour, so its sign-in page cannot be tried over and over through Haptic. */
+const MAP_RUNS_AN_HOUR = 5;
+
+/**
+ * Maps the signed-in app from Haptic's own browser, signing in with an account
+ * the company gives (worker/map-run.ts). The name and password are used in
+ * this request and are not saved.
+ *
+ * Only for a site whose script has been seen on an address it allows. That is
+ * what shows the company runs the site: without it, anyone could add someone
+ * else's site and have Haptic try passwords on it.
+ */
+async function startMapRun(sql: Sql, env: AppEnv, org: Organization, id: string, input: Record<string, unknown>) {
+  if (!env.BROWSER) throw new Refusal(503, "Mapping with a sign-in is not set up on this server. Map from your own browser instead.");
+  const site = await ownedSite(sql, org, id);
+  const username = typeof input.username === "string" ? input.username.trim() : "";
+  const password = typeof input.password === "string" ? input.password : "";
+  if (!username || username.length > 200) throw new Refusal(400, "Give the email or username the account signs in with.", "username");
+  if (!password || password.length > 200) throw new Refusal(400, "Give the account's password.", "password");
+  if (typeof input.signIn !== "string" || !input.signIn.trim()) throw new Refusal(400, "Give the address of your sign-in page.", "signIn");
+  const signInAt = siteAddress(input.signIn);
+  const start = input.url === undefined || input.url === "" ? new URL(site.origin) : siteAddress(input.url);
+  for (const address of [signInAt, start]) {
+    if (!site.allowed_origins.includes(address.origin)) {
+      throw new Refusal(400, `Haptic isn't allowed to run on ${address.origin} yet. Add it under "Where Haptic may run", or use an address on ${site.origin}.`, address === signInAt ? "signIn" : "url");
+    }
+  }
+  // Plain http is for a developer's own machine, where there is no one between the browser and the app.
+  if (signInAt.protocol !== "https:" && !/^(localhost|127\.0\.0\.1)$/.test(signInAt.hostname)) throw new Refusal(400, "Haptic only types a password on an address that starts with https://.", "signIn");
+  const seen = (await sql`select 1 from site_origins o join sites s on s.id = o.site_id where s.id = ${id} and o.origin = any(s.allowed_origins) limit 1`) as unknown[];
+  if (!seen.length) throw new Refusal(409, "Haptic's script has not been seen on your site yet. Add the script first: mapping runs through it.");
+  if (site.context.mapRun && (await runProgress(env.BROWSER, site.context.mapRun)).running) throw new Refusal(409, "Haptic is already mapping this app. Stop that run first.");
+
+  const hourAgo = Date.now() - 60 * 60_000;
+  const tries = (site.context.mapRunTries ?? []).filter((at) => Date.parse(at) > hourAgo);
+  if (tries.length >= MAP_RUNS_AN_HOUR) throw new Refusal(429, "Haptic has tried to sign in to this app several times in the last hour. Wait a while, or map from your own browser.");
+  const pass = newMappingPass();
+  const mapping = { hash: await mappingHash(id, pass), expires: new Date(Date.now() + MAPPING_PASS_MS).toISOString() };
+  // The pass is saved before the browser starts, because the mapper asks whether it is good as soon as it loads.
+  await sql`
+    update sites set context = jsonb_set(jsonb_set(context - 'mapRun', '{mapping}', ${JSON.stringify(mapping)}::jsonb), '{mapRunTries}', ${JSON.stringify([...tries, new Date().toISOString()])}::jsonb), updated_at = now()
+    where id = ${id} and company_id = ${org.id}`;
+
+  let session: string;
+  try {
+    session = await startRun(env.BROWSER, { url: signInAt.href, username, password }, start.href, pass, (origin) => site.allowed_origins.includes(origin));
+  } catch (error) {
+    if (error instanceof CannotMap) throw new Refusal(422, error.message);
+    // Only what kind of error it was. Nothing that was typed is in it, and nothing typed is logged anywhere else.
+    console.error(`Couldn't start a mapping run for ${id}:`, error instanceof Error ? error.name : "unknown error");
+    throw new Refusal(502, "Haptic's browser could not start. Try again in a few minutes, or map from your own browser.");
+  }
+  const run = { session, startedAt: new Date().toISOString() };
+  await sql`update sites set context = jsonb_set(context, '{mapRun}', ${JSON.stringify(run)}::jsonb), updated_at = now() where id = ${id} and company_id = ${org.id}`;
+  return { running: true, startedAt: run.startedAt, mapped: mappedCount(site) };
+}
+
+const mappedCount = (site: SiteRow) => (site.context.pages ?? []).filter((page) => page.mapped).length;
+
+/** How the run in Haptic's browser is getting on. Asked every few seconds by the dashboard, which is also what keeps that browser open. */
+async function mapRunStatus(sql: Sql, env: AppEnv, org: Organization, id: string) {
+  const site = await ownedSite(sql, org, id);
+  const run = site.context.mapRun;
+  if (!run || !env.BROWSER) return { running: false, mapped: mappedCount(site) };
+  const progress = await runProgress(env.BROWSER, run);
+  if (!progress.running) await sql`update sites set context = context - 'mapRun', updated_at = now() where id = ${id} and company_id = ${org.id} and context->'mapRun'->>'session' = ${run.session}`;
+  return { ...progress, startedAt: run.startedAt, mapped: mappedCount(site) };
+}
+
+async function stopMapRun(sql: Sql, env: AppEnv, org: Organization, id: string) {
+  const site = await ownedSite(sql, org, id);
+  if (site.context.mapRun && env.BROWSER) await stopRun(env.BROWSER, site.context.mapRun);
+  await sql`update sites set context = context - 'mapRun', updated_at = now() where id = ${id} and company_id = ${org.id}`;
+  return { running: false, mapped: mappedCount(site) };
 }
 
 // Approving access requests ---------------------------------------------------

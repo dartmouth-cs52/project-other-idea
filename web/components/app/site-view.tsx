@@ -389,6 +389,8 @@ function MapApp({ site, reload, onChange, first = false }: { site: Site; reload:
   const [opened, setOpened] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const done = site.mapped > 0;
+  // A run in Haptic's own browser that is still going is shown, whichever way was picked last.
+  const [how, setHow] = useState<"own" | "account">(site.mapRun.startedAt ? "account" : "own");
 
   // While a run is under way in the other tab, the count is asked for often enough to watch it climb.
   useEffect(() => {
@@ -436,40 +438,213 @@ function MapApp({ site, reload, onChange, first = false }: { site: Site; reload:
       <StepTitle mark={done ? <DoneMark /> : <Route className="size-5 text-muted-foreground" aria-hidden />}>
         {done ? `${site.mapped} signed-in ${site.mapped === 1 ? "screen" : "screens"} mapped` : "Show Haptic the screens behind your login"}
       </StepTitle>
+      {site.mapRun.offered && (
+        <Segmented
+          label="How to map"
+          value={how}
+          onChange={setHow}
+          options={[
+            { value: "own", name: "From my browser" },
+            { value: "account", name: "With a test account" },
+          ]}
+        />
+      )}
+      {how === "account" ? (
+        <MapWithAccount site={site} reload={reload} done={done} />
+      ) : (
+        <>
+          <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
+            {done
+              ? "Haptic knows these screens: where their links and buttons lead, and what is behind each menu, tab and dialog. Map again after a big change to your product."
+              : "So far Haptic has only read your public pages. Sign in to your app in this browser, then start. Your app opens in a new tab and Haptic goes through it by itself: it visits each page and opens menus, tabs and dialogs to see what is there. It takes a few minutes, and you can pause or stop it at any time."}
+          </p>
+          <ul className="flex max-w-[65ch] list-disc flex-col gap-1 pl-5 text-sm leading-5 text-muted-foreground">
+            <li>It skips anything that looks like it saves, sends, deletes, pays or signs out, and it never types or submits a form.</li>
+            <li>While it presses a button, it stops the page from sending changes. No guard is perfect, so use a test or demo account if you have one.</li>
+            <li>It keeps the names of buttons, links and fields. Never what is in a field or a table.</li>
+            <li>Haptic will describe your app as this account sees it, so use an account that sees what your users see.</li>
+          </ul>
+          <form onSubmit={begin} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor={`map-${site.id}`}>Where your app starts once you are signed in</Label>
+              <Input id={`map-${site.id}`} value={start} onChange={(event) => setStart(event.target.value)} placeholder={site.origin} className="h-11 bg-card px-3.5 md:text-base" />
+            </div>
+            <Button type="submit" size="xl" variant={done ? "secondary" : "default"} disabled={busy}>
+              {done ? "Map again" : "Start mapping"}
+            </Button>
+            {first && (
+              <Button type="button" size="xl" variant="ghost" disabled={skip.busy} onClick={() => skip.choose("later")}>
+                Not now
+              </Button>
+            )}
+          </form>
+          {skip.error && (
+            <Alert variant="destructive">
+              <AlertCircleIcon />
+              <AlertDescription>{skip.error}</AlertDescription>
+            </Alert>
+          )}
+          {opened && !error && (
+            <p className="text-sm text-muted-foreground">
+              Your app is open in a new tab. Press Start in the panel at the top of it. If no panel shows, the script is not on that page yet.
+            </p>
+          )}
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircleIcon />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+/** What the server says of a run in Haptic's own browser. */
+interface MapRunNow {
+  running: boolean;
+  screens?: number;
+  mapped: number;
+}
+
+/**
+ * The other way to map: Haptic signs in to the app in a browser of its own,
+ * with an account the company gives, and the same mapper runs there
+ * (worker/map-run.ts on the server). The password goes to the server once, to
+ * sign in, and is dropped from this page as soon as it is sent.
+ *
+ * While a run is going the page asks after it every few seconds. That is also
+ * what keeps Haptic's browser open, so the run ends a few minutes after this
+ * page is closed, with what it has mapped kept.
+ */
+function MapWithAccount({ site, reload, done }: { site: Site; reload: () => void; done: boolean }) {
+  const [signIn, setSignIn] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [start, setStart] = useState(site.origin);
+  const [busy, setBusy] = useState(false);
+  const [running, setRunning] = useState(site.mapRun.startedAt !== null);
+  const [screens, setScreens] = useState<number | null>(null);
+  const [finished, setFinished] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!running) return;
+    let mapped = site.mapped;
+    const timer = setInterval(async () => {
+      try {
+        const now = await api<MapRunNow>(`/sites/${site.id}/map/run`);
+        if (typeof now.screens === "number") setScreens(now.screens);
+        if (now.mapped !== mapped || !now.running) reload();
+        mapped = now.mapped;
+        if (!now.running) {
+          setRunning(false);
+          setFinished(true);
+        }
+      } catch {
+        // One missed answer is not the end of the run. The next one says.
+      }
+    }, WAITING_MS);
+    return () => clearInterval(timer);
+    // The count this starts from is only where to begin noticing changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, site.id, reload]);
+
+  async function begin(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setFinished(false);
+    setBusy(true);
+    const sent = password;
+    // Not kept on the page a moment longer than it takes to send.
+    setPassword("");
+    try {
+      await api<MapRunNow>(`/sites/${site.id}/map/run`, { method: "POST", body: { signIn: signIn.trim(), username: username.trim(), password: sent, url: start.trim() } });
+      setScreens(0);
+      setRunning(true);
+    } catch (failure) {
+      setError((failure as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function stop() {
+    setBusy(true);
+    try {
+      await api<MapRunNow>(`/sites/${site.id}/map/run`, { method: "DELETE" });
+      setRunning(false);
+      setFinished(true);
+      reload();
+    } catch (failure) {
+      setError((failure as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const field = "h-11 bg-card px-3.5 md:text-base";
+  return (
+    <>
       <p className="max-w-[65ch] text-sm leading-5 text-muted-foreground">
-        {done
-          ? "Haptic knows these screens: where their links and buttons lead, and what is behind each menu, tab and dialog. Map again after a big change to your product."
-          : "So far Haptic has only read your public pages. Sign in to your app in this browser, then start. Your app opens in a new tab and Haptic goes through it by itself: it visits each page and opens menus, tabs and dialogs to see what is there. It takes a few minutes, and you can pause or stop it at any time."}
+        Give Haptic an account and it signs in and goes through your app in a browser of its own: it visits each page and opens menus, tabs and dialogs to
+        see what is there. It takes a few minutes. Keep this page open while it runs.
       </p>
       <ul className="flex max-w-[65ch] list-disc flex-col gap-1 pl-5 text-sm leading-5 text-muted-foreground">
-        <li>It skips anything that looks like it saves, sends, deletes, pays or signs out, and it never types or submits a form.</li>
-        <li>While it presses a button, it stops the page from sending changes. No guard is perfect, so use a test or demo account if you have one.</li>
-        <li>It keeps the names of buttons, links and fields. Never what is in a field or a table.</li>
-        <li>Haptic will describe your app as this account sees it, so use an account that sees what your users see.</li>
+        <li>Use a test or demo account, not a real person&apos;s and not an admin&apos;s. Haptic presses buttons in it, and no guard is perfect.</li>
+        <li>The password is used once, to sign in, and is not saved. To map again you give it again.</li>
+        <li>
+          It works with a name and password typed on your own site. It does not get past &ldquo;Sign in with Google&rdquo;, a sign-in page kept by another
+          service, a captcha, or a code sent by email or phone. For those, map from your browser.
+        </li>
+        <li>As from your browser, it skips anything that looks like it saves, sends, deletes, pays or signs out, and keeps only the names of buttons, links and fields.</li>
       </ul>
-      <form onSubmit={begin} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <div className="flex flex-1 flex-col gap-2">
-          <Label htmlFor={`map-${site.id}`}>Where your app starts once you are signed in</Label>
-          <Input id={`map-${site.id}`} value={start} onChange={(event) => setStart(event.target.value)} placeholder={site.origin} className="h-11 bg-card px-3.5 md:text-base" />
-        </div>
-        <Button type="submit" size="xl" variant={done ? "secondary" : "default"} disabled={busy}>
-          {done ? "Map again" : "Start mapping"}
-        </Button>
-        {first && (
-          <Button type="button" size="xl" variant="ghost" disabled={skip.busy} onClick={() => skip.choose("later")}>
-            Not now
+      {running ? (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <p className="flex-1 text-sm text-foreground" role="status">
+            Haptic is signed in and mapping your app{screens ? `: ${screens} ${screens === 1 ? "screen" : "screens"} so far.` : "."}
+          </p>
+          <Button type="button" size="xl" variant="secondary" disabled={busy} onClick={stop}>
+            Stop
           </Button>
-        )}
-      </form>
-      {skip.error && (
-        <Alert variant="destructive">
-          <AlertCircleIcon />
-          <AlertDescription>{skip.error}</AlertDescription>
-        </Alert>
+        </div>
+      ) : (
+        <form onSubmit={begin} className="flex flex-col gap-3" autoComplete="off">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`run-signin-${site.id}`}>Your sign-in page</Label>
+              <Input id={`run-signin-${site.id}`} value={signIn} onChange={(event) => setSignIn(event.target.value)} placeholder={`${site.origin}/login`} required className={field} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`run-start-${site.id}`}>Where your app starts once signed in</Label>
+              <Input id={`run-start-${site.id}`} value={start} onChange={(event) => setStart(event.target.value)} placeholder={site.origin} className={field} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`run-user-${site.id}`}>The account&apos;s email or username</Label>
+              <Input id={`run-user-${site.id}`} value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="off" required className={field} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`run-password-${site.id}`}>Its password</Label>
+              <Input
+                id={`run-password-${site.id}`}
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="off"
+                required
+                className={field}
+              />
+            </div>
+          </div>
+          <Button type="submit" size="xl" variant={done ? "secondary" : "default"} disabled={busy} className="self-start">
+            {busy ? "Signing in" : done ? "Sign in and map again" : "Sign in and map"}
+          </Button>
+        </form>
       )}
-      {opened && !error && (
-        <p className="text-sm text-muted-foreground">
-          Your app is open in a new tab. Press Start in the panel at the top of it. If no panel shows, the script is not on that page yet.
+      {finished && !running && !error && (
+        <p className="text-sm text-muted-foreground" role="status">
+          {site.mapped > 0 ? "That run has ended. What it mapped is counted above." : "That run ended without mapping a screen. Check the start address has Haptic's script on it."}
         </p>
       )}
       {error && (
@@ -478,7 +653,7 @@ function MapApp({ site, reload, onChange, first = false }: { site: Site; reload:
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-    </Card>
+    </>
   );
 }
 

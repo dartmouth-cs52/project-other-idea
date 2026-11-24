@@ -33,3 +33,7 @@ The server masks the same again before it stores anything, with the same functio
 Neither the widget nor the server masks real dates written in figures, like 2026-03-07 or 07.03.2026, with a month from 1 to 12 and a day from 1 to 31 (12.34.5678 is masked): a question like "my latest invoice" needs them, and they say no more about a person than the names a page already shows. Nor do they mask shorter numbers, like prices and quantities, or names and other words, so text on the page can still hold personal details, a date of birth among them.
 
 One exception, so Haptic can find the order or account someone asked about: an email address, or a number of five or more digits, that the user wrote in their own question is left readable wherever exactly that value stands on its own on the page. In the question itself it is left readable only when the page shows it standing on its own like that, and is masked otherwise (`namedIn`).
+
+## A test account a company gives
+
+Everything above is about visitors. One thing a company can do sends Haptic a password: mapping its signed-in app [with a test account](widget.md#with-a-test-account-from-haptics-own-browser), which is asked for in the dashboard and never happens by itself. The account's name and password go to the site's Worker once, are typed into the company's own sign-in page by a browser on Cloudflare, and are not saved, logged or put in an error. They are never sent to the model. What is read in that browser is what the mapper reads anywhere: the names of buttons, links and fields.
