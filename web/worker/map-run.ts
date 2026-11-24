@@ -18,8 +18,9 @@
 // to this Worker.
 
 import puppeteer from "@cloudflare/puppeteer";
-import { MAP_KEY, newMapState } from "../../src/shared/mapping";
-import { CannotMap, signIn, type SignInPage, type SignInWith } from "./sign-in";
+import { MAP_KEY } from "../../src/shared/mapping";
+import { beginMapping, type MapPage } from "./map-begin";
+import { signIn, type SignInPage, type SignInWith } from "./sign-in";
 
 /** Cloudflare Browser Rendering, the BROWSER binding. The same shape reader.ts asks for, said here so this file stands apart from the reader. */
 export interface BrowserBinding {
@@ -43,40 +44,6 @@ export interface RunProgress {
 const KEEP_ALIVE_MS = 5 * 60_000;
 /** The longest one run may take. The mapper's own limits end most runs well before this. */
 export const MAX_RUN_MS = 30 * 60_000;
-const LOAD_MS = 20_000;
-/** How long the widget may take to show on the app's first page. */
-const WIDGET_MS = 12_000;
-
-/** What starting the mapper needs of a page, beyond signing in. */
-export interface MapPage extends SignInPage {
-  reload(options?: { timeout?: number }): Promise<unknown>;
-}
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * Opens the app where the company said it starts and sets the mapper going
- * in it. The mapper waits for a person to press Start unless the tab already
- * holds a run under way, so that is what the tab is given before the page is
- * loaded again. Throws CannotMap when the widget is not on that page.
- */
-export async function beginMapping(page: MapPage, start: string, pass: string, allowed: (origin: string) => boolean): Promise<void> {
-  try {
-    await page.goto(start, { timeout: LOAD_MS });
-  } catch {
-    throw new CannotMap("Haptic signed in, but could not open the address your app starts at. Check it.");
-  }
-  const at = new URL(page.url());
-  if (!allowed(at.origin)) throw new CannotMap(`Haptic signed in, but your app's start address led to ${at.host}, which is not an address Haptic may run on.`);
-  await page.evaluate(([key, state]: [string, string]) => sessionStorage.setItem(key, state), [MAP_KEY, JSON.stringify(newMapState(pass, "running"))]);
-  await page.reload({ timeout: LOAD_MS }).catch(() => {});
-  for (const end = Date.now() + WIDGET_MS; Date.now() < end; ) {
-    const there = await page.evaluate(() => document.querySelector("haptic-root") !== null).catch(() => false);
-    if (there) return;
-    await sleep(400);
-  }
-  throw new CannotMap(`Haptic signed in, but its script is not on ${at.origin}${at.pathname}. Mapping runs through the script, so give a start address the script is on.`);
-}
 
 /** Signs in and starts the mapper. Returns the browser's session id, with the browser left running. */
 export async function startRun(binding: BrowserBinding, using: SignInWith, start: string, pass: string, allowed: (origin: string) => boolean): Promise<string> {

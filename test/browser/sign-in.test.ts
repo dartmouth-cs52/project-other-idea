@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import type { Browser, Page } from "playwright";
 import type { MapReport } from "../../src/shared/types.ts";
-import { beginMapping, type MapPage } from "../../web/worker/map-run.ts";
+import { beginMapping, type MapPage } from "../../web/worker/map-begin.ts";
 import { signIn, type SignInPage } from "../../web/worker/sign-in.ts";
 import { BROWSERS, launch, page, startHarness, type Harness } from "./harness.ts";
 
 // Mapping with an account the company gives: Haptic's own browser signs in
 // (web/worker/sign-in.ts) and sets the mapper going with no one to press
-// Start (web/worker/map-run.ts). On Cloudflare the browser is Puppeteer's.
+// Start (web/worker/map-begin.ts). On Cloudflare the browser is Puppeteer's.
 // These run the same steps in Playwright's, which has what they use.
 //
 // The code that runs in the page is handed over as source text. The Worker's

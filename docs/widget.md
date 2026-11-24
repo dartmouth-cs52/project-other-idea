@@ -131,7 +131,7 @@ On each page it notes the labels, then presses each button, tab and menu to see 
 
 ### With a test account, from Haptic's own browser
 
-A company that would rather not sit through it can give Haptic an account instead. In the dashboard, **With a test account** asks for the sign-in page, a name, a password and where the app starts. A browser on Cloudflare (Browser Rendering, the `BROWSER` binding of the site's Worker) signs in (`web/worker/sign-in.ts`), opens the app, and the same mapper runs in it under the same rules (`web/worker/map-run.ts`). Because no one is there to press Start, the tab is given a run already under way before the app is loaded. The option is shown only where the Worker has a browser.
+A company that would rather not sit through it can give Haptic an account instead. In the dashboard, **With a test account** asks for the sign-in page, a name, a password and where the app starts. A browser on Cloudflare (Browser Rendering, the `BROWSER` binding of the site's Worker) signs in (`web/worker/sign-in.ts`), opens the app, and the same mapper runs in it under the same rules (`web/worker/map-run.ts`, which starts it with `web/worker/map-begin.ts`). Because no one is there to press Start, the tab is given a run already under way before the app is loaded. The option is shown only where the Worker has a browser.
 
 **The password.** It is sent once, used in the request that signs in, and not saved, logged or put in an error. What the site keeps while the run goes is the browser's session id (`mapRun` in its context). Mapping again means giving the password again. The dashboard asks for a test or demo account, because the mapper presses buttons in it.
 
