@@ -19,3 +19,6 @@ eval/toolkits/results/*.json
 .dev.vars
 # The browser profile eval/live.ts signs in with.
 eval/.profile/
+
+# Swift build output for the Mac package.
+/mac/.build/
