@@ -26,6 +26,7 @@ struct Shell: View {
     @ViewBuilder
     private func screen(_ nav: Nav) -> some View {
         switch nav {
+        case .home: HomeView()
         default: ComingSoon(nav: nav)
         }
     }
