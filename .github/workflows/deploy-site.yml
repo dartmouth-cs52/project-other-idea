@@ -20,8 +20,9 @@ on:
     branches: [main]
     paths:
       - "web/**"
-      # A change to the docs alone does not need a deploy.
+      # A change to the docs alone does not need a deploy, nor does one to the example of the local secrets.
       - "!web/**/*.md"
+      - "!web/.dev.vars.example"
       - "db/migrations/**"
   workflow_dispatch:
 
