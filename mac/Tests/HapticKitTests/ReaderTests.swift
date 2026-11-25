@@ -129,6 +129,30 @@ final class ReaderTests: XCTestCase {
         XCTAssertEqual(reading.snapshot.elements.map(\.label), ["Send invite"])
     }
 
+    func testMenuItemsSayWhichClosedMenuTheyAreInAndPointAtItsTitle() {
+        let title = Fake("AXMenuBarItem", frame: CGRect(x: 100, y: 580, width: 40, height: 20))
+        let exportTitle = Fake("AXMenuItem", frame: .zero)
+        let report = Fake("AXMenuItem", frame: .zero)
+        let export = MenuEntry(title: "Export", children: [MenuEntry(title: "Usage Report…", node: report)], node: exportTitle)
+        let file = MenuEntry(title: "File", children: [MenuEntry(title: "Close", enabled: false, node: Fake("AXMenuItem", frame: .zero)), export], node: title)
+        let reading = read([Fake("AXButton", "Save")], menuBar: [file])
+        let listed = reading.snapshot.elements.map { "\($0.role) \($0.label) \($0.state ?? []) [\($0.context ?? "")]" }
+        XCTAssertEqual(listed, [
+            "button Save [] []",
+            "menu File [\"collapsed\"] [menu bar]",
+            "menuitem Close [\"in the closed File menu\", \"disabled\"] [menu File]",
+            "menu Export [\"collapsed\", \"in the closed File menu\"] [menu File]",
+            "menuitem Usage Report… [\"in the closed Export menu\"] [menu File › Export]",
+        ])
+        // Closed, the pointer goes to the title in the menu bar. With File open it goes to Export, and with both open to the item.
+        let item = reading.listed["e5"]!
+        XCTAssertEqual(Guide.frame(of: item), title.frame)
+        exportTitle.frame = CGRect(x: 100, y: 500, width: 120, height: 22)
+        XCTAssertEqual(Guide.frame(of: item), exportTitle.frame)
+        report.frame = CGRect(x: 220, y: 500, width: 140, height: 22)
+        XCTAssertEqual(Guide.frame(of: item), report.frame)
+    }
+
     func testMenusAreNotPartOfWhetherTheScreenChanged() {
         let enabled = MenuEntry(title: "Edit", children: [MenuEntry(title: "Paste", enabled: true, node: Fake("AXMenuItem"))], node: Fake("AXMenuBarItem"))
         let disabled = MenuEntry(title: "Edit", children: [MenuEntry(title: "Paste", enabled: false, node: Fake("AXMenuItem"))], node: Fake("AXMenuBarItem"))
@@ -142,5 +166,11 @@ final class ReaderTests: XCTestCase {
         XCTAssertEqual(reading.element(at: CGPoint(x: 320, y: 110))?.element.label, "Open")
         XCTAssertEqual(reading.element(at: CGPoint(x: 50, y: 110))?.element.label, "Website relaunch")
         XCTAssertNil(reading.element(at: CGPoint(x: 700, y: 500)))
+    }
+
+    func testScreensAreNamedAsPaths() {
+        XCTAssertEqual(LiveTree.path(for: "Plan & Billing", document: false), "/plan-billing")
+        XCTAssertEqual(LiveTree.path(for: "", document: false), "/window")
+        XCTAssertEqual(LiveTree.path(for: "Q3 budget (Maya).numbers", document: true), "/document")
     }
 }
