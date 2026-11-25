@@ -1,0 +1,22 @@
+name: Mac tests
+
+# HapticKit and the demo apps (mac/) are Swift, so they are built and tested on a Mac, and only when they change.
+on:
+  push:
+    branches: [main]
+    paths: ["mac/**", ".github/workflows/mac-tests.yml"]
+  pull_request:
+    paths: ["mac/**", ".github/workflows/mac-tests.yml"]
+
+jobs:
+  mac:
+    name: HapticKit on a Mac
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mac
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift --version
+      - run: swift build
+      - run: swift test
