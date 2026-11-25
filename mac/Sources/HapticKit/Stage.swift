@@ -32,6 +32,12 @@ final class Stage {
     private var target: (() -> CGRect?)?
     private var shownTarget = CGRect.zero
     private var said: (text: String, busy: Bool)?
+    /** Where the pointer was last drawn in this guide, kept while it is hidden between steps, so the next step's can glide from there. */
+    private var lastDrawn: CGRect?
+    /** The move the pointer is in the middle of: from where, and since when. */
+    private var glide: (from: CGRect, began: TimeInterval)?
+    private var glideTick: Timer?
+    private static let glideSeconds: TimeInterval = 0.45
 
     func start() {
         guard tick == nil else { return }
@@ -55,6 +61,7 @@ final class Stage {
     func unpoint() {
         target = nil
         shownTarget = .zero
+        endGlide()
         pointer?.orderOut(nil)
         if said != nil { layoutCaption() }
     }
@@ -72,6 +79,7 @@ final class Stage {
         said = nil
         caption?.orderOut(nil)
         unpoint()
+        lastDrawn = nil
     }
 
     private func makeCaption() -> CaptionView {
@@ -115,20 +123,53 @@ final class Stage {
             // Scrolled away, or its window closed. The sentence stays, and the pointer comes back if the control does.
             if shownTarget != .zero {
                 shownTarget = .zero
+                endGlide()
                 pointer?.orderOut(nil)
                 layoutCaption()
             }
             return
         }
-        guard frame != shownTarget else { return }
+        guard frame != shownTarget || glide != nil else { return }
         let first = shownTarget == .zero
-        shownTarget = frame
+        if frame != shownTarget {
+            // A new control is glided to, so the eye can follow the pointer there. The first of a guide comes from the Ask button.
+            // A control that only moved, with its window or its list, is kept up with at once.
+            let from = first ? lastDrawn ?? launcher.flatMap({ $0.isVisible ? $0.frame : nil }) : frame.size != shownTarget.size ? lastDrawn : nil
+            if let from, from != frame { beginGlide(from: from) }
+            shownTarget = frame
+            layoutCaption()
+        }
+        var drawn = frame
+        if let glide {
+            let part = min(1, (ProcessInfo.processInfo.systemUptime - glide.began) / Self.glideSeconds)
+            // Quick away and slow to arrive.
+            let eased = 1 - pow(1 - part, 3)
+            let mix = { (a: CGFloat, b: CGFloat) in a + (b - a) * eased }
+            drawn = CGRect(x: mix(glide.from.minX, frame.minX), y: mix(glide.from.minY, frame.minY), width: mix(glide.from.width, frame.width), height: mix(glide.from.height, frame.height))
+            if part >= 1 { endGlide() }
+        }
+        lastDrawn = drawn
         let view = pointerView ?? makePointer()
-        let box = PointerView.box(around: frame)
+        let box = PointerView.box(around: drawn)
         pointer?.setFrame(box, display: true)
-        view.show(target: frame, in: box)
+        view.show(target: drawn, in: box)
         if first { pointer?.orderFront(nil) }
-        layoutCaption()
+    }
+
+    private func beginGlide(from: CGRect) {
+        glide = (from, ProcessInfo.processInfo.systemUptime)
+        guard glideTick == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.keepUp() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        glideTick = timer
+    }
+
+    private func endGlide() {
+        glide = nil
+        glideTick?.invalidate()
+        glideTick = nil
     }
 
     private func layoutCaption() {
