@@ -2,13 +2,14 @@
 import PackageDescription
 
 // Haptic for Mac apps. HapticKit is what a company adds to its own app, as the
-// script tag is what it adds to its site.
+// script tag is what it adds to its site. HapticDemo is a small app to try it on.
 let package = Package(
     name: "HapticKit",
     platforms: [.macOS(.v13)],
     products: [.library(name: "HapticKit", targets: ["HapticKit"])],
     targets: [
         .target(name: "HapticKit"),
+        .executableTarget(name: "HapticDemo", dependencies: ["HapticKit"]),
         .testTarget(name: "HapticKitTests", dependencies: ["HapticKit"]),
     ]
 )

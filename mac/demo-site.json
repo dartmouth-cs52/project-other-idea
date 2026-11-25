@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "id": "site_macdemo",
+  "name": "Acme Desk",
+  "origin": "app://com.haptic.demo",
+  "allowedOrigins": ["app://com.haptic.demo"],
+  "appearance": { "accent": "#1E6EF4", "position": "bottom-right", "launcherLabel": "Ask" },
+  "notes": "Acme Desk is a Mac app, not a website. Teams use it to manage their Acme projects, teammates and workspace settings.\n\n- A \"path\" here is a screen of the app, named after the window's title. The sidebar on the left switches screens: Overview, Projects, Team, Settings.\n- Menu bar items are listed as elements too. One marked \"in the closed File menu\" is reached by opening that menu first. Point at the item itself: the app moves the pointer to the menu's title until the menu is open.\n- Settings has three tabs: General, Notifications and Security. API keys are on the Security tab.\n- Exports are in the File menu, under Export.",
+  "docs": [
+    {
+      "title": "Inviting teammates",
+      "source": "mac/demo-site.json",
+      "text": "# Inviting teammates\n\nOpen Team in the sidebar and press Invite teammate. Type the person's email address, choose a role and press Send invite."
+    }
+  ],
+  "pages": [
+    { "path": "/overview", "title": "Overview", "headings": ["Overview"], "links": [{ "label": "Projects", "to": "/projects" }, { "label": "Team", "to": "/team" }, { "label": "Settings", "to": "/settings" }], "buttons": ["View projects", "Invite teammate"], "fields": [] },
+    { "path": "/projects", "title": "Projects", "headings": ["Projects"], "links": [], "buttons": ["New project"], "fields": [], "opens": [{ "control": "New project", "links": [], "buttons": ["Cancel", "Create project"], "fields": ["Project name"] }] },
+    { "path": "/team", "title": "Team", "headings": ["Team"], "links": [], "buttons": ["Invite teammate"], "fields": [], "opens": [{ "control": "Invite teammate", "links": [], "buttons": ["Cancel", "Send invite"], "fields": ["Email address", "Role"] }] },
+    { "path": "/settings", "title": "Settings", "headings": ["Settings"], "links": [], "buttons": ["General", "Notifications", "Security"], "fields": ["Workspace name", "Appearance"], "opens": [{ "control": "Notifications", "links": [], "buttons": ["Email me about deploys", "Weekly summary"] }, { "control": "Security", "links": [], "buttons": ["Two-factor authentication", "Create API key"] }] }
+  ],
+  "source": { "url": "app://com.haptic.demo", "maxPages": 0, "docs": [] },
+  "answers": { "enabled": false },
+  "learn": false,
+  "createdAt": "2026-11-23T00:00:00.000Z",
+  "updatedAt": "2026-11-23T00:00:00.000Z"
+}
