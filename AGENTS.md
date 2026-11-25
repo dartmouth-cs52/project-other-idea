@@ -17,6 +17,8 @@ Three npm packages, each with its own `package.json` and lockfile. Install each 
 - **`web/`** is joinhaptic.com, the dashboard, and the Worker behind them (`web/worker`). It has its own [AGENTS.md](web/AGENTS.md). Read it before writing any Next.js code: this version differs from the one you know.
 - **`testbed/`** is Northpine, the stress-test app and live demo. It has its own [AGENTS.md](testbed/AGENTS.md), with its rules and the names of the traps it sets.
 
+`mac/` is not an npm package. It is HapticKit, a Swift package for macOS 13 and later, and the start of Haptic for Mac apps. It mirrors the web side file for file: `Snapshot.swift` makes the `Snapshot` of `src/shared/types.ts` from an accessibility tree, `Masking.swift` is `cleanText`, and `Client.swift` makes the calls `src/server/app.ts` answers. A change to any of those on the web side has to be made there too. CI does not build or test it, so its tests are run on a Mac.
+
 ## Commands
 
 All of these work from a fresh clone with no key and no database.

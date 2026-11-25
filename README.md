@@ -129,7 +129,7 @@ The third Worker is Northpine, the demo at `demo.joinhaptic.com`. It has no back
 
 ### How the code is organized
 
-Three npm packages, each with its own `package.json` and lockfile: the top of the repository, `web/` and `testbed/`.
+Three npm packages, each with its own `package.json` and lockfile: the top of the repository, `web/` and `testbed/`. `mac/` is a Swift package.
 
 | Path | What it is |
 |---|---|
@@ -145,12 +145,13 @@ Three npm packages, each with its own `package.json` and lockfile: the top of th
 | [`test`](test) | Unit tests, browser tests and the red-team pages |
 | [`testbed`](testbed) | Northpine, the stress-test app and live demo |
 | [`demo`](demo) | A small multi-page app for trying the widget locally |
+| [`mac`](mac) | HapticKit, the start of Haptic for Mac apps, in Swift. It turns a window's accessibility tree into the same list of controls the widget makes from a page, masks it by the same rules, and asks the same server. See [Status](#status) for what it lacks |
 | [`docs`](docs) | How each part works, listed under [Documentation](#documentation) |
 | [`DESIGN.md`](DESIGN.md) | The design system shared by the widget and the website |
 | [`AGENTS.md`](AGENTS.md) | What a coding agent needs to know to work here |
 | [`.github/workflows`](.github/workflows) | CI, the browser suites, the benchmark and the deploys |
 
-**Stack.** TypeScript throughout. Claude through the Anthropic SDK. Cloudflare Workers with KV, Durable Objects, rate limits and Browser Rendering. Neon Postgres and Neon Auth. Next.js 16, React 19, Tailwind CSS 4 and shadcn/ui for the site and dashboard. React, Vite and Radix for Northpine. Stripe for billing and Resend for email. esbuild, Playwright, `node:test` and GitHub Actions.
+**Stack.** TypeScript throughout, apart from the Swift in `mac/`. Claude through the Anthropic SDK. Cloudflare Workers with KV, Durable Objects, rate limits and Browser Rendering. Neon Postgres and Neon Auth. Next.js 16, React 19, Tailwind CSS 4 and shadcn/ui for the site and dashboard. React, Vite and Radix for Northpine. Stripe for billing and Resend for email. esbuild, Playwright, `node:test` and GitHub Actions.
 
 ## Engineering
 
@@ -428,6 +429,7 @@ Haptic is in early access. It is running, by invitation, and free until billing 
 - Nothing inside a rich-text editor, a canvas or a frame from another origin can be pointed at. For editors this is deliberate, because the widget reads nothing inside an area the user writes in.
 - Answers has been run against a real model on one app, Northpine. Its own benchmark of 220 questions, 100 of them attacks, is built and has not yet been run against a real model.
 - Do it with me is off by default. It does not pick dates yet, so a date field is handed to the user.
+- Haptic for Mac apps has been started and does not run in an app yet. `mac/` has the reader, the masking and the calls to the server, and a site can list a Mac app among the places it runs, by its bundle identifier. The part that reads a running app's own window, and anything that draws the pointer over it, are not in the repository. CI does not build or test the Swift package.
 
 ## How it was built
 
