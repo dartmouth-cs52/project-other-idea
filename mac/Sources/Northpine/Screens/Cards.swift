@@ -1,7 +1,7 @@
 import SwiftUI
 
 // Cards: every card the company has issued, in a table that can be searched,
-// narrowed and sorted.
+// narrowed and sorted. Opening one shows the card itself (CardDetail.swift).
 
 struct CardsView: View {
     @EnvironmentObject var store: Store
@@ -32,7 +32,11 @@ struct CardsView: View {
     }
 
     var body: some View {
-        list
+        if let id = store.detail?.split(separator: "/").last.map(String.init), let card = store.card(id) {
+            CardDetailView(cardID: card.id)
+        } else {
+            list
+        }
     }
 
     private var list: some View {
