@@ -1,6 +1,6 @@
 # Haptic website
 
-The marketing site for Haptic, served at joinhaptic.com. Next.js with Tailwind and shadcn/ui, exported as a fully static site.
+The marketing site for Haptic and the dashboard companies sign in to, served at joinhaptic.com. Next.js with Tailwind and shadcn/ui, exported as a fully static site, with a Cloudflare Worker in `worker/` that answers everything under `/api/`.
 
 ```bash
 npm install
@@ -79,7 +79,7 @@ Billing needs two more, `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. See [Bi
 
 `NEON_AUTH_URL` and `WIDGET_URL` are plain settings in `wrangler.jsonc`. In Neon Auth for the main branch, add `https://joinhaptic.com` as a trusted domain, turn on Magic Link with a 1440 minute expiry, and turn off email and password. Until the secrets are set, the sign-in pages load but say sign-in is not set up.
 
-**Trying it locally.** Copy the values above into `.dev.vars`, pointing at a Neon branch for testing, with `NEON_AUTH_URL` set to that branch's auth address and `WIDGET_URL=http://localhost:4000`. Add `http://localhost:8787` to that branch's trusted domains. Then:
+**Trying it locally.** Copy `.dev.vars.example` to `.dev.vars` and fill it in with the values above, pointing at a Neon branch for testing, with `NEON_AUTH_URL` set to that branch's auth address and `WIDGET_URL=http://localhost:4000`. The example file says where each value comes from. Add `http://localhost:8787` to that branch's trusted domains. Then:
 
 ```bash
 NEXT_PUBLIC_WIDGET_URL=http://localhost:4000 npx next build
@@ -170,12 +170,15 @@ The second needs `DATABASE_URL` for Neon's main branch in `.env`. Until it has r
 
 The site runs on Cloudflare as one Worker: the static pages from `out/`, plus the form handler. The settings are in `wrangler.jsonc`.
 
-**From GitHub.** Merging a change to the site into `main` publishes it. The workflow in `.github/workflows/deploy-site.yml` installs, lints, builds and deploys, then checks that joinhaptic.com answers. A change to the docs alone does not deploy. It can also be started by hand, from the Actions tab, under Deploy site. Pull requests never deploy.
+**From GitHub.** Merging a change to the site into `main` publishes it. The workflow in `.github/workflows/deploy-site.yml` installs, lints, checks that Stripe charges what `lib/site.ts` says, applies the database migrations, builds and deploys, then checks that joinhaptic.com answers. A change to the docs alone does not deploy, and a change to `../db/migrations` alone does. It can also be started by hand, from the Actions tab, under Deploy site. Pull requests never deploy.
 
-The workflow reads two repository secrets, set under Settings, Secrets and variables, Actions:
+The workflow needs three repository secrets, set under Settings, Secrets and variables, Actions, and stops before it starts without any of them:
 
 - `CLOUDFLARE_API_TOKEN`: a Cloudflare API token made from the "Edit Cloudflare Workers" template.
 - `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account the Worker lives in.
+- `DATABASE_URL`: Neon's connection string for the haptic project's main branch, which the deploy brings up to date with `../db/migrations` before it publishes.
+
+Three more are optional, and are for billing: `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, which the deploy copies onto the Worker, and `STRIPE_PRICES_KEY`, a read-only key for the price check. See [Billing](#billing).
 
 **By hand.** The same thing from a terminal:
 

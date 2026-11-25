@@ -768,7 +768,11 @@ guide ends with the green tick and "Done". The line that says Haptic is an AI
 stays. The rest below is proposed.
 
 - **Haptic guides, the person acts.** Haptic points and explains. It does not
-  click, type or scroll for anyone.
+  click, type or scroll for anyone. In the widget a company can turn on Do it
+  with me for its site, and it is off unless they do. The ask box then has a Do
+  it button beside Send, and Haptic clicks, types and chooses on the page while
+  the person watches. It still hands them the last control, the one that
+  saves, sends or pays, and points at it for them to click.
 - **Mark the control, leave the page alone.** One outline on the target. The
   page is never dimmed or blurred, because the person may need to read it, and
   the edge of the window never glows as a frame, because that is how agents
