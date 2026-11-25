@@ -16,6 +16,9 @@ on:
       - "src/shared/**"
       - "test/widget/**"
       - "test/browser/**"
+      # Signing in with a test account lives with the site's Worker, and is tested in test/browser/sign-in.test.ts.
+      - "web/worker/sign-in.ts"
+      - "web/worker/map-begin.ts"
       - "eval/browser.ts"
       - "package.json"
   push:
@@ -25,6 +28,9 @@ on:
       - "src/shared/**"
       - "test/widget/**"
       - "test/browser/**"
+      # Signing in with a test account lives with the site's Worker, and is tested in test/browser/sign-in.test.ts.
+      - "web/worker/sign-in.ts"
+      - "web/worker/map-begin.ts"
       - "eval/browser.ts"
   workflow_dispatch:
 
