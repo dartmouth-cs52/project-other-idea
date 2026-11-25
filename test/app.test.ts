@@ -665,3 +665,40 @@ test("a step the server pointed at itself, because the sentence named the contro
   assert.equal(turnCounts(request, measure({ named: "e1", asked: true, verdict: "ask" })).recheck, "asked");
   assert.equal(turnCounts(request, measure({ named: "e1", asked: false, verdict: "aside" })).recheck, "logged");
 });
+
+// A Mac app (mac/) has no origin, so it names itself by its bundle identifier, and a site lists that as it lists a web origin.
+test("a Mac app is let in by the app origin the site lists, and what it read from its window reaches the model as a page does", async () => {
+  const { APP_ORIGIN } = await import("../src/shared/types.ts");
+  for (const good of ["app://com.acme.desk", "app://com.acme.Desk-2", "app://x"]) assert.match(good, APP_ORIGIN);
+  for (const bad of ["app://", "app://com.acme.desk/", "app://com acme", "app://.acme", "https://acme.com", "app://com.acme.desk?x=1"]) assert.doesNotMatch(bad, APP_ORIGIN);
+
+  const desk: SiteContext = { ...site, id: "site_desk", origin: "app://com.acme.desk", allowedOrigins: ["app://com.acme.desk"] };
+  const { app, turns } = makeApp(false, {}, [desk]);
+  const snapshot = {
+    path: "/settings",
+    title: "Settings",
+    headings: ["Settings"],
+    text: [],
+    truncated: false,
+    elements: [
+      { id: "e1", role: "treeitem", label: "Team", context: "Sidebar" },
+      { id: "e2", role: "tab", label: "Security", state: ["selected"], context: "tabs › Settings" },
+      { id: "e3", role: "menu", label: "File", state: ["collapsed"], context: "menu bar" },
+      { id: "e4", role: "menuitem", label: "Usage Report…", state: ["in the closed Export menu"], context: "menu File › Export" },
+    ],
+  };
+  const ask = (origin: string) =>
+    app(new Request("https://widget.test/v1/turn", { method: "POST", headers: { "Content-Type": "application/json", Origin: origin }, body: JSON.stringify({ site: desk.id, goal: "export a usage report", step: 0, history: [], version: 2, snapshot }) }), "1.1.1.1");
+
+  assert.equal((await ask("app://com.other.app"))?.status, 403);
+  const response = await ask("app://com.acme.desk");
+  assert.equal(response?.status, 200);
+  assert.equal(((await response?.json()) as TurnReply).target, "e4");
+  assert.deepEqual(turns, ["export a usage report"]);
+
+  const settings = await app(new Request("https://widget.test/v1/sites/site_desk", { headers: { Origin: "app://com.acme.desk" } }), "1.1.1.1");
+  assert.equal(settings?.status, 200);
+
+  const page = renderSnapshot(parseTurn({ site: desk.id, goal: "x", step: 0, history: [], snapshot })!.snapshot);
+  assert.match(page, /e4 menuitem "Usage Report…" \(in the closed Export menu\) \[menu File › Export\]/);
+});

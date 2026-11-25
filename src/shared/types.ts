@@ -92,6 +92,15 @@ export interface SiteContext {
 export const ROUTES_MODES = ["off", "shadow", "serve"] as const;
 export type RoutesMode = (typeof ROUTES_MODES)[number];
 
+/**
+ * How a Mac app names itself where a page names its origin: "app://" and the
+ * app's bundle identifier, like "app://com.acme.desk". HapticKit (mac/) sends
+ * it as the Origin of every call, and a site lists it among `allowedOrigins`
+ * beside its web origins. Like a web origin it is a low bar, since any
+ * program can write the header itself, and nothing more rests on it.
+ */
+export const APP_ORIGIN = /^app:\/\/[A-Za-z0-9](?:[A-Za-z0-9.-]{0,153}[A-Za-z0-9])?$/;
+
 export interface SiteSource {
   url: string;
   maxPages: number;

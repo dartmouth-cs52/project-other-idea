@@ -75,13 +75,15 @@ export function findSignIn(): SignInForm {
 
   const inputs = Array.from(document.querySelectorAll("input")).filter(drawn);
   const kind = (el: HTMLInputElement) => (el.getAttribute("type") ?? "text").toLowerCase();
-  const hint = (el: HTMLInputElement) => `${el.autocomplete} ${el.name} ${el.id} ${el.getAttribute("aria-label") ?? ""} ${el.placeholder}`.toLowerCase();
+  // Read as written. Asked through the element, Firefox gives nothing for a value it does not fill in itself, such as one-time-code.
+  const fills = (el: HTMLInputElement) => (el.getAttribute("autocomplete") ?? "").toLowerCase();
+  const hint = (el: HTMLInputElement) => `${fills(el)} ${el.name} ${el.id} ${el.getAttribute("aria-label") ?? ""} ${el.placeholder}`.toLowerCase();
 
-  const code = inputs.some((el) => el.autocomplete === "one-time-code" || /\b(otp|one[-_ ]?time|verification code|2fa|mfa|totp)\b/.test(hint(el)));
+  const code = inputs.some((el) => fills(el).includes("one-time-code") || /\b(otp|one[-_ ]?time|verification code|2fa|mfa|totp)\b/.test(hint(el)));
   const captcha = Array.from(document.querySelectorAll("iframe")).some((frame) => /recaptcha|hcaptcha|challenges\.cloudflare\.com|turnstile|arkoselabs|funcaptcha/i.test(frame.src) && drawn(frame));
 
-  const password = inputs.find((el) => kind(el) === "password" && el.autocomplete !== "new-password");
-  const names = inputs.filter((el) => ["text", "email", "tel"].includes(kind(el)) && el.autocomplete !== "one-time-code");
+  const password = inputs.find((el) => kind(el) === "password" && !fills(el).includes("new-password"));
+  const names = inputs.filter((el) => ["text", "email", "tel"].includes(kind(el)) && !fills(el).includes("one-time-code"));
   // With a password on the page, the name is the last such field before it. Alone, it is one that says it holds a name or an email.
   const user = password
     ? names.filter((el) => el.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING).pop()

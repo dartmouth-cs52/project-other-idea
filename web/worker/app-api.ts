@@ -32,7 +32,7 @@
 // id, which is public, is never enough to read or change someone's data.
 
 import { MAPPING_FRAGMENT, MAPPING_PASS_MS, mappingHash, newMappingPass } from "../../src/shared/mapping";
-import { answersOn, cleanText, DEFAULT_APPEARANCE, ROUTES_MODES, type Appearance, type Doc, type PageNode, type RoutesMode, type SiteContext } from "../../src/shared/types";
+import { answersOn, APP_ORIGIN, cleanText, DEFAULT_APPEARANCE, ROUTES_MODES, type Appearance, type Doc, type PageNode, type RoutesMode, type SiteContext } from "../../src/shared/types";
 import { ANSWERS_DOCS_BUDGET, DOCS_BUDGET, docFromUrl, docsThatFit, MAX_DOC_CHARS, MAX_DOCS, pastedDoc } from "./docs";
 import { isPersonalEmail, emailDomain, type AccessRequest } from "../lib/access-request";
 import { signedInUrl } from "../lib/dashboard";
@@ -320,8 +320,13 @@ function originList(input: unknown): string[] {
   const origins = new Set<string>();
   for (const item of input) {
     const text = typeof item === "string" ? item.trim().replace(/\/$/, "") : "";
+    // A Mac app has no address. It is listed by its bundle identifier: app://com.example.app.
+    if (APP_ORIGIN.test(text)) {
+      origins.add(text);
+      continue;
+    }
     if (!URL.canParse(text) || new URL(text).origin !== text || !/^https?:$/.test(new URL(text).protocol)) {
-      throw new Refusal(400, `"${String(item).slice(0, 80)}" isn't an origin. An origin is the start of an address only, like https://app.example.com.`, "allowedOrigins");
+      throw new Refusal(400, `"${String(item).slice(0, 80)}" isn't an origin. An origin is the start of an address only, like https://app.example.com, or for a Mac app, app:// and its bundle identifier.`, "allowedOrigins");
     }
     origins.add(text);
   }
