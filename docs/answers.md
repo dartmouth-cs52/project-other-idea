@@ -52,7 +52,7 @@ A doc fetched from a URL is linked to that URL. **Answers has not been tried wit
 
 ### Trying it on the demo app
 
-The demo app has a small help centre of its own, in `demo/help`: twelve articles about a product that does not exist. Add `--answers on` to the demo command in the [README](../README.md#quick-start) to try Answers on it: ask "how long does an invite link last", then "how do I transfer ownership", which the articles leave out on purpose. One article, on roles, tells the reader to press a Remove button the app does not have, so there is something for the check against the live page to find. The plans article has prices and a refund rule in it, which Haptic must never state.
+The demo app has a small help centre of its own, in `demo/help`: twelve articles about a product that does not exist. The demo command in the [README](../README.md#setup) passes them with `--docs demo/help`, and a site with help docs has Answers on unless it is built with `--answers off`. To try Answers on it, ask "how long does an invite link last", then "how do I transfer ownership", which the articles leave out on purpose. One article, on roles, tells the reader to press a Remove button the app does not have, so there is something for the check against the live page to find. The plans article has prices and a refund rule in it, which Haptic must never state.
 
 ## The way to a person
 

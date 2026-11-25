@@ -1,0 +1,26 @@
+# Copy to .dev.vars, for `npm run preview` and `npx wrangler dev`. Never commit .dev.vars.
+# Names only: each line says where its value comes from. Online, the secrets are put on the Worker
+# with `npx wrangler secret put <NAME>`, and the two addresses are vars in wrangler.jsonc.
+
+# Neon's connection string for a branch made for testing, never the live one.
+# Neon console: the project, then Connect. Apply the migrations to it with `npm run db:migrate`
+# at the top of the repository.
+DATABASE_URL=
+# That branch's Neon Auth address, from the branch's Auth page in the Neon console. Not a secret.
+# Add http://localhost:8787 to the branch's trusted domains there.
+NEON_AUTH_URL=
+# 32 or more random characters: openssl rand -base64 32
+NEON_AUTH_COOKIE_SECRET=
+# 32 or more random characters, a different one. Signs the Approve links in access-request emails.
+APPROVE_SECRET=
+# Sends the sign-in email. Resend's dashboard, API Keys, with sending access only.
+RESEND_API_KEY=
+# The widget server on this machine: `npm run dev` at the top of the repository. Not a secret.
+WIDGET_URL=http://localhost:4000
+
+# Optional. The inbox that gets a copy of each access request.
+# NOTIFY_TO=
+# Optional, billing only. The key is from Stripe's dashboard under Developers, API keys, in test mode.
+# `stripe listen --forward-to localhost:8787/api/stripe/webhook` prints the webhook secret.
+# STRIPE_SECRET_KEY=
+# STRIPE_WEBHOOK_SECRET=
