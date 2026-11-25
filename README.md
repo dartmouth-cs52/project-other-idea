@@ -30,7 +30,7 @@ People say what they want to do, and Haptic points to exactly where to click, st
 Haptic is an AI guide that a company adds to its web app with one script tag. A user types what they want to do, and Haptic reads the page in front of them and points at the exact control to click, one step at a time, across page loads and through forms. It learns the product from the site itself, its help docs and a few notes, so nobody writes a tour or maintains a selector.
 
 - **The app is at [joinhaptic.com](https://joinhaptic.com).** Click **Ask** on any page to try the guide. Companies sign in there, by invitation, to add their site and see what their users asked.
-- **Haptic inside a real app is at [demo.joinhaptic.com](https://demo.joinhaptic.com).** That is Northpine, a made-up spend-management product with the live widget on it.
+- **Haptic inside an app is at [demo.joinhaptic.com](https://demo.joinhaptic.com).** That is Northpine, a made-up spend-management product with the live widget on it.
 
 ![The widget in the middle of a guide: the question in the panel, the pointer and its outline on the Team link, and the caption Click Team beside it](docs/screenshots/guide.png)
 
