@@ -13,5 +13,6 @@ let package = Package(
         .executableTarget(name: "HapticDemo", dependencies: ["HapticKit"]),
         .executableTarget(name: "Northpine", dependencies: ["HapticKit"]),
         .testTarget(name: "HapticKitTests", dependencies: ["HapticKit"]),
+        .testTarget(name: "NorthpineTests", dependencies: ["Northpine"]),
     ]
 )
