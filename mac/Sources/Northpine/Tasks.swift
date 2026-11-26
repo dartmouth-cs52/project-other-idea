@@ -28,7 +28,7 @@ enum GuideTasks {
             GuideTask(id: "freeze-card", ask: "Freeze the first card in the list") { store in
                 zip(store.company.cards, before.cards).contains { $0.status == .frozen && $1.status == .active }
             },
-            GuideTask(id: "missing-receipts", ask: "Show me only the expenses that are missing a receipt") { $0.nav == .expenses },
+            GuideTask(id: "missing-receipts", ask: "Show me only the expenses that are missing a receipt") { $0.nav == .expenses && $0.onlyMissingReceipts },
             GuideTask(id: "close-books", ask: "Take me to where I close the books for May") { $0.nav == .accounting && $0.accountingTab == "Month-end close" },
             GuideTask(id: "mappings", ask: "Where do I change which account travel is booked to?") { $0.nav == .accounting && $0.accountingTab == "Mappings" },
             GuideTask(id: "export-trial-balance", ask: "Export a trial balance") { $0.exported == "Trial balance" || ($0.nav == .accounting && $0.accountingTab == "Month-end close") },

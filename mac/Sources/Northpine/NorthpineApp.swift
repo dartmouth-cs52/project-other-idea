@@ -86,10 +86,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let task = environment["HAPTIC_TASK"].flatMap { id in MainActor.assumeIsolated { GuideTasks.named(id) } }
         if environment["HAPTIC_AUTOPILOT"] != nil || task != nil { MainActor.assumeIsolated { Autopilot.start(task: task) } }
         if let question = task?.ask ?? environment["HAPTIC_ASK"] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            // The Lab's switches first, with time for the window to redraw, so the question is asked of the app as switched.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 if let names = task?.lab, !names.isEmpty { Lab.shared?.apply(names) }
-                Haptic.ask(question)
             }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { Haptic.ask(question) }
         }
     }
 
