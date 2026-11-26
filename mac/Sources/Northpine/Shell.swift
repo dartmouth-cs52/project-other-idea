@@ -30,6 +30,7 @@ struct Shell: View {
         case .home: HomeView()
         case .cards: CardsView()
         case .expenses: ExpensesView()
+        case .reimbursements: ReimbursementsView()
         default: ComingSoon(nav: nav)
         }
     }
