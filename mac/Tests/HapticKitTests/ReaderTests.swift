@@ -207,4 +207,12 @@ final class ReaderTests: XCTestCase {
             "Open approvals [To do]", "Export spend [Spend by category]", "Open bills [To do]", "View cards [Latest activity]",
         ])
     }
+
+    func testSegmentsSayWhatTheyChooseBetween() {
+        let month = Fake("AXRadioButton", "This month")
+        month.isOn = true
+        let reading = read([Fake("AXRadioGroup", "Period", [Fake("AXRadioButton", "This week"), month])])
+        XCTAssertEqual(reading.snapshot.elements.map { "\($0.role) \($0.label) [\($0.context ?? "")]" }, ["radio This week [Period]", "radio This month [Period]"])
+        XCTAssertEqual(reading.snapshot.elements[1].state, ["checked"])
+    }
 }
