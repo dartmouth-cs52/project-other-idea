@@ -218,4 +218,18 @@ final class ReaderTests: XCTestCase {
         XCTAssertEqual(reading.snapshot.elements.map { "\($0.role) \($0.label) [\($0.context ?? "")]" }, ["radio This week [Period]", "radio This month [Period]"])
         XCTAssertEqual(reading.snapshot.elements[1].state, ["checked"])
     }
+
+    func testARowOfATreeThatOpensNamesItsArrowAndIsNotAHeading() {
+        let arrow = Fake("AXDisclosureTriangle", frame: CGRect(x: 4, y: 500, width: 14, height: 14))
+        let assets = Fake("AXRow", frame: CGRect(x: 0, y: 496, width: 400, height: 24), [Fake("AXCell", "", [arrow, Fake("AXHeading", "1000, Assets")])])
+        let checking = Fake("AXRow", frame: CGRect(x: 0, y: 470, width: 400, height: 24), [Fake("AXCell", "", [Fake.text("1010 Operating Checking")])])
+        let reading = read([Fake("AXHeading", "Accounting"), Fake("AXOutline", "Chart of accounts", frame: CGRect(x: 0, y: 0, width: 400, height: 520), [assets, checking])])
+        XCTAssertEqual(reading.snapshot.elements.map { "\($0.role) \($0.label) [\($0.context ?? "")]" }, [
+            "treeitem 1000, Assets [Chart of accounts › Accounting]",
+            "button 1000, Assets [Chart of accounts › Accounting]",
+            "treeitem 1010 Operating Checking [Chart of accounts › Accounting]",
+        ])
+        XCTAssertEqual(reading.snapshot.elements[1].state, ["collapsed"])
+        XCTAssertEqual(reading.snapshot.headings, ["Accounting"])
+    }
 }

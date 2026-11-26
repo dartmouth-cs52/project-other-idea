@@ -176,6 +176,8 @@ struct Reader {
         var clip: CGRect
         var parentRole = ""
         var inRow = false
+        /** What the row being read says, for naming the small arrow that opens it. */
+        var rowName = ""
     }
 
     mutating func read(_ screen: Screen) -> Reading {
@@ -207,7 +209,8 @@ struct Reader {
             if !around.inRow { addText(node) }
             return
         case "AXHeading":
-            addHeading(node, around)
+            // Inside a row it is the row's own words, which the row is already named by.
+            if !around.inRow { addHeading(node, around) }
             return
         case "AXButton", "AXMenuButton", "AXDisclosureTriangle", "AXColorWell":
             if Self.titleBarButtons.contains(subrole) { return }
@@ -215,7 +218,9 @@ struct Reader {
             if let expanded = node.isExpanded { state.append(expanded ? "expanded" : "collapsed") }
             else if role == "AXMenuButton" { state.append("collapsed") }
             else if role == "AXDisclosureTriangle" { state.append(node.isOn ? "expanded" : "collapsed") }
-            add(node, "button", around, state)
+            // The arrow that opens a row of a tree has no name of its own. It is named by its row.
+            let arrow = role == "AXDisclosureTriangle" && around.inRow && nonEmpty(node.label, node.title) == nil
+            add(node, "button", around, state, name: arrow && !around.rowName.isEmpty ? around.rowName : nil)
             return
         case "AXLink":
             add(node, "link", around)
@@ -259,6 +264,7 @@ struct Reader {
                 add(node, role, around, node.isSelected ? ["selected"] : [], name: name)
             }
             around.inRow = true
+            around.rowName = name
         case "AXOutline", "AXTable", "AXList":
             around.parentRole = role
             if let label = nonEmpty(node.label, node.title) { around.landmark = Masking.clean(label, max: 40, own: own) }
