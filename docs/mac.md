@@ -95,3 +95,5 @@ cd mac && swift test
 ```
 
 The reader is tested on trees written out by hand (`Tests/HapticKitTests`), and `test/app.test.ts` checks that the server lets in an app the site lists and renders what it read.
+
+For a whole app to try it on, with tasks that run by themselves, see [Northpine for Mac](mac-northpine.md).
