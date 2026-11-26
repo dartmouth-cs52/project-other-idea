@@ -103,3 +103,14 @@ struct StatusBadge: View {
 extension Card.Status {
     var color: Color { self == .active ? .green : self == .frozen ? .blue : .secondary }
 }
+
+extension Transaction.Status {
+    var color: Color {
+        switch self {
+        case .cleared: return .green
+        case .pending: return .orange
+        case .declined: return .secondary
+        case .flagged: return .red
+        }
+    }
+}
