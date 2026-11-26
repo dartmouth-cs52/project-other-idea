@@ -14,7 +14,7 @@ final class Store: ObservableObject {
     @Published var company = Seed.company()
 
     @Published var nav: Nav? = .home {
-        didSet { detail = nil }
+        didSet { detail = nav == .accounting ? accountingSection : nil }
     }
     /** What is open within the screen, like one card of Cards. Part of the screen's name to Haptic. */
     @Published var detail: String? {
@@ -23,6 +23,14 @@ final class Store: ObservableObject {
 
     /** The sheet for issuing a card is open. Kept here because Cards, Home and the menu bar all open it. */
     @Published var issuingCard = false
+
+    /** Which of Accounting's four sections is showing. Each is its own screen to Haptic. */
+    @Published var accountingTab = "Chart of accounts" {
+        didSet { detail = accountingSection }
+    }
+    private var accountingSection: String? {
+        accountingTab == "Chart of accounts" ? nil : accountingTab.lowercased().replacingOccurrences(of: " ", with: "-")
+    }
 
     init() {
         nameScreen()
@@ -35,6 +43,7 @@ final class Store: ObservableObject {
     /** Shuts every sheet and goes back to the screen's own list. */
     func closeEverything() {
         issuingCard = false
+        accountingTab = "Chart of accounts"
         detail = nil
     }
 

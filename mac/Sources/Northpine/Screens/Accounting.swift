@@ -1,19 +1,19 @@
 import SwiftUI
 
-// Accounting: where spend meets the books. Four tabs across the top. The
-// first two are here: the chart of accounts, a tree, and the mappings that
-// say which account each category is booked to.
+// Accounting: where spend meets the books. Four sections across the top. Two
+// are here: the chart of accounts, a tree, and the mappings that say which
+// account each category is booked to. The other two are in AccountingClose.swift.
 
 struct AccountingView: View {
     @EnvironmentObject var store: Store
-    @State private var tab = "Chart of accounts"
 
     static let tabs = ["Chart of accounts", "Mappings", "Sync", "Month-end close"]
 
     var body: some View {
-        Page {
+        let tab = store.accountingTab
+        return Page {
             PageHeader(title: "Accounting", subtitle: "Connected to Ledgerline. Last synced 2 hours ago.")
-            Picker("Section", selection: $tab) {
+            Picker("Section", selection: $store.accountingTab) {
                 ForEach(Self.tabs, id: \.self) { Text($0).tag($0) }
             }
             .pickerStyle(.segmented)
@@ -23,10 +23,10 @@ struct AccountingView: View {
             switch tab {
             case "Chart of accounts": ChartOfAccounts()
             case "Mappings": Mappings()
-            default: Text("This part of Accounting is on its way.").foregroundStyle(.secondary)
+            case "Sync": LedgerSync()
+            default: MonthEndClose()
             }
         }
-        .onChange(of: tab) { store.detail = $0 == Self.tabs[0] ? nil : $0.lowercased().replacingOccurrences(of: " ", with: "-") }
     }
 }
 
