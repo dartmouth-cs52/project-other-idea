@@ -4,6 +4,8 @@ Haptic on the web reads the page a visitor is on and points at the control to us
 
 This is a first version. What it does and does not do is listed at the end.
 
+It has not been through the benchmark in `eval/`, which is all web, so there is no accuracy number for it. It has been tried on the two apps in `mac/`, and on the larger one, [Northpine for Mac](mac-northpine.md), sixteen tasks passed once with the production model. It sends the server the same kind of snapshot under the same prompt and rules, so we expect it to behave much as the web widget does. That is an expectation and not a measurement.
+
 ## Try it
 
 You need Xcode's command line tools and a server running from this repo.

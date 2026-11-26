@@ -111,6 +111,8 @@ With `claude-sonnet-5-5` on 25 November 2026, all sixteen passed in one run:
 | `icons-people` | Where is the list of everyone in the company? (icons only) | 1 |
 | `employee-approvals` | Where do I approve requests? (as an employee) | 0 |
 
+These sixteen are not the benchmark. The benchmark in `eval/` has 565 frozen steps with known right answers and whole guides on real apps, all of it web, and HapticKit has not been through anything like it. Sixteen tasks on an app we wrote ourselves show that it works, not how often.
+
 The last one takes no steps because the right answer is words: approvals are not part of an employee's role. One run is one run. The model's answers vary, and a task that passed here can fail on another day.
 
 ## What trying it found
