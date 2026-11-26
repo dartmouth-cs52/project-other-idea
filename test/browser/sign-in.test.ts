@@ -58,6 +58,19 @@ const CODE = login(
   `function ask(event) { event.preventDefault(); document.getElementById("first").remove(); document.getElementById("second").hidden = false; }`,
 );
 
+const SLOW_DISABLE = login(
+  `<div><label>Email <input name="email" type="email" value="demo@acme.test"></label>
+   <label>Password <input name="password" type="password"></label>
+   <button type="button" onclick="sendSlow()">Sign in with email</button></div>`,
+  `function sendSlow() {
+    for (const el of document.querySelectorAll("input, button")) el.disabled = true;
+    setTimeout(() => {
+      for (const el of document.querySelectorAll("input, button")) el.disabled = false;
+      check({ preventDefault() {} });
+    }, 700);
+  }`,
+);
+
 const APP = page(`<nav><a href="/">Home</a> <a href="/projects">Projects</a></nav><main><h1 id="h"></h1><button id="quick">Quick add</button></main>
   <script>document.getElementById("h").textContent = location.pathname === "/projects" ? "Projects" : "Home";</script>`);
 
@@ -164,6 +177,19 @@ for (const name of BROWSERS) {
       harness.pages.set("/bare", "<!doctype html><title>App</title><h1>No script here</h1>");
       tab = await newTab();
       await assert.rejects(beginMapping(asPage(tab), `${harness.url}/bare`, PASS, here), (error: unknown) => error instanceof Error && error.name === "CannotMap" && /script is not on/.test(error.message));
+      await tab.close();
+    });
+
+    test("waits out a form that disables its fields while sending, clears a prefilled name, and clicks Sign in with email", async () => {
+      let tab = await open(SLOW_DISABLE);
+      await signIn(asPage(tab), { url: `${harness.url}/login`, username: NAME, password: PASSWORD }, here);
+      assert.equal(await tab.evaluate(() => sessionStorage.getItem("in")), "yes");
+      await tab.close();
+
+      tab = await open(SLOW_DISABLE);
+      const said = await fails(tab, { username: NAME, password: "wrong" });
+      assert.match(said, /Wrong email or password/);
+      assert.equal(await tab.evaluate(() => sessionStorage.getItem("tries")), "1");
       await tab.close();
     });
   });

@@ -45,6 +45,8 @@ export class CannotMap extends Error {
 export interface SignInForm {
   user: boolean;
   password: boolean;
+  /** True when a password field is still on screen but disabled while the form is sending. */
+  sending: boolean;
   submit: boolean;
   /** Something only a person can get past: "captcha" or "code". */
   challenge: "" | "captcha" | "code";
@@ -70,10 +72,12 @@ const POLL_MS = 400;
 export function findSignIn(): SignInForm {
   const MARK = "data-haptic-sign-in";
   const text = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
-  const drawn = (el: Element) => el.getClientRects().length > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility()) && !(el as HTMLInputElement).disabled;
+  const shown = (el: Element) => el.getClientRects().length > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  const drawn = (el: Element) => shown(el) && !(el as HTMLInputElement).disabled;
   for (const el of Array.from(document.querySelectorAll(`[${MARK}]`))) el.removeAttribute(MARK);
 
-  const inputs = Array.from(document.querySelectorAll("input")).filter(drawn);
+  const allInputs = Array.from(document.querySelectorAll("input")).filter(shown);
+  const inputs = allInputs.filter(drawn);
   const kind = (el: HTMLInputElement) => (el.getAttribute("type") ?? "text").toLowerCase();
   // Read as written. Asked through the element, Firefox gives nothing for a value it does not fill in itself, such as one-time-code.
   const fills = (el: HTMLInputElement) => (el.getAttribute("autocomplete") ?? "").toLowerCase();
@@ -83,6 +87,7 @@ export function findSignIn(): SignInForm {
   const captcha = Array.from(document.querySelectorAll("iframe")).some((frame) => /recaptcha|hcaptcha|challenges\.cloudflare\.com|turnstile|arkoselabs|funcaptcha/i.test(frame.src) && drawn(frame));
 
   const password = inputs.find((el) => kind(el) === "password" && !fills(el).includes("new-password"));
+  const sending = !password && allInputs.some((el) => kind(el) === "password" && !fills(el).includes("new-password"));
   const names = inputs.filter((el) => ["text", "email", "tel"].includes(kind(el)) && !fills(el).includes("one-time-code"));
   // With a password on the page, the name is the last such field before it. Alone, it is one that says it holds a name or an email.
   const user = password
@@ -92,19 +97,19 @@ export function findSignIn(): SignInForm {
   const within: ParentNode = (password ?? user)?.closest("form") ?? document;
   const buttons = Array.from(within.querySelectorAll("button, input[type='submit'], [role='button']")).filter(drawn);
   const name = (el: Element) => text(el.getAttribute("aria-label")) || text((el as HTMLElement).innerText) || text((el as HTMLInputElement).value);
-  // Not "Sign in with Google", "Forgot password" or "Show password", which share a form with the real one.
-  const ours = buttons.filter((el) => !/\b(with|using|via|forgot|reset|show|hide|sign up|register|create|sso|passkey|magic)\b/i.test(name(el)));
+  // Not "Sign in with Google", "Forgot password" or "Show password", which share a form with the real one. "Sign in with email" and "Sign in with password" are ours.
+  const ours = buttons.filter((el) => !/\b(with(?!\s+(a\s+|your\s+)?(email|e-mail|password)\b)|using|via|forgot|reset|show|hide|sign up|register|create|sso|passkey|magic)\b/i.test(name(el)));
   const submit =
     ours.find((el) => /^(sign in|log in|login|signin|continue|next|submit)$/i.test(name(el))) ??
     ours.find((el) => (el.getAttribute("type") ?? "").toLowerCase() === "submit") ??
-    ours.find((el) => /\b(sign in|log in|login|continue|next)\b/i.test(name(el)));
+    ours.find((el) => /\b(sign in|log in|login|signin|continue|next)\b/i.test(name(el)));
 
   user?.setAttribute(MARK, "user");
   password?.setAttribute(MARK, "password");
   if (password || user) submit?.setAttribute(MARK, "submit");
 
-  const alert = Array.from(document.querySelectorAll("[role='alert'], [aria-live='assertive'], [aria-invalid='true'] ~ [id]")).filter(drawn).map((el) => text((el as HTMLElement).innerText)).find(Boolean);
-  return { user: !!user, password: !!password, submit: !!submit && !!(password || user), challenge: captcha ? "captcha" : code ? "code" : "", says: (alert ?? "").slice(0, 140).replace(/[.\s]+$/, "") };
+  const alert = Array.from(document.querySelectorAll("[role='alert'], [aria-live='assertive'], [aria-invalid='true'] ~ [id]")).filter(shown).map((el) => text((el as HTMLElement).innerText)).find(Boolean);
+  return { user: !!user, password: !!password, sending, submit: !!submit && !!(password || user), challenge: captcha ? "captcha" : code ? "code" : "", says: (alert ?? "").slice(0, 140).replace(/[.\s]+$/, "") };
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -145,6 +150,27 @@ export async function signIn(page: SignInPage, using: SignInWith, allowed: (orig
     if (form.challenge === "captcha") throw new CannotMap("Your sign-in page asks for a captcha, which Haptic does not get past. Map from your own browser instead.");
     if (form.challenge === "code") throw new CannotMap("Your app asks this account for a code after the password. Use an account without two-step sign-in, or map from your own browser.");
   };
+  const enter = async (which: "user" | "password", value: string) => {
+    const selector = field(which);
+    // A demo or staging page sometimes fills a field in for visitors. Select what is there first so ours replaces it.
+    const had = await page.evaluate((sel: string) => {
+      const el = document.querySelector(sel) as HTMLInputElement | null;
+      if (!el || !el.value) return false;
+      el.focus();
+      el.select();
+      return true;
+    }, selector);
+    if (had) {
+      await page.keyboard.press("Backspace");
+      await page.evaluate((sel: string) => {
+        const el = document.querySelector(sel) as HTMLInputElement | null;
+        if (!el || !el.value) return;
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(el, "");
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      }, selector);
+    }
+    await page.type(selector, value);
+  };
   const send = async (form: SignInForm) => {
     if (form.submit) await page.click(field("submit"));
     else await page.keyboard.press("Enter");
@@ -162,7 +188,7 @@ export async function signIn(page: SignInPage, using: SignInWith, allowed: (orig
   if (!form || (!form.user && !form.password)) throw new CannotMap("Haptic found no name or password field on that page. Give the address of the page with the sign-in form itself.");
   refuse(form);
 
-  if (form.user) await page.type(field("user"), using.username);
+  if (form.user) await enter("user", using.username);
   if (!form.password) {
     // The name is asked for first and the password on the next step.
     await send(form);
@@ -171,13 +197,13 @@ export async function signIn(page: SignInPage, using: SignInWith, allowed: (orig
     if (form) refuse(form);
     if (!form?.password) throw new CannotMap(`Your sign-in page did not ask for a password after the name${form?.says ? `. It said: "${form.says}"` : ""}. If it signs people in by email link or another service, map from your own browser.`);
   }
-  await page.type(field("password"), using.password);
+  await enter("password", using.password);
   await send(form);
 
-  // Signed in is when the password field has gone. A page that still shows one has said no, and one that says why has said so already.
-  const after = await wait(page, (found) => !found.password || !!found.says || !!found.challenge);
+  // Signed in is when the password field has gone from the page, not merely been disabled while the form sends.
+  const after = await wait(page, (found) => (!found.password && !found.sending) || !!found.says || !!found.challenge);
   stay("Signing in");
-  if (!after) throw new CannotMap("Your app did not finish loading after signing in.");
+  if (!after || (after.sending && !after.says)) throw new CannotMap("Your app did not finish loading after signing in.");
   refuse(after);
-  if (after.password) throw new CannotMap(`Your app did not accept that sign-in${after.says ? `. It said: "${after.says}"` : ""}. Haptic tried once and will not try again by itself.`);
+  if (after.password || after.sending) throw new CannotMap(`Your app did not accept that sign-in${after.says ? `. It said: "${after.says}"` : ""}. Haptic tried once and will not try again by itself.`);
 }
