@@ -173,4 +173,15 @@ final class ReaderTests: XCTestCase {
         XCTAssertEqual(LiveTree.path(for: "", document: false), "/window")
         XCTAssertEqual(LiveTree.path(for: "Q3 budget (Maya).numbers", document: true), "/document")
     }
+
+    func testASidebarsGroupTitleNamesItsRowsAndIsNotOneOfThem() {
+        func row(_ words: String, y: CGFloat) -> Fake { Fake("AXRow", frame: CGRect(x: 0, y: y, width: 200, height: 24), [Fake("AXCell", "", [Fake.text(words)])]) }
+        func title(_ words: String, y: CGFloat) -> Fake { Fake("AXRow", frame: CGRect(x: 0, y: y, width: 200, height: 18), [Fake("AXCell", "", [Fake("AXGroup", "", [Fake("AXHeading", words)])])]) }
+        let sidebar = Fake("AXOutline", "Sidebar", frame: CGRect(x: 0, y: 0, width: 200, height: 600), [title("Spend", y: 500), row("Cards", y: 470), row("Expenses", y: 440), title("Company", y: 400), row("People", y: 370)])
+        let reading = read([sidebar, Fake("AXButton", "Issue card", frame: CGRect(x: 300, y: 500, width: 90, height: 22))])
+        XCTAssertEqual(reading.snapshot.elements.map { "\($0.role) \($0.label) [\($0.context ?? "")]" }, [
+            "treeitem Cards [Sidebar › Spend]", "treeitem Expenses [Sidebar › Spend]", "treeitem People [Sidebar › Company]", "button Issue card []",
+        ])
+        XCTAssertEqual(reading.snapshot.headings, [], "a sidebar's group titles are not the screen's headings")
+    }
 }

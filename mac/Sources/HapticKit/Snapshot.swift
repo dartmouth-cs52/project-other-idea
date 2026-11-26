@@ -243,6 +243,11 @@ struct Reader {
             return
         case "AXRow":
             // A row of a sidebar or a table is something to click. Its words are its name, and are not listed again as text.
+            // A sidebar's group title is a row too, but nothing happens when it is clicked. It names the rows under it.
+            if let title = groupTitle(of: node) {
+                lastHeading = title
+                return
+            }
             let name = wordsIn(node)
             if !name.isEmpty {
                 let role = around.parentRole == "AXOutline" ? "treeitem" : "row"
@@ -255,6 +260,7 @@ struct Reader {
             let visible = clipped(around.clip, node.frame)
             around.clip = visible
             var rows = 0
+            let headingBefore = lastHeading
             for child in node.children {
                 if child.role == "AXRow" {
                     rows += 1
@@ -262,6 +268,8 @@ struct Reader {
                 }
                 walk(child, around)
             }
+            // A group title inside the list names its rows, and nothing after the list.
+            lastHeading = headingBefore
             return
         case "AXScrollArea":
             around.clip = clipped(around.clip, node.frame)
@@ -277,6 +285,24 @@ struct Reader {
         // A tab view keeps its role for its tabs. Any other container hands none down.
         if role != "AXRow" { around.parentRole = role == "AXTabGroup" || role == "AXRadioGroup" ? role : (role == "AXGroup" ? around.parentRole : "") }
         for child in node.children { walk(child, around) }
+    }
+
+    /** For a row that holds a heading and nothing else, like "Spend" over three rows of a sidebar: what it says. */
+    private func groupTitle(of row: TreeNode) -> String? {
+        var heading: String?
+        var other = false
+        func look(_ node: TreeNode, _ depth: Int) {
+            guard depth < 5, !other else { return }
+            for child in node.children {
+                if child.role == "AXHeading" { heading = nonEmpty(child.label, child.title, child.staticText) }
+                else if child.role == "AXCell" || child.role == "AXGroup" { look(child, depth + 1) }
+                else { other = true }
+            }
+        }
+        look(row, 0)
+        guard !other, let heading else { return nil }
+        let words = Masking.clean(heading, max: 40, own: own)
+        return words.isEmpty ? nil : words
     }
 
     private func clipped(_ clip: CGRect, _ frame: CGRect) -> CGRect {
