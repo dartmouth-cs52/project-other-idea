@@ -184,4 +184,12 @@ final class ReaderTests: XCTestCase {
         ])
         XCTAssertEqual(reading.snapshot.headings, [], "a sidebar's group titles are not the screen's headings")
     }
+
+    func testAScrollBarsOwnButtonsAreLeftOut() {
+        let page = Fake("AXButton", "")
+        page.subrole = "AXIncrementPage"
+        page.isEnabled = false
+        let area = Fake("AXScrollArea", "", frame: window, [Fake("AXButton", "Save"), Fake("AXScrollBar", "", [Fake("AXValueIndicator"), page])])
+        XCTAssertEqual(read([area]).snapshot.elements.map(\.label), ["Save"])
+    }
 }
