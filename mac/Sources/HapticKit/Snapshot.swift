@@ -287,7 +287,8 @@ struct Reader {
         default:
             if let landmark = Self.landmarks[role] { around.landmark = landmark }
             // A box with a name, like "Notifications" around three switches.
-            else if role == "AXGroup", let label = nonEmpty(node.label, node.title) { around.landmark = Masking.clean(label, max: 40, own: own) }
+            // And a row of segments or radio buttons, which says what is being chosen: "Period" over week, month, quarter.
+            else if role == "AXGroup" || role == "AXRadioGroup", let label = nonEmpty(node.label, node.title) { around.landmark = Masking.clean(label, max: 40, own: own) }
         }
 
         // A tab view keeps its role for its tabs. Any other container hands none down.
