@@ -34,6 +34,7 @@ struct Shell: View {
         case .approvals: ApprovalsView()
         case .bills: BillsView()
         case .vendors: VendorsView()
+        case .budgets: BudgetsView()
         default: ComingSoon(nav: nav)
         }
     }
