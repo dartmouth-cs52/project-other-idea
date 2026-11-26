@@ -31,6 +31,7 @@ struct NorthpineApp: App {
                     Preferences.shared = preferences
                 }
         }
+        .commands { NorthpineCommands(store: store) }
         Settings {
             SettingsWindow()
                 .environmentObject(store)

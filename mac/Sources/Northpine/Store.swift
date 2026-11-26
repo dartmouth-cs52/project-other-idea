@@ -40,6 +40,9 @@ final class Store: ObservableObject {
         didSet { nameScreen() }
     }
 
+    /** What the File menu's Export was asked for, shown in an alert until it is dismissed. */
+    @Published var exported: String?
+
     init() {
         nameScreen()
     }

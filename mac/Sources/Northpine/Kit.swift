@@ -37,17 +37,6 @@ struct Page<Content: View>: View {
     }
 }
 
-/** A screen that is not built yet. */
-struct ComingSoon: View {
-    let nav: Nav
-
-    var body: some View {
-        Page {
-            PageHeader(title: nav.title, subtitle: "This part of Northpine is on its way.")
-        }
-    }
-}
-
 /** One number with what it counts, for the rows of figures at the top of a screen. */
 struct StatTile: View {
     let label: String

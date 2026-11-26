@@ -21,6 +21,11 @@ struct Shell: View {
             screen(store.nav ?? .home)
         }
         .navigationTitle((store.nav ?? .home).title)
+        .alert("Export started", isPresented: Binding(get: { store.exported != nil }, set: { if !$0 { store.exported = nil } })) {
+            Button("OK") {}
+        } message: {
+            Text("\(store.exported ?? "Your file") will be in Downloads in a moment.")
+        }
         .sheet(isPresented: $store.issuingCard) { IssueCardSheet().environmentObject(store) }
     }
 
@@ -41,7 +46,6 @@ struct Shell: View {
         case .policies: PoliciesView()
         case .inbox: InboxView()
         case .help: HelpView()
-        default: ComingSoon(nav: nav)
         }
     }
 }
