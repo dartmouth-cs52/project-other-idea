@@ -47,7 +47,13 @@ final class Store: ObservableObject {
     @Published var paletteOpen = false
 
     /** False shows the sign-in screen in place of the app. */
-    @Published var signedIn = true
+    @Published var signedIn = true {
+        didSet { nameScreen() }
+    }
+    /** The four steps of setting up a new company are showing. */
+    @Published var onboarding = false {
+        didSet { nameScreen() }
+    }
 
     init() {
         nameScreen()
@@ -62,6 +68,8 @@ final class Store: ObservableObject {
         issuingCard = false
         contacting = false
         paletteOpen = false
+        signedIn = true
+        onboarding = false
         accountingTab = "Chart of accounts"
         detail = nil
     }
@@ -87,6 +95,10 @@ final class Store: ObservableObject {
         // The Settings window is in front whenever it is open, so its pane is the screen.
         if let settingsPane {
             Haptic.screen = "/settings/" + settingsPane.lowercased().replacingOccurrences(of: " ", with: "-")
+            return
+        }
+        if onboarding || !signedIn {
+            Haptic.screen = onboarding ? "/onboarding" : "/sign-in"
             return
         }
         let base = (nav ?? .home).path

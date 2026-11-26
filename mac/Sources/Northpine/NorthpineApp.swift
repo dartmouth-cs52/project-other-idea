@@ -23,7 +23,9 @@ struct NorthpineApp: App {
 
     var body: some Scene {
         WindowGroup("Northpine") {
-            Shell()
+            Group {
+                if store.onboarding { OnboardingView() } else if store.signedIn { Shell() } else { SignInView() }
+            }
                 .environmentObject(store)
                 .frame(minWidth: 980, minHeight: 620)
                 .onAppear {

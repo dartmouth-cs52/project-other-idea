@@ -46,6 +46,8 @@ enum Dump {
         ("sync", { $0.go(.accounting); $0.accountingTab = "Sync" }),
         ("close", { $0.go(.accounting); $0.accountingTab = "Month-end close" }),
         ("palette", { $0.paletteOpen = true }),
+        ("sign-in", { $0.signedIn = false }),
+        ("onboarding", { $0.onboarding = true }),
         ("settings", { _ in Preferences.open("General") }),
         ("settings-security", { _ in Preferences.open("Security") }),
     ]
