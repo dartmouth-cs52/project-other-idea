@@ -29,8 +29,11 @@ People say what they want to do, and Haptic points to exactly where to click, st
 
 Haptic is an AI guide that a company adds to its web app with one script tag. A user types what they want to do, and Haptic reads the page in front of them and points at the exact control to click, one step at a time, across page loads and through forms. It learns the product from the site itself, its help docs and a few notes, so nobody writes a tour or maintains a selector.
 
+It works in native Mac apps too. [HapticKit](docs/mac.md) is a Swift package a company adds to its own app with one call. It reads the app's window and menu bar as the widget reads a page, asks the same server, and points at the control in the app's own window.
+
 - **The app is at [joinhaptic.com](https://joinhaptic.com).** Click **Ask** on any page to try the guide. Companies sign in there, by invitation, to add their site and see what their users asked.
 - **Haptic inside an app is at [demo.joinhaptic.com](https://demo.joinhaptic.com).** That is Northpine, a made-up spend-management product with the live widget on it.
+- **Haptic inside a Mac app is [Northpine for Mac](docs/mac-northpine.md),** the same made-up product as a native app, in `mac/`. It runs from a clone with `swift run Northpine`.
 
 ![The widget in the middle of a guide: the question in the panel, the pointer and its outline on the Team link, and the caption Click Team beside it](docs/screenshots/guide.png)
 
@@ -91,7 +94,7 @@ sequenceDiagram
 
 ### What Haptic knows about a site
 
-A crawl turns the site into a **graph**. Each page's title, headings, buttons and field labels make a node, and the links between pages are the edges. The dashboard's reader uses a headless browser and also opens each menu, tab and accordion, so the map knows which control a link sits behind. Real visits fill in what a crawl can't reach. The widget reports the labels on each page it loads on, and a label joins the map once three different visitors have seen it. [How visits teach it.](docs/widget.md#learning-the-site-from-visits) And someone at the company can have Haptic go through their signed-in app by itself, from the dashboard, which adds what each button, menu and dialog leads to. [How mapping works.](docs/widget.md#mapping-the-signed-in-app) Together with the company's notes and help docs, this gives the model a map it can plan routes through, to pages the user hasn't reached yet.
+A crawl turns the site into a **graph**. Each page's title, headings, buttons and field labels make a node, and the links between pages are the edges. The dashboard's reader uses a headless browser and also opens each menu, tab and accordion, so the map knows which control a link sits behind. Real visits fill in what a crawl can't reach. The widget reports the labels on each page it loads on, and a label joins the map once three different visitors have seen it. [How visits teach it.](docs/widget.md#learning-the-site-from-visits) And a company can have Haptic go through its signed-in app by itself, which adds what each button, menu and dialog leads to. There are two ways, chosen in the dashboard. Someone at the company signs in as usual and Haptic goes through the app in their own browser, so no password ever reaches Haptic. Or the company gives Haptic a test account, and Haptic signs in once from a browser of its own on Cloudflare and maps the app with nobody sitting through it. [How mapping works](docs/widget.md#mapping-the-signed-in-app), and [what the test account is used for and what is kept](docs/privacy.md#a-test-account-a-company-gives). Together with the company's notes and help docs, this gives the model a map it can plan routes through, to pages the user hasn't reached yet.
 
 ## Architecture
 
@@ -123,9 +126,10 @@ The third Worker is Northpine, the demo at `demo.joinhaptic.com`. It has no back
 
 - **The widget** (`src/widget`) is the script a customer pastes into their app. It reads the page, draws the pointer and the panel inside a shadow root, and talks only to the widget server.
 - **The widget server** (`src/server`) is one request handler, `app.ts`, that runs in two places: under Node on your machine (`src/server/index.ts`) and as a Cloudflare Worker online (`worker/index.ts`). It validates each step, builds the prompt, calls Claude, checks the reply against its rules, keeps each site inside its budget and records the guide. A KV namespace holds the off switch, and a Durable Object holds what each site has spent.
-- **The site Worker** (`web/`) serves joinhaptic.com as static pages from Next.js, and answers everything under `/api/`: the request-access form, sign-in through Neon Auth, the dashboard's queries, reading a new customer's site in a headless browser, billing through Stripe and email through Resend.
+- **The site Worker** (`web/`) serves joinhaptic.com as static pages from Next.js, and answers everything under `/api/`: the request-access form, sign-in through Neon Auth, the dashboard's queries, reading a new customer's site in a headless browser, signing in to a customer's app with a test account to map it, billing through Stripe and email through Resend.
 - **The database** is Postgres on Neon. The widget server writes each question and step as it happens, and the dashboard reads them from there, so there is no socket between the two.
 - **Northpine** (`testbed/`) is a client-only React app, built to contain every UI pattern known to break a pointing guide.
+- **HapticKit** (`mac/`) is the widget's counterpart for native Mac apps, in Swift. It runs inside the customer's app, reads the app's own accessibility tree, and talks to the same widget server with the same request a page sends. An app names itself by its bundle identifier, as `app://com.example.app`, where a page names its origin. **Northpine for Mac**, in the same package, is the native test app.
 
 ### How the code is organized
 
@@ -145,7 +149,7 @@ Three npm packages, each with its own `package.json` and lockfile: the top of th
 | [`test`](test) | Unit tests, browser tests and the red-team pages |
 | [`testbed`](testbed) | Northpine, the stress-test app and live demo |
 | [`demo`](demo) | A small multi-page app for trying the widget locally |
-| [`mac`](mac) | HapticKit, the start of Haptic for Mac apps, in Swift. It turns a window's accessibility tree into the same list of controls the widget makes from a page, masks it by the same rules, and asks the same server. See [Status](#status) for what it lacks |
+| [`mac`](mac) | Haptic for Mac apps, in Swift. HapticKit turns a window's accessibility tree and the menu bar into the same list of controls the widget makes from a page, masks it by the same rules, asks the same server, and draws the pointer over the app's own window. Beside it are two apps to try it on: Acme Desk, a small one, and Northpine for Mac, a large one with sixteen tasks that run by themselves |
 | [`docs`](docs) | How each part works, listed under [Documentation](#documentation) |
 | [`DESIGN.md`](DESIGN.md) | The design system shared by the widget and the website |
 | [`AGENTS.md`](AGENTS.md) | What a coding agent needs to know to work here |
@@ -164,7 +168,8 @@ The pointer is the easy part. Most of the code is what makes it safe to put in f
 | **Private data on the page** | The widget sends labels, never field values, and leaves what a user typed out of every heading, label and option that repeats it. Email addresses, long numbers and phone and card numbers are masked in the browser and again on the server, by the same function. See [what is masked](docs/privacy.md) and [what is stored](docs/operations.md#what-is-recorded-about-visitors). |
 | **An unbounded model bill** | Each site's knowledge is prompt-cached. Each site has hourly and daily dollar budgets, enforced on every step by reserving the step's maximum cost up front and settling to the real cost afterwards. Optional limits for each visitor count against a daily-salted hash of their address. A kill switch takes Haptic off one site, or all of them, without a deploy. See [spend limits](docs/operations.md#what-a-site-can-spend). |
 | **Knowing whether a change made it better** | A [benchmark](eval/README.md) of 565 frozen steps with known right answers, scored for accuracy, latency and output hygiene, plus whole guides run start to finish in a browser. A staging copy of the server measures a prompt change against the real model before visitors get it. |
-| **Real apps are harder than demos** | [Northpine](testbed/README.md) is a fake spend-management app with about 60 routes and 10,000 transactions. It is built to contain every UI pattern known to break a pointing guide, among them virtualized tables, portals, nested dialogs and command palettes. It comes with 179 tasks. |
+| **Real apps are harder than demos** | [Northpine](testbed/README.md) is a fake spend-management app with about 60 routes and 10,000 transactions. It is built to contain every UI pattern known to break a pointing guide, among them virtualized tables, portals, nested dialogs and command palettes. It comes with 179 tasks. [Northpine for Mac](docs/mac-northpine.md) is the same for native apps: fourteen screens, a Settings window, sheets inside sheets, exports three menus deep, and a Lab that renames the sidebar or strips it to icons. Building it found eleven bugs in HapticKit, each fixed with a test. |
+| **Apps behind a login** | A crawl stops at the sign-in page. [Mapping](docs/widget.md#mapping-the-signed-in-app) gets past it in one of two ways. In the company's own browser, a guard keeps the app from saving, sending or deleting anything while Haptic presses its buttons. With a test account, Haptic types the password only on an address the company has allowed, tries once so the account is never locked out, stops at a captcha or a code, and keeps neither the name nor the password. |
 | **Billing people can check** | Pricing charges only for finished guides. Finished has one definition shared by the widget, the database and the dashboard, which lists every billable guide with a download. |
 
 ### Beyond pointing
@@ -324,6 +329,24 @@ npm run dev
 
 It runs at http://localhost:4200. To put Haptic on it, follow [Try Haptic on it](testbed/README.md#try-haptic-on-it).
 
+### Haptic in a Mac app
+
+Optional. `mac/` is a Swift package, and needs a Mac with Xcode's command line tools. With the server from step 3 running:
+
+```bash
+mkdir -p data/sites && cp mac/northpine-site.json data/sites/site_northpine_mac.json
+```
+
+```bash
+cd mac
+```
+
+```bash
+swift run Northpine
+```
+
+Northpine for Mac opens with an **Ask** button in the corner of its window. Try *why can't I pay Juniper Office Leasing* or *export a trial balance*. Use a Claude API key for this, not the stand-in model. [Northpine for Mac](docs/mac-northpine.md) has the rest, and [Haptic in a Mac app](docs/mac.md) says how to add HapticKit to an app of your own.
+
 ## Development
 
 From the top of the repository:
@@ -339,13 +362,15 @@ npm run test:dashboard            # the built dashboard in Chromium, kept curren
 npm run test:widget               # guides, hearing, Do it with me, the gate and red-team pages, in Chromium
 ```
 
+The Mac package has its own tests, which need Xcode's command line tools: `cd mac && swift test`.
+
 `npm test` needs nothing but `npm ci`. Tests that need a browser or a database skip themselves and say what is missing.
 
 The browser tests need Playwright's browsers once, with `npx playwright install chromium firefox webkit`. The act tests on pages built from the real React, Radix and cmdk also need those libraries for the run, and are skipped without them. Install them with `npm install --no-save react@19 react-dom@19 radix-ui@1 cmdk@1`.
 
 The dashboard tests open the pages `next build` writes, so build the site first. They read every number from a local Postgres through the Worker's own queries, so they need `TEST_DATABASE_URL` set to an empty local database, never a real one. Run them with `cd web && npm run build && cd .. && TEST_DATABASE_URL=postgres://postgres@127.0.0.1:55432/haptic_test npm run test:dashboard`. A test writes a question and its steps to the database as the widget server does, and waits for the open page to show them by itself. Without the build or the database they are skipped, and say which is missing. `dashboard-tests.yml` runs them on every pull request that touches the dashboard.
 
-On every push and pull request, CI typechecks, tests and builds the server, lints, tests and builds the website, and builds Northpine and checks that each of its pages fits a phone. A pull request that touches the widget also runs both browser suites, in `widget-tests.yml`.
+On every push and pull request, CI typechecks, tests and builds the server, lints, tests and builds the website, and builds Northpine and checks that each of its pages fits a phone. A pull request that touches the widget also runs both browser suites, in `widget-tests.yml`, and one that touches `mac/` builds and tests the Swift package on a Mac, in `mac-tests.yml`.
 
 ## Deployment
 
@@ -411,7 +436,7 @@ Both need a Cloudflare API token in `CLOUDFLARE_API_TOKEN`, and go straight to t
 |---|---|
 | [Operations](docs/operations.md) | Deploying, the database, what is recorded about visitors, what Teach Haptic keeps, billing outcomes, the kill switch, spend limits, step costs and verified routes |
 | [Privacy](docs/privacy.md) | What leaves the browser, what is masked first, and the exceptions |
-| [The widget on a page](docs/widget.md) | Modal dialogs, covered controls, what a form needs before its button, route changes, Do it with me, teach mode, learning the site from visits, mapping the signed-in app, and the browser tests |
+| [The widget on a page](docs/widget.md) | Modal dialogs, covered controls, what a form needs before its button, route changes, Do it with me, teach mode, learning the site from visits, mapping the signed-in app from the company's own browser or with a test account, and the browser tests |
 | [Correcting Haptic](docs/corrections.md) | What people can't find, guide health and its emails, Point here instead, Teach Haptic, and controls Haptic must never point at |
 | [Haptic in a Mac app](docs/mac.md) | HapticKit, the Swift package that does in a native Mac app what the widget does on a page: how a window is read, the menu bar, privacy, and what is not built yet |
 | [Northpine for Mac](docs/mac-northpine.md) | The large Mac app Haptic is tried on: its screens and what makes each hard, the Lab, how its site file is written from the app itself, the sixteen tasks and their results, and what building it found in HapticKit |
@@ -427,11 +452,12 @@ Both need a Cloudflare API token in `CLOUDFLARE_API_TOKEN`, and go straight to t
 Haptic is in early access. It is running, by invitation, and free until billing starts. These are its known limits.
 
 - On real apps a single step is right about 85% of the time, and about half the whole guides get there. On Haptic's own sites it is 97% and nearly all of them.
-- The command-line crawler reads each page in a browser only when Playwright's Chromium is installed (`npx playwright install chromium`). Without it, it reads the HTML the server sends, so pages drawn by JavaScript come back thin. Pages behind a login need a saved session (`--session`) or mapping from the dashboard. The widget still reads every page as the user sees it, so a thinly crawled site leans more on notes and docs.
+- The command-line crawler reads each page in a browser only when Playwright's Chromium is installed (`npx playwright install chromium`). Without it, it reads the HTML the server sends, so pages drawn by JavaScript come back thin. Pages behind a login need a saved session (`--session`) or mapping from the dashboard, either in the company's own browser or with a test account. The widget still reads every page as the user sees it, so a thinly crawled site leans more on notes and docs.
 - Nothing inside a rich-text editor, a canvas or a frame from another origin can be pointed at. For editors this is deliberate, because the widget reads nothing inside an area the user writes in.
 - Answers has been run against a real model on one app, Northpine. Its own benchmark of 220 questions, 100 of them attacks, is built and has not yet been run against a real model.
 - Do it with me is off by default. It does not pick dates yet, so a date field is handed to the user.
-- Haptic for Mac apps has been started and does not run in an app yet. `mac/` has the reader, the masking and the calls to the server, and a site can list a Mac app among the places it runs, by its bundle identifier. The part that reads a running app's own window, and anything that draws the pointer over it, are not in the repository. CI does not build or test the Swift package.
+- Mapping with a test account does not get past a captcha, a code sent by email or phone, or a sign-in kept by another service such as Google. It says so and stops, and those apps are mapped from the company's own browser. It has been tested against made-up sign-in pages in three browsers, and not yet run against a customer's app.
+- Haptic for Mac apps points and explains, and that is all so far. Do it with me, the source links under an answer, the hand-off form and "Did this help?" are not built for it. A Mac app's screens are written down by hand or by the app itself, as Northpine for Mac does, because nothing crawls or maps a native app. It reads what an app tells accessibility, so views that draw themselves and web views inside an app are not read. On Northpine for Mac all sixteen tasks passed in one run with the production model, and one run is one run. [The rest.](docs/mac.md#what-is-not-built)
 
 ## How it was built
 
@@ -443,7 +469,7 @@ Haptic started in Dartmouth's CS 52, Full-Stack Web Development. It's built by t
 
 - **Charlie Peers**, [@charliepeers](https://github.com/charliepeers). The production server and its deployment, the benchmark, cost controls, Answers and hand-off, Do it with me, privacy masking, sign-in, the dashboard and onboarding flow, and joinhaptic.com.
 - **Theodore Chan**, [@TheoC26](https://github.com/TheoC26). Northpine, how the widget follows a page through dialogs, covered controls and route changes, learning a site from visits, corrections and guide health.
-- **Isaac Saxonov**, [@clewner](https://github.com/clewner). The first version of the widget, server and site crawler that the rest grew from, and mapping pages behind a sign-in.
+- **Isaac Saxonov**, [@clewner](https://github.com/clewner). The first version of the widget, server and site crawler that the rest grew from, mapping pages behind a sign-in, from the company's own browser and with a test account, and Haptic for Mac apps: HapticKit and Northpine for Mac.
 
 ## Licence
 
