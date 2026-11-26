@@ -32,6 +32,7 @@ struct Shell: View {
         case .expenses: ExpensesView()
         case .reimbursements: ReimbursementsView()
         case .approvals: ApprovalsView()
+        case .bills: BillsView()
         default: ComingSoon(nav: nav)
         }
     }

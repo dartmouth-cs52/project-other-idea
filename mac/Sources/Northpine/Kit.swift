@@ -114,3 +114,16 @@ extension Transaction.Status {
         }
     }
 }
+
+extension Bill.Status {
+    var color: Color {
+        switch self {
+        case .draft: return .secondary
+        case .awaiting: return .orange
+        case .approved: return .blue
+        case .scheduled: return .purple
+        case .paid: return .green
+        case .overdue: return .red
+        }
+    }
+}
