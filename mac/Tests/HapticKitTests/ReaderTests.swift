@@ -171,6 +171,9 @@ final class ReaderTests: XCTestCase {
     func testScreensAreNamedAsPaths() {
         XCTAssertEqual(LiveTree.path(for: "Plan & Billing", document: false), "/plan-billing")
         XCTAssertEqual(LiveTree.path(for: "", document: false), "/window")
+        XCTAssertEqual(LiveTree.path(for: "/cards/card", document: false), "/cards/card")
+        XCTAssertEqual(LiveTree.path(for: "Settings/Plan & Billing/", document: false), "/settings/plan-billing")
+        XCTAssertEqual(LiveTree.path(for: "//", document: false), "/window")
         XCTAssertEqual(LiveTree.path(for: "Q3 budget (Maya).numbers", document: true), "/document")
     }
 
