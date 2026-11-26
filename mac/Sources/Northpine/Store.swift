@@ -32,6 +32,9 @@ final class Store: ObservableObject {
         accountingTab == "Chart of accounts" ? nil : accountingTab.lowercased().replacingOccurrences(of: " ", with: "-")
     }
 
+    /** The sheet that writes to support is open. The Help menu opens it too. */
+    @Published var contacting = false
+
     init() {
         nameScreen()
     }
@@ -43,6 +46,7 @@ final class Store: ObservableObject {
     /** Shuts every sheet and goes back to the screen's own list. */
     func closeEverything() {
         issuingCard = false
+        contacting = false
         accountingTab = "Chart of accounts"
         detail = nil
     }

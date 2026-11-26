@@ -40,6 +40,7 @@ struct Shell: View {
         case .people: PeopleView()
         case .policies: PoliciesView()
         case .inbox: InboxView()
+        case .help: HelpView()
         default: ComingSoon(nav: nav)
         }
     }
