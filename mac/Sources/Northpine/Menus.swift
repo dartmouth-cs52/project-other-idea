@@ -7,6 +7,7 @@ import SwiftUI
 
 struct NorthpineCommands: Commands {
     @ObservedObject var store: Store
+    @ObservedObject var lab: Lab
 
     private var openCard: Card? {
         guard store.nav == .cards, let id = store.detail?.split(separator: "/").last else { return nil }
@@ -48,8 +49,8 @@ struct NorthpineCommands: Commands {
                 .keyboardShortcut("k")
             Divider()
             ForEach(NavGroup.all) { group in
-                ForEach(Array(group.items.enumerated()), id: \.element) { _, item in
-                    Button(item.title) { store.go(item) }
+                ForEach(Array(group.items.filter(lab.shows).enumerated()), id: \.element) { _, item in
+                    Button(lab.title(item)) { store.go(item) }
                         .keyboardShortcut(shortcut(item), modifiers: .command)
                 }
                 Divider()
