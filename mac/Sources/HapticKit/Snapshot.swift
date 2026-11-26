@@ -352,6 +352,9 @@ struct Reader {
                 if child.role == "AXStaticText" || child.role == "AXHeading" {
                     let words = child.staticText.isEmpty ? nonEmpty(child.label, child.title) ?? "" : child.staticText
                     if !words.isEmpty { parts.append(words) }
+                } else if child.role == "AXImage" {
+                    // An icon the app described, like a sidebar of icons with no words. What it is called is all the row says.
+                    if let words = nonEmpty(child.label, child.title) { parts.append(words) }
                 } else if !Self.fieldRoles.contains(child.role) {
                     // Never the inside of a field: what is there is what someone typed.
                     gather(child, depth + 1)

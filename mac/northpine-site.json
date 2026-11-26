@@ -1,0 +1,2047 @@
+{
+  "allowedOrigins" : [
+    "app://com.northpine.mac"
+  ],
+  "answers" : {
+    "enabled" : false
+  },
+  "appearance" : {
+    "accent" : "#1F7A4D",
+    "launcherLabel" : "Ask",
+    "position" : "bottom-right"
+  },
+  "createdAt" : "2026-11-25T00:00:00.000Z",
+  "docs" : [
+    {
+      "source" : "Northpine Help Center, Cards",
+      "text" : "# Issue a card to someone\n\nOpen Cards and press Issue card. Choose the cardholder and whether the card is virtual or physical, give it a name, then set its limit and how often the limit resets. A physical card also asks where to post it. Review the details, tick that the cardholder has read the card policy, and press Issue card.",
+      "title" : "Issue a card to someone"
+    },
+    {
+      "source" : "Northpine Help Center, Cards",
+      "text" : "# Freeze or unfreeze a card\n\nOpen Cards, choose the card and press Freeze under the table, or open the card and turn on Freeze this card. A frozen card declines every purchase until it is unfrozen. Nothing else about it changes.",
+      "title" : "Freeze or unfreeze a card"
+    },
+    {
+      "source" : "Northpine Help Center, Cards",
+      "text" : "# Change a card's limit\n\nOpen the card from Cards. Under Spending limit, drag the slider or use the stepper beside it, and choose how often the limit resets. Press Save changes.",
+      "title" : "Change a card's limit"
+    },
+    {
+      "source" : "Northpine Help Center, Expenses",
+      "text" : "# Split an expense across categories\n\nOpen the expense from Expenses and press Split. Give each part a category and an amount. The parts must add up to the whole before Save split can be pressed. Split evenly shares the amount between the parts.",
+      "title" : "Split an expense across categories"
+    },
+    {
+      "source" : "Northpine Help Center, Expenses",
+      "text" : "# Find purchases with no receipt\n\nOpen Expenses and tick Missing receipt only. Select the purchases, open Actions and choose Request Receipts to remind their owners.",
+      "title" : "Find purchases with no receipt"
+    },
+    {
+      "source" : "Northpine Help Center, Reimbursements",
+      "text" : "# Ask to be paid back\n\nOpen Reimbursements and press New request. Give the request a title, add a line for each thing you paid for with its date and amount, choose where to be paid, and press Submit request.",
+      "title" : "Ask to be paid back"
+    },
+    {
+      "source" : "Northpine Help Center, Approvals",
+      "text" : "# Approve or reject a request\n\nOpen Approvals and choose a request from the list. Press Approve, or Reject and give a reason the requester will see. Requests over $5,000 go on to Finance after you.",
+      "title" : "Approve or reject a request"
+    },
+    {
+      "source" : "Northpine Help Center, Approvals",
+      "text" : "# Hand your approvals to someone while you are away\n\nOpen Approvals and press Delegate. Choose who covers for you and until when, then press Start delegating.",
+      "title" : "Hand your approvals to someone while you are away"
+    },
+    {
+      "source" : "Northpine Help Center, Bills",
+      "text" : "# Pay a bill\n\nOpen Bills and stay on To pay. Choose the bill and press Pay bill. Choose how to pay, which account to pay from and when, then confirm. A bill from a vendor on hold cannot be paid until the hold is lifted in Vendors.",
+      "title" : "Pay a bill"
+    },
+    {
+      "source" : "Northpine Help Center, Vendors",
+      "text" : "# Hold or release payments to a vendor\n\nOpen Vendors and choose the vendor. On the Details tab, turn Hold payments to this vendor on or off. While it is on, none of the vendor's bills can be paid.",
+      "title" : "Hold or release payments to a vendor"
+    },
+    {
+      "source" : "Northpine Help Center, Budgets",
+      "text" : "# Change a budget\n\nOpen Budgets and press Edit beside the budget. Use the stepper for each line to raise or lower it, choose when the owner is warned, and press Save budget.",
+      "title" : "Change a budget"
+    },
+    {
+      "source" : "Northpine Help Center, Accounting",
+      "text" : "# Choose which account a category is booked to\n\nOpen Accounting and choose Mappings. Each category has a pop-up with the account it is booked to. Change it and press Save mappings. Tick Apply to past purchases too to rebook what was already spent.",
+      "title" : "Choose which account a category is booked to"
+    },
+    {
+      "source" : "Northpine Help Center, Accounting",
+      "text" : "# Close the books for a month\n\nOpen Accounting and choose Month-end close. Work down the checklist: each check that is not done has a button that takes you to where it is fixed. When all six are ticked, press Close for the month and confirm.",
+      "title" : "Close the books for a month"
+    },
+    {
+      "source" : "Northpine Help Center, People",
+      "text" : "# Invite people to Northpine\n\nOpen People and press Invite people. Type their email addresses, choose a role and a department, and press Send invites. They show as Invited until they accept.",
+      "title" : "Invite people to Northpine"
+    },
+    {
+      "source" : "Northpine Help Center, People",
+      "text" : "# Change what a role may do\n\nOpen People and choose Roles and permissions. Tick or untick an ability under a role, then press Save permissions. Admins may always do everything.",
+      "title" : "Change what a role may do"
+    },
+    {
+      "source" : "Northpine Help Center, Policies",
+      "text" : "# Change a spending rule\n\nOpen Policies. Switch a rule on or off, or press Change amount beside it. Nothing takes effect until you press Publish at the top of the screen.",
+      "title" : "Change a spending rule"
+    },
+    {
+      "source" : "Northpine Help Center, Reports",
+      "text" : "# Export a report\n\nOpen Reports, choose how to group the spend and the dates, then open Export and choose a spreadsheet or a document. The same exports are in the File menu, under Export.",
+      "title" : "Export a report"
+    }
+  ],
+  "id" : "site_northpine_mac",
+  "learn" : false,
+  "name" : "Northpine",
+  "notes" : "Northpine is a Mac app, not a website. Companies use it to manage what they spend: company cards, expenses, reimbursements, approvals, bills and vendors, budgets, and the accounting behind them.\n\n- A \"path\" here is a screen of the app. The sidebar on the left switches screens. It has five groups: Overview (Home, Inbox), Spend (Cards, Expenses, Reimbursements), Payables (Approvals, Bills, Vendors), Finance (Budgets, Accounting, Reports) and Company (People, Policies, Help Center).\n- Every screen is also in the Go menu in the menu bar, and in the command palette (the Command palette button in the toolbar).\n- Menu bar items are listed as elements too. One marked \"in the closed File menu\" is reached by opening that menu first. Point at the item itself: the app moves the pointer to the menu's title until the menu is open.\n- Exports are in the File menu under Export. Report exports are one menu deeper, under File, Export, Reports.\n- Settings is a separate window, opened with Settings… in the Northpine menu or in the account menu in the toolbar. It has five panes along its top: General, Notifications, Security, Plan and billing, Integrations. API keys and two-factor authentication are on Security.\n- Accounting has four sections chosen by a row of segments: Chart of accounts, Mappings, Sync and Month-end close.\n- Tables (Cards, Expenses, Bills, People) work the same way: click a row to choose it, then use the buttons under the table, like Open card or Pay bill. Those buttons are off until a row is chosen.\n- Approvals, Vendors, Inbox and Help Center show a list on the left and what was chosen on the right.\n- A bill cannot be paid while its vendor is on hold. The hold is the \"Hold payments to this vendor\" checkbox on the vendor's Details tab in Vendors.\n- Changes to Policies do nothing until Publish at the top of that screen is pressed.\n- What someone can see depends on their role and the company's plan. If a screen is missing from the sidebar, say that their role or plan does not include it. Do not send them looking for it.",
+  "origin" : "app://com.northpine.mac",
+  "pages" : [
+    {
+      "buttons" : [
+        "This week",
+        "This month",
+        "This quarter",
+        "Open approvals",
+        "Open bills",
+        "Open expenses",
+        "Open accounting",
+        "View approvals",
+        "View vendors",
+        "View accounting",
+        "View budgets",
+        "View expenses",
+        "View cards",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Home",
+        "To do",
+        "Spend by category",
+        "Latest activity"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "opens" : [
+        {
+          "buttons" : [
+            "Go to Home",
+            "Go to Inbox",
+            "Go to Cards",
+            "Go to Expenses",
+            "Go to Reimbursements",
+            "Go to Approvals",
+            "Go to Bills",
+            "Go to Vendors",
+            "Close"
+          ],
+          "control" : "Command palette",
+          "fields" : [
+            "Type a command or a screen"
+          ],
+          "links" : [
+
+          ]
+        }
+      ],
+      "path" : "/home",
+      "title" : "Home"
+    },
+    {
+      "buttons" : [
+        "Mark all as read",
+        "Notification settings",
+        "All",
+        "Unread",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Inbox"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/inbox",
+      "title" : "Inbox"
+    },
+    {
+      "buttons" : [
+        "Issue card",
+        "Card",
+        "Holder",
+        "Number",
+        "Type",
+        "Spent",
+        "Status",
+        "Open card",
+        "Freeze",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Search cards",
+        "Status",
+        "Type",
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Cards"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "opens" : [
+        {
+          "buttons" : [
+            "Virtual",
+            "Physical",
+            "Cancel",
+            "Back",
+            "Next"
+          ],
+          "control" : "Issue card",
+          "fields" : [
+            "Cardholder",
+            "Card name"
+          ],
+          "links" : [
+
+          ]
+        }
+      ],
+      "path" : "/cards",
+      "title" : "Cards"
+    },
+    {
+      "buttons" : [
+        "Export",
+        "Actions",
+        "All",
+        "Cleared",
+        "Pending",
+        "Declined",
+        "Flagged",
+        "Missing receipt only",
+        "Date",
+        "Merchant",
+        "Person",
+        "Category",
+        "Receipt",
+        "Amount",
+        "Status",
+        "Open expense",
+        "Clear selection",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Category",
+        "Search expenses",
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Expenses"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/expenses",
+      "title" : "Expenses"
+    },
+    {
+      "buttons" : [
+        "Only mine",
+        "Pay approved",
+        "New request",
+        "Draft (3)",
+        "Submitted (13)",
+        "Approve Team dinner",
+        "Reject Team dinner",
+        "Approve SaaStr conference",
+        "Reject SaaStr conference",
+        "Approve Home office setup",
+        "Reject Home office setup",
+        "Approve Chicago client trip",
+        "Reject Chicago client trip",
+        "Approve Customer visit, Denver",
+        "Reject Customer visit, Denver",
+        "Approve March mileage",
+        "Reject March mileage",
+        "Approved (12)",
+        "Pay Customer visit, Denver now",
+        "Pay March mileage now",
+        "Pay Team dinner now",
+        "Pay SaaStr conference now",
+        "Pay Home office setup now",
+        "Pay Chicago client trip now",
+        "Paid (6)",
+        "Rejected (12)",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Reimbursements"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/reimbursements",
+      "title" : "Reimbursements"
+    },
+    {
+      "buttons" : [
+        "Delegate…",
+        "Approve all under $100",
+        "Pending",
+        "Approved",
+        "Rejected",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Kind",
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Approvals"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/approvals",
+      "title" : "Approvals"
+    },
+    {
+      "buttons" : [
+        "Add bill",
+        "Drafts",
+        "To approve",
+        "To pay",
+        "Scheduled",
+        "Paid",
+        "Bill",
+        "Vendor",
+        "Due",
+        "Amount",
+        "Status",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Search bills",
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Bills"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/bills",
+      "title" : "Bills"
+    },
+    {
+      "buttons" : [
+        "Show archived",
+        "New vendor",
+        "Details",
+        "Bills",
+        "Documents",
+        "Hold payments to this vendor",
+        "Archive vendor…",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Search vendors",
+        "Name",
+        "Billing email",
+        "Payment terms",
+        "Country",
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Vendors",
+        "Harbor Freight Logistics"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/vendors",
+      "title" : "Vendors"
+    },
+    {
+      "buttons" : [
+        "Over budget only",
+        "Expand all",
+        "Collapse all",
+        "Hide Engineering 2026 lines",
+        "Edit Engineering 2026",
+        "Show Sales 2026 lines",
+        "Edit Sales 2026",
+        "Show Marketing 2026 lines",
+        "Edit Marketing 2026",
+        "Show Finance 2026 lines",
+        "Edit Finance 2026",
+        "Show Operations 2026 lines",
+        "Edit Operations 2026",
+        "Show Support 2026 lines",
+        "Edit Support 2026",
+        "Show People 2026 lines",
+        "Edit People 2026",
+        "Show Design 2026 lines",
+        "Edit Design 2026",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "View",
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Budgets",
+        "Engineering 2026",
+        "Sales 2026",
+        "Marketing 2026",
+        "Finance 2026",
+        "Operations 2026",
+        "Support 2026",
+        "People 2026"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/budgets",
+      "title" : "Budgets"
+    },
+    {
+      "buttons" : [
+        "Chart of accounts",
+        "Mappings",
+        "Sync",
+        "Month-end close",
+        "Add account",
+        "Deactivate",
+        "Show inactive accounts",
+        "1000, Assets, Asset",
+        "2000, Liabilities, Liability",
+        "3000, Equity, Equity",
+        "4000, Income, Income",
+        "6000, Operating Expenses, Expense",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Accounting"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/accounting",
+      "title" : "Accounting"
+    },
+    {
+      "buttons" : [
+        "Save report…",
+        "Schedule…",
+        "Export",
+        "Category",
+        "Department",
+        "Person",
+        "Merchant",
+        "Show as table",
+        "Quick range",
+        "Include pending",
+        "Delete saved report",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "From",
+        "To",
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Reports",
+        "Saved reports"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/reports",
+      "title" : "Reports"
+    },
+    {
+      "buttons" : [
+        "Invite people",
+        "Directory",
+        "Roles and permissions",
+        "Name",
+        "Email",
+        "Department",
+        "Role",
+        "Status",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Search people",
+        "Department",
+        "Search Northpine"
+      ],
+      "headings" : [
+        "People"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/people",
+      "title" : "People"
+    },
+    {
+      "buttons" : [
+        "Test a purchase…",
+        "Discard changes",
+        "Publish",
+        "Receipts required",
+        "Change amount for Receipts required",
+        "Manager approval",
+        "Change amount for Manager approval",
+        "Finance approval for bills",
+        "Change amount for Finance approval for bills",
+        "Block alcohol-only purchases",
+        "Travel class",
+        "Meal limit per person",
+        "Change amount for Meal limit per person",
+        "Memo required",
+        "Change amount for Memo required",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Policies"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/policies",
+      "title" : "Policies"
+    },
+    {
+      "buttons" : [
+        "Contact support",
+        "Show me how",
+        "Yes, this was helpful",
+        "No, this was not helpful",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Search help",
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Help Center",
+        "Issue a card to someone"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "opens" : [
+        {
+          "buttons" : [
+            "This is blocking payments",
+            "Cancel",
+            "Send message"
+          ],
+          "control" : "Contact support",
+          "fields" : [
+            "Topic",
+            "How can we help?"
+          ],
+          "links" : [
+
+          ]
+        }
+      ],
+      "path" : "/help",
+      "title" : "Help Center"
+    },
+    {
+      "buttons" : [
+        "All cards",
+        "Show card number",
+        "Freeze this card",
+        "Lock to one category",
+        "Cancel card…",
+        "Save changes",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Limit",
+        "$25,000",
+        "Resets",
+        "Category",
+        "Budget",
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Maya's Events",
+        "Spending limit",
+        "Controls",
+        "Recent purchases"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/cards/card",
+      "title" : "A card"
+    },
+    {
+      "buttons" : [
+        "All expenses",
+        "Split…",
+        "Flag",
+        "View receipt",
+        "Remove receipt",
+        "Post comment",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Category",
+        "Account",
+        "Memo",
+        "Add a comment",
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Marriott",
+        "Details",
+        "Receipt",
+        "Comments"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/expenses/expense",
+      "title" : "An expense"
+    },
+    {
+      "buttons" : [
+        "Chart of accounts",
+        "Mappings",
+        "Sync",
+        "Month-end close",
+        "Apply to past purchases too",
+        "Reset to defaults",
+        "Save mappings",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Account for Travel",
+        "Account for Meals",
+        "Account for Software",
+        "Account for Advertising",
+        "Account for Office supplies",
+        "Account for Hardware",
+        "Account for Training",
+        "Account for Shipping",
+        "Account for Events",
+        "Account for Contractors",
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Accounting"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/accounting/mappings",
+      "title" : "Accounting, Mappings"
+    },
+    {
+      "buttons" : [
+        "Chart of accounts",
+        "Mappings",
+        "Sync",
+        "Month-end close",
+        "Sync now",
+        "Retry failed",
+        "Sync automatically",
+        "Disconnect Ledgerline…",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "How often",
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Accounting",
+        "History"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/accounting/sync",
+      "title" : "Accounting, Sync"
+    },
+    {
+      "buttons" : [
+        "Chart of accounts",
+        "Mappings",
+        "Sync",
+        "Month-end close",
+        "Reconcile the card statement, The statement and Northpine agree to the cent.",
+        "Approve all reimbursements, Nothing submitted is still waiting.",
+        "Collect missing receipts, Every purchase over $75 has one, or is marked lost.",
+        "Go to Expenses",
+        "Map every purchase to an account, Nothing is left as Not mapped.",
+        "Pay or accrue open bills, Each bill due in the month is paid or accrued.",
+        "Go to Bills",
+        "Review budgets that ran over, Their owners have been told.",
+        "Go to Budgets",
+        "Close May 2026",
+        "Export trial balance",
+        "Hide Sidebar",
+        "Back",
+        "Command palette",
+        "Issue a card",
+        "Notifications",
+        "Account"
+      ],
+      "fields" : [
+        "Month",
+        "Search Northpine"
+      ],
+      "headings" : [
+        "Accounting"
+      ],
+      "links" : [
+        {
+          "label" : "Home",
+          "to" : "/home"
+        },
+        {
+          "label" : "Inbox",
+          "to" : "/inbox"
+        },
+        {
+          "label" : "Cards",
+          "to" : "/cards"
+        },
+        {
+          "label" : "Expenses",
+          "to" : "/expenses"
+        },
+        {
+          "label" : "Reimbursements",
+          "to" : "/reimbursements"
+        },
+        {
+          "label" : "Approvals",
+          "to" : "/approvals"
+        },
+        {
+          "label" : "Bills",
+          "to" : "/bills"
+        },
+        {
+          "label" : "Vendors",
+          "to" : "/vendors"
+        },
+        {
+          "label" : "Budgets",
+          "to" : "/budgets"
+        },
+        {
+          "label" : "Accounting",
+          "to" : "/accounting"
+        },
+        {
+          "label" : "Reports",
+          "to" : "/reports"
+        },
+        {
+          "label" : "People",
+          "to" : "/people"
+        },
+        {
+          "label" : "Policies",
+          "to" : "/policies"
+        },
+        {
+          "label" : "Help Center",
+          "to" : "/help"
+        }
+      ],
+      "path" : "/accounting/month-end-close",
+      "title" : "Accounting, Month-end close"
+    },
+    {
+      "buttons" : [
+        "Keep me signed in on this Mac",
+        "Sign in",
+        "Forgot password?",
+        "Sign in with SSO",
+        "Set up a new company"
+      ],
+      "fields" : [
+        "Work email",
+        "Password"
+      ],
+      "headings" : [
+        "Sign in to Northpine"
+      ],
+      "links" : [
+
+      ],
+      "path" : "/sign-in",
+      "title" : "Sign in"
+    },
+    {
+      "buttons" : [
+        "Back to sign in",
+        "Back",
+        "Continue"
+      ],
+      "fields" : [
+        "Company name",
+        "People"
+      ],
+      "headings" : [
+        "Set up Northpine",
+        "Your company"
+      ],
+      "links" : [
+
+      ],
+      "path" : "/onboarding",
+      "title" : "Set up a new company"
+    },
+    {
+      "buttons" : [
+        "Match system",
+        "Light",
+        "Dark",
+        "Compact",
+        "Comfortable",
+        "General",
+        "Notifications",
+        "Security",
+        "Plan and billing",
+        "Integrations"
+      ],
+      "fields" : [
+        "Company name",
+        "Fiscal year starts",
+        "Currency"
+      ],
+      "headings" : [
+
+      ],
+      "links" : [
+
+      ],
+      "path" : "/settings/general",
+      "title" : "Settings, General"
+    },
+    {
+      "buttons" : [
+        "Send me a weekly digest",
+        "Requests waiting for my approval",
+        "Declined purchases",
+        "Budgets passing their limit",
+        "Play a sound",
+        "General",
+        "Notifications",
+        "Security",
+        "Plan and billing",
+        "Integrations"
+      ],
+      "fields" : [
+        "Digest day"
+      ],
+      "headings" : [
+        "Email",
+        "On this Mac"
+      ],
+      "links" : [
+
+      ],
+      "path" : "/settings/notifications",
+      "title" : "Settings, Notifications"
+    },
+    {
+      "buttons" : [
+        "Require two-factor authentication for everyone",
+        "Single sign-on",
+        "Revoke Ledgerline sync",
+        "Create API key",
+        "General",
+        "Notifications",
+        "Security",
+        "Plan and billing",
+        "Integrations"
+      ],
+      "fields" : [
+        "Sign out after 12 hours"
+      ],
+      "headings" : [
+        "API keys"
+      ],
+      "links" : [
+
+      ],
+      "path" : "/settings/security",
+      "title" : "Settings, Security"
+    },
+    {
+      "buttons" : [
+        "Change plan…",
+        "Update payment method…",
+        "Download invoices",
+        "General",
+        "Notifications",
+        "Security",
+        "Plan and billing",
+        "Integrations"
+      ],
+      "fields" : [
+        "Seats: 60"
+      ],
+      "headings" : [
+
+      ],
+      "links" : [
+
+      ],
+      "path" : "/settings/plan-and-billing",
+      "title" : "Settings, Plan and billing"
+    },
+    {
+      "buttons" : [
+        "Disconnect Ledgerline",
+        "Disconnect Slack",
+        "Connect Gusto",
+        "Connect Okta",
+        "Connect Google Workspace",
+        "General",
+        "Notifications",
+        "Security",
+        "Plan and billing",
+        "Integrations"
+      ],
+      "fields" : [
+
+      ],
+      "headings" : [
+
+      ],
+      "links" : [
+
+      ],
+      "path" : "/settings/integrations",
+      "title" : "Settings, Integrations"
+    }
+  ],
+  "source" : {
+    "docs" : [
+
+    ],
+    "maxPages" : 0,
+    "url" : "app://com.northpine.mac"
+  },
+  "updatedAt" : "2026-11-25T00:00:00.000Z",
+  "version" : 1
+}

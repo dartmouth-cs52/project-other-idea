@@ -414,6 +414,7 @@ Both need a Cloudflare API token in `CLOUDFLARE_API_TOKEN`, and go straight to t
 | [The widget on a page](docs/widget.md) | Modal dialogs, covered controls, what a form needs before its button, route changes, Do it with me, teach mode, learning the site from visits, mapping the signed-in app, and the browser tests |
 | [Correcting Haptic](docs/corrections.md) | What people can't find, guide health and its emails, Point here instead, Teach Haptic, and controls Haptic must never point at |
 | [Haptic in a Mac app](docs/mac.md) | HapticKit, the Swift package that does in a native Mac app what the widget does on a page: how a window is read, the menu bar, privacy, and what is not built yet |
+| [Northpine for Mac](docs/mac-northpine.md) | The large Mac app Haptic is tried on: its screens and what makes each hard, the Lab, how its site file is written from the app itself, the sixteen tasks and their results, and what building it found in HapticKit |
 | [Answers and hand-off](docs/answers.md) | Answering from help docs, the server-side rules, and hand-off to a person |
 | [Benchmark](eval/README.md) | How cases work, how to run them, and results |
 | [Website and dashboard](web/README.md) | Sign-in, approvals, the dashboard, the team, billing, and deploying the site |

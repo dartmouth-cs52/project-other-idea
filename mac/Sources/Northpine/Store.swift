@@ -55,6 +55,9 @@ final class Store: ObservableObject {
         didSet { nameScreen() }
     }
 
+    /** Expenses is showing only purchases with no receipt. Here, not in the screen, so a script can tell. */
+    @Published var onlyMissingReceipts = false
+
     init() {
         nameScreen()
     }

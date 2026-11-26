@@ -63,7 +63,7 @@ struct HomeView: View {
                 }
 
                 Panel(title: "Latest activity") {
-                    ForEach(company.notices) { notice in
+                    ForEach(company.notices.filter { lab.shows($0.nav) }) { notice in
                         HStack(alignment: .firstTextBaseline) {
                             Circle().fill(notice.unread ? Color.accentColor : .clear).frame(width: 7, height: 7)
                             VStack(alignment: .leading, spacing: 2) {
@@ -92,7 +92,15 @@ struct HomeView: View {
             .sorted { $0.1 > $1.1 }
     }
 
+    /** One thing to do, unless it is on a screen this person is not shown. */
+    @ViewBuilder
     private func todo(_ what: String, _ button: String, _ nav: Nav) -> some View {
+        if lab.shows(nav) {
+            todoRow(what, button, nav)
+        }
+    }
+
+    private func todoRow(_ what: String, _ button: String, _ nav: Nav) -> some View {
         HStack {
             Text(what)
             Spacer()

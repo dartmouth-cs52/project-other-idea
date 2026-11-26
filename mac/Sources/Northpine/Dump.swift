@@ -24,33 +24,55 @@ enum Dump {
             show(nav.path, json: arguments.contains("--json"))
         }
         // What only shows once something is opened: a sheet, or one row of a table.
-        for (name, open) in opened where only == nil || only == name {
+        for state in opened where only == nil || only == state.name {
             guard let store = Store.shared else { break }
-            open(store)
-            try? await Task.sleep(nanoseconds: 1_300_000_000)
-            show(name, json: arguments.contains("--json"))
-            store.closeEverything()
-            // The Settings window, if this state opened it.
-            for window in NSApp.windows where window.isVisible && window.title != "Northpine" && window.styleMask.contains(.closable) && store.settingsPane != nil { window.close() }
-            try? await Task.sleep(nanoseconds: 700_000_000)
+            await enter(state, store)
+            show(state.name, json: arguments.contains("--json"))
+            await leave(store)
         }
         NSApp.terminate(nil)
     }
 
-    /** The states behind a click, each by a name to ask for it by. */
-    static let opened: [(String, @MainActor (Store) -> Void)] = [
-        ("card", { $0.go(.cards); $0.detail = "card/c1" }),
-        ("issue-card", { $0.go(.cards); $0.issuingCard = true }),
-        ("expense", { $0.go(.expenses); $0.detail = "expense/t1" }),
-        ("mappings", { $0.go(.accounting); $0.accountingTab = "Mappings" }),
-        ("sync", { $0.go(.accounting); $0.accountingTab = "Sync" }),
-        ("close", { $0.go(.accounting); $0.accountingTab = "Month-end close" }),
-        ("palette", { $0.paletteOpen = true }),
-        ("sign-in", { $0.signedIn = false }),
-        ("onboarding", { $0.onboarding = true }),
-        ("settings", { _ in Preferences.open("General") }),
-        ("settings-security", { _ in Preferences.open("Security") }),
+    /** A state behind a click: a name to ask for it by, the control that opens it, and how to get there. */
+    struct Opened {
+        let name: String
+        /** What the person presses to get here, as the site's pages say it. */
+        let control: String
+        let open: @MainActor (Store) -> Void
+    }
+
+    static let opened: [Opened] = [
+        Opened(name: "card", control: "Open card") { $0.go(.cards); $0.detail = "card/c1" },
+        Opened(name: "issue-card", control: "Issue card") { $0.go(.cards); $0.issuingCard = true },
+        Opened(name: "expense", control: "Open expense") { $0.go(.expenses); $0.detail = "expense/t1" },
+        Opened(name: "mappings", control: "Mappings") { $0.go(.accounting); $0.accountingTab = "Mappings" },
+        Opened(name: "sync", control: "Sync") { $0.go(.accounting); $0.accountingTab = "Sync" },
+        Opened(name: "close", control: "Month-end close") { $0.go(.accounting); $0.accountingTab = "Month-end close" },
+        Opened(name: "contact", control: "Contact support") { $0.go(.help); $0.contacting = true },
+        Opened(name: "palette", control: "Command palette") { $0.go(.home); $0.paletteOpen = true },
+        Opened(name: "sign-in", control: "Sign Out") { $0.signedIn = false },
+        Opened(name: "onboarding", control: "Set up a new company") { $0.onboarding = true },
+        Opened(name: "settings", control: "Settings…") { _ in Preferences.open("General") },
+        Opened(name: "settings-notifications", control: "Notifications") { _ in Preferences.open("Notifications") },
+        Opened(name: "settings-security", control: "Security") { _ in Preferences.open("Security") },
+        Opened(name: "settings-plan", control: "Plan and billing") { _ in Preferences.open("Plan and billing") },
+        Opened(name: "settings-integrations", control: "Integrations") { _ in Preferences.open("Integrations") },
     ]
+
+    static func enter(_ state: Opened, _ store: Store) async {
+        state.open(store)
+        try? await Task.sleep(nanoseconds: 1_300_000_000)
+    }
+
+    static func leave(_ store: Store) async {
+        // The Settings window, if the state opened it.
+        if store.settingsPane != nil {
+            for window in NSApp.windows where window.isVisible && (window.identifier?.rawValue ?? "").contains("Settings") { window.close() }
+            store.settingsPane = nil
+        }
+        store.closeEverything()
+        try? await Task.sleep(nanoseconds: 700_000_000)
+    }
 
     static func show(_ name: String, json: Bool) {
         guard let text = Haptic.snapshotJSON() else { return print("--- \(name)\n(no window)") }

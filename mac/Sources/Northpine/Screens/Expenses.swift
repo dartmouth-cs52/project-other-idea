@@ -10,7 +10,6 @@ struct ExpensesView: View {
     @State private var category = "Any category"
     @State private var selection = Set<Transaction.ID>()
     @State private var order = [KeyPathComparator(\Row.date, order: .reverse)]
-    @State private var onlyMissing = false
     @State private var exported: String?
 
     struct Row: Identifiable {
@@ -28,7 +27,7 @@ struct ExpensesView: View {
         store.company.transactions
             .filter { show == "All" || $0.status.rawValue == show }
             .filter { category == "Any category" || $0.category == category }
-            .filter { !onlyMissing || !$0.hasReceipt }
+            .filter { !store.onlyMissingReceipts || !$0.hasReceipt }
             .map { Row(purchase: $0, person: store.person($0.personID)?.name ?? "") }
             .filter { search.isEmpty || $0.merchant.localizedCaseInsensitiveContains(search) || $0.person.localizedCaseInsensitiveContains(search) }
             .sorted(using: order)
@@ -74,17 +73,19 @@ struct ExpensesView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 360)
+                .frame(width: 300)
                 Picker("Category", selection: $category) {
                     Text("Any category").tag("Any category")
                     ForEach(Seed.categories, id: \.self) { Text($0).tag($0) }
                 }
-                .frame(width: 220)
-                Toggle("Missing receipt only", isOn: $onlyMissing)
+                .frame(width: 190)
+                // Never squeezed: a label with no room wraps a letter to a line, and the checkbox says it is a tall thin strip.
+                Toggle("Missing receipt only", isOn: $store.onlyMissingReceipts)
+                    .fixedSize()
                 Spacer()
                 TextField("Search expenses", text: $search)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
+                    .frame(width: 150)
             }
 
             Table(rows, selection: $selection, sortOrder: $order) {

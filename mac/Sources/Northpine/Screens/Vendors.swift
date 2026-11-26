@@ -22,6 +22,7 @@ struct VendorsView: View {
         Page {
             PageHeader(title: "Vendors", subtitle: "\(store.company.vendors.filter { $0.status == .active }.count) active, \(store.company.vendors.filter { $0.status == .onHold }.count) on hold") {
                 Toggle("Show archived", isOn: $showArchived)
+                    .fixedSize()
                 Button("New vendor") { adding = true }
             }
 

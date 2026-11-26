@@ -266,9 +266,12 @@ final class Guide {
         changeWatch = timer
         let center = NotificationCenter.default
         observers = [
-            center.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { note in
+            center.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { [weak self] note in
                 let menu = note.object as? NSMenu
-                MainActor.assumeIsolated { LiveTree.trackedMenu = menu }
+                MainActor.assumeIsolated {
+                    LiveTree.trackedMenu = menu
+                    self?.onMenuOpened(menu)
+                }
             },
             center.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: nil) { _ in
                 MainActor.assumeIsolated { LiveTree.trackedMenu = nil }
@@ -325,6 +328,22 @@ final class Guide {
         if let item, item.element.role == "select" { picking = item; return }
         typing?.cancel()
         look(event: item.map { "The user clicked \(describe($0.element))." }, on: item)
+    }
+
+    /**
+     * A button that opens a menu of its own, like an Export or an account
+     * button. The menu holds the mouse until something is chosen, so the click
+     * that opened it is never seen to finish, and the pointer would sit on the
+     * button while the person hunted through the menu alone. The menu opening
+     * is the step being taken: the screen is read again, with the open menu's
+     * items in it, and the pointer moves on to the one to choose.
+     */
+    private func onMenuOpened(_ menu: NSMenu?) {
+        guard isRunning, let menu, menu !== NSApp.mainMenu, menu.supermenu == nil else { return }
+        // Not a pop-up button's list of choices, which are the person's own and wait for one to be picked.
+        guard let item = pressed, item.element.role == "button" else { return }
+        pressed = nil
+        look(event: "The user opened the menu of \(describe(item.element)).", on: item)
     }
 
     private func onMenu(_ item: NSMenuItem?) {
