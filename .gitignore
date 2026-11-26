@@ -22,3 +22,6 @@ eval/.profile/
 
 # Swift build output for the Mac package.
 /mac/.build/
+
+# The trailer's video files. The trailer itself is on YouTube, linked from the README.
+/trailer/

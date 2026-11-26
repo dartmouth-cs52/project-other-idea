@@ -10,7 +10,7 @@
 **The AI guide that lives in your product.**<br>
 People say what they want to do, and Haptic points to exactly where to click, step by step.
 
-[Live app](https://joinhaptic.com) · [Demo app](https://demo.joinhaptic.com) · [What it is](#what-it-is) · [Architecture](#architecture) · [Setup](#setup) · [Deployment](#deployment) · [Team](#team)
+[Live app](https://joinhaptic.com) · [Demo app](https://demo.joinhaptic.com) · [Trailer](https://youtu.be/CTK9fPdWAfM) · [What it is](#what-it-is) · [Architecture](#architecture) · [Setup](#setup) · [Deployment](#deployment) · [Team](#team)
 
 [![CI](https://github.com/dartmouth-cs52/project-other-idea/actions/workflows/ci.yml/badge.svg)](https://github.com/dartmouth-cs52/project-other-idea/actions/workflows/ci.yml)
 [![Live](https://img.shields.io/badge/live-joinhaptic.com-1E6EF4)](https://joinhaptic.com)
@@ -24,6 +24,12 @@ People say what they want to do, and Haptic points to exactly where to click, st
 ![Haptic guiding a visitor from the privacy page to the request-access form on joinhaptic.com](docs/demo.gif)
 
 <p align="center"><sub>A real, unscripted run on <a href="https://joinhaptic.com">joinhaptic.com</a> with the production model. The visitor asks one question, and Haptic leads them across a page load and through a form. To try it, click <b>Ask</b> on any page of the site.</sub></p>
+
+<p align="center">
+  <a href="https://youtu.be/CTK9fPdWAfM"><img src="https://img.youtube.com/vi/CTK9fPdWAfM/maxresdefault.jpg" width="720" alt="The Haptic trailer on YouTube"></a>
+  <br>
+  <sub><a href="https://youtu.be/CTK9fPdWAfM"><b>Watch the trailer</b></a> on YouTube.</sub>
+</p>
 
 ## What it is
 
