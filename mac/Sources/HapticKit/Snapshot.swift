@@ -158,7 +158,12 @@ struct Reader {
     private var textChars = 0
     private var visited = 0
     private var truncated = false
-    private var lastHeading = ""
+    private var lastHeading = "" {
+        didSet { if lastHeading != oldValue { lastHeadingFrame = .zero } }
+    }
+    private var lastHeadingFrame = CGRect.zero
+    /** Every heading read so far, with where it is and what it was found under. */
+    private var headingsSeen: [(words: String, frame: CGRect, landmark: String)] = []
     /** Every label on screen with where it is, for naming a field the app did not name. */
     private var labels: [(text: String, frame: CGRect)] = []
     /** Fields that came without a name, to be named from the label beside them. */
@@ -202,7 +207,7 @@ struct Reader {
             if !around.inRow { addText(node) }
             return
         case "AXHeading":
-            addHeading(node)
+            addHeading(node, around)
             return
         case "AXButton", "AXMenuButton", "AXDisclosureTriangle", "AXColorWell":
             if Self.titleBarButtons.contains(subrole) { return }
@@ -322,10 +327,12 @@ struct Reader {
         textChars += words.count
     }
 
-    private mutating func addHeading(_ node: TreeNode) {
+    private mutating func addHeading(_ node: TreeNode, _ around: Around) {
         let words = Masking.clean(nonEmpty(node.label, node.title, node.staticText) ?? wordsIn(node), own: own)
         guard !words.isEmpty else { return }
         lastHeading = words
+        lastHeadingFrame = node.frame
+        if !node.frame.isEmpty { headingsSeen.append((words, node.frame, around.landmark)) }
         if headings.count < Self.maxHeadings, !headings.contains(words) { headings.append(words) }
     }
 
@@ -374,7 +381,7 @@ struct Reader {
         var states = state
         if !node.isEnabled { states.append("disabled") }
         if !states.isEmpty { element.state = states }
-        let context = [around.landmark, lastHeading].filter { !$0.isEmpty }.joined(separator: " › ")
+        let context = [around.landmark, heading(over: frame, in: around.landmark)].filter { !$0.isEmpty }.joined(separator: " › ")
         if !context.isEmpty { element.context = String(context.prefix(120)) }
         if !around.clip.intersects(frame) {
             if frame.minY >= around.clip.maxY { element.offscreen = "above" }
@@ -383,6 +390,28 @@ struct Reader {
         elements.append(element)
         listed[id] = Listed(element: element, node: node)
         order.append(id)
+    }
+
+    /**
+     * The heading a control sits under. Nearly always the last one read. But
+     * two boxes side by side can be read heading, heading, then the controls of
+     * both mixed together, so a last heading that starts to the right of the
+     * control is not its own, and the nearest one above it is taken instead.
+     */
+    private func heading(over frame: CGRect, in landmark: String) -> String {
+        guard !lastHeadingFrame.isEmpty, lastHeadingFrame.minX >= frame.maxX else { return lastHeading }
+        var best: (words: String, frame: CGRect)?
+        // y runs up, so a heading above the control has the larger y.
+        for seen in headingsSeen where seen.landmark == landmark && seen.frame.minX < frame.maxX && seen.frame.minY >= frame.minY {
+            if let found = best {
+                let nearer = seen.frame.minY < found.frame.minY - 2
+                let level = abs(seen.frame.minY - found.frame.minY) <= 2
+                if nearer || (level && seen.frame.minX > found.frame.minX) { best = (seen.words, seen.frame) }
+            } else {
+                best = (seen.words, seen.frame)
+            }
+        }
+        return best?.words ?? ""
     }
 
     /**
