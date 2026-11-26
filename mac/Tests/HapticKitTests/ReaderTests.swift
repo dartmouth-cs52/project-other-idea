@@ -232,4 +232,14 @@ final class ReaderTests: XCTestCase {
         XCTAssertEqual(reading.snapshot.elements[1].state, ["collapsed"])
         XCTAssertEqual(reading.snapshot.headings, ["Accounting"])
     }
+
+    func testWhereAControlIsIsSaidOnceAndAToolbarIsOnlyAToolbar() {
+        let row = Fake("AXRow", frame: CGRect(x: 0, y: 400, width: 200, height: 24), [Fake("AXCell", "", [Fake.text("Software renewals")])])
+        let reading = read([
+            Fake("AXHeading", "Saved reports"),
+            Fake("AXOutline", "Saved reports", frame: CGRect(x: 0, y: 0, width: 200, height: 500), [row]),
+            Fake("AXToolbar", "", [Fake("AXButton", "Hide Sidebar")]),
+        ])
+        XCTAssertEqual(reading.snapshot.elements.map { "\($0.label) [\($0.context ?? "")]" }, ["Software renewals [Saved reports]", "Hide Sidebar [toolbar]"])
+    }
 }
