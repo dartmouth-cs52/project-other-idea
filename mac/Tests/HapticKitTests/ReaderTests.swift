@@ -242,4 +242,10 @@ final class ReaderTests: XCTestCase {
         ])
         XCTAssertEqual(reading.snapshot.elements.map { "\($0.label) [\($0.context ?? "")]" }, ["Software renewals [Saved reports]", "Hide Sidebar [toolbar]"])
     }
+
+    func testARowThatIsOnlyAnIconIsNamedByWhatTheIconIsCalled() {
+        func row(_ icon: String, y: CGFloat) -> Fake { Fake("AXRow", frame: CGRect(x: 0, y: y, width: 64, height: 28), [Fake("AXCell", "", [Fake("AXImage", icon)])]) }
+        let sidebar = Fake("AXOutline", "Sidebar", frame: CGRect(x: 0, y: 0, width: 64, height: 600), [row("Wallet", y: 500), row("", y: 470), row("Team", y: 440)])
+        XCTAssertEqual(read([sidebar]).snapshot.elements.map { "\($0.role) \($0.label)" }, ["treeitem Wallet", "treeitem Team"], "a row with an icon nobody described is still left out")
+    }
 }
