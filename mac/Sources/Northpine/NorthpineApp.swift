@@ -19,13 +19,22 @@ import SwiftUI
 struct NorthpineApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store = Store()
+    @StateObject private var preferences = Preferences()
 
     var body: some Scene {
         WindowGroup("Northpine") {
             Shell()
                 .environmentObject(store)
                 .frame(minWidth: 980, minHeight: 620)
-                .onAppear { Store.shared = store }
+                .onAppear {
+                    Store.shared = store
+                    Preferences.shared = preferences
+                }
+        }
+        Settings {
+            SettingsWindow()
+                .environmentObject(store)
+                .environmentObject(preferences)
         }
     }
 }

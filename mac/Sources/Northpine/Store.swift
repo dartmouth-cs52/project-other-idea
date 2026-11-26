@@ -35,6 +35,11 @@ final class Store: ObservableObject {
     /** The sheet that writes to support is open. The Help menu opens it too. */
     @Published var contacting = false
 
+    /** The pane of the Settings window that is showing, while that window is open. */
+    @Published var settingsPane: String? {
+        didSet { nameScreen() }
+    }
+
     init() {
         nameScreen()
     }
@@ -69,6 +74,11 @@ final class Store: ObservableObject {
 
     /** Tells Haptic which screen this is. Window titles here hold people's and vendors' names, so the title alone would not do. */
     private func nameScreen() {
+        // The Settings window is in front whenever it is open, so its pane is the screen.
+        if let settingsPane {
+            Haptic.screen = "/settings/" + settingsPane.lowercased().replacingOccurrences(of: " ", with: "-")
+            return
+        }
         let base = (nav ?? .home).path
         // Every card is the same screen to Haptic: /cards/card, not /cards/card/c12.
         Haptic.screen = detail.map { "\(base)/\($0.split(separator: "/")[0])" } ?? base
