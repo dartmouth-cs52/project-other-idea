@@ -35,6 +35,14 @@ struct ExpensesView: View {
     }
 
     var body: some View {
+        if let id = store.detail?.split(separator: "/").last.map(String.init), store.company.transactions.contains(where: { $0.id == id }) {
+            ExpenseDetailView(expenseID: id)
+        } else {
+            list
+        }
+    }
+
+    private var list: some View {
         let rows = rows
         return Page {
             PageHeader(title: "Expenses", subtitle: "\(rows.count) purchases, \(Format.round(rows.reduce(0) { $0 + $1.amount })) in all") {

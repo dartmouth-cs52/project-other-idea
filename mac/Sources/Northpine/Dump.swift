@@ -39,6 +39,7 @@ enum Dump {
     static let opened: [(String, @MainActor (Store) -> Void)] = [
         ("card", { $0.go(.cards); $0.detail = "card/c1" }),
         ("issue-card", { $0.go(.cards); $0.issuingCard = true }),
+        ("expense", { $0.go(.expenses); $0.detail = "expense/t1" }),
     ]
 
     static func show(_ name: String, json: Bool) {
