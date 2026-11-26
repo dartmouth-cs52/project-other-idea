@@ -99,3 +99,7 @@ struct StatusBadge: View {
             .foregroundStyle(color)
     }
 }
+
+extension Card.Status {
+    var color: Color { self == .active ? .green : self == .frozen ? .blue : .secondary }
+}

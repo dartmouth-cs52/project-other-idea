@@ -21,6 +21,9 @@ final class Store: ObservableObject {
         didSet { nameScreen() }
     }
 
+    /** The sheet for issuing a card is open. Kept here because Cards, Home and the menu bar all open it. */
+    @Published var issuingCard = false
+
     init() {
         nameScreen()
     }
@@ -33,9 +36,22 @@ final class Store: ObservableObject {
     func vendor(_ id: String?) -> Vendor? { company.vendors.first { $0.id == id } }
     func card(_ id: String?) -> Card? { company.cards.first { $0.id == id } }
 
+    /** Changes one card in place. */
+    func change(card id: String, _ change: (inout Card) -> Void) {
+        guard let index = company.cards.firstIndex(where: { $0.id == id }) else { return }
+        change(&company.cards[index])
+    }
+
+    func toggleFreeze(_ id: String) {
+        change(card: id) { card in
+            if card.status == .active { card.status = .frozen } else if card.status == .frozen { card.status = .active }
+        }
+    }
+
     /** Tells Haptic which screen this is. Window titles here hold people's and vendors' names, so the title alone would not do. */
     private func nameScreen() {
         let base = (nav ?? .home).path
-        Haptic.screen = detail.map { "\(base)/\($0)" } ?? base
+        // Every card is the same screen to Haptic: /cards/card, not /cards/card/c12.
+        Haptic.screen = detail.map { "\(base)/\($0.split(separator: "/")[0])" } ?? base
     }
 }
