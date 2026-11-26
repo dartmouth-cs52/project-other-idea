@@ -26,6 +26,7 @@ struct Shell: View {
         } message: {
             Text("\(store.exported ?? "Your file") will be in Downloads in a moment.")
         }
+        .sheet(isPresented: $store.paletteOpen) { PaletteSheet().environmentObject(store) }
         .sheet(isPresented: $store.issuingCard) { IssueCardSheet().environmentObject(store) }
     }
 

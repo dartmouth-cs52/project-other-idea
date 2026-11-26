@@ -44,6 +44,9 @@ struct NorthpineCommands: Commands {
                 .keyboardShortcut("r")
         }
         CommandMenu("Go") {
+            Button("Command Palette…") { store.paletteOpen = true }
+                .keyboardShortcut("k")
+            Divider()
             ForEach(NavGroup.all) { group in
                 ForEach(Array(group.items.enumerated()), id: \.element) { _, item in
                     Button(item.title) { store.go(item) }

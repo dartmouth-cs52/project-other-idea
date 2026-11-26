@@ -43,6 +43,9 @@ final class Store: ObservableObject {
     /** What the File menu's Export was asked for, shown in an alert until it is dismissed. */
     @Published var exported: String?
 
+    /** The command palette is open. */
+    @Published var paletteOpen = false
+
     init() {
         nameScreen()
     }
@@ -55,6 +58,7 @@ final class Store: ObservableObject {
     func closeEverything() {
         issuingCard = false
         contacting = false
+        paletteOpen = false
         accountingTab = "Chart of accounts"
         detail = nil
     }
