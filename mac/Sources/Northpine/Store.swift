@@ -46,6 +46,9 @@ final class Store: ObservableObject {
     /** The command palette is open. */
     @Published var paletteOpen = false
 
+    /** False shows the sign-in screen in place of the app. */
+    @Published var signedIn = true
+
     init() {
         nameScreen()
     }
