@@ -179,7 +179,11 @@ enum LiveTree {
 
     static func entries(of menu: NSMenu, depth: Int, open: Bool = false) -> [MenuEntry] {
         // Which items can be used is worked out when a menu opens. Asking now gives the answer the person would see.
-        if depth > 0 { menu.update() }
+        if depth > 0 {
+            // SwiftUI fills a menu in when it is about to open, and not before. Asked as an opening menu asks, it shows the titles the person would see, not the ones from when the app started.
+            menu.delegate?.menuNeedsUpdate?(menu)
+            menu.update()
+        }
         return menu.items.compactMap { item in
             guard !item.isSeparatorItem, !item.isHidden, !item.title.isEmpty else { return nil }
             if depth == 1, systemMenuItems.contains(item.title) { return nil }
