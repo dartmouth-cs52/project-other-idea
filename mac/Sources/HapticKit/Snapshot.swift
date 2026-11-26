@@ -388,7 +388,9 @@ struct Reader {
         var states = state
         if !node.isEnabled { states.append("disabled") }
         if !states.isEmpty { element.state = states }
-        let context = [around.landmark, heading(over: frame, in: around.landmark)].filter { !$0.isEmpty }.joined(separator: " › ")
+        // A toolbar belongs to the window, not to whichever heading was read last. And a list named as its heading is said once.
+        let under = around.landmark == "toolbar" ? "" : heading(over: frame, in: around.landmark)
+        let context = [around.landmark, under.caseInsensitiveCompare(around.landmark) == .orderedSame ? "" : under].filter { !$0.isEmpty }.joined(separator: " › ")
         if !context.isEmpty { element.context = String(context.prefix(120)) }
         if !around.clip.intersects(frame) {
             if frame.minY >= around.clip.maxY { element.offscreen = "above" }
