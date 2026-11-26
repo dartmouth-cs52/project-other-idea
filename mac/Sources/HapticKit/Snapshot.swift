@@ -273,6 +273,9 @@ struct Reader {
             return
         case "AXScrollArea":
             around.clip = clipped(around.clip, node.frame)
+        case "AXScrollBar":
+            // Its arrows and page areas are buttons with no name, and nobody is ever sent to one.
+            return
         case "AXMenuBar", "AXMenu":
             // The app's menus are read from the menus themselves, with what is behind each one.
             return
