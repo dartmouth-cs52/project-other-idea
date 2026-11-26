@@ -192,4 +192,19 @@ final class ReaderTests: XCTestCase {
         let area = Fake("AXScrollArea", "", frame: window, [Fake("AXButton", "Save"), Fake("AXScrollBar", "", [Fake("AXValueIndicator"), page])])
         XCTAssertEqual(read([area]).snapshot.elements.map(\.label), ["Save"])
     }
+
+    func testControlsInTwoBoxesSideBySideEachGetTheirOwnHeading() {
+        // As SwiftUI reads two panels in a row: both headings, then the controls of both, mixed.
+        func heading(_ words: String, x: CGFloat, y: CGFloat) -> Fake { Fake("AXHeading", words, frame: CGRect(x: x, y: y, width: 120, height: 16)) }
+        func button(_ words: String, x: CGFloat, y: CGFloat) -> Fake { Fake("AXButton", words, frame: CGRect(x: x, y: y, width: 100, height: 20)) }
+        let reading = read([
+            heading("Billing", x: 20, y: 560),
+            heading("To do", x: 20, y: 500), heading("Spend by category", x: 420, y: 500),
+            button("Open approvals", x: 260, y: 470), button("Export spend", x: 600, y: 470), button("Open bills", x: 260, y: 440),
+            heading("Latest activity", x: 20, y: 300), button("View cards", x: 680, y: 270),
+        ])
+        XCTAssertEqual(reading.snapshot.elements.map { "\($0.label) [\($0.context ?? "")]" }, [
+            "Open approvals [To do]", "Export spend [Spend by category]", "Open bills [To do]", "View cards [Latest activity]",
+        ])
+    }
 }
