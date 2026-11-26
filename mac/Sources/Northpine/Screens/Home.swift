@@ -4,7 +4,11 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var store: Store
+    @EnvironmentObject var lab: Lab
     @State private var range = "This month"
+    @State private var feed: [String] = []
+    private let tick = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
+    private static let happenings = ["Priya bought $64.20 at Sweetgreen", "A card was issued to Tomas", "Jonas approved INV-2041", "Datadog charged $1,180.00", "Ingrid submitted a reimbursement", "A purchase at Lyft was declined"]
 
     private var company: Company { store.company }
     private var days: Int { range == "This week" ? 7 : range == "This month" ? 30 : 90 }
@@ -51,6 +55,13 @@ struct HomeView: View {
                     }
                 }
 
+                if lab.liveFeed {
+                    Panel(title: "Happening now") {
+                        if feed.isEmpty { Text("Waiting for the first purchase…").foregroundStyle(.secondary) }
+                        ForEach(Array(feed.enumerated()), id: \.offset) { _, line in Text(line) }
+                    }
+                }
+
                 Panel(title: "Latest activity") {
                     ForEach(company.notices) { notice in
                         HStack(alignment: .firstTextBaseline) {
@@ -67,6 +78,11 @@ struct HomeView: View {
                     }
                 }
             }
+        }
+        .onReceive(tick) { _ in
+            guard lab.liveFeed else { return }
+            feed.insert(Self.happenings[feed.count % Self.happenings.count], at: 0)
+            if feed.count > 4 { feed.removeLast() }
         }
     }
 

@@ -65,4 +65,41 @@ final class ClientTests: XCTestCase {
             try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: folder).appendingPathComponent("pointer.png"))
         }
     }
+
+    @MainActor
+    func testAMenuItemThreeMenusDownIsListed() {
+        func menu(_ title: String, _ items: [NSMenuItem]) -> NSMenuItem {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            let submenu = NSMenu(title: title)
+            submenu.autoenablesItems = false
+            items.forEach(submenu.addItem)
+            item.submenu = submenu
+            return item
+        }
+        func leaf(_ title: String) -> NSMenuItem { NSMenuItem(title: title, action: nil, keyEquivalent: "") }
+        let bar = NSMenu(title: "Main")
+        bar.addItem(menu("File", [menu("Export", [leaf("Expenses as CSV…"), menu("Reports", [leaf("Trial Balance…"), menu("Archive", [menu("Older", [leaf("2019")])])])])]))
+        let file = LiveTree.entries(of: bar, depth: 0)[0]
+        let export = file.children[0]
+        XCTAssertEqual(export.children.map(\.title), ["Expenses as CSV…", "Reports"])
+        let reports = export.children[1]
+        XCTAssertEqual(reports.children.map(\.title), ["Trial Balance…"], "a menu past the limit is left out, not listed empty")
+    }
+
+    @MainActor
+    func testWhatTheSystemAddsToTheEditMenuIsLeftOut() {
+        let edit = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        edit.submenu = NSMenu(title: "Edit")
+        for title in ["Undo", "Copy", "Writing Tools", "AutoFill", "Start Dictation…", "Emoji & Symbols"] {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            if title == "Writing Tools" || title == "AutoFill" {
+                item.submenu = NSMenu(title: title)
+                item.submenu?.addItem(NSMenuItem(title: "Proofread", action: nil, keyEquivalent: ""))
+            }
+            edit.submenu?.addItem(item)
+        }
+        let bar = NSMenu(title: "Main")
+        bar.addItem(edit)
+        XCTAssertEqual(LiveTree.entries(of: bar, depth: 0)[0].children.map(\.title), ["Undo", "Copy"])
+    }
 }

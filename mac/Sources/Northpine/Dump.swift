@@ -30,6 +30,8 @@ enum Dump {
             try? await Task.sleep(nanoseconds: 1_300_000_000)
             show(name, json: arguments.contains("--json"))
             store.closeEverything()
+            // The Settings window, if this state opened it.
+            for window in NSApp.windows where window.isVisible && window.title != "Northpine" && window.styleMask.contains(.closable) && store.settingsPane != nil { window.close() }
             try? await Task.sleep(nanoseconds: 700_000_000)
         }
         NSApp.terminate(nil)
@@ -43,6 +45,11 @@ enum Dump {
         ("mappings", { $0.go(.accounting); $0.accountingTab = "Mappings" }),
         ("sync", { $0.go(.accounting); $0.accountingTab = "Sync" }),
         ("close", { $0.go(.accounting); $0.accountingTab = "Month-end close" }),
+        ("palette", { $0.paletteOpen = true }),
+        ("sign-in", { $0.signedIn = false }),
+        ("onboarding", { $0.onboarding = true }),
+        ("settings", { _ in Preferences.open("General") }),
+        ("settings-security", { _ in Preferences.open("Security") }),
     ]
 
     static func show(_ name: String, json: Bool) {

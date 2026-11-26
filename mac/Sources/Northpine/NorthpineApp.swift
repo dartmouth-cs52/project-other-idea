@@ -10,6 +10,7 @@ import SwiftUI
 //
 //   swift run Northpine                  the app, with the Ask button
 //   HAPTIC_ASK="…" swift run Northpine   ask a question as soon as the app is up
+//   LAB=renamed,icons swift run Northpine  start with Lab switches on (Lab.swift)
 //   swift run Northpine --dump           print what Haptic reads from each screen, and quit (Dump.swift)
 //
 // The server it asks is HAPTIC_SERVER (http://localhost:4000 when unset) and
@@ -19,13 +20,34 @@ import SwiftUI
 struct NorthpineApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store = Store()
+    @StateObject private var preferences = Preferences()
+    @StateObject private var lab = Lab()
 
     var body: some Scene {
         WindowGroup("Northpine") {
-            Shell()
+            Group {
+                if store.onboarding { OnboardingView() } else if store.signedIn { Shell() } else { SignInView() }
+            }
                 .environmentObject(store)
+                .environmentObject(lab)
                 .frame(minWidth: 980, minHeight: 620)
-                .onAppear { Store.shared = store }
+                .onAppear {
+                    Store.shared = store
+                    Preferences.shared = preferences
+                    Lab.shared = lab
+                    if let names = ProcessInfo.processInfo.environment["LAB"] { lab.apply(names) }
+                }
+        }
+        .commands { NorthpineCommands(store: store, lab: lab) }
+        Window("Lab", id: "lab") {
+            LabWindow().environmentObject(lab)
+        }
+        .windowResizability(.contentSize)
+        .keyboardShortcut("l", modifiers: [.command, .option])
+        Settings {
+            SettingsWindow()
+                .environmentObject(store)
+                .environmentObject(preferences)
         }
     }
 }
