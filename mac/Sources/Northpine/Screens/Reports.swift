@@ -94,6 +94,7 @@ struct ReportsView: View {
                         }
                         .frame(width: 130)
                         Toggle("Include pending", isOn: $includePending)
+                            .fixedSize()
                         Spacer()
                     }
                     ScrollView {

@@ -21,6 +21,7 @@ struct BudgetsView: View {
                     }
                     .frame(width: 200)
                     Toggle("Over budget only", isOn: $onlyOver)
+                        .fixedSize()
                     Button("Expand all") { open = Set(store.company.budgets.map(\.id)) }
                     Button("Collapse all") { open = [] }
                 }
