@@ -11,6 +11,7 @@ import SwiftUI
 //   swift run Northpine                  the app, with the Ask button
 //   HAPTIC_ASK="…" swift run Northpine   ask a question as soon as the app is up
 //   LAB=renamed,icons swift run Northpine  start with Lab switches on (Lab.swift)
+//   HAPTIC_TASK=freeze-card swift run Northpine  ask one of the tasks and follow the pointer by itself (Tasks.swift)
 //   swift run Northpine --dump           print what Haptic reads from each screen, and quit (Dump.swift)
 //
 // The server it asks is HAPTIC_SERVER (http://localhost:4000 when unset) and
@@ -70,8 +71,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             server: URL(string: environment["HAPTIC_SERVER"] ?? "http://localhost:4000")!,
             appID: Self.appID
         )
-        if let question = environment["HAPTIC_ASK"] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { Haptic.ask(question) }
+        if CommandLine.arguments.contains("--tasks") {
+            Task { @MainActor in
+                for task in GuideTasks.all { print("\(task.id)\t\(task.ask)") }
+                NSApp.terminate(nil)
+            }
+            return
+        }
+        let task = environment["HAPTIC_TASK"].flatMap { id in MainActor.assumeIsolated { GuideTasks.named(id) } }
+        if environment["HAPTIC_AUTOPILOT"] != nil || task != nil { MainActor.assumeIsolated { Autopilot.start(task: task) } }
+        if let question = task?.ask ?? environment["HAPTIC_ASK"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                if let names = task?.lab, !names.isEmpty { Lab.shared?.apply(names) }
+                Haptic.ask(question)
+            }
         }
     }
 
