@@ -68,7 +68,7 @@ test("the ask box grows to six lines, then scrolls up and down, and fits again w
 
     await field.fill(LONG);
     const wide = await box(session);
-    await session.page.setViewportSize({ width: 300, height: 720 });
+    await session.page.setViewportSize({ width: 240, height: 720 });
     await session.until(async () => (await box(session)).panelWidth < wide.panelWidth, "the chat to narrow with the window");
     await session.until(async () => (await box(session)).height > wide.height, "the ask box to take more lines in a narrow window");
     const narrow = await box(session);
@@ -92,7 +92,13 @@ test("the ask box is as tall as the lines its words take, never a line more or l
     await tab.locator("haptic-root .launcher").click();
     const text = "can you add Theo as a card user with a limit of fifty dollars for his trip to Japan next month, and make sure the card works abroad, then send him an invite by email so he can set up his own login and see the card in the app on his phone before he flies out on Friday morning, and after that show me where to see what he spends while he is away";
     const drawn = await tab.evaluate((text: string) => {
-      const field = document.querySelector("haptic-root")!.shadowRoot!.querySelector(".ask textarea") as HTMLTextAreaElement;
+      const root = document.querySelector("haptic-root")!.shadowRoot!;
+      // On macOS, scroll bars float over the text and take no room even without --hide-scrollbars, so give this one a
+      // classic gutter to exercise the Windows layout rule everywhere.
+      const barStyle = document.createElement("style");
+      barStyle.textContent = ".ask textarea::-webkit-scrollbar { width: 15px; }";
+      root.append(barStyle);
+      const field = root.querySelector(".ask textarea") as HTMLTextAreaElement;
       const wrong: string[] = [];
       const all = text.split(" ");
       let bar = 0;

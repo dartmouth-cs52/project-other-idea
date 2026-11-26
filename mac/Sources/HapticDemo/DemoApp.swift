@@ -109,7 +109,9 @@ final class DemoDelegate: NSObject, NSApplicationDelegate {
         try? await Task.sleep(nanoseconds: 1_200_000_000)
         print("--- Invite sheet")
         print(Haptic.snapshotJSON() ?? "(no window)")
-        NSApp.terminate(nil)
+        fflush(stdout)
+        // An open sheet stops NSApp.terminate from quitting, so exit straight out.
+        exit(0)
     }
 }
 
@@ -283,7 +285,10 @@ enum Autopilot {
             print("STEP [\(step.outcome ?? (step.last ? "last" : "continue"))] \(step.role ?? "-") \"\(step.label ?? "")\" at \(at): \(step.say)")
             fflush(stdout)
             if step.outcome != nil {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { NSApp.terminate(nil) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    fflush(stdout)
+                    exit(0)
+                }
                 return
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { follow(step) }
@@ -298,7 +303,7 @@ enum Autopilot {
             return
         }
         // A pop-up button's list is the system's to run, and a script can't choose from it.
-        if role == "select" { print("AUTOPILOT: stopping at a pop-up button"); return NSApp.terminate(nil) }
+        if role == "select" { print("AUTOPILOT: stopping at a pop-up button"); fflush(stdout); exit(0) }
         // A click made up by a script does not select a row of a list, so the sidebar is switched as a shortcut would switch it.
         if role == "treeitem", let section = Section(rawValue: label) { DemoDelegate.desk?.section = section; return }
         guard let frame = step.frame else { return }

@@ -51,7 +51,8 @@ enum Autopilot {
                 print("TASK \(task.id) \(done ? "PASS" : "FAIL") outcome=\(outcome) steps=\(steps)")
             }
             fflush(stdout)
-            NSApp.terminate(nil)
+            // A task that ends on an open sheet stops NSApp.terminate from quitting, so exit straight out.
+            exit(0)
         }
     }
 
