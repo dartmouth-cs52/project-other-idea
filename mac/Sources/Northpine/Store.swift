@@ -32,6 +32,12 @@ final class Store: ObservableObject {
         self.nav = nav
     }
 
+    /** Shuts every sheet and goes back to the screen's own list. */
+    func closeEverything() {
+        issuingCard = false
+        detail = nil
+    }
+
     func person(_ id: String?) -> Person? { company.people.first { $0.id == id } }
     func vendor(_ id: String?) -> Vendor? { company.vendors.first { $0.id == id } }
     func card(_ id: String?) -> Card? { company.cards.first { $0.id == id } }
