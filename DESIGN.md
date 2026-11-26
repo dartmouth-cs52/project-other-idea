@@ -570,7 +570,10 @@ left the screen completely. Nothing switches while any of it can be seen.
 
 Proposed. It is built, in `mac/Sources/HapticKit/Stage.swift`, and has not been
 through the designer. It follows the widget wherever a Mac app allows, and this
-section says where it does and where it does not yet.
+section says where it does and where it does not yet. It is also far less
+tested than the widget. It has been tried on our own two test apps and has not
+been through the benchmark, so what is here is how it looks, not a claim about
+how often it points at the right thing.
 
 HapticKit adds nothing to the app's own views. The Ask button, the box a
 question is typed in, the pointer and its caption are each a small window laid

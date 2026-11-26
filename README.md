@@ -29,11 +29,11 @@ People say what they want to do, and Haptic points to exactly where to click, st
 
 Haptic is an AI guide that a company adds to its web app with one script tag. A user types what they want to do, and Haptic reads the page in front of them and points at the exact control to click, one step at a time, across page loads and through forms. It learns the product from the site itself, its help docs and a few notes, so nobody writes a tour or maintains a selector.
 
-It works in native Mac apps too. [HapticKit](docs/mac.md) is a Swift package a company adds to its own app with one call. It reads the app's window and menu bar as the widget reads a page, asks the same server, and points at the control in the app's own window.
+The web widget is the product. There is also a newer and much less tested version for native Mac apps, [HapticKit](docs/mac.md), a Swift package that reads an app's window as the widget reads a page and asks the same server.
 
 - **The app is at [joinhaptic.com](https://joinhaptic.com).** Click **Ask** on any page to try the guide. Companies sign in there, by invitation, to add their site and see what their users asked.
 - **Haptic inside an app is at [demo.joinhaptic.com](https://demo.joinhaptic.com).** That is Northpine, a made-up spend-management product with the live widget on it.
-- **Haptic inside a Mac app is [Northpine for Mac](docs/mac-northpine.md),** the same made-up product as a native app, in `mac/`. It runs from a clone with `swift run Northpine`.
+- **For Mac apps there is [Northpine for Mac](docs/mac-northpine.md),** the same made-up product as a native app, in `mac/`. It is a test app, not a live demo, and runs from a clone with `swift run Northpine`.
 
 ![The widget in the middle of a guide: the question in the panel, the pointer and its outline on the Team link, and the caption Click Team beside it](docs/screenshots/guide.png)
 
@@ -95,6 +95,20 @@ sequenceDiagram
 ### What Haptic knows about a site
 
 A crawl turns the site into a **graph**. Each page's title, headings, buttons and field labels make a node, and the links between pages are the edges. The dashboard's reader uses a headless browser and also opens each menu, tab and accordion, so the map knows which control a link sits behind. Real visits fill in what a crawl can't reach. The widget reports the labels on each page it loads on, and a label joins the map once three different visitors have seen it. [How visits teach it.](docs/widget.md#learning-the-site-from-visits) And a company can have Haptic go through its signed-in app by itself, which adds what each button, menu and dialog leads to. There are two ways, chosen in the dashboard. Someone at the company signs in as usual and Haptic goes through the app in their own browser, so no password ever reaches Haptic. Or the company gives Haptic a test account, and Haptic signs in once from a browser of its own on Cloudflare and maps the app with nobody sitting through it. [How mapping works](docs/widget.md#mapping-the-signed-in-app), and [what the test account is used for and what is kept](docs/privacy.md#a-test-account-a-company-gives). Together with the company's notes and help docs, this gives the model a map it can plan routes through, to pages the user hasn't reached yet.
+
+### How that knowledge reaches the model, and why it is quick
+
+Everything Haptic knows about a site is one record, the site's **context**: the company's notes, its help docs, the graph of its pages, the controls it never wants pointed at, and its settings. It is built once, when the site is added, and built again only when the site is read again or the company changes something. On your machine it is a JSON file in `data/sites/`, and online it is a row in Postgres.
+
+On every step the server turns that record into the first part of the prompt, in the same order each time: the rules, the notes, the site map, then the help docs (`buildSystemPrompt` in `src/server/prompt.ts`). What changes from step to step, the page in front of the user, their question and what has happened so far, goes after it. That split is the design, and three things follow from it.
+
+- **One call a step.** The model already has the whole site in front of it, so it does not search for anything, call a tool or ask for a second page before it answers. There is no retrieval step and no vector database. A step is one request and one streamed reply.
+- **The part that never changes is cached.** The first part of the prompt is identical for every step on a site, so it is marked for the model provider's prompt cache, which keeps it ready for an hour after the site's last step. A step whose context is already cached is charged a fraction of the price for it, and the model does not have to read it again before it starts to answer. A step pays in full only for what is new, which is the page.
+- **A step never waits on the database.** The Worker keeps each site's context in memory and answers from that copy, up to ten minutes old, then fetches a fresh one after the reply has gone (`src/server/site-cache.ts`).
+
+The site map is written to be small. A page is a few lines of labels, and a link or button that appears on most pages, such as the navigation, is written once under "On most pages" and not again on each one. What sits behind a menu or a tab reads `behind "Account": Billing → /billing`, so the model knows which control to point at first without having seen the menu open.
+
+The cost of this design is a ceiling. A site's context has to fit in one prompt, so help docs past a set size are left out, and a very large help centre would need its articles looked up by question, which is not built. And we have not measured how much time the cache saves by itself. The benchmark's timings are for whole steps.
 
 ## Architecture
 
@@ -168,8 +182,8 @@ The pointer is the easy part. Most of the code is what makes it safe to put in f
 | **Private data on the page** | The widget sends labels, never field values, and leaves what a user typed out of every heading, label and option that repeats it. Email addresses, long numbers and phone and card numbers are masked in the browser and again on the server, by the same function. See [what is masked](docs/privacy.md) and [what is stored](docs/operations.md#what-is-recorded-about-visitors). |
 | **An unbounded model bill** | Each site's knowledge is prompt-cached. Each site has hourly and daily dollar budgets, enforced on every step by reserving the step's maximum cost up front and settling to the real cost afterwards. Optional limits for each visitor count against a daily-salted hash of their address. A kill switch takes Haptic off one site, or all of them, without a deploy. See [spend limits](docs/operations.md#what-a-site-can-spend). |
 | **Knowing whether a change made it better** | A [benchmark](eval/README.md) of 565 frozen steps with known right answers, scored for accuracy, latency and output hygiene, plus whole guides run start to finish in a browser. A staging copy of the server measures a prompt change against the real model before visitors get it. |
-| **Real apps are harder than demos** | [Northpine](testbed/README.md) is a fake spend-management app with about 60 routes and 10,000 transactions. It is built to contain every UI pattern known to break a pointing guide, among them virtualized tables, portals, nested dialogs and command palettes. It comes with 179 tasks. [Northpine for Mac](docs/mac-northpine.md) is the same for native apps: fourteen screens, a Settings window, sheets inside sheets, exports three menus deep, and a Lab that renames the sidebar or strips it to icons. Building it found eleven bugs in HapticKit, each fixed with a test. |
-| **Apps behind a login** | A crawl stops at the sign-in page. [Mapping](docs/widget.md#mapping-the-signed-in-app) gets past it in one of two ways. In the company's own browser, a guard keeps the app from saving, sending or deleting anything while Haptic presses its buttons. With a test account, Haptic types the password only on an address the company has allowed, tries once so the account is never locked out, stops at a captcha or a code, and keeps neither the name nor the password. |
+| **Real apps are harder than demos** | [Northpine](testbed/README.md) is a fake spend-management app with about 60 routes and 10,000 transactions. It is built to contain every UI pattern known to break a pointing guide, among them virtualized tables, portals, nested dialogs and command palettes. It comes with 179 tasks. [Northpine for Mac](docs/mac-northpine.md) is a smaller test app of the same kind for HapticKit, with sixteen tasks. |
+| **Apps behind a login** | A crawl stops at the sign-in page. [Mapping](docs/widget.md#mapping-the-signed-in-app) gets past it from the company's own signed-in browser, where a guard keeps the app from saving, sending or deleting anything while Haptic presses its buttons. A company that would sooner not sit through it can give Haptic a test account instead. |
 | **Billing people can check** | Pricing charges only for finished guides. Finished has one definition shared by the widget, the database and the dashboard, which lists every billable guide with a download. |
 
 ### Beyond pointing
@@ -194,6 +208,8 @@ The pointer is the easy part. Most of the code is what makes it safe to put in f
 | Three apps held out of all tuning, EspoCRM, GitLab and Moodle | 83 of 96, 86% | 21 of 29, 72% |
 
 The gap between single steps and whole guides on real apps is the finding. About half the guides that did not get there were lost to the widget before the model had a fair chance, to an empty page, a pick it never heard, or two unnamed fields taken for one. That gap is the work in progress.
+
+All of this is the web widget. HapticKit has not been through the benchmark. Every number in the [Benchmark](#benchmark) section is from the web widget. What there is for the Mac side is sixteen tasks on our own test app, which passed once with the production model. It sends the server the same kind of snapshot, under the same prompt and the same rules, so we expect it to behave much as the web widget does. That is an expectation and not a measurement.
 
 The production model was chosen earlier, from one run of the first 74 cases.
 
@@ -457,11 +473,24 @@ Haptic is in early access. It is running, by invitation, and free until billing 
 - Answers has been run against a real model on one app, Northpine. Its own benchmark of 220 questions, 100 of them attacks, is built and has not yet been run against a real model.
 - Do it with me is off by default. It does not pick dates yet, so a date field is handed to the user.
 - Mapping with a test account does not get past a captcha, a code sent by email or phone, or a sign-in kept by another service such as Google. It says so and stops, and those apps are mapped from the company's own browser. It has been tested against made-up sign-in pages in three browsers, and not yet run against a customer's app.
-- Haptic for Mac apps points and explains, and that is all so far. Do it with me, the source links under an answer, the hand-off form and "Did this help?" are not built for it. A Mac app's screens are written down by hand or by the app itself, as Northpine for Mac does, because nothing crawls or maps a native app. It reads what an app tells accessibility, so views that draw themselves and web views inside an app are not read. On Northpine for Mac all sixteen tasks passed in one run with the production model, and one run is one run. [The rest.](docs/mac.md#what-is-not-built)
+- Haptic for Mac apps has not been through the benchmark, so there is no accuracy number for it. It points and explains, and that is all so far. Do it with me, the source links under an answer, the hand-off form and "Did this help?" are not built for it. A Mac app's screens are written down by hand or by the app itself, as Northpine for Mac does, because nothing crawls or maps a native app. It reads what an app tells accessibility, so views that draw themselves and web views inside an app are not read. On Northpine for Mac all sixteen tasks passed in one run with the production model, and one run is one run. [The rest.](docs/mac.md#what-is-not-built)
 
 ## How it was built
 
 Haptic is written with [Claude Code](https://claude.com/claude-code), and the commit history shows it. Most commits are authored by the agent. The team's work is what the agent is pointed at and what it is held to. We decide what to build, and we set the bar a change has to clear before it merges. That bar is the frozen benchmark, the red-team pages, the browser suites, and a staging server for measuring a change to the prompt against the real model before visitors get it. A large share of this repository is that bar and not the product, namely the benchmark, Northpine, the any-website sweep and about as many lines of tests as of code under test.
+
+### The decisions the rest follows from
+
+A handful of choices were made early, by people, and most of the code is a consequence of them.
+
+- **One script tag, and nothing else, on the customer's side.** A company adds Haptic by pasting one line before `</body>`. There is no SDK to wire in, no change to their backend and no build step. The widget draws inside a shadow root, so the page's styles cannot reach it and its styles cannot reach the page, and it talks only to Haptic's server. That address is in every customer's script tag, so it can never change.
+- **Read the page as it is, every step.** Haptic stores no selectors and no recorded tours. It lists the controls on the live page each time and asks about that list. This is why it keeps working when the product changes, and it is also why each step has to be fast.
+- **The model chooses from a list. It never invents.** A reply names the id of a control from the list it was sent, and nothing else can be pointed at. No coordinates and no selectors come back from the model.
+- **What Haptic knows about a site is one saved record, sent whole.** The context is built once and saved, not looked up piece by piece for each question. It goes first in every prompt, unchanged, so the model provider can cache it. [How that works, and what it costs.](#how-that-knowledge-reaches-the-model-and-why-it-is-quick)
+- **The server keeps no conversation.** Each step is a complete request: the page, the question and what has happened so far. The guide's state lives in the user's browser, in `sessionStorage`, which is what lets a guide carry on across a full page load, and the server holds nothing about a guide between its steps. Guides and steps are written to the database as they happen, and the dashboard reads them from there, so there is no connection between the two to keep open.
+- **Privacy is decided in the browser.** The widget sends labels and never what was typed, and masks email addresses and long numbers before anything leaves the page. The server runs the same function again, so one change to the rule changes both.
+- **One request handler, two places.** The same `app.ts` runs under Node on a laptop and as a Cloudflare Worker online, so what is tested locally is what is deployed.
+- **A second client speaks the same language.** HapticKit sends the server the same snapshot shape the widget does, so the Mac side needed no new prompt, rules or budget code. It is the newest part and the least tested.
 
 ## Team
 
@@ -469,7 +498,7 @@ Haptic started in Dartmouth's CS 52, Full-Stack Web Development. It's built by t
 
 - **Charlie Peers**, [@charliepeers](https://github.com/charliepeers). The production server and its deployment, the benchmark, cost controls, Answers and hand-off, Do it with me, privacy masking, sign-in, the dashboard and onboarding flow, and joinhaptic.com.
 - **Theodore Chan**, [@TheoC26](https://github.com/TheoC26). Northpine, how the widget follows a page through dialogs, covered controls and route changes, learning a site from visits, corrections and guide health.
-- **Isaac Saxonov**, [@clewner](https://github.com/clewner). The first version of the widget, server and site crawler that the rest grew from, mapping pages behind a sign-in, from the company's own browser and with a test account, and Haptic for Mac apps: HapticKit and Northpine for Mac.
+- **Isaac Saxonov**, [@clewner](https://github.com/clewner). The first version of the widget, server and site crawler that the rest grew from. The design of the site context: what Haptic learns about a site, how it is saved as one record, and how it is carried into every step as the cached first part of the prompt. Mapping pages behind a sign-in, from the company's own browser or with a test account. HapticKit for Mac apps and its test app, Northpine for Mac.
 
 ## Licence
 

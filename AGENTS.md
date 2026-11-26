@@ -23,6 +23,8 @@ Three npm packages, each with its own `package.json` and lockfile. Install each 
   - `Sources/Northpine`: Northpine for Mac, the large test app, the native cousin of `testbed/`. One file a screen in `Screens/`, the made-up company in `Data/Seed.swift`, the switches that make it hard in `Lab.swift`, and the tasks that run by themselves in `Tasks.swift` and `Autopilot.swift`.
   - `Tests`: the reader on trees written out by hand, and Northpine's seed, palette and Lab.
 
+  HapticKit has not been through the benchmark in `eval/`, which is all web. What there is for it is Northpine's sixteen tasks, which passed once with the production model. It sends the same kind of snapshot under the same prompt and rules, so it is expected to behave much as the widget does, and that has not been measured. Don't quote the web's accuracy numbers for it.
+
 ## Commands
 
 All of these work from a fresh clone with no key and no database.
@@ -75,6 +77,7 @@ The browser suites (`npm run test:browser`, `npm run test:widget`, `npm run test
 - **Mapping the signed-in app** has two ways in, and the dashboard offers both on one card (`MapApp` in `web/components/app/site-view.tsx`). In the company's own browser it is the widget's mapper (`src/widget/map.ts`). With a test account it is the site Worker, in a browser of its own: `web/worker/map-run.ts` starts it, `sign-in.ts` signs in and `map-begin.ts` starts the same mapper there. The two share the mapper's state (`MAP_KEY` and `newMapState` in `src/shared/mapping.ts`), so a change to that state changes both.
 - **What Haptic does with a test account** is described in `docs/widget.md`, in `docs/privacy.md` and on the website's privacy page. It is the one place Haptic types a password, so a change to `sign-in.ts` changes all three.
 - **A new page on the website** needs a line in `web/public/sitemap.xml`.
+- **The site context** (`SiteContext` in `src/shared/types.ts`) is everything known about a site, saved as one record. `buildSystemPrompt` in `src/server/prompt.ts` turns it into the first part of every prompt, and that part is cached by the model provider for as long as it stays identical. So anything that changes from step to step must never go into it, and its parts must come out in the same order every time. A step's own data goes in the message after it.
 - **Docs.** Each part has a doc, listed under Documentation in the README. Change the doc in the same change as the code it describes.
 
 ## Rules
