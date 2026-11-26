@@ -12,6 +12,7 @@ import SwiftUI
 //   HAPTIC_ASK="…" swift run Northpine   ask a question as soon as the app is up
 //   LAB=renamed,icons swift run Northpine  start with Lab switches on (Lab.swift)
 //   HAPTIC_TASK=freeze-card swift run Northpine  ask one of the tasks and follow the pointer by itself (Tasks.swift)
+//   swift run Northpine --site > northpine-site.json  write the site file the server needs, from the app itself (Site.swift)
 //   swift run Northpine --dump           print what Haptic reads from each screen, and quit (Dump.swift)
 //
 // The server it asks is HAPTIC_SERVER (http://localhost:4000 when unset) and
@@ -62,6 +63,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         let environment = ProcessInfo.processInfo.environment
+        if CommandLine.arguments.contains("--site") {
+            Task { @MainActor in await Site.run() }
+            return
+        }
         if CommandLine.arguments.contains("--dump") {
             Task { @MainActor in await Dump.run() }
             return
