@@ -158,9 +158,13 @@ enum LiveTree {
      */
     static func path(for name: String, document: Bool) -> String {
         if document { return "/document" }
-        let slug = name.lowercased().unicodeScalars.map { CharacterSet.alphanumerics.contains($0) && $0.isASCII ? Character($0) : "-" }
-        let joined = String(slug).split(separator: "-").joined(separator: "-")
-        return "/" + (joined.isEmpty ? "window" : String(joined.prefix(60)))
+        // A name the app gave can have parts, like "cards/card", and keeps them, as a page's path keeps its own.
+        let parts = name.split(separator: "/").prefix(4).compactMap { part -> String? in
+            let slug = part.lowercased().unicodeScalars.map { CharacterSet.alphanumerics.contains($0) && $0.isASCII ? Character($0) : "-" }
+            let joined = String(slug).split(separator: "-").joined(separator: "-")
+            return joined.isEmpty ? nil : String(joined.prefix(60))
+        }
+        return "/" + (parts.isEmpty ? "window" : parts.joined(separator: "/"))
     }
 
     private static func entries(of menu: NSMenu, depth: Int, open: Bool = false) -> [MenuEntry] {
