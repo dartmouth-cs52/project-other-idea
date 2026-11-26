@@ -85,4 +85,21 @@ final class ClientTests: XCTestCase {
         let reports = export.children[1]
         XCTAssertEqual(reports.children.map(\.title), ["Trial Balance…"], "a menu past the limit is left out, not listed empty")
     }
+
+    @MainActor
+    func testWhatTheSystemAddsToTheEditMenuIsLeftOut() {
+        let edit = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        edit.submenu = NSMenu(title: "Edit")
+        for title in ["Undo", "Copy", "Writing Tools", "AutoFill", "Start Dictation…", "Emoji & Symbols"] {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            if title == "Writing Tools" || title == "AutoFill" {
+                item.submenu = NSMenu(title: title)
+                item.submenu?.addItem(NSMenuItem(title: "Proofread", action: nil, keyEquivalent: ""))
+            }
+            edit.submenu?.addItem(item)
+        }
+        let bar = NSMenu(title: "Main")
+        bar.addItem(edit)
+        XCTAssertEqual(LiveTree.entries(of: bar, depth: 0)[0].children.map(\.title), ["Undo", "Copy"])
+    }
 }
