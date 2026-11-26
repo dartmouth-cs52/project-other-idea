@@ -29,6 +29,7 @@ struct Shell: View {
         switch nav {
         case .home: HomeView()
         case .cards: CardsView()
+        case .expenses: ExpensesView()
         default: ComingSoon(nav: nav)
         }
     }
