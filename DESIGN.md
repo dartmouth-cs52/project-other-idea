@@ -2,10 +2,10 @@
 version: alpha
 name: Haptic
 description: >-
-  Design system for Haptic, an AI guide embedded in web apps. Covers the
-  marketing site at joinhaptic.com (web/), the dashboard behind its sign-in,
-  and the embedded widget (src/widget). Built on shadcn/ui and Tailwind's
-  default scale.
+  Design system for Haptic, an AI guide embedded in web apps and native Mac
+  apps. Covers the marketing site at joinhaptic.com (web/), the dashboard
+  behind its sign-in, the embedded widget (src/widget) and what HapticKit
+  draws in a Mac app (mac/). Built on shadcn/ui and Tailwind's default scale.
 colors:
   # Light mode. Tailwind "stone", a warm neutral.
   primary: "#1C1917"
@@ -234,7 +234,9 @@ components:
 Haptic is an AI guide that lives inside a company's web app. A person says what
 they want to do, and a pointer walks them to the right controls, step by step.
 The buyer is a product or support leader at a software company. The first use
-case is logged in web apps.
+case is logged in web apps. It also runs inside native Mac apps, where the same
+pointer is drawn over the app's own window. What differs there is set out under
+In a Mac app.
 
 The look is quiet and exact. Soft black on off-white, set in Geist, with no
 decoration. The pointer is the product, so it is the only thing on any screen
@@ -564,6 +566,46 @@ Scrolling never changes what a demo shows. A demo waits on its first frame,
 starts once about a third of it is on screen, and keeps playing until it has
 left the screen completely. Nothing switches while any of it can be seen.
 
+## In a Mac app
+
+Proposed. It is built, in `mac/Sources/HapticKit/Stage.swift`, and has not been
+through the designer. It follows the widget wherever a Mac app allows, and this
+section says where it does and where it does not yet.
+
+HapticKit adds nothing to the app's own views. The Ask button, the box a
+question is typed in, the pointer and its caption are each a small window laid
+over the app's window, so they float above sheets and open menus and are never
+read as part of the app.
+
+- **Pointer:** The same path, from `assets/pointer.svg`, in Pointer blue with
+  its white border and shadow, tip up and to the left. It is 30pt, a size up
+  from the web's 24px, because it is seen across a whole display and not one
+  browser tab.
+- **Glide:** The pointer travels to each control and does not appear on it. On
+  the first step it leaves the Ask button, and after that the control it was
+  last on. It takes a little under half a second and eases out, quick to leave
+  and slow to land, as on the web. A control that only moved, because its
+  window was dragged or its list scrolled, is followed at once with no glide.
+- **Target mark:** A Pointer blue outline around the control with a faint blue
+  fill, with rounded corners. It changes shape on the way, from the last
+  control's size to the next one's. It pulses slowly while it waits. The web's
+  mark holds still, so this is a difference to settle.
+- **Caption:** A near-black bubble with white text at 13pt in the system font,
+  at most 300pt wide, with 10pt corners and a small × that stops the guide. It
+  sits under the control, or above when there is no room underneath.
+- **Ask button:** A 32pt pill in the bottom right corner of the app's window,
+  where the web's launcher is. It takes the site's colour and word from the
+  dashboard, as the launcher does.
+- **In the menu bar:** An item in a closed menu cannot be pointed at, so the
+  pointer rests on the menu's title, and moves to the item once the menu is
+  open. The same goes for a button that opens a menu of its own.
+- **Type:** The system font throughout, as in the widget, so nothing is loaded
+  into the app.
+
+Not built there yet: the thinking glow, the chat with its bubbles and status
+line, the green tick, and the line that says Haptic is an AI. Each should come
+across as it is on the web.
+
 ## Dashboard
 
 Signed off: colour says how a guide stands and which way a number moved, and
@@ -604,6 +646,18 @@ reason a customer gave.
 - **Knowledge.** What Haptic reads and what the company has corrected. Notes,
   help docs, corrections, the routes taught by doing, the controls never to
   point at, and the pages read.
+
+Mapping the screens behind a login is offered on a card of its own, with one
+segmented control at its top that chooses how: "From my browser" or "With a
+test account". From my browser opens the company's app in a tab, where the
+person signs in as usual and presses Start. With a test account is a form in
+the card, with the sign-in page's address, where to start, the account's email
+or username and its password, and one primary button. While Haptic is mapping,
+the card says so and offers Stop. The password field is emptied the moment the
+form is sent, and nothing in the dashboard shows it again. A refusal, such as a
+captcha or a wrong password, is said in a sentence in the card, in the form's
+usual way, and never as a code. A site whose allowed addresses include a Mac
+app lists it beside the web ones, written `app://` and its bundle identifier.
 - **Settings.** Three tabs. General holds the site's name, the Ask button's
   colour and deleting the site. Install holds the script and where it runs.
   Usage holds the finished guides, month by month, which are what billing
@@ -869,6 +923,8 @@ stays. The rest below is proposed.
 
 - Do keep Pointer blue for the pointer, its target mark and focus.
   Never for text, buttons or links.
+- Do draw the same pointer in a Mac app as on a page: the same path, the same
+  blue, the same border and shadow.
 - Do give the pointer its white border and shadow everywhere.
 - Do use sizes, radii and spacing from the scales above. No one-off values.
 - Do check both modes. Every colour has a dark twin.
