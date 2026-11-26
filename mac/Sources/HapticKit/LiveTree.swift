@@ -167,15 +167,20 @@ enum LiveTree {
         return "/" + (parts.isEmpty ? "window" : parts.joined(separator: "/"))
     }
 
-    private static func entries(of menu: NSMenu, depth: Int, open: Bool = false) -> [MenuEntry] {
+    /** How many menus deep an item can be and still be listed: File › Export › Reports › Trial Balance is three. */
+    static let menuDepth = 3
+
+    static func entries(of menu: NSMenu, depth: Int, open: Bool = false) -> [MenuEntry] {
         // Which items can be used is worked out when a menu opens. Asking now gives the answer the person would see.
         if depth > 0 { menu.update() }
         return menu.items.compactMap { item in
             guard !item.isSeparatorItem, !item.isHidden, !item.title.isEmpty else { return nil }
             var entry = MenuEntry(title: item.title, enabled: item.isEnabled, checked: item.state == .on, node: LiveNode(item))
-            if let submenu = item.submenu, depth < 2 {
+            if let submenu = item.submenu {
                 // The Services menu is other apps' commands, and the Apple menu is the system's.
-                if submenu === NSApp.servicesMenu || item.title == "Services" { return nil }
+                if submenu === NSApplication.shared.servicesMenu || item.title == "Services" { return nil }
+                // Deeper than this is left out whole. Listed without its items it would look like something to choose.
+                if depth >= menuDepth { return nil }
                 entry.open = open ? false : isOpen(submenu)
                 entry.children = entries(of: submenu, depth: depth + 1)
             }
