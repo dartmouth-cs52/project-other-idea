@@ -21,6 +21,7 @@ struct Shell: View {
             screen(store.nav ?? .home)
         }
         .navigationTitle((store.nav ?? .home).title)
+        .sheet(isPresented: $store.issuingCard) { IssueCardSheet().environmentObject(store) }
     }
 
     @ViewBuilder

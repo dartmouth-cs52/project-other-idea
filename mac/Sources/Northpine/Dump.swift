@@ -7,6 +7,7 @@ import HapticKit
 //
 //   swift run Northpine --dump            every screen in the sidebar
 //   swift run Northpine --dump cards      one screen, by its path
+//   swift run Northpine --dump issue-card one of the states behind a click (see `opened`)
 //   swift run Northpine --dump --json     the JSON that is sent, in full
 
 @MainActor
@@ -22,8 +23,23 @@ enum Dump {
             try? await Task.sleep(nanoseconds: 900_000_000)
             show(nav.path, json: arguments.contains("--json"))
         }
+        // What only shows once something is opened: a sheet, or one row of a table.
+        for (name, open) in opened where only == nil || only == name {
+            guard let store = Store.shared else { break }
+            open(store)
+            try? await Task.sleep(nanoseconds: 1_300_000_000)
+            show(name, json: arguments.contains("--json"))
+            store.closeEverything()
+            try? await Task.sleep(nanoseconds: 700_000_000)
+        }
         NSApp.terminate(nil)
     }
+
+    /** The states behind a click, each by a name to ask for it by. */
+    static let opened: [(String, @MainActor (Store) -> Void)] = [
+        ("card", { $0.go(.cards); $0.detail = "card/c1" }),
+        ("issue-card", { $0.go(.cards); $0.issuingCard = true }),
+    ]
 
     static func show(_ name: String, json: Bool) {
         guard let text = Haptic.snapshotJSON() else { return print("--- \(name)\n(no window)") }
