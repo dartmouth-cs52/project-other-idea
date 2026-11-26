@@ -40,6 +40,9 @@ enum Dump {
         ("card", { $0.go(.cards); $0.detail = "card/c1" }),
         ("issue-card", { $0.go(.cards); $0.issuingCard = true }),
         ("expense", { $0.go(.expenses); $0.detail = "expense/t1" }),
+        ("mappings", { $0.go(.accounting); $0.accountingTab = "Mappings" }),
+        ("sync", { $0.go(.accounting); $0.accountingTab = "Sync" }),
+        ("close", { $0.go(.accounting); $0.accountingTab = "Month-end close" }),
     ]
 
     static func show(_ name: String, json: Bool) {
